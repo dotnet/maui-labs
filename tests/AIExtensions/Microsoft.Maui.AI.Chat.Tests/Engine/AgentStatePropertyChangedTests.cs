@@ -215,6 +215,99 @@ public class AgentStatePropertyChangedTests
         Assert.Equal(["Value: Original, pending False", "OnChanged: Original, pending False"], log);
     }
 
+    [Fact]
+    public async Task StateHandler_CanSendTheFirstMessageOfAClearedConversation()
+    {
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ReplyAsync(ct, Snapshot("Pasta")));
+        model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Hello again", ct));
+        using var agent = CreateAgent(model);
+        using var context = new AgentContext(agent);
+        await context.SendMessageAsync("Recipe?");
+        Task? next = null;
+        agent.State.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AgentState<NoteState>.Value) && agent.State.Value.Title == "Original")
+                next ??= context.SendMessageAsync("Start over");
+        };
+
+        await context.ClearAsync();
+        Assert.NotNull(next);
+        await next;
+
+        // The new turn starts the cleared conversation: the clear neither removes it nor sends the old history.
+        var turn = Assert.Single(context.Turns);
+        Assert.Equal("Hello again", Assert.IsType<TextContentBlock>(Assert.Single(turn.ResponseBlocks)).RawText);
+        Assert.Equal(["user:Start over"], Describe(model.Requests[^1]));
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+    }
+
+    [Fact]
+    public async Task StateHandler_CannotSendWhileARestoreReplaysTheState()
+    {
+        var thread = new InMemoryConversationThread("thread-state");
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ReplyAsync(ct, Snapshot("Pasta")));
+        using (var liveAgent = CreateAgent(model, thread))
+        using (var live = new AgentContext(liveAgent))
+            await live.SendMessageAsync("Recipe?");
+
+        var next = new ScriptedChatClient();
+        next.Enqueue(ct => ResponseEmitters.EmitTextResponse("Two", ct));
+        using var agent = CreateAgent(next, thread);
+        using var context = new AgentContext(agent);
+        Task? nested = null;
+        agent.State.PropertyChanged += (_, _) => nested ??= context.SendMessageAsync("too early");
+
+        await context.RestoreAsync();
+
+        // The restore is not finished while it replays the state, so the conversation cannot continue yet.
+        Assert.NotNull(nested);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => nested);
+        Assert.Empty(next.Requests);
+        Assert.Single(context.Turns);
+        Assert.Equal("Pasta", agent.State.Value.Title);
+
+        await context.SendMessageAsync("second");
+
+        Assert.Equal(["user:Recipe?", "assistant:Done", "user:second"], Describe(next.Requests[^1]));
+        Assert.Equal(2, context.Turns.Count);
+    }
+
+    [Fact]
+    public async Task StateHandler_CanClearWhileARestoreReplaysTheState()
+    {
+        var thread = new InMemoryConversationThread("thread-state");
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ReplyAsync(ct, Snapshot("Pasta")));
+        using (var liveAgent = CreateAgent(model, thread))
+        using (var live = new AgentContext(liveAgent))
+            await live.SendMessageAsync("Recipe?");
+
+        var next = new ScriptedChatClient();
+        next.Enqueue(ct => ResponseEmitters.EmitTextResponse("Fresh", ct));
+        using var agent = CreateAgent(next, thread);
+        using var context = new AgentContext(agent);
+        Task? clear = null;
+        agent.State.PropertyChanged += (_, _) => clear ??= context.ClearAsync();
+
+        await context.RestoreAsync();
+        Assert.NotNull(clear);
+        await clear;
+
+        // The clear waited for the restore, so it removed the restored conversation instead of being undone by it.
+        Assert.Empty(context.Turns);
+        Assert.Equal("Original", agent.State.Value.Title);
+        Assert.Empty(thread.GetUpdates());
+
+        await context.SendMessageAsync("Hi");
+
+        Assert.Equal(["user:Hi"], Describe(next.Requests[^1]));
+    }
+
+    private static List<string> Describe(IReadOnlyList<ChatMessage> request)
+        => request.Select(message => $"{message.Role}:{message.Text}").ToList();
+
     private static UIAgent<NoteState> CreateAgent(IChatClient client, IConversationThread? thread = null)
         => new(
             client,

@@ -99,7 +99,9 @@ These match upstream so that upstream fixes apply directly:
   - Handlers may re-enter. The attempt starts before a send reports its turn and before a retry removes
     its response blocks, so handlers of those changes cannot start another send or retry (upstream
     guards on the status, which changes later), and a send from a handler of the `Turns` reset is
-    rejected, so every handler of a collection change sees it before the next change.
+    rejected, so every handler of a collection change sees it before the next change. A clear resets the
+    typed state after it removed the turns, so a handler of that change can start the cleared
+    conversation.
 
 ### Turns, history and the thread
 
@@ -140,9 +142,9 @@ These match upstream so that upstream fixes apply directly:
   the same status, even when an earlier callback already sent the next message from the change that
   ended a turn. Upstream passes each callback the current `Status`, so later callbacks never hear how
   the turn ended.
-- **`ClearAsync`.** Not in upstream. It waits for the active response to stop, then clears the turns,
-  the history, the thread and the typed state, so a response that was still running cannot change the
-  cleared conversation.
+- **`ClearAsync`.** Not in upstream. It waits for the active response to stop, and for a restore in
+  progress to finish, then clears the turns, the history, the thread and the typed state, so a response
+  that was still running cannot change the cleared conversation.
 - **Turn ids** are the request message id. Upstream leaves `ConversationTurn.Id` empty.
 - **Per-turn metadata.** `ConversationTurn.ModelId` (the last model id reported by the provider) and
   `ConversationTurn.Usage` (token usage summed over the turn's requests) are not in upstream. Both are
@@ -165,6 +167,9 @@ These match upstream so that upstream fixes apply directly:
   each of them, with their blocks in place, so a native view that already shows the context renders them.
   Block-added and status-changed callbacks are still not raised. Upstream restores silently and relies on
   the Blazor component re-rendering after the call.
+- **Exclusive.** Until the restored turns are loaded, a send fails and `ClearAsync` waits for the
+  restore, so neither a send nor a clear interleaves with it, including one started by a handler of a
+  typed-state change the restore replays. Upstream does not guard a restore.
 
 ### Tools, UI actions and approvals
 

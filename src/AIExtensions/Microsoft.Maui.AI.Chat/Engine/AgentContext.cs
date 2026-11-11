@@ -48,8 +48,9 @@ namespace Microsoft.Maui.AI.Chat;
 /// Handlers of these events, like the callbacks, may call back into the context. A handler of a turn's
 /// addition or of a retry's removal of response blocks cannot start another send or retry, because the
 /// turn's attempt already started; a handler of a reset of <see cref="Turns"/> cannot send either, so every
-/// handler of a collection change sees the change before the next one. Send the next message from a status
-/// change instead.
+/// handler of a collection change sees the change before the next one. Nothing can send while a restore
+/// runs, including a handler of a typed-state change the restore replays. Send the next message from a
+/// status change instead.
 /// </para>
 /// <para>
 /// This type is single-thread-affine and is not thread-safe. Callers must serialize access and
@@ -69,6 +70,7 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
     private readonly List<Action<ConversationTurn, ContentBlock>> _blockAddedCallbacks = new();
     private readonly List<Action<ConversationTurn>> _responseBlocksClearedCallbacks = new();
     private Attempt? _attempt;
+    private TaskCompletionSource? _restore;
     private ChatMessage? _retryMessage;
     private bool _restoreCompleted;
     private bool _resettingTurns;
@@ -116,29 +118,49 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
     /// </summary>
     /// <returns>A task that completes when the conversation has been cleared.</returns>
     /// <remarks>
+    /// <para>
     /// The active response is discarded rather than committed, and it is awaited before anything
-    /// is cleared, so it cannot change the cleared conversation. Do not block on the returned task
-    /// from an engine callback or UI action; the response cannot unwind while its thread is blocked.
+    /// is cleared, so it cannot change the cleared conversation. A restore in progress is awaited too,
+    /// so it cannot reload what the clear removes. Do not block on the returned task from an engine
+    /// callback or UI action; the response cannot unwind while its thread is blocked.
+    /// </para>
+    /// <para>
+    /// The typed state is reset last, in one change, so a handler of that change finds the conversation
+    /// cleared and can already send its first message.
+    /// </para>
     /// </remarks>
     public async Task ClearAsync()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        while (_attempt is { } attempt)
+        while (true)
         {
-            attempt.Abandon();
-            await attempt.Unwound;
+            if (_attempt is { } attempt)
+            {
+                attempt.Abandon();
+                await attempt.Unwound;
+            }
+            else if (_restore is { } restore)
+            {
+                await restore.Task;
+            }
+            else
+            {
+                break;
+            }
+
             ObjectDisposedException.ThrowIf(_disposed, this);
         }
 
-        _agent.RejectPendingPredictiveState();
-        _agent.ResetState();
         _agent.ClearHistory();
         _retryMessage = null;
         _restoreCompleted = false;
         Error = null;
         Status = ConversationStatus.Idle;
         ResetTurns(Array.Empty<ConversationTurn>());
+
+        // Resetting the state also drops a pending prediction.
+        _agent.ResetState();
         NotifyStatusChanged(ConversationStatus.Idle);
     }
 
@@ -169,6 +191,12 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
         {
             throw new InvalidOperationException(
                 "A message cannot be sent while the reset of Turns is reported. Send it from a status change.");
+        }
+
+        if (_restore is not null)
+        {
+            throw new InvalidOperationException(
+                "A message cannot be sent while a restore is in progress. Send it once RestoreAsync returned.");
         }
 
         _agent.ThrowIfToolsCannotBeInvoked();
@@ -205,12 +233,13 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
     /// tools, and other interactive blocks are not resumed or invoked. Once all turns are loaded,
     /// <see cref="Turns"/> raises one reset and then each turn is announced through
     /// <see cref="RegisterOnTurnAdded"/>, with its blocks already in place; no block-added or
-    /// status-changed notifications are raised.
+    /// status-changed notifications are raised. The typed state raises the changes the restore replays.
+    /// Until the turns are loaded, a send fails and <see cref="ClearAsync"/> waits for the restore.
     /// </remarks>
     public async Task RestoreAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfCannotRestore(cancellationToken);
-        AddRestoredTurns(await _agent.RestoreTurnsAsync(cancellationToken));
+        await RunRestoreAsync(_agent.RestoreTurnsAsync, cancellationToken);
     }
 
     /// <summary>
@@ -238,7 +267,9 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
     /// <para>
     /// Once all turns are loaded, <see cref="Turns"/> raises one reset and then each turn is announced
     /// through <see cref="RegisterOnTurnAdded"/>, with its blocks already in place, so a view that already
-    /// shows this context renders them. No block-added or status-changed notifications are raised.
+    /// shows this context renders them. No block-added or status-changed notifications are raised. The
+    /// typed state raises the changes the restore replays. Until the turns are loaded, a send fails and
+    /// <see cref="ClearAsync"/> waits for the restore.
     /// </para>
     /// </remarks>
     public async Task RestoreAsync(
@@ -247,7 +278,41 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
     {
         ArgumentNullException.ThrowIfNull(messages);
         ThrowIfCannotRestore(cancellationToken);
-        AddRestoredTurns(await _agent.RestoreTurnsAsync(messages, cancellationToken));
+        await RunRestoreAsync(token => _agent.RestoreTurnsAsync(messages, token), cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs the agent's restore as the context's restore in progress, then loads the turns it rebuilt.
+    /// </summary>
+    private async Task RunRestoreAsync(
+        Func<CancellationToken, Task<IReadOnlyList<RestoredTurn>>> restoreTurnsAsync,
+        CancellationToken cancellationToken)
+    {
+        // The restore is in progress before the agent runs it, so a handler of a state change it replays
+        // cannot send into, or restore over, the conversation it is rebuilding.
+        var restore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _restore = restore;
+        try
+        {
+            var turns = await restoreTurnsAsync(cancellationToken);
+
+            // The turns' announcements may already continue the conversation.
+            EndRestore(restore);
+            AddRestoredTurns(turns);
+        }
+        finally
+        {
+            EndRestore(restore);
+
+            // Last: a clear that waits for the restore resumes once it has been reported.
+            restore.TrySetResult();
+        }
+    }
+
+    private void EndRestore(TaskCompletionSource restore)
+    {
+        if (ReferenceEquals(_restore, restore))
+            _restore = null;
     }
 
     private void ThrowIfCannotRestore(CancellationToken cancellationToken)
@@ -258,7 +323,7 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
         if (_attempt is not null || Status != ConversationStatus.Idle)
             throw new InvalidOperationException("RestoreAsync requires an idle context.");
 
-        if (_restoreCompleted || _turns.Count != 0)
+        if (_restoreCompleted || _restore is not null || _turns.Count != 0)
         {
             throw new InvalidOperationException(
                 "RestoreAsync requires an empty context and may not be called twice. Call ClearAsync first.");
