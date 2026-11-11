@@ -56,6 +56,7 @@ internal sealed class ChatMessageList : CollectionView
     private int _backwardSteps;
     private double _backwardDistance;
     private double _awayDistance;
+    private ConversationTurn? _lastTurn;
 
     public ChatMessageList(AIChatView owner)
     {
@@ -131,10 +132,7 @@ internal sealed class ChatMessageList : CollectionView
     /// <summary>Scrolls to the newest row and keeps following new content.</summary>
     public void PinToEnd()
     {
-        _isPinned = true;
-        _backwardSteps = 0;
-        _backwardDistance = 0;
-        _awayDistance = 0;
+        Pin();
         ScrollToEnd();
     }
 
@@ -192,6 +190,13 @@ internal sealed class ChatMessageList : CollectionView
 
         if (structureChanged || mayShrink)
             _settleUntil = Clock() + SettleMilliseconds;
+
+        // An empty list has nothing to read back through, and a new turn (sent from the composer or by the app, or
+        // restored) is what the user wants to see: follow the end again.
+        var lastTurn = _session is { Turns.Count: > 0 } session ? session.Turns[^1] : null;
+        if (_rows.Count == 0 || (lastTurn is not null && !ReferenceEquals(lastTurn, _lastTurn)))
+            Pin();
+        _lastTurn = lastTurn;
 
         if ((structureChanged || refreshed) && _isPinned)
             ScrollToEnd();
@@ -491,6 +496,14 @@ internal sealed class ChatMessageList : CollectionView
             _rows.Insert(index, desired[index]);
 
         return true;
+    }
+
+    private void Pin()
+    {
+        _isPinned = true;
+        _backwardSteps = 0;
+        _backwardDistance = 0;
+        _awayDistance = 0;
     }
 
     private void ScrollToEnd()
