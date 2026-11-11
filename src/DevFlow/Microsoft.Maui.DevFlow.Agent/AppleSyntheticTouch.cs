@@ -107,6 +107,8 @@ internal sealed class AppleSyntheticTouch : IDisposable
         // Best-effort extras: a handler that reads them gets sensible values, and a
         // handler that does not is unaffected if the ivar has moved.
         TryWritePoint(handle, "_previousLocationInWindow", location);
+        TryWritePoint(handle, "_preciseLocationInWindow", location);
+        TryWritePoint(handle, "_precisePreviousLocationInWindow", location);
         TryWriteInteger(handle, "_tapCount", 1);
         TryWriteDouble(handle, "_timestamp", NSProcessInfo.ProcessInfo.SystemUptime);
 
@@ -151,6 +153,12 @@ internal sealed class AppleSyntheticTouch : IDisposable
         TryWritePoint(handle, "_previousLocationInWindow", _location);
         if (!TryWritePoint(handle, "_locationInWindow", locationInWindow))
             return false;
+
+        // Recognizers that test how far a touch has travelled — a tap fails once it moves —
+        // read the precise location on current releases; left behind, a dragged touch still
+        // looks like a tap to them.
+        TryWritePoint(handle, "_precisePreviousLocationInWindow", _location);
+        TryWritePoint(handle, "_preciseLocationInWindow", locationInWindow);
 
         TryWriteDouble(handle, "_timestamp", NSProcessInfo.ProcessInfo.SystemUptime);
         _location = locationInWindow;
@@ -275,6 +283,8 @@ internal sealed class SyntheticTouchEvent : UIEvent
 
     public override NSSet? TouchesForWindow(UIWindow window) => _touches;
 
+    public override NSSet? TouchesForGestureRecognizer(UIGestureRecognizer window) => _touches;
+
     public override UIEventType Type => UIEventType.Touches;
 }
 
@@ -372,6 +382,257 @@ internal static class AppleTouchInjector
         }
     }
 
+    // UIGestureRecognizer.state is readonly in the public API. Driving it is how synthetic
+    // gestures reach recognizers we do not own; UIKit dispatches the recognizer's target
+    // actions on each state change.
+    [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
+    private static extern void SendState(IntPtr receiver, IntPtr selector, nint state);
+
+    [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
+    private static extern double SendDouble(IntPtr receiver, IntPtr selector);
+
+    internal static bool TrySetState(UIGestureRecognizer recognizer, UIGestureRecognizerState state)
+    {
+        try
+        {
+            SendState(recognizer.Handle, Selector.GetHandle("setState:"), (nint)(long)state);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] setState: failed: {ex.GetBaseException().Message}");
+            return false;
+        }
+    }
+
+    private static bool IsLive(UIGestureRecognizer recognizer, HashSet<UIGestureRecognizer> losers)
+        => !losers.Contains(recognizer)
+           && recognizer.State is not (UIGestureRecognizerState.Failed or UIGestureRecognizerState.Cancelled
+               or UIGestureRecognizerState.Ended);
+
+    private static double Distance(CGPoint a, CGPoint b)
+    {
+        var dx = (double)b.X - (double)a.X;
+        var dy = (double)b.Y - (double)a.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+
+    /// <summary>
+    /// What UIKit's gesture environment does between touch moves, which it does only for touches
+    /// it dispatched itself: a recognizer fed the moves updates its own translation and location,
+    /// but its later state changes wait on that environment. So, after each move —
+    /// <list type="bullet">
+    /// <item>a continuous gesture that has begun (MAUI's pan) is moved to Changed, which sends its
+    /// action with the translation it computed from the touch;</item>
+    /// <item>a tap fails once the touch has travelled further than the tap allows;</item>
+    /// <item>once a gesture has begun, every recognizer still waiting fails unless one of the two
+    /// delegates lets them recognize simultaneously — the exclusion that stops a slider's tap
+    /// firing at the end of a drag.</item>
+    /// </list>
+    /// </summary>
+    private static void Arbitrate(
+        IReadOnlyList<UIGestureRecognizer> receiving, HashSet<UIGestureRecognizer> losers,
+        double travelled, NSSet touches, UIEvent touchEvent)
+    {
+        foreach (var recognizer in receiving)
+        {
+            if (losers.Contains(recognizer))
+                continue;
+
+            if (recognizer is UITapGestureRecognizer { State: UIGestureRecognizerState.Possible } tap
+                && travelled > TapAllowableMovement(tap))
+                Withdraw(tap, losers, touches, touchEvent);
+            else if (recognizer.State is UIGestureRecognizerState.Began or UIGestureRecognizerState.Changed)
+                TrySetState(recognizer, UIGestureRecognizerState.Changed);
+        }
+
+        foreach (var active in receiving)
+        {
+            if (active.State is not (UIGestureRecognizerState.Began or UIGestureRecognizerState.Changed))
+                continue;
+
+            foreach (var waiting in receiving)
+            {
+                if (!ReferenceEquals(waiting, active)
+                    && !losers.Contains(waiting)
+                    && waiting.State == UIGestureRecognizerState.Possible
+                    && !RecognizeSimultaneously(active, waiting))
+                    Withdraw(waiting, losers, touches, touchEvent);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Takes a recognizer out of the touch the way it would leave a real one it has lost: it is
+    /// told the touch was cancelled and sees nothing more of it. Setting its state to Failed is not
+    /// enough — mid-touch, UIKit holds that change for its gesture environment, and the recognizer
+    /// would still recognize when the touch ends (a tap firing at the end of a drag).
+    /// </summary>
+    private static void Withdraw(
+        UIGestureRecognizer recognizer, HashSet<UIGestureRecognizer> losers, NSSet touches, UIEvent touchEvent)
+    {
+        losers.Add(recognizer);
+        recognizer.TouchesCancelled(touches, touchEvent);
+        TrySetState(recognizer, UIGestureRecognizerState.Failed);
+    }
+
+    /// <summary>
+    /// How far a tap's touch may travel and still be a tap. UITapGestureRecognizer keeps this
+    /// behind a private getter (45 points today); the fallback is that same value.
+    /// </summary>
+    private static double TapAllowableMovement(UITapGestureRecognizer tap)
+    {
+        const double Fallback = 45;
+        try
+        {
+            var selector = new Selector("allowableMovement");
+            return tap.RespondsToSelector(selector) && SendDouble(tap.Handle, selector.Handle) is var value
+                   && double.IsFinite(value) && value > 0
+                ? value
+                : Fallback;
+        }
+        catch (Exception)
+        {
+            return Fallback;
+        }
+    }
+
+    /// <summary>Either delegate saying yes is enough, as it is for UIKit.</summary>
+    private static bool RecognizeSimultaneously(UIGestureRecognizer a, UIGestureRecognizer b)
+    {
+        var selector = new Selector("gestureRecognizer:shouldRecognizeSimultaneouslyWithGestureRecognizer:");
+        return Asks(a, b) || Asks(b, a);
+
+        bool Asks(UIGestureRecognizer self, UIGestureRecognizer other)
+            => self.WeakDelegate is { } recognizerDelegate
+               && recognizerDelegate.RespondsToSelector(selector)
+               && SendBool((IntPtr)recognizerDelegate.Handle, selector.Handle, (IntPtr)self.Handle, (IntPtr)other.Handle);
+    }
+
+    [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool SendBool(IntPtr receiver, IntPtr selector, IntPtr arg1, IntPtr arg2);
+
+    private static bool DelegateAccepts(UIGestureRecognizer recognizer, UITouch touch)
+    {
+        var selector = new Selector("gestureRecognizer:shouldReceiveTouch:");
+        var recognizerDelegate = recognizer.WeakDelegate;
+        return recognizerDelegate == null
+            || !recognizerDelegate.RespondsToSelector(selector)
+            || SendBool((IntPtr)recognizerDelegate.Handle, selector.Handle, (IntPtr)recognizer.Handle, (IntPtr)touch.Handle);
+    }
+
+    /// <summary>
+    /// Those of <paramref name="recognizers"/> whose delegates would accept a touch starting at
+    /// <paramref name="locationInWindow"/> on <paramref name="target"/> — asked exactly as
+    /// <see cref="DriveRecognizersAsync"/> asks them, without delivering anything. Null when the
+    /// touch cannot be assembled on this OS version.
+    /// </summary>
+    internal static List<UIGestureRecognizer>? WouldReceive(
+        UIView target, IEnumerable<UIGestureRecognizer> recognizers, CGPoint locationInWindow)
+    {
+        if (target.Window is not { } window)
+            return null;
+
+        using var touch = AppleSyntheticTouch.Create(window, target, locationInWindow);
+        return touch == null ? null : recognizers.Where(r => DelegateAccepts(r, touch.Touch)).ToList();
+    }
+
+    /// <summary>
+    /// One touch delivered to gesture recognizers rather than to a view — a tap when
+    /// <paramref name="steps"/> is 0, otherwise a drag along <paramref name="positionAt"/> (sampled
+    /// with t in 0..1, in window coordinates). Canvases such as SkiaSharp's SKCanvasView and
+    /// Syncfusion's drawn controls, and MAUI's own pan and tap recognizers, take input only
+    /// through recognizers, which UIKit feeds from the touches it routes to the view; a touch
+    /// handed to the view directly never reaches them. Each recognizer is given the touch the way
+    /// UIKit's gesture environment would — its delegate is asked first, then it sees the touch
+    /// begin, move and end — so a recognizer that reads <c>locationInView:</c> or its translation
+    /// gets the real path.
+    /// </summary>
+    internal static async Task<IReadOnlyList<UIGestureRecognizer>?> DriveRecognizersAsync(
+        UIView target,
+        IReadOnlyList<UIGestureRecognizer> recognizers,
+        Func<double, CGPoint> positionAt,
+        int holdMs,
+        int durationMs,
+        int steps)
+    {
+        var window = target.Window;
+        if (window == null)
+            return null;
+
+        using var touch = AppleSyntheticTouch.Create(window, target, positionAt(0));
+        if (touch == null)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                "[Microsoft.Maui.DevFlow] Synthetic UITouch could not be assembled on this OS version.");
+            return null;
+        }
+
+        using var set = new NSSet(touch.Touch);
+        using var touchEvent = new SyntheticTouchEvent(set);
+
+        try
+        {
+            // A delegate that declines the touch keeps the recognizer out of it, as it would
+            // for a real finger — Syncfusion's scroll recognizer filters touches this way.
+            var receiving = recognizers.Where(r => DelegateAccepts(r, touch.Touch)).ToList();
+
+            foreach (var recognizer in receiving)
+                recognizer.TouchesBegan(set, touchEvent);
+
+            if (holdMs > 0)
+                await Task.Delay(holdMs);
+
+            var start = positionAt(0);
+            var losers = new HashSet<UIGestureRecognizer>();
+            var stepDelay = steps > 0 && durationMs > 0 ? Math.Max(1, durationMs / steps) : 0;
+            for (var step = 1; step <= steps; step++)
+            {
+                var point = positionAt((double)step / steps);
+                touch.MoveTo(point);
+                // A recognizer that has failed or finished is out of the gesture; UIKit stops
+                // feeding it, and so does this.
+                foreach (var recognizer in receiving)
+                {
+                    if (IsLive(recognizer, losers))
+                        recognizer.TouchesMoved(set, touchEvent);
+                }
+
+                Arbitrate(receiving, losers, Distance(start, point), set, touchEvent);
+                if (stepDelay > 0)
+                    await Task.Delay(stepDelay);
+            }
+
+            // Hold still before lifting, as the Android tier does, so the release carries no
+            // velocity and a drag ends where it was asked to rather than flinging on.
+            if (steps > 0)
+                await Task.Delay(60);
+
+            touch.End();
+            foreach (var recognizer in receiving)
+            {
+                if (IsLive(recognizer, losers))
+                    recognizer.TouchesEnded(set, touchEvent);
+            }
+
+            // A continuous gesture still in flight finishes with the touch.
+            foreach (var recognizer in receiving)
+            {
+                if (!losers.Contains(recognizer)
+                    && recognizer.State is UIGestureRecognizerState.Began or UIGestureRecognizerState.Changed)
+                    TrySetState(recognizer, UIGestureRecognizerState.Ended);
+            }
+
+            return receiving.Where(r => !losers.Contains(r)).ToList();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Microsoft.Maui.DevFlow] Synthetic recognizer touch failed: {ex.GetBaseException().Message}");
+            return null;
+        }
+    }
 }
 
 /// <summary>

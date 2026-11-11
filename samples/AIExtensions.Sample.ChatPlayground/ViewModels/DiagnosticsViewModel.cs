@@ -12,7 +12,7 @@ public sealed partial class DiagnosticsViewModel(ChatDiagnostics diagnostics) : 
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ToggleDescription))]
-    private bool isOpen = true;
+    private bool isOpen;
 
     public string ToggleDescription => IsOpen ? "Hide AI diagnostics" : "Show AI diagnostics";
 

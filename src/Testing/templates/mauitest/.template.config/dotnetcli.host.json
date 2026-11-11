@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json.schemastore.org/dotnetcli.host",
+  "symbolInfo": {
+    "applicationId": {
+      "longName": "application-id"
+    },
+    "androidMinSdk": {
+      "longName": "android-min-sdk"
+    },
+    "iosMinVersion": {
+      "longName": "ios-min-version"
+    },
+    "maccatalystMinVersion": {
+      "longName": "maccatalyst-min-version"
+    },
+    "skipRestore": {
+      "longName": "no-restore"
+    }
+  }
+}

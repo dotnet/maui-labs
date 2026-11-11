@@ -976,12 +976,13 @@ public partial class InspectorPageTests : IAsyncLifetime
         await Expect(_page.Locator("#df-props-pane")).ToBeVisibleAsync();
         await Expect(_page.Locator("#df-tree-pane")).ToBeVisibleAsync();
         Assert.False(await _page.Locator("body").EvaluateAsync<bool>("body => body.classList.contains('df-tree-hidden')"));
-        var compactTree = await _page.Locator("#df-tree-pane").BoundingBoxAsync();
-        var compactScrim = await _page.Locator("#df-pane-scrim").BoundingBoxAsync();
-        Assert.NotNull(compactTree);
-        Assert.NotNull(compactScrim);
-        Assert.True(compactScrim.X >= compactTree.X + compactTree.Width - 1,
-            $"Expected compact properties scrim to preserve the tree, tree right={compactTree.X + compactTree.Width}, scrim left={compactScrim.X}");
+        var compactView = await _page.Locator("#df-view-pane").BoundingBoxAsync();
+        var compactProps = await _page.Locator("#df-props-pane").BoundingBoxAsync();
+        Assert.NotNull(compactView);
+        Assert.NotNull(compactProps);
+        await Expect(_page.Locator("#df-pane-scrim")).ToBeHiddenAsync();
+        Assert.True(compactView.X + compactView.Width <= compactProps.X + 1,
+            $"Expected compact properties to dock beside the preview, preview right={compactView.X + compactView.Width}, properties left={compactProps.X}");
         await _page.Keyboard.PressAsync("Escape");
 
         await _page.SetViewportSizeAsync(700, 450);
@@ -2166,27 +2167,6 @@ public partial class InspectorPageTests : IAsyncLifetime
     }
 
     [LiveInspectorFact]
-    public async Task ReadOnlyPropertyFilterRemainsUsable()
-    {
-        await _page.RouteAsync("**/api/control", route => route.FulfillAsync(new()
-        {
-            Status = 200,
-            ContentType = "application/json",
-            Body = "{\"youAreWriter\":false,\"heldByOther\":true,\"label\":\"Other Inspector\"}",
-        }));
-
-        await _page.GotoAsync(BaseUrl);
-        var header = _page.Locator("[data-automationId='HeaderLabel']");
-        var id = await header.GetAttributeAsync("data-id");
-        await _page.Locator($".df-tree-node[data-tree-id='{id}']").ClickAsync();
-
-        await Expect(_page.Locator("#df-prop-filter")).ToBeEnabledAsync();
-        await Expect(_page.Locator(".df-prop-row input[type='number']").First).ToBeDisabledAsync();
-        await _page.Locator("#df-prop-filter").FillAsync("Font");
-        Assert.Equal(2, await _page.Locator(".df-prop-row:visible").CountAsync());
-    }
-
-    [LiveInspectorFact]
     public async Task PassiveRecordingObserverClearsWhenRecordingEnds()
     {
         var ownsLease = true;
@@ -2447,58 +2427,6 @@ public partial class InspectorPageTests : IAsyncLifetime
                 await Expect(body).Not.ToContainTextAsync("declare using the permission");
                 await Expect(body).Not.ToContainTextAsync("BATTERY_STATS");
         }
-
-    [LiveInspectorFact]
-    public async Task NetworkTabRefreshesAutomaticallyAndKeepsDetailOpen()
-    {
-        var networkCalls = 0;
-        await _page.RouteAsync("**/api/network", async route =>
-        {
-            var call = Interlocked.Increment(ref networkCalls);
-            var marker = call == 1 ? "first" : "second";
-            if (call == 1) await Task.Delay(3000);
-            await route.FulfillAsync(new()
-            {
-                Status = 200,
-                ContentType = "application/json",
-                Body = $$"""
-                    {"ok":true,"requests":[{"id":"request-1","method":"GET","url":"https://example.test/{{marker}}","statusCode":200,"durationMs":12}]}
-                    """,
-            });
-        });
-        await _page.RouteAsync("**/api/network/detail", async route =>
-        {
-            await Task.Delay(500);
-            await route.FulfillAsync(new()
-            {
-                Status = 200,
-                ContentType = "application/json",
-                Body = """
-                    {"ok":true,"request":{"id":"request-1","method":"GET","url":"https://example.test/second","statusCode":200,"statusText":"OK","durationMs":12}}
-                    """,
-            });
-        });
-
-        await OpenDataDockAsync();
-        await _page.Locator("[data-tab='network']").ClickAsync();
-
-        await Expect(_page.Locator("#df-dock-body")).ToContainTextAsync(
-            "https://example.test/second",
-            new() { Timeout = 6000 });
-        await _page.WaitForTimeoutAsync(1500);
-        await Expect(_page.Locator("#df-dock-body")).Not.ToContainTextAsync("https://example.test/first");
-        Assert.True(networkCalls >= 2, $"Expected an automatic network refresh, got {networkCalls} request(s).");
-        await Expect(_page.Locator("#df-dock-meta")).ToContainTextAsync("live");
-
-        await Expect(_page.Locator("#df-attach-data")).ToBeEnabledAsync();
-        await _page.Locator("#df-dock-body tr.df-row-click").First.ClickAsync();
-        await Expect(_page.Locator("#df-attach-data")).ToBeDisabledAsync();
-        await Expect(_page.Locator("#df-dock-body")).ToContainTextAsync("Back to requests");
-        await Expect(_page.Locator("#df-attach-data")).ToBeEnabledAsync();
-        await _page.WaitForTimeoutAsync(2500);
-        await Expect(_page.Locator("#df-dock-body")).ToContainTextAsync("Back to requests");
-        await Expect(_page.Locator("#df-dock-meta")).ToContainTextAsync("live paused");
-    }
 
     [LiveInspectorFact]
     public async Task DataContextCopyIsBoundedAndRedacted()

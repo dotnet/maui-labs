@@ -8,6 +8,8 @@ using AppKit;
 
 using Microsoft.Maui.Platforms.MacOS.Platform;
 
+#pragma warning disable CS0618 // This handler provides compatibility for MAUI's obsolete ListView and cell types.
+
 namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 
 public partial class ListViewHandler : MacOSViewHandler<ListView, NSScrollView>

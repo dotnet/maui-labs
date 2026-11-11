@@ -3,7 +3,17 @@ import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { isInside, resolveLocalSourceFile } from "../dist-test/source-path.js";
+import { isInside, resolveLocalSourceFile, sourceHashMatches } from "../dist-test/source-path.js";
+
+test("source hashes retain 128 bits and reject stale or legacy metadata", () => {
+  const text = "\u65e5\u672c\u8a9e";
+  const expected = "77710aedc74ecfa33685e33a6c7df5cc";
+  assert.equal(sourceHashMatches(text, expected), true);
+  assert.equal(sourceHashMatches(text, expected.toUpperCase()), true);
+  assert.equal(sourceHashMatches(`${text}\n`, expected), false);
+  assert.equal(sourceHashMatches(text, expected.slice(0, 16)), false);
+  assert.equal(sourceHashMatches(text, `${expected.slice(0, 16)}0000000000000000`), false);
+});
 
 test("a source file beneath a parent junction outside the workspace requires consent", async (t) => {
   const temporary = await mkdtemp(join(tmpdir(), "devflow-source-path-"));

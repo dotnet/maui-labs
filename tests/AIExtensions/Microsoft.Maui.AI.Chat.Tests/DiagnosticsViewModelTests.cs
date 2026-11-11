@@ -12,17 +12,21 @@ public sealed class DiagnosticsViewModelTests
         using var receiver = new ChatDiagnostics();
         var chat = new DiagnosticsViewModel(receiver);
         var embeddings = new DiagnosticsViewModel(receiver);
+        var images = new DiagnosticsViewModel(receiver);
         var notifications = new List<string?>();
         chat.PropertyChanged += (_, e) => notifications.Add(e.PropertyName);
+        Assert.False(chat.IsOpen);
+        Assert.False(embeddings.IsOpen);
+        Assert.False(images.IsOpen);
+        Assert.Equal("Show AI diagnostics", chat.ToggleDescription);
+        chat.ToggleCommand.Execute(null);
         Assert.True(chat.IsOpen);
-        Assert.True(embeddings.IsOpen);
         Assert.Equal("Hide AI diagnostics", chat.ToggleDescription);
+        Assert.False(embeddings.IsOpen);
+        Assert.False(images.IsOpen);
         chat.CloseCommand.Execute(null);
         Assert.False(chat.IsOpen);
         Assert.Equal("Show AI diagnostics", chat.ToggleDescription);
-        Assert.True(embeddings.IsOpen);
-        chat.ToggleCommand.Execute(null);
-        Assert.True(chat.IsOpen);
         Assert.Equal(["IsOpen", "ToggleDescription", "IsOpen", "ToggleDescription"], notifications);
 
         receiver.CreateLogger("Microsoft.Extensions.AI.Test").LogDebug("Existing diagnostic");
@@ -44,7 +48,7 @@ public sealed class DiagnosticsViewModelTests
     {
         using var receiver = new ChatDiagnostics();
         var viewModel = new DiagnosticsViewModel(receiver);
-        viewModel.CloseCommand.Execute(null);
+        Assert.False(viewModel.IsOpen);
         receiver.CreateLogger("Microsoft.Extensions.AI.Test").LogError("Existing failure");
         viewModel.ToggleCommand.Execute(null);
         viewModel.Refresh();

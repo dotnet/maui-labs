@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		340019422EDF4D6800DAB0A3 /* PlainTextDeltas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019412EDF4D6800DAB0A3 /* PlainTextDeltas.swift */; };
+		3400193F2EDF4D6800DAB0A3 /* StructuredJsonDeltas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019402EDF4D6800DAB0A3 /* StructuredJsonDeltas.swift */; };
 		340019332EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019302EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift */; };
 		340019342EDF4D6800DAB0A3 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019292EDF4D6800DAB0A3 /* ChatMessage.swift */; };
 		340019352EDF4D6800DAB0A3 /* ToolNative.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019322EDF4D6800DAB0A3 /* ToolNative.swift */; };
@@ -31,6 +33,8 @@
 		3400192D2EDF4D6800DAB0A3 /* ChatResponseUpdateNative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatResponseUpdateNative.swift; sourceTree = "<group>"; };
 		3400192E2EDF4D6800DAB0A3 /* ChatTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTool.swift; sourceTree = "<group>"; };
 		340019302EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JsonSchemaDecoder.swift; sourceTree = "<group>"; };
+		340019412EDF4D6800DAB0A3 /* PlainTextDeltas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlainTextDeltas.swift; sourceTree = "<group>"; };
+		340019402EDF4D6800DAB0A3 /* StructuredJsonDeltas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredJsonDeltas.swift; sourceTree = "<group>"; };
 		340019312EDF4D6800DAB0A3 /* ToolCallWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolCallWatcher.swift; sourceTree = "<group>"; };
 		340019322EDF4D6800DAB0A3 /* ToolNative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolNative.swift; sourceTree = "<group>"; };
 		34279C902EC421CC00583050 /* EssentialsAI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = EssentialsAI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -62,6 +66,8 @@
 				3400192D2EDF4D6800DAB0A3 /* ChatResponseUpdateNative.swift */,
 				3400192E2EDF4D6800DAB0A3 /* ChatTool.swift */,
 				340019302EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift */,
+				340019412EDF4D6800DAB0A3 /* PlainTextDeltas.swift */,
+				340019402EDF4D6800DAB0A3 /* StructuredJsonDeltas.swift */,
 				340019312EDF4D6800DAB0A3 /* ToolCallWatcher.swift */,
 				340019322EDF4D6800DAB0A3 /* ToolNative.swift */,
 				34279C912EC421CC00583050 /* Products */,
@@ -160,6 +166,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				340019332EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift in Sources */,
+				340019422EDF4D6800DAB0A3 /* PlainTextDeltas.swift in Sources */,
+				3400193F2EDF4D6800DAB0A3 /* StructuredJsonDeltas.swift in Sources */,
 				340019342EDF4D6800DAB0A3 /* ChatMessage.swift in Sources */,
 				340019352EDF4D6800DAB0A3 /* ToolNative.swift in Sources */,
 				340019372EDF4D6800DAB0A3 /* ToolCallWatcher.swift in Sources */,

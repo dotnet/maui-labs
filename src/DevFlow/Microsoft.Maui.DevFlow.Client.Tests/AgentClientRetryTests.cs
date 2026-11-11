@@ -20,16 +20,19 @@ public class AgentClientRetryTests
     private const string TapBody = """{"success":true}""";
 
     [Theory]
-    [InlineData(0, 1)]
-    [InlineData(1, 2)]
-    [InlineData(3, 4)]
-    public async Task TapAsync_MakesExactlyOneAttemptPerConfiguredRetry(int retryCount, int expectedAttempts)
+    [InlineData(0, 1, false)]
+    [InlineData(1, 2, false)]
+    [InlineData(3, 4, false)]
+    [InlineData(0, 1, true)]
+    [InlineData(1, 2, true)]
+    [InlineData(3, 4, true)]
+    public async Task TapAsync_MakesExactlyOneAttemptPerConfiguredRetry(
+        int retryCount, int expectedAttempts, bool frameworkException)
     {
-        // The agent resets every connection, so each attempt fails the same way at the transport
-        // level while still completing a TCP accept — which is what makes the attempts countable
-        // rather than inferred from elapsed time.
-        using var agent = FakeAgent.Start(_ => FakeAgent.Response.Reset());
-        using var client = new AgentClient("localhost", agent.Port)
+        // Count calls at the transport boundary: a TCP reset does not guarantee the same
+        // exception classification or number of wire requests across HTTP handler families.
+        var transport = new RetryTransport(int.MaxValue, () => TransportFailure(frameworkException));
+        using var client = new AgentClient("localhost", 9223, transport)
         {
             AutoAcquireMutationLease = false,
             TransientFailureRetryCount = retryCount,
@@ -38,20 +41,18 @@ public class AgentClientRetryTests
 
         Assert.False(await client.TapAsync("el-1"));
 
-        Assert.Equal(expectedAttempts, agent.Requests.Count);
+        Assert.Equal(expectedAttempts, transport.Attempts);
     }
 
-    [Fact]
-    public async Task TapAsync_StopsRetryingOnceTheAgentAnswers()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TapAsync_StopsRetryingOnceTheAgentAnswers(bool frameworkException)
     {
         // Two transport failures, then a real answer: the call must succeed on the third attempt and
         // not keep burning the remaining retries.
-        var failuresLeft = 2;
-        using var agent = FakeAgent.Start(_ =>
-            Interlocked.Decrement(ref failuresLeft) >= 0
-                ? FakeAgent.Response.Reset()
-                : FakeAgent.Response.Json(TapBody));
-        using var client = new AgentClient("localhost", agent.Port)
+        var transport = new RetryTransport(2, () => TransportFailure(frameworkException));
+        using var client = new AgentClient("localhost", 9223, transport)
         {
             AutoAcquireMutationLease = false,
             TransientFailureRetryCount = 10,
@@ -60,15 +61,17 @@ public class AgentClientRetryTests
 
         Assert.True(await client.TapAsync("el-1"));
 
-        Assert.Equal(3, agent.Requests.Count);
+        Assert.Equal(3, transport.Attempts);
     }
 
-    [Fact]
-    public async Task TapAsync_DoesNotRetryWhenMutatingRetriesAreDisabled()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TapAsync_DoesNotRetryWhenMutatingRetriesAreDisabled(bool frameworkException)
     {
         // Opting out must be honored, because a retried POST can duplicate the agent-side effect.
-        using var agent = FakeAgent.Start(_ => FakeAgent.Response.Reset());
-        using var client = new AgentClient("localhost", agent.Port)
+        var transport = new RetryTransport(int.MaxValue, () => TransportFailure(frameworkException));
+        using var client = new AgentClient("localhost", 9223, transport)
         {
             AutoAcquireMutationLease = false,
             TransientFailureRetryCount = 3,
@@ -78,7 +81,36 @@ public class AgentClientRetryTests
 
         Assert.False(await client.TapAsync("el-1"));
 
-        Assert.Single(agent.Requests);
+        Assert.Equal(1, transport.Attempts);
+    }
+
+    [Theory]
+    [InlineData("timeout")]
+    [InlineData("cancelled")]
+    [InlineData("protocol")]
+    [InlineData("trust")]
+    public async Task TapAsync_DoesNotRetryNonTransientFailures(string failure)
+    {
+        var transport = new RetryTransport(int.MaxValue, () => failure switch
+        {
+            "timeout" => new TaskCanceledException("timeout", new TimeoutException()),
+            "cancelled" => new TaskCanceledException(),
+            "protocol" => new HttpRequestException("protocol",
+                new WebException("protocol", null, WebExceptionStatus.ProtocolError, response: null)),
+            "trust" => new HttpRequestException("trust",
+                new WebException("trust", null, WebExceptionStatus.TrustFailure, response: null)),
+            _ => throw new ArgumentOutOfRangeException(nameof(failure))
+        });
+        using var client = new AgentClient("localhost", 9223, transport)
+        {
+            AutoAcquireMutationLease = false,
+            TransientFailureRetryCount = 3,
+            TransientFailureRetryDelay = TimeSpan.Zero,
+        };
+
+        Assert.False(await client.TapAsync("el-1"));
+
+        Assert.Equal(1, transport.Attempts);
     }
 
     [Fact]
@@ -220,4 +252,32 @@ public class AgentClientRetryTests
             await Task.Delay(delay).ConfigureAwait(false);
             return FakeAgent.Start(IPAddress.Loopback, port, _ => FakeAgent.Response.Json(body));
         });
+
+    private static HttpRequestException TransportFailure(bool frameworkException)
+    {
+        var reset = new SocketException((int)SocketError.ConnectionReset);
+        return new HttpRequestException("Connection reset", frameworkException
+            ? new WebException("Connection reset", reset, WebExceptionStatus.ReceiveFailure, response: null)
+            : reset);
+    }
+
+    private sealed class RetryTransport(int failuresBeforeSuccess, Func<Exception> failure) : HttpMessageHandler
+    {
+        public int Attempts { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Attempts++;
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("/api/v1/ui/actions/tap", request.RequestUri!.AbsolutePath);
+            Assert.Contains("\"elementId\":\"el-1\"", await request.Content!.ReadAsStringAsync());
+            if (Attempts <= failuresBeforeSuccess)
+                throw failure();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(TapBody)
+            };
+        }
+    }
 }

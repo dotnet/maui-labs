@@ -18,6 +18,48 @@ public class InspectorDiagnosticsOptInTests
     // up as phantom traffic in the assertions below.
     private const string AgentHost = "127.0.0.9";
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task DiagnosticsAgent_ReadRequestAsync_ConsumesBodyAcrossReads(int initialBodyBytes)
+    {
+        var body = Encoding.UTF8.GetBytes("\u20ac");
+        var headers = Encoding.ASCII.GetBytes(
+            $"POST /api/v1/ui/diagnostics/layout HTTP/1.1\r\nHost: localhost\r\ncontent-length: {body.Length}\r\n\r\n");
+        using var stream = new FragmentedRequestStream(
+            [.. headers, .. body], headers.Length + initialBodyBytes);
+
+        var request = await DiagnosticsAgent.ReadRequestAsync(stream, CancellationToken.None);
+
+        Assert.Equal("POST", request.Method);
+        Assert.Equal("/api/v1/ui/diagnostics/layout", request.Path);
+        Assert.Equal(stream.Length, stream.Position);
+    }
+
+    [Fact]
+    public async Task DiagnosticsAgent_ReadRequestAsync_TruncatedBody_Throws()
+    {
+        using var stream = new MemoryStream(Encoding.ASCII.GetBytes(
+            "POST /api/v1/ui/diagnostics/layout HTTP/1.1\r\nContent-Length: 2\r\n\r\n{"));
+
+        await Assert.ThrowsAsync<EndOfStreamException>(
+            () => DiagnosticsAgent.ReadRequestAsync(stream, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DiagnosticsAgent_ReadRequestAsync_WithoutBody_ReturnsRequest()
+    {
+        using var stream = new FragmentedRequestStream(Encoding.ASCII.GetBytes(
+            "GET /api/v1/agent/status HTTP/1.1\r\nHost: localhost\r\n\r\n"), 1);
+
+        var request = await DiagnosticsAgent.ReadRequestAsync(stream, CancellationToken.None);
+
+        Assert.Equal("GET", request.Method);
+        Assert.Equal("/api/v1/agent/status", request.Path);
+        Assert.Equal(stream.Length, stream.Position);
+    }
+
     [Fact]
     public async Task State_WithoutDiagnosticsFlag_DoesNotAnalyzeLayout()
     {
@@ -154,8 +196,10 @@ public class InspectorDiagnosticsOptInTests
         }
     }
 
-    [Fact]
-    public async Task LayoutSuppression_RootedProject_ReportsPathAndPreservesSuccessfulRoundTrip()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LayoutSuppression_RootedProject_ReportsPathAndPreservesSuccessfulRoundTrip(bool legacyFingerprint)
     {
         var root = Path.Combine(Path.GetTempPath(), $"devflow-layout-policy-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -163,13 +207,16 @@ public class InspectorDiagnosticsOptInTests
         {
             var project = Path.Combine(root, "App.csproj");
             await File.WriteAllTextAsync(project, "<Project />");
+            if (legacyFingerprint)
+                await File.WriteAllTextAsync(Path.Combine(root, ".mauidevflow"),
+                    """{"layoutDiagnostics":{"suppressions":[{"fingerprint":"0123456789abcdef","reason":"Saved policy"}]}}""");
             await using var agent = new DiagnosticsAgent
             {
                 LayoutResponse = """
                     {"schemaVersion":"1.0","ruleSetVersion":"1.1",
                      "snapshot":{"id":"snapshot","stable":true,"nodeCount":1},
                      "summary":{"violations":1},"coverage":{"overall":"partial","rules":[]},
-                     "findings":[{"id":"test-finding","suppressionKey":"test-fingerprint",
+                     "findings":[{"id":"test-finding","suppressionKey":"0123456789abcdef0123456789abcdef",
                        "ruleId":"layout.constraint-violation","outcome":"violation","severity":"moderate",
                        "confidence":"high","message":"Conflicting constraints.","element":{"id":"root","type":"BoxView"}}]}
                     """
@@ -179,6 +226,7 @@ public class InspectorDiagnosticsOptInTests
             await AuthorizeAsync(http, inspector.Url);
             using var scan = await http.PostAsync($"{inspector.Url}/api/diagnostics/layout",
                 new StringContent("{}", Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, scan.StatusCode);
             using var report = JsonDocument.Parse(await scan.Content.ReadAsStringAsync());
             var policyPath = report.RootElement.GetProperty("policyFilePath").GetString();
             Assert.Equal(Path.Combine(root, ".mauidevflow"), policyPath);
@@ -188,7 +236,8 @@ public class InspectorDiagnosticsOptInTests
             Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
             using var result = JsonDocument.Parse(await saved.Content.ReadAsStringAsync());
             Assert.True(result.RootElement.GetProperty("success").GetBoolean());
-            Assert.Single(Microsoft.Maui.Cli.DevFlow.LayoutDiagnosticsPolicyLoader.LoadProjectPolicy(project).Suppressions);
+            var suppression = Assert.Single(Microsoft.Maui.Cli.DevFlow.LayoutDiagnosticsPolicyLoader.LoadProjectPolicy(project).Suppressions);
+            Assert.Equal(legacyFingerprint ? "0123456789abcdef" : "0123456789abcdef0123456789abcdef", suppression.Fingerprint);
 
             using var rescanned = await http.PostAsync($"{inspector.Url}/api/diagnostics/layout",
                 new StringContent("{}", Encoding.UTF8, "application/json"));
@@ -265,6 +314,12 @@ public class InspectorDiagnosticsOptInTests
             await inspector.StopAsync();
             inspector.Dispose();
         }
+    }
+
+    private sealed class FragmentedRequestStream(byte[] request, int firstReadSize) : MemoryStream(request)
+    {
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            => base.ReadAsync(buffer[..Math.Min(buffer.Length, Position == 0 ? firstReadSize : 1)], cancellationToken);
     }
 
     /// <summary>Minimal agent: enough tree + screenshot for a frame, and a counted analyze route.</summary>
@@ -369,19 +424,40 @@ public class InspectorDiagnosticsOptInTests
             }
         }
 
-        private static async Task<(string Method, string Path)> ReadRequestAsync(
-            NetworkStream stream,
+        public static async Task<(string Method, string Path)> ReadRequestAsync(
+            Stream stream,
             CancellationToken ct)
         {
             var buffer = new byte[8192];
             var text = new StringBuilder();
-            while (text.ToString().IndexOf("\r\n\r\n", StringComparison.Ordinal) < 0)
+            int headerEnd;
+            while ((headerEnd = text.ToString().IndexOf("\r\n\r\n", StringComparison.Ordinal)) < 0)
             {
                 var read = await stream.ReadAsync(buffer, ct);
-                if (read <= 0) break;
-                text.Append(Encoding.UTF8.GetString(buffer, 0, read));
+                if (read == 0)
+                    throw new EndOfStreamException("Incomplete HTTP request headers.");
+                // ASCII preserves byte offsets even when the first read includes a partial UTF-8 body.
+                text.Append(Encoding.ASCII.GetString(buffer, 0, read));
             }
-            var parts = text.ToString().Split("\r\n", 2)[0].Split(' ');
+            var headers = text.ToString()[..headerEnd];
+            var contentLength = 0;
+            foreach (var line in headers.Split("\r\n"))
+            {
+                if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
+                    contentLength = int.Parse(line["Content-Length:".Length..].Trim(),
+                        System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            var remaining = contentLength - (text.Length - headerEnd - 4);
+            while (remaining > 0)
+            {
+                var read = await stream.ReadAsync(buffer.AsMemory(0, Math.Min(buffer.Length, remaining)), ct);
+                if (read == 0)
+                    throw new EndOfStreamException("Incomplete HTTP request body.");
+                remaining -= read;
+            }
+
+            var parts = headers.Split("\r\n", 2)[0].Split(' ');
             return (
                 parts.Length > 0 ? parts[0] : "",
                 parts.Length > 1 ? parts[1] : "");

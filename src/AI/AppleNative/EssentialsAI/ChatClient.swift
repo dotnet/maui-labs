@@ -16,6 +16,39 @@ public class AppleIntelligenceLogger: NSObject {
 }
 #endif
 
+/// Preserves request-local callback order while retaining the invocation queue as the execution target.
+final class CallbackDispatcher: @unchecked Sendable {
+    private let queue: DispatchQueue
+
+    init(target: DispatchQueue?) {
+        queue = DispatchQueue(label: "Microsoft.Maui.EssentialsAI.Callbacks", target: target)
+    }
+
+    func dispatch(_ callback: @escaping () -> Void) {
+        queue.async(execute: callback)
+    }
+}
+
+/// Known availability values returned through the Objective-C bridge.
+/// Unknown future reasons are still returned as their native string description.
+enum AppleIntelligenceModelAvailabilityNative {
+    static let available = "available"
+    static let deviceNotEligible = "deviceNotEligible"
+    static let appleIntelligenceNotEnabled = "appleIntelligenceNotEnabled"
+    static let modelNotReady = "modelNotReady"
+}
+
+/// Capability flags returned through the Objective-C bridge.
+/// Keep these values aligned with AppleIntelligenceModelCapabilitiesNative in managed code.
+struct AppleIntelligenceModelCapabilitiesNative: OptionSet {
+    let rawValue: UInt64
+
+    static let vision = Self(rawValue: 1 << 0)
+    static let guidedGeneration = Self(rawValue: 1 << 1)
+    static let reasoning = Self(rawValue: 1 << 2)
+    static let toolCalling = Self(rawValue: 1 << 3)
+}
+
 @objc(ChatClientError)
 public enum ChatClientError: Int {
     case emptyMessages = 1
@@ -27,6 +60,46 @@ public enum ChatClientError: Int {
 @objc(ChatClientNative)
 public class ChatClientNative: NSObject {
 
+    @objc public static func getModelAvailability() -> String {
+        availabilityName(SystemLanguageModel.default.availability)
+    }
+
+    static func availabilityName(_ availability: SystemLanguageModel.Availability) -> String {
+        switch availability {
+        case .available: return AppleIntelligenceModelAvailabilityNative.available
+        case .unavailable(let reason):
+            switch reason {
+            case .deviceNotEligible: return AppleIntelligenceModelAvailabilityNative.deviceNotEligible
+            case .appleIntelligenceNotEnabled: return AppleIntelligenceModelAvailabilityNative.appleIntelligenceNotEnabled
+            case .modelNotReady: return AppleIntelligenceModelAvailabilityNative.modelNotReady
+            @unknown default: return String(describing: reason)
+            }
+        }
+    }
+
+    @objc public static func getModelCapabilities() -> NSNumber? {
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+            let capabilities = SystemLanguageModel.default.capabilities
+            var flags: AppleIntelligenceModelCapabilitiesNative = []
+            if capabilities.contains(.vision) { flags.insert(.vision) }
+            if capabilities.contains(.guidedGeneration) { flags.insert(.guidedGeneration) }
+            if capabilities.contains(.reasoning) { flags.insert(.reasoning) }
+            if capabilities.contains(.toolCalling) { flags.insert(.toolCalling) }
+            return NSNumber(value: flags.rawValue)
+        }
+        return nil
+    }
+
+    static func validateImageSupport(hasImages: Bool, supportsOS27: Bool, supportsVision: Bool) throws {
+        guard hasImages else { return }
+        guard supportsOS27 else {
+            throw NSError.chatError(.invalidContent, description: "Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.")
+        }
+        guard supportsVision else {
+            throw NSError.chatError(.invalidContent, description: "The current Apple Intelligence model does not report vision support.")
+        }
+    }
+
     // MARK: - Stream Response
 
     @objc public func streamResponse(
@@ -37,7 +110,8 @@ public class ChatClientNative: NSObject {
     ) -> CancellationTokenNative? {
 
         let methodName = "streamResponse"
-        let cq = OperationQueue.current?.underlyingQueue
+        let callbacks = CallbackDispatcher(target: OperationQueue.current?.underlyingQueue)
+        let textDeltas = PlainTextDeltaEmitter()
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -61,7 +135,9 @@ public class ChatClientNative: NSObject {
 #endif
 
                     let update = ResponseUpdateNative(updateType: .toolCall, toolCallId: id, toolCallName: name, toolCallArguments: arguments)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    textDeltas.toolCall {
+                        callbacks.dispatch { onUpdate(update) }
+                    }
                 },
                 onToolResult: { id, name, result in
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -71,11 +147,11 @@ public class ChatClientNative: NSObject {
 #endif
 
                     let update = ResponseUpdateNative(updateType: .toolResult, toolCallId: id, toolCallName: name, toolCallResult: result)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    callbacks.dispatch { onUpdate(update) }
                 }
             )
 
-        return executeTask(methodName, messages, options, toolWatcher, onComplete) { session, prompt, schema, genOptions in
+        return executeTask(methodName, messages, options, toolWatcher, callbacks, onComplete) { session, prompt, schema, genOptions in
 
             if let jsonSchema = schema {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -84,22 +160,29 @@ public class ChatClientNative: NSObject {
                 }
 #endif
 
-                let responseStream = session.streamResponse(to: prompt, schema: jsonSchema, includeSchemaInPrompt: false, options: genOptions)
+                // Keep the schema in the prompt as well as the grammar so nested fields retain their meaning.
+                let responseStream = session.streamResponse(to: prompt, schema: jsonSchema, options: genOptions)
 
-                for try await response in responseStream {
-                    try Task.checkCancellation()
-                    let text = response.content.jsonString
-                    guard !text.isEmpty else { continue }
+                // Native completion metadata yields append-only JSON deltas; the state is local to this response.
+                var deltas = StructuredJsonDeltas()
+                let emit: (String) -> Void = { delta in
+                    guard !delta.isEmpty else { return }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                     if let log = AppleIntelligenceLogger.log {
-                        log("[\(methodName)] Streaming update: \(text)")
+                        log("[\(methodName)] Streaming update: \(delta)")
                     }
 #endif
-                    let update = ResponseUpdateNative(updateType: .content, text: text)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    let update = ResponseUpdateNative(updateType: .content, text: delta)
+                    callbacks.dispatch { onUpdate(update) }
+                }
+
+                for try await snapshot in responseStream {
+                    try Task.checkCancellation()
+                    emit(try deltas.process(snapshot.rawContent))
                 }
 
                 let response = try await responseStream.collect()
+                emit(try deltas.process(response.rawContent, final: true))
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Stream collected, content length: \(response.content.jsonString.count)")
@@ -114,21 +197,24 @@ public class ChatClientNative: NSObject {
 #endif
 
                 let responseStream = session.streamResponse(to: prompt, options: genOptions)
+                let emit: (String) -> Void = { delta in
+                    guard !delta.isEmpty else { return }
+#if APPLE_INTELLIGENCE_LOGGING_ENABLED
+                    if let log = AppleIntelligenceLogger.log {
+                        log("[\(methodName)] Streaming update: \(delta)")
+                    }
+#endif
+                    let update = ResponseUpdateNative(updateType: .content, text: delta)
+                    callbacks.dispatch { onUpdate(update) }
+                }
 
                 for try await response in responseStream {
                     try Task.checkCancellation()
-                    let text = response.content
-                    guard !text.isEmpty else { continue }
-#if APPLE_INTELLIGENCE_LOGGING_ENABLED
-                    if let log = AppleIntelligenceLogger.log {
-                        log("[\(methodName)] Streaming update: \(text)")
-                    }
-#endif
-                    let update = ResponseUpdateNative(updateType: .content, text: text)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    try textDeltas.process(response.content, emit: emit)
                 }
 
                 let response = try await responseStream.collect()
+                try textDeltas.process(response.content, emit: emit)
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Stream collected, content length: \(response.content.count)")
@@ -150,7 +236,7 @@ public class ChatClientNative: NSObject {
     ) -> CancellationTokenNative? {
 
         let methodName = "getResponse"
-        let cq = OperationQueue.current?.underlyingQueue
+        let callbacks = CallbackDispatcher(target: OperationQueue.current?.underlyingQueue)
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -174,7 +260,7 @@ public class ChatClientNative: NSObject {
 #endif
 
                     let update = ResponseUpdateNative(updateType: .toolCall, toolCallId: id, toolCallName: name, toolCallArguments: arguments)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    callbacks.dispatch { onUpdate(update) }
                 },
                 onToolResult: { id, name, result in
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -184,11 +270,11 @@ public class ChatClientNative: NSObject {
 #endif
 
                     let update = ResponseUpdateNative(updateType: .toolResult, toolCallId: id, toolCallName: name, toolCallResult: result)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    callbacks.dispatch { onUpdate(update) }
                 }
             )
 
-        return executeTask(methodName, messages, options, toolWatcher, onComplete) { session, prompt, schema, genOptions in
+        return executeTask(methodName, messages, options, toolWatcher, callbacks, onComplete) { session, prompt, schema, genOptions in
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
             if let log = AppleIntelligenceLogger.log {
@@ -198,7 +284,7 @@ public class ChatClientNative: NSObject {
 
             let response = try await {
                 if let jsonSchema = schema {
-                    let inner = try await session.respond(to: prompt, schema: jsonSchema, includeSchemaInPrompt: false, options: genOptions)
+                    let inner = try await session.respond(to: prompt, schema: jsonSchema, options: genOptions)
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                     if let log = AppleIntelligenceLogger.log {
                         log("[\(methodName)] Response received, content length: \(inner.content.jsonString.count)")
@@ -247,13 +333,15 @@ public class ChatClientNative: NSObject {
         let otherMessages = Array(messages.dropLast())
 
         let model = SystemLanguageModel.default
-        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *),
-           messages.contains(where: { message in message.contents.contains(where: { $0 is ImageContentNative }) }),
-           !model.capabilities.contains(.vision) {
-            throw NSError.chatError(.invalidContent, description: "Image input requires iOS, Mac Catalyst, or macOS 27.0 or later and a vision-capable Apple Intelligence model. The current model does not report vision support.")
+        let hasImages = messages.contains(where: { message in message.contents.contains(where: { $0 is ImageContentNative }) })
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+            try Self.validateImageSupport(hasImages: hasImages, supportsOS27: true, supportsVision: model.capabilities.contains(.vision))
+        } else {
+            try Self.validateImageSupport(hasImages: hasImages, supportsOS27: false, supportsVision: false)
         }
 
-        let tools = options?.tools?.map { ToolNative($0, toolWatcher?.notifyToolCall, toolWatcher?.notifyToolResult) } ?? []
+        let tools = try options?.toolCallingMode == .disallowed ? [] :
+            options?.tools?.map { try ToolNative($0, toolWatcher?.notifyToolCall, toolWatcher?.notifyToolResult) } ?? []
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log, let toolList = options?.tools {
@@ -283,19 +371,15 @@ public class ChatClientNative: NSObject {
             return nil
         }()
 
-        // Map options into GenerationOptions
-        let genOptions = GenerationOptions(
-            samplingMode: {
-                if let topK = options?.topK?.intValue {
-                    return .random(top: topK, seed: options?.seed?.uint64Value)
-                }
-                return .greedy
-            }(),
-            temperature: options?.temperature?.doubleValue,
-            maximumResponseTokens: options?.maxOutputTokens?.intValue
-        )
+        let genOptions = try (options ?? ChatOptionsNative()).toGenerationOptions()
 
-        let session = LanguageModelSession(model: model, tools: tools, transcript: transcript)
+        let availability = Self.getModelAvailability()
+        guard availability == AppleIntelligenceModelAvailabilityNative.available else {
+            throw NSError.chatError(.invalidContent, description: "Apple Intelligence system model is unavailable: \(availability)")
+        }
+
+        let session = Self.makeSession(model: model, tools: tools, transcript: transcript,
+                                       toolCallingMode: options?.toolCallingMode ?? .allowed)
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -304,6 +388,15 @@ public class ChatClientNative: NSObject {
 #endif
 
         return (session, prompt, schema, genOptions)
+    }
+
+    static func makeSession(
+        model: SystemLanguageModel, tools: [ToolNative], transcript: Transcript, toolCallingMode: ToolCallingModeNative
+    ) -> LanguageModelSession {
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *), toolCallingMode == .required {
+            return LanguageModelSession(profile: RequiredToolProfile(model: model, tools: tools), history: transcript)
+        }
+        return LanguageModelSession(model: model, tools: tools, transcript: transcript)
     }
 
     private func toUsageDetailsNative<Content>(
@@ -330,13 +423,12 @@ public class ChatClientNative: NSObject {
         _ messages: [ChatMessageNative],
         _ options: ChatOptionsNative?,
         _ toolWatcher: ToolCallWatcher?,
+        _ callbacks: CallbackDispatcher,
         _ onComplete: @escaping (ChatResponseNative?, NSError?) -> Void,
         operation:
             @escaping (LanguageModelSession, Prompt, GenerationSchema?, GenerationOptions) async throws
             -> (String, ArraySlice<Transcript.Entry>, UsageDetailsNative?)
     ) -> CancellationTokenNative? {
-
-        let cq = OperationQueue.current?.underlyingQueue
 
         guard !messages.isEmpty else {
             let error = NSError.chatError(.emptyMessages, description: "No messages provided.")
@@ -346,7 +438,7 @@ public class ChatClientNative: NSObject {
             }
 #endif
 
-            cq?.async { onComplete(nil, error.toNSError()) } ?? onComplete(nil, error.toNSError())
+            callbacks.dispatch { onComplete(nil, error.toNSError()) }
             return nil
         }
 
@@ -362,6 +454,9 @@ public class ChatClientNative: NSObject {
 
                 // Convert transcript entries to messages
                 let transcriptMessages = try result.1.compactMap(self.fromTranscriptEntry)
+                guard !result.0.isEmpty, !transcriptMessages.isEmpty else {
+                    throw NSError.chatError(.invalidContent, description: "Apple Intelligence returned an empty native response.")
+                }
 
                 // Create response with all transcript messages
                 let response = ChatResponseNative(messages: transcriptMessages, usage: result.2)
@@ -373,7 +468,7 @@ public class ChatClientNative: NSObject {
                 }
 #endif
 
-                cq?.async { onComplete(response, nil) } ?? onComplete(response, nil)
+                callbacks.dispatch { onComplete(response, nil) }
             } catch {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
@@ -381,7 +476,8 @@ public class ChatClientNative: NSObject {
                 }
 #endif
 
-                cq?.async { onComplete(nil, error.toNSError()) } ?? onComplete(nil, error.toNSError())
+                let nativeError = error.toNSError(isCancelled: Task.isCancelled)
+                callbacks.dispatch { onComplete(nil, nativeError) }
             }
         }
 
@@ -390,7 +486,7 @@ public class ChatClientNative: NSObject {
 
     // MARK: - Conversion to Foundation Models Helpers
 
-    private func toPrompt(message: ChatMessageNative) throws -> Prompt {
+    func toPrompt(message: ChatMessageNative) throws -> Prompt {
         guard message.role == .user else {
             throw NSError.chatError(.invalidRole, description: "Only user messages can be prompts. Found: \(message.role)")
         }
@@ -420,7 +516,7 @@ public class ChatClientNative: NSObject {
         }
     }
 
-    private func toTranscriptEntries(message: ChatMessageNative) throws -> [Transcript.Entry] {
+    func toTranscriptEntries(message: ChatMessageNative) throws -> [Transcript.Entry] {
         switch message.role {
         case .user:
             return [try toUserEntry(message)]
@@ -466,6 +562,10 @@ public class ChatClientNative: NSObject {
         var entries: [Transcript.Entry] = []
         var pendingResponseSegments: [Transcript.Segment] = []
         var pendingToolCalls: [Transcript.ToolCall] = []
+
+        if message.contents.isEmpty {
+            return [.response(Transcript.Response(assetIDs: [], segments: [.text(Transcript.TextSegment(content: ""))]))]
+        }
 
         for content in message.contents {
             if let textContent = content as? TextContentNative {
@@ -629,6 +729,7 @@ public class ChatClientNative: NSObject {
     private func formatOptionsDetailed(_ options: ChatOptionsNative) -> String {
         var parts: [String] = []
         if let topK = options.topK { parts.append("topK=\(topK)") }
+        if let topP = options.topP { parts.append("topP=\(topP)") }
         if let temp = options.temperature { parts.append("temperature=\(temp)") }
         if let maxTokens = options.maxOutputTokens { parts.append("maxOutputTokens=\(maxTokens)") }
         if let seed = options.seed { parts.append("seed=\(seed)") }
@@ -662,6 +763,30 @@ public class ChatClientNative: NSObject {
 #endif
 }
 
+@available(iOS 27.0, macOS 27.0, visionOS 27.0, *)
+extension SessionPropertyValues {
+    @SessionPropertyEntry var essentialsAIRequiredToolCallCount: Int = 0
+}
+
+@available(iOS 27.0, macOS 27.0, visionOS 27.0, *)
+struct RequiredToolProfile: LanguageModelSession.DynamicProfile {
+    let model: SystemLanguageModel
+    let tools: [any Tool]
+
+    @SessionProperty(\.essentialsAIRequiredToolCallCount) var toolCallCount
+
+    static func toolCallingMode(for count: Int) -> GenerationOptions.ToolCallingMode {
+        count < 1 ? .required : .allowed
+    }
+
+    var body: some LanguageModelSession.DynamicProfile {
+        Profile { tools }
+            .model(model)
+            .toolCallingMode(Self.toolCallingMode(for: toolCallCount))
+            .onToolCall { toolCallCount += 1 }
+    }
+}
+
 extension NSError {
 
     static func chatError(_ code: ChatClientError, description: String) -> NSError {
@@ -675,7 +800,11 @@ extension NSError {
 
 extension Error {
 
-    fileprivate func toNSError() -> NSError {
+    func toNSError(isCancelled: Bool = false) -> NSError {
+        if isCancelled || self is CancellationError {
+            return NSError.chatError(.cancelled, description: "Request was cancelled.")
+        }
+
         switch self
         {
         case let error as LanguageModelSession.GenerationError:
@@ -713,9 +842,6 @@ extension Error {
                     NSLocalizedDescriptionKey: error.localizedDescription,
                 ]
             )
-
-        case is CancellationError:
-            return NSError.chatError(.cancelled, description: "Request was cancelled.")
 
         case let error as NSError:
             return error

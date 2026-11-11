@@ -90,6 +90,12 @@ public class BrokerInspectorRoutingTests
         var second = AgentRegistration.ComputeId(project, tfm, sessionId, processId: 1002);
 
         Assert.NotEqual(first, second);
+        Assert.Matches("^[0-9a-f]{32}$", first);
+        Assert.Matches("^[0-9a-f]{32}$", second);
+        Assert.Equal(
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes($"{project}|{tfm}|{sessionId}|1001")))[..32].ToLowerInvariant(),
+            first);
         Assert.Equal(first, AgentBrokerRegistration.ComputeId(project, tfm, sessionId, processId: 1001));
         Assert.Equal(second, AgentBrokerRegistration.ComputeId(project, tfm, sessionId, processId: 1002));
 
@@ -102,12 +108,13 @@ public class BrokerInspectorRoutingTests
     }
 
     [Fact]
-    public void AgentIds_WithoutProcessIdentity_UseLegacyId()
+    public void AgentIds_WithoutProcessIdentity_UseProjectAndFrameworkId()
     {
         const string project = "DevFlow.Sample";
         const string tfm = "net10.0-windows10.0.19041.0";
 
         var legacy = AgentRegistration.ComputeId(project, tfm);
+        Assert.Matches("^[0-9a-f]{32}$", legacy);
 
         Assert.Equal(legacy, AgentRegistration.ComputeId(project, tfm, "session", processId: null));
         Assert.Equal(legacy, AgentBrokerRegistration.ComputeId(project, tfm, "session", processId: 0));

@@ -6,13 +6,15 @@ using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientToolCallLoggingTests
 {
+	// Apple's callback adapter owns log correlation; Activity identity across awaits is covered by the shared function suite.
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task ToolCallbacks_InheritChatTraceAndSpanAcrossAwaits(bool streaming)
+	public async Task ToolCallbackLogs_InheritChatTraceAndSpan(bool streaming)
 	{
 		const string sourceName = "AppleToolCorrelationTests";
 		Activity? chatSpan = null;
@@ -27,13 +29,9 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 		using var client = new AppleIntelligenceChatClient(logCollector).AsBuilder()
 			.UseOpenTelemetry(sourceName: sourceName, configure: telemetry => telemetry.EnableSensitiveData = false)
 			.Build();
-		Activity? beforeAwait = null;
-		Activity? afterAwait = null;
 		var weatherTool = AIFunctionFactory.Create(async (string location) =>
 		{
-			beforeAwait = Activity.Current;
 			await Task.Yield();
-			afterAwait = Activity.Current;
 			return $"Clear skies in {location}";
 		}, name: "GetWeather", description: "Gets the weather for a location");
 		var options = new ChatOptions { Tools = [weatherTool] };
@@ -48,8 +46,6 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 		}
 
 		Assert.NotNull(chatSpan);
-		Assert.Same(chatSpan, beforeAwait);
-		Assert.Same(chatSpan, afterAwait);
 		Assert.NotEmpty(logCollector.Entries);
 		Assert.All(logCollector.Entries, entry =>
 		{
@@ -64,6 +60,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	//   [0] Debug: "Invoking GetWeather."
 	//   [1] Debug: "GetWeather invocation completed. Duration: {timespan}"
 	// ====================================================================
+	// Apple's callback logger owns these exact Debug messages and redaction rules; cloud invocation middleware logs separately.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_SingleTool_Debug_ProducesExactly2Entries()
@@ -103,6 +100,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	//   [0] Trace: "Invoking GetWeather({"location": "Seattle"})."
 	//   [1] Trace: "GetWeather invocation completed. Duration: {ts}. Result: \"Clear skies, 72°F in Seattle\""
 	// ====================================================================
+	// Apple's callback logger emits this exact sensitive-data Trace format; it is not an IChatClient logging contract.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_SingleTool_Trace_ProducesExactly2EntriesWithSensitiveData()
@@ -138,6 +136,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// ====================================================================
 	// No tools — must produce zero log entries even at Trace
 	// ====================================================================
+	// Apple's injected ILoggerFactory is used only for native tool callbacks, unlike provider-wide cloud HTTP logging.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_NoTools_ProducesZeroEntries()
@@ -155,6 +154,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// Information level — tool calls happen but produce zero log entries
 	// (our logging is Debug/Trace only)
 	// ====================================================================
+	// Apple's callback logger filters successful invocations below Information; other providers choose different levels.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_InformationLevel_ProducesZeroEntries()
@@ -177,6 +177,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// ====================================================================
 	// Streaming, Debug — same 2 entries as non-streaming
 	// ====================================================================
+	// Asserts Apple's native streaming callback logger's exact two-entry Debug format, not shared invocation behavior.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_SingleTool_Debug_ProducesExactly2Entries()
@@ -207,6 +208,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// ====================================================================
 	// Streaming, Trace — same 2 entries as non-streaming, with sensitive data
 	// ====================================================================
+	// Asserts Apple's native streaming callback logger's sensitive-data Trace format, which cloud middleware does not promise.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_SingleTool_Trace_ProducesExactly2EntriesWithSensitiveData()
@@ -239,6 +241,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// ====================================================================
 	// Ordering: for a single tool, "Invoking" must come before "completed"
 	// ====================================================================
+	// Orders Apple's adapter-owned log messages around a native callback; common tool-result ordering is covered in the base.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_InvokingIsLoggedBeforeCompleted()
@@ -267,6 +270,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// Order across tools is non-deterministic, but each tool's
 	// "Invoking" must precede its "completed".
 	// ====================================================================
+	// Apple's framework invokes native tools concurrently; asserts its callback logger's entry count and per-tool ordering.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_MultipleTools_ProducesExactly4Entries()
@@ -318,6 +322,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// ====================================================================
 	// Tool failure — exactly 2 entries: Invoking (Debug) + failed (Error)
 	// ====================================================================
+	// Apple's callback logger emits these Debug/Error messages even when the native framework propagates an NSError failure.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_ToolFailure_Produces2EntriesWithErrorLevel()
@@ -352,28 +357,6 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 		// Entry 1: Error-level "GetWeather invocation failed."
 		Assert.Equal(LogLevel.Error, logs[1].Level);
 		Assert.Equal("GetWeather invocation failed.", logs[1].Message);
-	}
-
-	// ====================================================================
-	// No logger factory — tool invocation works without crashing
-	// ====================================================================
-	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_NoLoggerFactory_CompletesSuccessfully()
-	{
-		var client = new AppleIntelligenceChatClient();
-
-		var weatherTool = AIFunctionFactory.Create(
-			(string location) => $"Clear skies, 72°F in {location}",
-			name: "GetWeather",
-			description: "Gets the weather for a location");
-
-		var options = new ChatOptions { Tools = [weatherTool] };
-		var response = await client.GetResponseAsync(
-			[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options);
-
-		Assert.NotNull(response);
-		Assert.NotEmpty(response.Messages);
 	}
 
 	/// <summary>

@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Essentials.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
 
@@ -119,15 +120,15 @@ public sealed class ChatDiagnosticsTests
         using var factory = LoggerFactory.Create(builder => builder
             .SetMinimumLevel(LogLevel.Warning)
             .AddProvider(receiver)
-            .AddFilter<ChatDiagnostics>(ChatDiagnostics.AppleToolLogCategory, LogLevel.Debug));
-        var logger = factory.CreateLogger(ChatDiagnostics.AppleToolLogCategory);
+            .AddFilter<ChatDiagnostics>(ChatDiagnostics.ProviderLogCategory, LogLevel.Debug));
+        var logger = factory.CreateLogger("Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient");
         using var source = new ActivitySource(ChatDiagnostics.SourceName);
         using var activity = source.StartActivity("chat")!;
 
         logger.LogDebug("Invoking {MethodName}.", "calculate");
         logger.LogDebug("{MethodName} invocation completed. Duration: {Duration}", "calculate", TimeSpan.FromMilliseconds(5));
         logger.LogTrace("private tool arguments and result");
-        factory.CreateLogger("Microsoft.Maui.Essentials.AI.Other").LogError("unrelated");
+        factory.CreateLogger("Other.Category").LogError("unrelated");
 
         var entries = receiver.Snapshot().Entries;
         Assert.Equal(2, entries.Length);
@@ -137,6 +138,45 @@ public sealed class ChatDiagnosticsTests
         Assert.DoesNotContain(entries, entry => (entry.Message + entry.Details).Contains("private tool"));
         receiver.Dispose();
         Assert.False(logger.IsEnabled(LogLevel.Debug));
+    }
+
+    [Fact]
+    public void Receiver_CapturesAppAndProviderLogsWithoutViewModelSpecificFilters()
+    {
+        using var receiver = new ChatDiagnostics();
+        using var factory = LoggerFactory.Create(builder => builder
+            .SetMinimumLevel(LogLevel.Warning)
+            .AddProvider(receiver)
+            .AddFilter<ChatDiagnostics>(ChatDiagnostics.SourceName, LogLevel.Debug)
+            .AddFilter<ChatDiagnostics>(ChatDiagnostics.ProviderLogCategory, LogLevel.Debug));
+        var logger = factory.CreateLogger<ModelReadinessViewModel>();
+
+        logger.LogDebug("Model status: {Availability}", ChatModelAvailability.NotReady);
+        logger.LogTrace("not captured");
+        factory.CreateLogger<ChatSessionService>().LogDebug("Recording saved.");
+        factory.CreateLogger("Microsoft.Maui.Essentials.AI.GeminiNanoChatClient").LogDebug("Native status read.");
+        factory.CreateLogger("AIExtensions.Sample.ChatPlaygroundOther").LogError("unrelated");
+        factory.CreateLogger("Microsoft.Maui.Essentials.AIOther").LogError("unrelated");
+
+        var entries = receiver.Snapshot().Entries;
+        Assert.Equal(3, entries.Length);
+        var entry = entries[0];
+        Assert.Contains(nameof(ModelReadinessViewModel), entry.Heading);
+        Assert.Equal("Model status: NotReady", entry.Message);
+        Assert.Equal("Recording saved.", entries[1].Message);
+        Assert.Equal("Native status read.", entries[2].Message);
+        Assert.True(logger.IsEnabled(LogLevel.Debug));
+    }
+
+    [Fact]
+    public void Receiver_CapturesSharedCategoryRoots()
+    {
+        using var receiver = new ChatDiagnostics();
+        receiver.CreateLogger(ChatDiagnostics.SourceName).LogInformation("App event");
+        receiver.CreateLogger(ChatDiagnostics.ProviderLogCategory).LogInformation("Provider event");
+
+        Assert.Equal(["App event", "Provider event"],
+            receiver.Snapshot().Entries.Select(entry => entry.Message));
     }
 
     [Fact]

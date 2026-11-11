@@ -100,7 +100,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 			// Native NSOutlineView source list sidebar
 			_outlineView = new NSOutlineView
 			{
-				SelectionHighlightStyle = NSTableViewSelectionHighlightStyle.SourceList,
+				Style = NSTableViewStyle.SourceList,
 				FloatsGroupRows = false,
 				RowSizeStyle = NSTableViewRowSizeStyle.Default,
 				HeaderView = null,
@@ -800,7 +800,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 				Editable = false,
 				Bordered = false,
 				DrawsBackground = false,
-				Font = NSFont.BoldSystemFontOfSize(10),
+				Font = NSFont.BoldSystemFontOfSize(10)!,
 				TextColor = NSColor.SecondaryLabel,
 				LineBreakMode = NSLineBreakMode.TruncatingTail,
 			};
@@ -840,7 +840,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 				Editable = false,
 				Bordered = false,
 				DrawsBackground = false,
-				Font = NSFont.SystemFontOfSize(13),
+				Font = NSFont.SystemFontOfSize(13)!,
 				TextColor = NSColor.Label,
 				LineBreakMode = NSLineBreakMode.TruncatingTail,
 			};

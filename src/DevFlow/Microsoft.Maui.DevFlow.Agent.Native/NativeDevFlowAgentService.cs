@@ -47,6 +47,9 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     protected override string DeviceTypeName => NativeUi.DeviceTypeName;
 
     /// <inheritdoc />
+    protected override string? DeviceIdentifier => NativeUi.DeviceIdentifier;
+
+    /// <inheritdoc />
     protected override bool IsUiSupported => true;
 
     /// <inheritdoc />
@@ -277,7 +280,14 @@ public class NativeDevFlowAgentService : DevFlowAgentService
 
     /// <inheritdoc />
     protected override Task<HttpResponse> HandleTap(HttpRequest request)
-        => ActOnElement(request, "action.tap", (view, _) => NativeUi.TryTap(view, null, null) ? "ok" : "Tap not handled", "Tapped");
+    {
+        // A tap at a point needs touch injection this agent does not have; tapping the element
+        // instead would report success for something other than what was asked.
+        if (request.BodyAs<TapRequest>() is { } body && (body.X.HasValue || body.Y.HasValue))
+            return Task.FromResult(HttpResponse.Error("Tap at a point is not supported by this agent"));
+
+        return ActOnElement(request, "action.tap", (view, _) => NativeUi.TryTap(view, null, null) ? "ok" : "Tap not handled", "Tapped");
+    }
 
     /// <inheritdoc />
     protected override Task<HttpResponse> HandleFill(HttpRequest request)
@@ -344,6 +354,12 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         var body = request.BodyAs<GestureActionRequest>();
         if (body == null || string.IsNullOrWhiteSpace(body.Type))
             return HttpResponse.Error("type is required");
+
+        // A drag from a point (or onto a drop target) needs touch injection this agent does not
+        // have; a plain gesture on the element instead would report success for the wrong input.
+        if (body.X.HasValue || body.Y.HasValue || body.ToX.HasValue || body.ToY.HasValue
+            || !string.IsNullOrWhiteSpace(body.ToElementId))
+            return HttpResponse.Error("A gesture at a point is not supported by this agent");
 
         var startedAtUtc = DateTime.UtcNow;
         var result = await DispatchAsync(() =>
@@ -444,7 +460,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
 
         try
         {
-            var result = await DispatchAsync(() =>
+            var result = await DispatchAsync(async () =>
             {
                 byte[]? png;
                 if (hasElementId && !string.IsNullOrEmpty(elementId))
@@ -454,13 +470,13 @@ public class NativeDevFlowAgentService : DevFlowAgentService
                 }
                 else
                 {
-                    png = NativeUi.CaptureScreen();
+                    png = await NativeUi.CaptureScreen();
                 }
 
                 return new ScreenshotCaptureResult(png, NativeUi.DisplayDensity);
             });
 
-            if (result.Png == null)
+            if (result?.Png == null)
             {
                 return hasElementId
                     ? HttpResponse.NotFound($"Element '{elementId}' not found or has no size")

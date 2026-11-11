@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Maui.DevFlow.Agent;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Blazor;
+using SkiaSharp.Views.Maui.Controls.Hosting;
+using Syncfusion.Maui.Toolkit.Hosting;
 
 namespace DevFlow.Sample;
 
@@ -18,6 +20,8 @@ public static class MauiProgram
 		var builder = MauiApp.CreateBuilder();
 		builder
 			.UseMauiApp<App>()
+			.UseSkiaSharp()
+			.ConfigureSyncfusionToolkit()
 			.ConfigureFonts(fonts =>
 			{
 				fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");

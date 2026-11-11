@@ -35,6 +35,26 @@
                         <Setter Property="IsVisible" Value="False" />
                     </DataTrigger>
                 </VerticalStackLayout.Triggers>
+                <VerticalStackLayout Spacing="4" IsVisible="{Binding HasModels}"
+                                     AutomationId="ChatModelOptions">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                        <Label Text="MODEL" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
+                        <local:InfoTip Grid.Column="1"
+                                       Text="Select the model for the next send. Readiness checks and downloads use the same selection." />
+                    </Grid>
+                    <VerticalStackLayout Spacing="4"
+                                         RadioButtonGroup.GroupName="ChatModel"
+                                         RadioButtonGroup.SelectedValue="{Binding SelectedModelId, Mode=TwoWay}"
+                                         BindableLayout.ItemsSource="{Binding Models}">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="local:ChatModelOption">
+                                <RadioButton HorizontalOptions="Fill"
+                                             Content="{Binding DisplayName}" Value="{Binding Id}"
+                                             AutomationId="{Binding AutomationId}" />
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
                 <BoxView HeightRequest="1"
                          Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
                 <Label Text="RESPONSE" Style="{StaticResource SectionHeading}" />
@@ -47,10 +67,13 @@
                     <local:InfoTip Grid.Column="2" Text="Update the response as text arrives." />
 
                     <CheckBox Grid.Row="1" IsChecked="{Binding UseStructuredJson}"
+                              IsVisible="{Binding SelectedDescriptor.SupportsStructuredOutput}"
                               WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
                               AutomationId="StructuredJsonCheckBox" />
-                    <Label Grid.Row="1" Grid.Column="1" Text="Structured JSON" VerticalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="1" Text="Structured JSON" VerticalOptions="Center"
+                           IsVisible="{Binding SelectedDescriptor.SupportsStructuredOutput}" />
                     <local:InfoTip Grid.Row="1" Grid.Column="2"
+                                   IsVisible="{Binding SelectedDescriptor.SupportsStructuredOutput}"
                                    Text="Request JSON matching the playground response schema." />
 
                     <CheckBox Grid.Row="2" IsChecked="{Binding UseReasoningSummary}"
@@ -74,7 +97,7 @@
                 </Grid>
                 <Editor Text="{Binding Instructions}" AutoSize="TextChanges"
                         MinimumHeightRequest="70" AutomationId="InstructionsEditor" />
-                <VerticalStackLayout IsVisible="{Binding SelectedDescriptor.SupportsToolCalling}" Spacing="12">
+                <VerticalStackLayout IsVisible="{Binding SupportsToolCalling}" Spacing="12">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                         <Label Text="Tools" FontSize="12" FontAttributes="Bold" VerticalOptions="Center" />
                         <local:InfoTip Grid.Column="1"
@@ -126,6 +149,7 @@
                         <RadioButton Content="None" Value="{x:Static ai:ChatToolMode.None}"
                                      AutomationId="ToolModeNoneRadio" />
                         <RadioButton Content="Require any" Value="{x:Static ai:ChatToolMode.RequireAny}"
+                                     IsVisible="{Binding SelectedDescriptor.SupportsRequiredToolMode}"
                                      AutomationId="ToolModeRequireAnyRadio" />
                     </HorizontalStackLayout>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">

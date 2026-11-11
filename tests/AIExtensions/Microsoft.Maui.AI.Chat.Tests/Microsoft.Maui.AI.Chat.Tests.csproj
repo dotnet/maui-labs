@@ -20,6 +20,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\ChatModelAvailability.cs"
+             Link="Models\ChatModelAvailability.cs" />
+    <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\ChatModelCapability.cs"
+             Link="Models\ChatModelCapability.cs" />
+    <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\ChatModelStatus.cs"
+             Link="Models\ChatModelStatus.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\ViewModels\ModelReadinessViewModel.cs"
+             Link="Chat\ViewModels\ModelReadinessViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Views\PlaygroundLayoutMetrics.cs"
+             Link="Views\PlaygroundLayoutMetrics.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ChatDiagnostics.cs"
              Link="Services\ChatDiagnostics.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ChatDiagnosticsExtensions.cs"

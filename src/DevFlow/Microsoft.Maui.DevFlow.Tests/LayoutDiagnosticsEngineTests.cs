@@ -114,7 +114,7 @@ public class LayoutDiagnosticsEngineTests
     }
 
     [Fact]
-    public void Analyze_DuplicateAutomationIds_ProduceDistinctFindingIds()
+    public void Analyze_DuplicateAutomationIds_PreserveDistinctIdsAndSavedSuppressions()
     {
         var capture = new LayoutCaptureSnapshot();
         foreach (var id in new[] { "first-runtime-id", "second-runtime-id" })
@@ -149,6 +149,25 @@ public class LayoutDiagnosticsEngineTests
         Assert.Equal(2, findings.Count);
         Assert.Equal(2, findings.Select(finding => finding.Id).Distinct().Count());
         Assert.Single(findings.Select(finding => finding.SuppressionKey).Distinct());
+        Assert.All(findings, finding => Assert.Matches("^[0-9a-f]{32}$", finding.SuppressionKey));
+        Assert.Matches("^[0-9a-f]{32}$", findings[0].Id);
+        Assert.Matches("^[0-9a-f]{32}-[0-9a-f]{32}$", findings[1].Id);
+        foreach (var unique in new[] { false, true })
+        {
+            var legacyKey = findings[0].SuppressionKey[..16];
+            if (unique)
+                legacyKey += "-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes($"{legacyKey}|{findings[1].Element.Id}|")))[..16].ToLowerInvariant();
+            var request = Request(minimumSeverity: "info");
+            request.Suppressions.Add(new() { Fingerprint = legacyKey, Reason = "Saved policy" });
+
+            var suppressed = LayoutDiagnosticsEngine.Analyze(
+                capture, request, "test", stable: true, stabilityReason: null, Support())
+                .Findings.Where(finding => finding.RuleId == LayoutDiagnosticRules.VisibleZeroArea && finding.Suppressed);
+
+            Assert.Equal(unique ? 1 : 2, suppressed.Count());
+            Assert.All(suppressed, finding => Assert.Equal("Saved policy", finding.SuppressionReason));
+        }
     }
 
     [Fact]
