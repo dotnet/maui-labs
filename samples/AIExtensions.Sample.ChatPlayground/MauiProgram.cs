@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.AI.Chat.Controls;
 using Microsoft.Maui.DevFlow.Agent;
 
 namespace AIExtensions.Sample.ChatPlayground;
@@ -14,6 +15,7 @@ public static class MauiProgram
     {
         var builder = MauiApp.CreateBuilder();
         builder.UseMauiApp<App>();
+        builder.UseAIChat();
 
         builder.Configuration.AddEmbeddedUserSecrets();
         var aiSettings = new AISettings();

@@ -22,20 +22,30 @@
             <Color x:Key="StopActionBackground">#B91C1C</Color>
             <Color x:Key="OverlayScrim">#550F172A</Color>
             <Color x:Key="OverlayScrimDark">#99000000</Color>
-            <Color x:Key="UserBubble">#DBEAFE</Color>
-            <Color x:Key="UserBubbleDark">#17385C</Color>
-            <Color x:Key="AssistantBubble">#FFFFFF</Color>
-            <Color x:Key="AssistantBubbleDark">#243449</Color>
-            <Color x:Key="ErrorBubble">#FEE2E2</Color>
-            <Color x:Key="ErrorBubbleDark">#4D2531</Color>
-            <Color x:Key="ToolBubble">#EEF4FF</Color>
-            <Color x:Key="ToolBubbleDark">#233650</Color>
-            <Color x:Key="SystemBubble">#F1F5F9</Color>
-            <Color x:Key="SystemBubbleDark">#2B394D</Color>
             <Color x:Key="ModelWarningBackground">#FEF3C7</Color>
             <Color x:Key="ModelWarningBackgroundDark">#422F0D</Color>
             <Color x:Key="ModelWarningText">#713F12</Color>
             <Color x:Key="ModelWarningTextDark">#FDE68A</Color>
+
+            <!--
+                AIChatView theming: the chat reads its colors from AIChat.Light.* and AIChat.Dark.* (see
+                AIChatThemeKeys). These overrides tint the chat with the playground's palette; remove them and the
+                control's own defaults apply.
+            -->
+            <Color x:Key="AIChat.Light.Text">#172033</Color>
+            <Color x:Key="AIChat.Light.SecondaryText">#596575</Color>
+            <Color x:Key="AIChat.Light.UserBubble">#DBEAFE</Color>
+            <Color x:Key="AIChat.Light.UserText">#172033</Color>
+            <Color x:Key="AIChat.Light.Surface">#F1F5F9</Color>
+            <Color x:Key="AIChat.Light.Stroke">#D9DFEA</Color>
+            <Color x:Key="AIChat.Light.CodeBackground">#E5EAF1</Color>
+            <Color x:Key="AIChat.Dark.Text">#EDF2FA</Color>
+            <Color x:Key="AIChat.Dark.SecondaryText">#B0BDD0</Color>
+            <Color x:Key="AIChat.Dark.UserBubble">#17385C</Color>
+            <Color x:Key="AIChat.Dark.UserText">#EDF2FA</Color>
+            <Color x:Key="AIChat.Dark.Surface">#26374D</Color>
+            <Color x:Key="AIChat.Dark.Stroke">#3B4C62</Color>
+            <Color x:Key="AIChat.Dark.CodeBackground">#1C2A3B</Color>
             <Style TargetType="Label">
                 <Setter Property="TextColor"
                         Value="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
