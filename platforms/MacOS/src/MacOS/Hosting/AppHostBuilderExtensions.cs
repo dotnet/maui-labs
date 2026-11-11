@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Animations;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Controls.Hosting;
 #if NET11_0_OR_GREATER
 using Microsoft.Maui.Controls.Platform;
 #endif

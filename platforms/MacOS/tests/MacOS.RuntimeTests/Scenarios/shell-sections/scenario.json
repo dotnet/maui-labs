@@ -16,7 +16,11 @@
       },
       {
         "source": "platforms/MacOS/src/MacOS/Handlers/ShellSectionHandler.cs",
-        "commit": "23ea45e98b84bfbf9dd00f4859fd4cf30d44120d"
+        "provenance": "Reproduce 23ea45e98b84bfbf9dd00f4859fd4cf30d44120d's no-op MapCurrentItem while retaining the equivalent MAUI 11-compatible parent traversal.",
+        "replace": {
+          "old": "\t\tif (section.Parent is ShellItem item && item.CurrentItem == section &&\n\t\t\titem.Parent is Shell shell && shell.CurrentItem == item &&\n\t\t\tshell.Handler is ShellHandler shellHandler)\n\t\t\tshellHandler.QueueSelectionUpdate(section);",
+          "new": ""
+        }
       }
     ],
     "exitCode": 42,

@@ -13,6 +13,13 @@ prove the missing service in a real window, then verifying fixed native action
 sheets, prompts and alerts with visible-sheet captures and typed task results.
 A timeout is a failure, not accepted baseline evidence.
 
+The `shell-sections` baseline keeps `ShellHandler` and `ShellItemHandler` pinned
+to `23ea45e98b84bfbf9dd00f4859fd4cf30d44120d`. Its `ShellSectionHandler` overlay
+restores that revision's no-op `MapCurrentItem` with an exact replacement while
+retaining the equivalent explicit parent traversal needed by MAUI 11, where the
+old `FindParentOfType` extension is unavailable. The same concrete regression
+sentinel and all 59 fixed assertions remain required.
+
 | Scenario | Cases | Before/fixed behavior |
 |---|---|---|
 | `layout` | 6 | Exact missing native child failure / add, insert, replace, remove, clear, re-add |
