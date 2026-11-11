@@ -27,6 +27,8 @@ internal sealed class MarkdownRenderer
     private const string CheckedBox = "\u2611\uFE0E";
     private const string UncheckedBox = "\u2610\uFE0E";
 
+    private static readonly ScrollBarVisibility s_sideScrollBarVisibility = GetSideScrollBarVisibility(AIChatTheme.GetPlatform());
+
     private readonly Command<string> _linkCommand;
     private Dictionary<string, DefinitionNode> _definitions = new(StringComparer.OrdinalIgnoreCase);
 
@@ -228,12 +230,7 @@ internal sealed class MarkdownRenderer
         text.LineBreakMode = LineBreakMode.NoWrap;
 
         // Code keeps its line structure; long lines scroll sideways instead of wrapping.
-        var scroller = new ScrollView
-        {
-            Orientation = ScrollOrientation.Horizontal,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Default,
-            Content = text,
-        };
+        var scroller = CreateSideScroller(text);
 
         var border = Styled(new Border(), AIChatThemeKeys.CodeBlockStyle);
         if (string.IsNullOrWhiteSpace(language))
@@ -374,8 +371,23 @@ internal sealed class MarkdownRenderer
         }
 
         var border = Styled(new Border { Content = grid, HorizontalOptions = LayoutOptions.Start }, AIChatThemeKeys.MarkdownTableBorderStyle);
-        return new ScrollView { Orientation = ScrollOrientation.Horizontal, Content = border };
+        return CreateSideScroller(border);
     }
+
+    private static ScrollView CreateSideScroller(View content) => new()
+    {
+        Orientation = ScrollOrientation.Horizontal,
+        HorizontalScrollBarVisibility = s_sideScrollBarVisibility,
+        Content = content,
+    };
+
+    /// <summary>
+    /// Gets the scroll bar of code and tables that scroll sideways. Android flashes a new scroller's bar across its
+    /// last line of text, and a swipe is how sideways content is found there anyway. Elsewhere the bar shows while
+    /// scrolling, and a mouse needs it.
+    /// </summary>
+    internal static ScrollBarVisibility GetSideScrollBarVisibility(DevicePlatform platform) =>
+        platform == DevicePlatform.Android ? ScrollBarVisibility.Never : ScrollBarVisibility.Default;
 
     private static BoxView CreateTableLine(bool horizontal) =>
         Styled(horizontal ? new LineView { HeightRequest = 1 } : new LineView { WidthRequest = 1 }, AIChatThemeKeys.MarkdownTableLineStyle);
