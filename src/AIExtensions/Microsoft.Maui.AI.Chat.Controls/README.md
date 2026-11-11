@@ -238,18 +238,20 @@ standard controls instead.
 
 ### Markdown
 
-Assistant text, and rich text from a provider (`RichContentBlock`), render as Markdown parsed with
-[Markdig](https://github.com/xoofx/markdig). While an answer streams, the views of what changed update in place (the
-growing paragraph, list item, table row, or code block), so the text above it does not flicker or jump. Raw HTML
-shows as text and is never rendered. Input far beyond any real answer is shown more simply, so it cannot stall the
-chat: a paragraph or heading with more than 1,000 emphasis or link markers shows its text unformatted, and a table
-with more than 64 columns or 2,000 cells shows as text, one row per line.
+Assistant text renders as Markdown, parsed with [Markdig](https://github.com/xoofx/markdig). Rich text from a
+provider (another `RichContentBlock`) is not parsed: the same renderer draws the provider's own nodes, so it looks
+like an answer, and a block without nodes shows its text as written. While an answer streams, the views of what
+changed update in place (the growing paragraph, list item, table row, or code block), so the text above it does not
+flicker or jump. Raw HTML shows as text and is never rendered. Input far beyond any real answer is shown more
+simply, so it cannot stall the chat: a paragraph or heading with more than 1,000 emphasis or link markers shows its
+text unformatted, and a table with more than 64 columns or 2,000 cells shows as text, one row per line.
 
 Markdown uses the chat's keys: `AIChat.Style.AssistantText` for paragraphs and list items,
 `AIChat.Style.LinkSpan` for links, `AIChat.Style.CodeBlock` and `AIChat.Style.CodeText` for code blocks (the same
 as in tool cards), and the `AIChat.Color.*` and `AIChat.FontFamily.Code` resources for the rest. Recoloring the
 chat recolors Markdown in both themes. Text sizes come from `AIChat.FontSize.Body` and `AIChat.FontSize.Code`
-(headings scale from the body size), not from the styles. These keys style what only Markdown has:
+(headings scale from the body size), not from the styles: a `FontSize` setter in `AIChat.Style.AssistantText`
+doesn't resize an answer, so set those keys instead. These keys style what only Markdown has:
 
 | Key | Type | Styles |
 |---|---|---|

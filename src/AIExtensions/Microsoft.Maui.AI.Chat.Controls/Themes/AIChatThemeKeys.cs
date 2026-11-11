@@ -59,7 +59,10 @@ public static class AIChatThemeKeys
     /// <summary>Positive status, such as an approved tool call.</summary>
     public const string SuccessColor = "AIChat.Color.Success";
 
-    /// <summary>The body font size (a <see cref="double"/>).</summary>
+    /// <summary>
+    /// The body font size (a <see cref="double"/>). Markdown answers take their size from it, and their headings
+    /// scale from it.
+    /// </summary>
     public const string BodyFontSize = "AIChat.FontSize.Body";
 
     /// <summary>The font size of secondary text (a <see cref="double"/>).</summary>
@@ -91,7 +94,8 @@ public static class AIChatThemeKeys
 
     /// <summary>
     /// The <see cref="Style"/> of assistant text (<see cref="Label"/>): Markdown paragraphs and list items, and the
-    /// welcome title.
+    /// welcome title. A <c>FontSize</c> setter does not resize Markdown, which takes its sizes from
+    /// <see cref="BodyFontSize"/> and <see cref="CodeFontSize"/>.
     /// </summary>
     public const string AssistantTextStyle = "AIChat.Style.AssistantText";
 
