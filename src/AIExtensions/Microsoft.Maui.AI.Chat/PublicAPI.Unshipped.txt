@@ -81,8 +81,10 @@ Microsoft.Maui.AI.Chat.ConversationTurn
 Microsoft.Maui.AI.Chat.ConversationTurn.ConversationTurn() -> void
 Microsoft.Maui.AI.Chat.ConversationTurn.Id.get -> string!
 Microsoft.Maui.AI.Chat.ConversationTurn.IsStopped.get -> bool
+Microsoft.Maui.AI.Chat.ConversationTurn.ModelId.get -> string?
 Microsoft.Maui.AI.Chat.ConversationTurn.RequestBlocks.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.ContentBlock!>!
 Microsoft.Maui.AI.Chat.ConversationTurn.ResponseBlocks.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.ContentBlock!>!
+Microsoft.Maui.AI.Chat.ConversationTurn.Usage.get -> Microsoft.Extensions.AI.UsageDetails?
 Microsoft.Maui.AI.Chat.DefinitionNode
 Microsoft.Maui.AI.Chat.DefinitionNode.DefinitionNode() -> void
 Microsoft.Maui.AI.Chat.DefinitionNode.Label.get -> string!

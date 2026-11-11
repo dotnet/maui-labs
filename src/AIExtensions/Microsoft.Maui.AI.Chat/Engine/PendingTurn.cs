@@ -13,13 +13,17 @@ internal sealed class PendingTurn
 {
     private readonly List<ChatResponseUpdate> _roundUpdates = new();
 
-    internal PendingTurn(int historyVersion)
+    internal PendingTurn(int historyVersion, ConversationTurn? displayTurn)
     {
         HistoryVersion = historyVersion;
+        DisplayTurn = displayTurn;
     }
 
     /// <summary>Gets the history version the turn started from; a clear or restore makes it stale.</summary>
     internal int HistoryVersion { get; }
+
+    /// <summary>Gets the turn that shows this pending turn, if any; it receives the response metadata.</summary>
+    internal ConversationTurn? DisplayTurn { get; }
 
     /// <summary>Gets the message that started the turn.</summary>
     internal ChatMessage? InitialMessage { get; private set; }
@@ -52,6 +56,7 @@ internal sealed class PendingTurn
         _roundUpdates.Add(historyUpdate);
         if (!string.IsNullOrEmpty(rawUpdate.ConversationId))
             ConversationId = rawUpdate.ConversationId;
+        DisplayTurn?.ObserveResponse(rawUpdate);
     }
 
     /// <summary>Moves the current round's response updates into <see cref="Messages"/>.</summary>

@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using Microsoft.Extensions.AI;
+
 namespace Microsoft.Maui.AI.Chat;
 
 /// <summary>
@@ -29,6 +31,27 @@ public class ConversationTurn
     /// </remarks>
     public bool IsStopped { get; internal set; }
 
+    /// <summary>
+    /// Gets the identifier of the model that answered, as reported by
+    /// <see cref="ChatResponseUpdate.ModelId"/>, or <see langword="null"/> when the provider does not
+    /// report it.
+    /// </summary>
+    /// <remarks>
+    /// The last model identifier reported during the turn wins. It is updated while the response
+    /// streams, before the blocks of the reporting update are added, and restored from a thread.
+    /// </remarks>
+    public string? ModelId { get; internal set; }
+
+    /// <summary>
+    /// Gets the token usage reported for the response, summed over every request the turn made, or
+    /// <see langword="null"/> when the provider reports no <see cref="UsageContent"/>.
+    /// </summary>
+    /// <remarks>
+    /// Usage is commonly reported at the end of a response, so it is complete when the turn is no
+    /// longer streaming. It is restored from a thread.
+    /// </remarks>
+    public UsageDetails? Usage { get; internal set; }
+
     internal void AddRequestBlock(ContentBlock block)
     {
         _requestBlocks.Add(block);
@@ -42,5 +65,13 @@ public class ConversationTurn
     internal void ClearResponseBlocks()
     {
         _responseBlocks.Clear();
+        ModelId = null;
+        Usage = null;
+    }
+
+    internal void ObserveResponse(ChatResponseUpdate update)
+    {
+        ModelId = ResponseMetadata.GetModelId(update, ModelId);
+        Usage = ResponseMetadata.AddUsage(update, Usage);
     }
 }

@@ -108,10 +108,10 @@ public class UIAgent : IDisposable
         CommitTurn(turn, stopped: false);
     }
 
-    internal PendingTurn BeginTurn()
+    internal PendingTurn BeginTurn(ConversationTurn? displayTurn = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return new PendingTurn(_historyVersion);
+        return new PendingTurn(_historyVersion, displayTurn);
     }
 
     /// <summary>
@@ -361,6 +361,8 @@ public class UIAgent : IDisposable
                 var processUpdate = isContinuation
                     ? update
                     : ApplyStateMapper(update);
+                if (!isContinuation)
+                    currentTurn.ObserveResponse(update);
                 responseUpdates.Add(processUpdate);
                 if (processUpdate.Contents.Count > 0
                     || update.Contents.Count == 0)
