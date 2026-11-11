@@ -15,17 +15,17 @@ internal static class ChatVisuals
     }
 
     public static Label Label(string styleKey, string? text = null) =>
-        new Label { Text = text }.Styled(styleKey);
+        new ChatLabel { Text = text }.Styled(styleKey);
 
     public static Border Card(View content) =>
-        new Border { Content = content }.Styled(AIChatThemeKeys.CardStyle);
+        new ChatBorder { Content = content }.Styled(AIChatThemeKeys.CardStyle);
 
     public static Border CodeBlock(Label text) =>
-        new Border { Content = text }.Styled(AIChatThemeKeys.CodeBlockStyle);
+        new ChatBorder { Content = text }.Styled(AIChatThemeKeys.CodeBlockStyle);
 
     /// <summary>A chevron that shows or hides a card's details; see <see cref="SetExpanded"/>.</summary>
     public static Button DisclosureButton(Action toggle, string automationId) =>
-        new Button
+        new ChatButton
         {
             Text = Chevron,
             FontSize = 20,
@@ -183,7 +183,7 @@ internal static class ChatVisuals
 
     private static Border CreateChip(string glyph, string name, string detail, bool alignEnd, View? trailing)
     {
-        var text = new VerticalStackLayout
+        var text = new ChatVerticalStackLayout
         {
             Spacing = 0,
             VerticalOptions = LayoutOptions.Center,
@@ -194,21 +194,19 @@ internal static class ChatVisuals
             },
         };
 
-        var row = new HorizontalStackLayout
+        var icon = new ChatLabel { Text = glyph, FontSize = 18, VerticalOptions = LayoutOptions.Center };
+        icon.SetDynamicResource(Microsoft.Maui.Controls.Label.FontFamilyProperty, AIChatThemeKeys.FontFamily);
+        var row = new ChatHorizontalStackLayout
         {
             Spacing = 8,
-            Children =
-            {
-                new Label { Text = glyph, FontSize = 18, VerticalOptions = LayoutOptions.Center },
-                text,
-            },
+            Children = { icon, text },
         };
         if (trailing is not null)
             row.Children.Add(trailing);
         else
             text.Margin = new Thickness(0, 0, 6, 0); // The chip's end padding is sized for a trailing button.
 
-        var chip = new Border
+        var chip = new ChatBorder
         {
             Content = row,
             HorizontalOptions = alignEnd ? LayoutOptions.End : LayoutOptions.Start,
@@ -293,6 +291,7 @@ internal static class ChatVisuals
 /// <summary>An image loaded from a web link. When it cannot be loaded, a chip for the link takes its place.</summary>
 internal sealed class LinkedImageView : ContentView
 {
+    private readonly bool _themed = ChatElements.EnsureTheme();
     private readonly Func<View> _createFallback;
 
     public LinkedImageView(Image image, Func<View> createFallback)

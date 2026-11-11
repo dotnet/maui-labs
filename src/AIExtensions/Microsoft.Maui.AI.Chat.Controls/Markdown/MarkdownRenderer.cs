@@ -226,21 +226,21 @@ internal sealed class MarkdownRenderer
     private static Border RenderCodeBlock(string code, string? language)
     {
         // The chat's code styles, so code looks the same in answers and in tool cards.
-        var text = Styled(new Label { Text = code }, AIChatThemeKeys.CodeTextStyle);
+        var text = Styled(new ChatLabel { Text = code }, AIChatThemeKeys.CodeTextStyle);
         text.LineBreakMode = LineBreakMode.NoWrap;
 
         // Code keeps its line structure; long lines scroll sideways instead of wrapping.
         var scroller = CreateSideScroller(text);
 
-        var border = Styled(new Border(), AIChatThemeKeys.CodeBlockStyle);
+        var border = Styled(new ChatBorder(), AIChatThemeKeys.CodeBlockStyle);
         if (string.IsNullOrWhiteSpace(language))
         {
             border.Content = scroller;
             return border;
         }
 
-        var caption = Styled(new Label { Text = language }, AIChatThemeKeys.MarkdownCodeBlockLanguageStyle);
-        border.Content = new VerticalStackLayout { Spacing = 4, Children = { caption, scroller } };
+        var caption = Styled(new ChatLabel { Text = language }, AIChatThemeKeys.MarkdownCodeBlockLanguageStyle);
+        border.Content = new ChatVerticalStackLayout { Spacing = 4, Children = { caption, scroller } };
         return border;
     }
 
@@ -254,7 +254,7 @@ internal sealed class MarkdownRenderer
                 context.Nested() with { TextStyleKey = AIChatThemeKeys.MarkdownBlockQuoteTextStyle })
             ?? CreateTextLabel(string.Empty, AIChatThemeKeys.MarkdownBlockQuoteTextStyle);
 
-        var grid = new Grid
+        var grid = new ChatGrid
         {
             ColumnSpacing = 10,
             ColumnDefinitions =
@@ -271,7 +271,7 @@ internal sealed class MarkdownRenderer
     private Grid RenderList(ListNode list, BlockContext context)
     {
         // One grid per list keeps every item's content aligned after the widest marker.
-        var grid = new Grid
+        var grid = new ChatGrid
         {
             ColumnSpacing = 8,
             RowSpacing = 4,
@@ -297,7 +297,7 @@ internal sealed class MarkdownRenderer
             };
 
             var marker = Styled(
-                new Label { Text = markerText, FontSize = FontSize, HorizontalTextAlignment = TextAlignment.End },
+                new ChatLabel { Text = markerText, FontSize = FontSize, HorizontalTextAlignment = TextAlignment.End },
                 AIChatThemeKeys.MarkdownListMarkerStyle);
 
             var content = (item is null ? RenderBlock(child, itemContext) : RenderContainer(item.Children, itemContext))
@@ -323,7 +323,7 @@ internal sealed class MarkdownRenderer
 
         // Cells sit in even grid tracks; the odd tracks hold one-pixel lines, so cells stay
         // transparent and the table blends with any bubble color.
-        var grid = new Grid { RowSpacing = 0, ColumnSpacing = 0 };
+        var grid = new ChatGrid { RowSpacing = 0, ColumnSpacing = 0 };
         for (var column = 0; column < columns; column++)
         {
             if (column > 0)
@@ -370,11 +370,11 @@ internal sealed class MarkdownRenderer
             }
         }
 
-        var border = Styled(new Border { Content = grid, HorizontalOptions = LayoutOptions.Start }, AIChatThemeKeys.MarkdownTableBorderStyle);
+        var border = Styled(new ChatBorder { Content = grid, HorizontalOptions = LayoutOptions.Start }, AIChatThemeKeys.MarkdownTableBorderStyle);
         return CreateSideScroller(border);
     }
 
-    private static ScrollView CreateSideScroller(View content) => new()
+    private static ScrollView CreateSideScroller(View content) => new ChatScrollView
     {
         Orientation = ScrollOrientation.Horizontal,
         HorizontalScrollBarVisibility = s_sideScrollBarVisibility,
@@ -415,7 +415,7 @@ internal sealed class MarkdownRenderer
         if (!TryCreateImageUri(url, out var uri))
             return ChatVisuals.CreateImageChip(url, description);
 
-        var image = new Image
+        var image = new ChatImage
         {
             Source = ImageSource.FromUri(uri),
             Aspect = Aspect.AspectFit,
@@ -434,14 +434,14 @@ internal sealed class MarkdownRenderer
 
     // Raw HTML is shown as source text, in the code font.
     private static Label RenderLiteral(string text) =>
-        Styled(new Label { Text = text }, AIChatThemeKeys.CodeTextStyle);
+        Styled(new ChatLabel { Text = text }, AIChatThemeKeys.CodeTextStyle);
 
     private Grid RenderFootnoteDefinition(FootnoteDefinitionNode footnote, BlockContext context)
     {
         var marker = CreateTextLabel("[" + footnote.Label + "]", AIChatThemeKeys.MarkdownListMarkerStyle);
         var content = RenderContainer(footnote.Children, context.Nested())
             ?? CreateTextLabel(string.Empty, context.TextStyleKey);
-        var grid = new Grid
+        var grid = new ChatGrid
         {
             ColumnSpacing = 6,
             ColumnDefinitions =
@@ -460,7 +460,7 @@ internal sealed class MarkdownRenderer
         if (views.Count <= 1)
             return views.Count == 0 ? null : views[0];
 
-        var stack = new VerticalStackLayout { Spacing = spacing };
+        var stack = new ChatVerticalStackLayout { Spacing = spacing };
         foreach (var view in views)
             stack.Children.Add(view);
         return stack;
@@ -475,7 +475,7 @@ internal sealed class MarkdownRenderer
         double FontSize);
 
     private Label CreateTextLabel(string text, string styleKey) =>
-        Styled(new Label { Text = text, FontSize = FontSize, LineBreakMode = LineBreakMode.WordWrap }, styleKey);
+        Styled(new ChatLabel { Text = text, FontSize = FontSize, LineBreakMode = LineBreakMode.WordWrap }, styleKey);
 
     private Label CreateInlineLabel(
         IReadOnlyList<RichTextNode> nodes,
@@ -483,7 +483,7 @@ internal sealed class MarkdownRenderer
         double fontSize,
         FontAttributes baseAttributes)
     {
-        var label = Styled(new Label { FontSize = fontSize, LineBreakMode = LineBreakMode.WordWrap }, styleKey);
+        var label = Styled(new ChatLabel { FontSize = fontSize, LineBreakMode = LineBreakMode.WordWrap }, styleKey);
 
         if (nodes.Count == 0)
         {
@@ -522,7 +522,7 @@ internal sealed class MarkdownRenderer
                 AddCodeSpan(formatted, code.Code, state);
                 break;
             case LineBreakNode:
-                formatted.Spans.Add(new Span { Text = "\n" });
+                formatted.Spans.Add(new ChatSpan { Text = "\n" });
                 break;
             case StrongNode:
                 AppendChildren(formatted, node, state with { Attributes = state.Attributes | FontAttributes.Bold }, depth);
@@ -581,7 +581,7 @@ internal sealed class MarkdownRenderer
         if (text.Length == 0)
             return;
 
-        var span = new Span { Text = text };
+        var span = new ChatSpan { Text = text };
         if (state.Attributes != FontAttributes.None)
             span.FontAttributes = state.Attributes;
 
@@ -606,7 +606,7 @@ internal sealed class MarkdownRenderer
             return;
 
         // The style sets the code font; the size keeps the theme's code-to-body ratio, also inside headings.
-        var span = new Span { Text = code, FontSize = FontSize > 0 ? state.FontSize * CodeFontSize / FontSize : CodeFontSize };
+        var span = new ChatSpan { Text = code, FontSize = FontSize > 0 ? state.FontSize * CodeFontSize / FontSize : CodeFontSize };
         if (state.Attributes != FontAttributes.None)
             span.FontAttributes = state.Attributes;
         Styled(span, AIChatThemeKeys.MarkdownInlineCodeStyle);
@@ -637,8 +637,10 @@ internal sealed class MarkdownRenderer
     /// A plain <see cref="BoxView"/> asks for 40 × 40 without a size request, which would widen auto table columns and
     /// pad short quotes, and a zero size request would stop it from stretching at all.
     /// </remarks>
-    private sealed class LineView : BoxView
+    internal sealed class LineView : BoxView
     {
+        private readonly bool _themed = ChatElements.EnsureTheme();
+
         protected override Size MeasureOverride(double widthConstraint, double heightConstraint) =>
             new(Math.Max(0, WidthRequest) + Margin.HorizontalThickness, Math.Max(0, HeightRequest) + Margin.VerticalThickness);
     }

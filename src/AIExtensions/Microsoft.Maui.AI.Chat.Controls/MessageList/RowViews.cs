@@ -4,6 +4,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 internal abstract class RowView<TRow> : ContentView
     where TRow : ChatRow
 {
+    private readonly bool _themed = ChatElements.EnsureTheme();
     private TRow? _row;
 
     protected RowView() => SetDynamicResource(StyleProperty, AIChatThemeKeys.RowStyle);

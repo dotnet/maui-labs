@@ -6,7 +6,7 @@ internal sealed class ToolCallView : BlockView
     private readonly Label _title = ChatVisuals.Label(AIChatThemeKeys.CardTitleStyle);
     private readonly Label _status = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle);
     private readonly Button _toggle;
-    private readonly VerticalStackLayout _details = new() { Spacing = 6, IsVisible = false };
+    private readonly VerticalStackLayout _details = new ChatVerticalStackLayout { Spacing = 6, IsVisible = false };
     private readonly Label _argumentsHeader = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle, "Arguments");
     private readonly Label _arguments = ChatVisuals.Label(AIChatThemeKeys.CodeTextStyle);
     private readonly Border _argumentsBlock;
@@ -23,7 +23,7 @@ internal sealed class ToolCallView : BlockView
         _status.VerticalOptions = LayoutOptions.Center;
         _title.VerticalOptions = LayoutOptions.Center;
 
-        var header = new Grid
+        var header = new ChatGrid
         {
             ColumnDefinitions =
             {
@@ -44,7 +44,7 @@ internal sealed class ToolCallView : BlockView
         _details.Children.Add(_resultHeader);
         _details.Children.Add(_resultBlock);
 
-        Content = ChatVisuals.Card(new VerticalStackLayout { Spacing = 8, Children = { header, _details } });
+        Content = ChatVisuals.Card(new ChatVerticalStackLayout { Spacing = 8, Children = { header, _details } });
     }
 
     internal Label TitleLabel => _title;
@@ -96,8 +96,8 @@ internal sealed class ToolApprovalView : BlockView
     private readonly Label _title = ChatVisuals.Label(AIChatThemeKeys.CardTitleStyle);
     private readonly Label _status = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle);
     private readonly Button _toggle;
-    private readonly VerticalStackLayout _details = new() { Spacing = 6 };
-    private readonly ContentView _call = new();
+    private readonly VerticalStackLayout _details = new ChatVerticalStackLayout { Spacing = 6 };
+    private readonly ContentView _call = new ChatContentView();
     private readonly Label _argumentsHeader = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle, "Arguments");
     private readonly Label _arguments = ChatVisuals.Label(AIChatThemeKeys.CodeTextStyle);
     private readonly Border _argumentsBlock;
@@ -123,13 +123,13 @@ internal sealed class ToolApprovalView : BlockView
         ApproveCommand = new Command(Approve, () => CanDecide);
         RejectCommand = new Command(Reject, () => CanDecide);
 
-        _approve = new Button { Text = "Approve", AutomationId = "ApproveToolButton", Command = ApproveCommand }
+        _approve = new ChatButton { Text = "Approve", AutomationId = "ApproveToolButton", Command = ApproveCommand }
             .Styled(AIChatThemeKeys.PrimaryButtonStyle);
-        _reject = new Button { Text = "Reject", AutomationId = "RejectToolButton", Command = RejectCommand }
+        _reject = new ChatButton { Text = "Reject", AutomationId = "RejectToolButton", Command = RejectCommand }
             .Styled(AIChatThemeKeys.SecondaryButtonStyle);
-        _buttons = new HorizontalStackLayout { Spacing = 8, Children = { _approve, _reject } };
+        _buttons = new ChatHorizontalStackLayout { Spacing = 8, Children = { _approve, _reject } };
 
-        var header = new Grid
+        var header = new ChatGrid
         {
             ColumnDefinitions =
             {
@@ -149,7 +149,7 @@ internal sealed class ToolApprovalView : BlockView
         _details.Children.Add(_resultHeader);
         _details.Children.Add(_resultBlock);
 
-        Content = ChatVisuals.Card(new VerticalStackLayout { Spacing = 8, Children = { header, _details, _buttons } });
+        Content = ChatVisuals.Card(new ChatVerticalStackLayout { Spacing = 8, Children = { header, _details, _buttons } });
     }
 
     internal Command ApproveCommand { get; }
@@ -291,7 +291,7 @@ internal sealed class UIActionView : BlockView
     {
         AutomationId = "AIChatUIAction";
         RunCommand = new Command(async () => await RunAsync(), () => CanRun);
-        _run = new Button
+        _run = new ChatButton
         {
             Text = "Run",
             AutomationId = "AIChatUIActionRun",
@@ -301,7 +301,7 @@ internal sealed class UIActionView : BlockView
 
         _title.VerticalOptions = LayoutOptions.Center;
         _status.VerticalOptions = LayoutOptions.Center;
-        var header = new Grid
+        var header = new ChatGrid
         {
             ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto) },
             ColumnSpacing = 8,
@@ -310,7 +310,7 @@ internal sealed class UIActionView : BlockView
         header.Add(_title, 0);
         header.Add(_status, 1);
 
-        Content = ChatVisuals.Card(new VerticalStackLayout { Spacing = 8, Children = { header, _run } });
+        Content = ChatVisuals.Card(new ChatVerticalStackLayout { Spacing = 8, Children = { header, _run } });
     }
 
     internal Command RunCommand { get; }
@@ -375,17 +375,12 @@ internal sealed class ReasoningView : BlockView
     public ReasoningView()
     {
         AutomationId = "AIChatReasoning";
-        _header = new Button
+        _header = new ChatButton
         {
-            BackgroundColor = Colors.Transparent,
-            BorderWidth = 0,
-            Padding = new Thickness(0),
             HorizontalOptions = LayoutOptions.Start,
-            FontSize = 13,
             Command = new Command(Toggle),
             AutomationId = "AIChatReasoningToggle",
-        };
-        _header.SetDynamicResource(Button.TextColorProperty, AIChatThemeKeys.SecondaryTextColor);
+        }.Styled(AIChatThemeKeys.ReasoningHeaderStyle);
         _text.IsVisible = false;
 
         // The chevron is decoration next to the header button, which carries the accessible name.
@@ -394,10 +389,10 @@ internal sealed class ReasoningView : BlockView
         _chevron.GestureRecognizers.Add(new TapGestureRecognizer { Command = _header.Command });
         AutomationProperties.SetExcludedWithChildren(_chevron, true);
 
-        Content = new VerticalStackLayout
+        Content = new ChatVerticalStackLayout
         {
             Spacing = 4,
-            Children = { new HorizontalStackLayout { Spacing = 6, Children = { _header, _chevron } }, _text },
+            Children = { new ChatHorizontalStackLayout { Spacing = 6, Children = { _header, _chevron } }, _text },
         };
     }
 

@@ -31,6 +31,9 @@ public partial class AIChatView
     /// <summary>Creates a chat view with the default theme and template.</summary>
     public AIChatView()
     {
+        // First, so the parts created below find the theme, whose implicit styles keep the app's styles off them.
+        EnsureTheme();
+
         _composer = new ChatComposer(this);
         _messageList = new ChatMessageList(this);
 
@@ -48,7 +51,6 @@ public partial class AIChatView
                 _composer.RemoveAttachment(attachment);
         });
 
-        EnsureTheme();
         SetDynamicResource(ControlTemplateProperty, AIChatThemeKeys.ChatViewTemplate);
 
         Loaded += OnLoaded;
@@ -446,7 +448,7 @@ public partial class AIChatView
             _suggestionsPart.Children.Clear();
             foreach (var suggestion in GetSuggestions())
             {
-                var chip = new Button
+                var chip = new ChatButton
                 {
                     Text = suggestion,
                     Command = _suggestionCommand,
@@ -469,7 +471,7 @@ public partial class AIChatView
         _attachmentsPart.Children.Clear();
         foreach (var attachment in Attachments)
         {
-            var remove = new Button
+            var remove = new ChatButton
             {
                 Text = "\u2715",
                 FontSize = 12,

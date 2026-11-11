@@ -6,7 +6,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </summary>
 internal sealed class UserMessageView : RowView<UserMessageRow>
 {
-    private readonly VerticalStackLayout _attachments = new() { Spacing = 6, HorizontalOptions = LayoutOptions.End, IsVisible = false };
+    private readonly VerticalStackLayout _attachments = new ChatVerticalStackLayout { Spacing = 6, HorizontalOptions = LayoutOptions.End, IsVisible = false };
     private readonly Label _text = ChatVisuals.Label(AIChatThemeKeys.UserTextStyle);
     private readonly Border _bubble;
     private AIContent[] _media = [];
@@ -14,9 +14,9 @@ internal sealed class UserMessageView : RowView<UserMessageRow>
     public UserMessageView()
     {
         AutomationId = "AIChatUserMessage";
-        _bubble = new Border { Content = _text, IsVisible = false }.Styled(AIChatThemeKeys.UserBubbleStyle);
+        _bubble = new ChatBorder { Content = _text, IsVisible = false }.Styled(AIChatThemeKeys.UserBubbleStyle);
         _bubble.PropertyChanged += OnBubblePropertyChanged;
-        Content = new VerticalStackLayout { Children = { _attachments, _bubble } };
+        Content = new ChatVerticalStackLayout { Children = { _attachments, _bubble } };
     }
 
     internal VerticalStackLayout Attachments => _attachments;
@@ -63,7 +63,7 @@ internal sealed class ThinkingView : RowView<ThinkingRow>
     {
         AutomationId = "AIChatThinking";
 
-        var indicator = new ActivityIndicator
+        var indicator = new ChatActivityIndicator
         {
             IsRunning = true,
             WidthRequest = 16,
@@ -72,7 +72,7 @@ internal sealed class ThinkingView : RowView<ThinkingRow>
         };
         indicator.SetDynamicResource(ActivityIndicator.ColorProperty, AIChatThemeKeys.SecondaryTextColor);
 
-        Content = new HorizontalStackLayout
+        Content = new ChatHorizontalStackLayout
         {
             Spacing = 8,
             Children = { indicator, ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle, "Thinking…") },
@@ -133,7 +133,7 @@ internal sealed class TurnErrorView : RowView<TurnErrorRow>
     {
         AutomationId = "AIChatTurnError";
 
-        _retry = new Button
+        _retry = new ChatButton
         {
             Text = "Retry",
             AutomationId = "AIChatRetryButton",
@@ -142,10 +142,10 @@ internal sealed class TurnErrorView : RowView<TurnErrorRow>
         }.Styled(AIChatThemeKeys.PrimaryButtonStyle);
         SemanticProperties.SetDescription(_retry, "Retry the last message");
 
-        Content = new Border
+        Content = new ChatBorder
         {
             HorizontalOptions = LayoutOptions.Start,
-            Content = new VerticalStackLayout
+            Content = new ChatVerticalStackLayout
             {
                 Spacing = 8,
                 Children = { ChatVisuals.Label(AIChatThemeKeys.ErrorTextStyle, Message), _retry },

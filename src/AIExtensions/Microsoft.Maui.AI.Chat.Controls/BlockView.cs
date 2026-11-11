@@ -15,6 +15,8 @@ public class BlockView : ContentView
 {
     private static readonly ConditionalWeakTable<ContentBlock, BlockViewState> ViewStates = new();
 
+    private readonly bool _themed = ChatElements.EnsureTheme();
+
     /// <summary>Backing property for <see cref="Block"/>.</summary>
     public static readonly BindableProperty BlockProperty =
         BindableProperty.Create(

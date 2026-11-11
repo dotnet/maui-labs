@@ -32,7 +32,11 @@ public sealed class ThemeTests : IDisposable
     {
         var theme = new AIChatTheme();
 
-        Assert.All(theme.Keys, key => Assert.StartsWith("AIChat.", key, StringComparison.Ordinal));
+        // Besides those, the theme holds the implicit styles of the view's internal element types.
+        Assert.All(theme.Keys, key => Assert.True(
+            key.StartsWith("AIChat.", StringComparison.Ordinal) ||
+            (theme[key] is Style { TargetType: { IsVisible: false } target } && key == target.FullName),
+            key));
     }
 
     [Fact]
