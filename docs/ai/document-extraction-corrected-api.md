@@ -18,7 +18,7 @@ provider-neutral instead of depending on Azure SDK model factories.
 
 Root-level `FileInputService` replaces the image/document input services. Callers pass `PickOptions` using reusable
 `ImageFiles`/`DocumentFiles` presets and pass packaged sample names explicitly. A shared `InputFile` replaces the two duplicate
-byte records and provides caller-stream loading with MIME resolution, cancellation, a 20 MB limit and borrowed stream ownership.
+byte records and provides caller-stream loading with MIME resolution, cancellation and borrowed stream ownership.
 The image-only filters stay distinct from OCR document filters; format support is not widened to whatever a different feature accepts.
 The standalone chat-recording and embedding text import paths still stream into their existing parsers and retain their own limits.
 
@@ -32,6 +32,15 @@ Each developer uses their own Foundry deployment; this playground does not need 
 After removing these layers, all 471 portable integration tests pass and the complete Catalyst playground builds without warnings/errors.
 Tests retain provider mapping, reader projection, transport-error propagation, cancellation and ownership coverage; tests of removed
 playground-specific limits and exception rewriting are removed rather than reintroducing those policies through fixtures.
+
+### Playground simplification
+
+The shared-input base PR removes the arbitrary 20 MB file limit and bounded stream helper in favor of standard stream copying.
+Native inspection serializes the complete native results as structured JSON on demand, without a semaphore, cached output,
+128 KB cap, custom truncating stream or JSON-inside-a-string envelope. Inspection errors surface to the UI with their details
+instead of being sanitized and cached. The normalized view remains separate and retains exact geometry, table spans and hierarchy.
+Options pass directly to the selected client; settings use their UI-owned provider lists without duplicate-ID or membership policing.
+Cancellation messages are simple status text. Reader/extraction modes, API options and provider/native fidelity remain intact.
 
 ### Historical registration cleanup (before narrowing to Mistral; policy layer since removed)
 

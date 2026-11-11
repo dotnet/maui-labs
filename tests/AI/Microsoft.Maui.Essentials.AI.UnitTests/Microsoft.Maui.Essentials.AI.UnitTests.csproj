@@ -29,7 +29,6 @@
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\ExtractedDocumentReader.cs" Link="Documents\ExtractedDocumentReader.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\CloudDocumentIngestionProjection.cs" Link="Documents\CloudDocumentIngestionProjection.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AISettings.cs" Link="Documents\AISettings.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\InputStreamReader.cs" Link="Services\InputStreamReader.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\InputFile.cs" Link="Services\InputFile.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentReadingService.cs" Link="Documents\DocumentReadingService.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentExtractionService.cs" Link="Documents\DocumentExtractionService.cs" />

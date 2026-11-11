@@ -41,17 +41,6 @@ public class DocumentSettingsViewModelTests
     }
 
     [Fact]
-    public void SelectionRejectsUnregisteredOrDuplicateProviders()
-    {
-        using var client = Client("same");
-        using var duplicate = Client("same");
-        Assert.Throws<ArgumentException>(() => new DocumentSettingsViewModel([], [client, duplicate]));
-        var settings = new DocumentSettingsViewModel([], [client]);
-        using var other = Client("other");
-        Assert.Throws<ArgumentException>(() => settings.SelectedClientOption = new DocumentExtractionClientOption(other, 2));
-    }
-
-    [Fact]
     public void ReaderSelectionRemainsAvailableWhenNoExtractionClientIsConfigured()
     {
         var settings = new DocumentSettingsViewModel([Reader("reader")]);

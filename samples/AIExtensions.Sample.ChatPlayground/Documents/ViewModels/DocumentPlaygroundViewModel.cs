@@ -76,7 +76,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         catch (Exception exception)
         {
             if (ReferenceEquals(owner, _extractionResult))
-                ResultOutput = $"Raw inspection failed ({exception.GetType().Name}).";
+                ResultOutput = $"Raw inspection failed: {exception}";
         }
     }
 
@@ -188,16 +188,12 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             ClearResult();
-            StatusMessage = Settings.CurrentIsCloud
-                ? "Document reading timed out; a submitted Azure operation may continue server-side."
-                : "Document reading timed out.";
+            StatusMessage = "Document processing timed out.";
         }
         catch (OperationCanceledException)
         {
             ClearResult();
-            StatusMessage = Settings.CurrentIsCloud
-                ? "Document reading cancelled; a submitted Azure operation may continue server-side."
-                : "Document reading cancelled.";
+            StatusMessage = "Document processing cancelled.";
         }
         catch (Exception exception)
         {

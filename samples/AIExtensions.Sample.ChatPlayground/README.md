@@ -60,6 +60,8 @@ Mistral table content remains literal Markdown/HTML without an addressed cell gr
 explicitly inspectable instead of being repackaged into metadata.
 
 The experiment distinguishes normalized shared-document content/layout from deliberate borrowed-native inspection.
+Native inspection displays complete structured JSON on request and reports inspection errors directly;
+there is no playground output cap, truncation policy or inspection cache.
 The final API has no streaming, raw-capture toggle, original-body ownership contract or generic structural renderer.
 Normalized output, logging and reader results do not automatically inspect native output.
 The old upstream OCR reader, configuration/OpenTelemetry middleware and usage/progress envelope remain removed.

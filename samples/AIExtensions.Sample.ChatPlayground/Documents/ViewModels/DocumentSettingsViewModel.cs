@@ -13,14 +13,8 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
 
     public DocumentSettingsViewModel(IEnumerable<IngestionDocumentReader> readers, IEnumerable<DocumentExtractionClient> clients)
     {
-        ArgumentNullException.ThrowIfNull(readers);
-        ArgumentNullException.ThrowIfNull(clients);
         Readers = readers.Select((reader, index) => new DocumentReaderOption(reader, index)).ToArray();
         Clients = clients.Select((client, index) => new DocumentExtractionClientOption(client, index)).ToArray();
-        if (Readers.Select(option => option.Descriptor.Id).Distinct(StringComparer.Ordinal).Count() != Readers.Count)
-            throw new ArgumentException("Document readers need distinct IDs.", nameof(readers));
-        if (Clients.Select(option => option.Descriptor.Id).Distinct(StringComparer.Ordinal).Count() != Clients.Count)
-            throw new ArgumentException("Document extraction clients need distinct IDs.", nameof(clients));
         SelectedOption = Readers.FirstOrDefault();
         SelectedClientOption = Clients.FirstOrDefault();
         Mode = Clients.Count > 0 ? DocumentOperationMode.Extraction : DocumentOperationMode.Reader;
@@ -63,12 +57,6 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
         return options;
     }
 
-    partial void OnSelectedOptionChanging(DocumentReaderOption? value)
-    {
-        if (value is not null && !Readers.Contains(value))
-            throw new ArgumentException("The selected document reader is not registered.", nameof(value));
-    }
-
     partial void OnSelectedOptionChanged(DocumentReaderOption? value)
     {
         OnPropertyChanged(nameof(SelectedReader));
@@ -78,12 +66,6 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
     }
 
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(IsIdle));
-
-    partial void OnSelectedClientOptionChanging(DocumentExtractionClientOption? value)
-    {
-        if (value is not null && !Clients.Contains(value))
-            throw new ArgumentException("The selected document extraction client is not registered.", nameof(value));
-    }
 
     partial void OnSelectedClientOptionChanged(DocumentExtractionClientOption? value) => NotifySelectionChanged();
 

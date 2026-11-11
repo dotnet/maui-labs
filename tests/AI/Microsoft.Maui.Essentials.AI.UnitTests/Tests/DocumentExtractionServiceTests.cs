@@ -31,32 +31,43 @@ public class DocumentExtractionServiceTests
         Assert.Contains("nativeOnly", raw);
         Assert.Equal(1, client.NativeReads);
         Assert.Equal(raw, await result.InspectRawAsync());
-        Assert.Equal(1, client.NativeReads);
+        Assert.Equal(2, client.NativeReads);
         Assert.True(client.Borrowed.CanRead);
     }
 
     [Fact]
-    public async Task ExtractAsync_NativeInspectionIsBounded()
+    public async Task ExtractAsync_NativeInspectionShowsCompleteStructuredOutput()
     {
         using var client = new Client { LargeRaw = true };
         var result = await Run(client);
         var raw = await result.InspectRawAsync();
         using var json = JsonDocument.Parse(raw);
-        Assert.True(json.RootElement.GetProperty("Truncated").GetBoolean());
-        Assert.True(raw.Length < 600_000);
+        Assert.Equal(JsonValueKind.Array, json.RootElement.ValueKind);
+        Assert.Equal(new string('x', 500_000), json.RootElement[0].GetProperty("nativeOnly").GetString());
     }
 
     [Fact]
-    public async Task ExtractAsync_ThrowingNativeGetterDoesNotAffectSemanticResultOrExposeSecret()
+    public async Task ExtractAsync_NativeInspectionReportsGetterFailureWithoutAffectingSemanticResult()
     {
         using var client = new Client { ThrowRaw = true };
         var result = await Run(client);
         Assert.Equal(0, client.NativeReads);
         Assert.Equal(2, result.PageCount);
-        var raw = await result.InspectRawAsync();
-        Assert.Contains("Native inspection failed", raw);
-        Assert.DoesNotContain("SECRET", raw);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => result.InspectRawAsync());
+        Assert.Contains("Native getter failure.", error.Message);
         Assert.DoesNotContain("inspection failed", result.Output);
+        client.ThrowRaw = false;
+        Assert.Contains("nativeOnly", await result.InspectRawAsync());
+        Assert.Equal(2, client.NativeReads);
+    }
+
+    [Fact]
+    public async Task ExtractAsync_PassesOptionsDirectlyToTheClient()
+    {
+        using var client = new Client();
+        var options = new DocumentExtractionOptions { ExtractorName = "deployment" };
+        await new DocumentExtractionService().ExtractAsync(client, new("input.png", "image/png", [1]), options);
+        Assert.Same(options, client.Options);
     }
 
     [Fact]
@@ -96,10 +107,11 @@ public class DocumentExtractionServiceTests
     private sealed class Client : DocumentExtractionClient
     {
         public Stream? Input { get; private set; }
+        public DocumentExtractionOptions? Options { get; private set; }
         public int NativeReads { get; private set; }
         public MemoryStream Borrowed { get; } = new([1]);
         public bool LargeRaw { get; init; }
-        public bool ThrowRaw { get; init; }
+        public bool ThrowRaw { get; set; }
         public bool NoNative { get; init; }
         public bool Cyclic { get; init; }
         public override Task<ExtractionDocument> ExtractAsync(
@@ -107,13 +119,14 @@ public class DocumentExtractionServiceTests
             CancellationToken cancellationToken = default)
         {
             Input = document;
+            Options = options;
             cancellationToken.ThrowIfCancellationRequested();
             var result = new ExtractionDocument(identifier)
             {
                 RawRepresentation = NoNative ? null : new Native(() =>
                 {
                     NativeReads++;
-                    if (ThrowRaw) throw new InvalidOperationException("SECRET getter failure.");
+                    if (ThrowRaw) throw new InvalidOperationException("Native getter failure.");
                     return LargeRaw ? new string('x', 500_000) : "raw";
                 }),
             };
