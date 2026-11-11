@@ -15,6 +15,7 @@ public class ShellNavigationRuntimeTests
 		app.Run([]);
 		Assert.Null(app.Failure);
 		Assert.True(app.Completed);
+		Assert.Equal(1, app.ActivationCount);
 	}
 
 	sealed class GtkRuntimeFactAttribute : FactAttribute
@@ -30,12 +31,17 @@ public class ShellNavigationRuntimeTests
 	{
 		public Exception? Failure { get; private set; }
 		public bool Completed { get; private set; }
-		protected override string ApplicationId => "com.maui.tests.shellnavigation";
+		public int ActivationCount { get; private set; }
+		// dotnet test runs both TFMs concurrently on the same D-Bus session.
+		// A shared ID forwards the second process's activation to the first and returns early.
+		protected override string ApplicationId => $"com.maui.tests.shellnavigation.p{Environment.ProcessId}";
 		protected override bool CreateDesktopEntry => false;
 		protected override MauiApp CreateMauiApp() => MauiApp.CreateBuilder().UseMauiAppLinuxGtk4<TestApplication>().Build();
 
 		protected override void OnStarted()
 		{
+			ActivationCount++;
+			Console.WriteLine($"GTK-NAV activated: process={Environment.ProcessId} application={ApplicationId}");
 			GLib.Functions.IdleAdd(0, () =>
 			{
 				RunAssertions();

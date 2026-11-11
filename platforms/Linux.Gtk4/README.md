@@ -115,7 +115,10 @@ MAUI_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo xvfb-run -a \
   --logger "console;verbosity=detailed"
 ```
 
-The test uses its own GTK application and does not require a DevFlow broker.
+The test uses a process-specific GTK application ID so concurrent net10/net11
+test hosts cannot forward activation to each other on the shared D-Bus session.
+It asserts that its own application completes with exactly one activation and
+does not require a DevFlow broker.
 
 ### Handler styling
 
@@ -606,6 +609,9 @@ The runner requires a .NET 11 SDK, creates a private DBus session and display, r
 tests with no failures or skips in the TRX, and rejects missing/empty filtered
 classes. Use a fresh `-ResultsDirectory` when repeating a run to preserve prior
 evidence. Use `-TestProject` and `-TestNamespace` to select tests in another project.
+For a project with a different target framework, pass `-TestFramework` explicitly:
+the DevFlow GTK snapshot project targets `net10.0`, even under the .NET 11 SDK.
+Without an override, the runner selects `net11.0`, or `net10.0` for a MAUI 10 version.
 CI's `runtime` matrix runs one existing native class per process; retain
 the union of native class entries when integrating other platform changes.
 

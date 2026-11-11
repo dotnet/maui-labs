@@ -6,7 +6,9 @@ param(
     [string] $ResultsDirectory = 'artifacts/TestResults/gtk-runtime',
     [string] $TestProject = 'platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj',
     [ValidatePattern('^[A-Za-z_][A-Za-z0-9_.]*$')]
-    [string] $TestNamespace = 'Microsoft.Maui.Platforms.Linux.Gtk4.Tests'
+    [string] $TestNamespace = 'Microsoft.Maui.Platforms.Linux.Gtk4.Tests',
+    [ValidateSet('net10.0', 'net11.0')]
+    [string] $TestFramework
 )
 
 $ErrorActionPreference = 'Stop'
@@ -37,16 +39,18 @@ $filter = "FullyQualifiedName~$TestNamespace.$TestClass."
 # passing it as one argument (observed in CI as "-p:MauiVersion=..." exploded into a
 # per-character argument list that MSBuild then rejected as an unknown switch).
 [string[]] $mauiArgs = @()
-$testFramework = 'net11.0'
 if ($MauiVersion) {
     $mauiArgs = @("-p:MauiVersion=$MauiVersion")
-    if ($MauiVersion.StartsWith('10.')) {
-        $testFramework = 'net10.0'
+}
+if (-not $TestFramework) {
+    $TestFramework = 'net11.0'
+    if ($MauiVersion -and $MauiVersion.StartsWith('10.')) {
+        $TestFramework = 'net10.0'
     }
 }
 
 & dbus-run-session -- xvfb-run --auto-servernum dotnet test $project `
-    --configuration Release --framework $testFramework --filter $filter @mauiArgs `
+    --configuration Release --framework $TestFramework --filter $filter @mauiArgs `
     --logger 'console;verbosity=detailed' `
     --logger "trx;LogFileName=$resultsName.trx" `
     --results-directory $results --blame-hang-timeout 3m '-m:1' '-nr:false'
