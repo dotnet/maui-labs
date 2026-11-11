@@ -12,17 +12,28 @@ internal static class ResponseMetadata
         => string.IsNullOrEmpty(update.ModelId) ? current : update.ModelId;
 
     /// <summary>Adds the update's usage to <paramref name="current"/>, as <c>ToChatResponse</c> does.</summary>
+    /// <returns>
+    /// A new <see cref="UsageDetails"/> when the update reports usage, so a turn reports the change, or
+    /// <paramref name="current"/> when it does not.
+    /// </returns>
     internal static UsageDetails? AddUsage(ChatResponseUpdate update, UsageDetails? current)
     {
+        UsageDetails? updated = null;
         foreach (var content in update.Contents)
         {
             if (content is UsageContent usage)
             {
-                current ??= new UsageDetails();
-                current.Add(usage.Details);
+                if (updated is null)
+                {
+                    updated = new UsageDetails();
+                    if (current is not null)
+                        updated.Add(current);
+                }
+
+                updated.Add(usage.Details);
             }
         }
 
-        return current;
+        return updated ?? current;
     }
 }
