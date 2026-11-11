@@ -138,6 +138,7 @@ public class UIAgent : IDisposable
             ArgumentNullException.ThrowIfNull(message);
 
         ThrowIfToolsCannotBeInvoked();
+        turn.BeginRound();
 
         // The request is recorded and shown even when the turn is already stopping, so a stopped turn keeps
         // it. The round stops before the request is sent.
@@ -171,7 +172,7 @@ public class UIAgent : IDisposable
 
             cancellationToken.ThrowIfCancellationRequested();
             UIAgentLog.StreamingAssistantResponse(_logger);
-            var chatOptions = BuildChatOptions(conversationId);
+            var chatOptions = BuildChatOptions(conversationId, isFollowUp: turn.Rounds > 1);
             var updateIndex = 0;
             await foreach (var update in _chatClient.GetStreamingResponseAsync(
                 request,
@@ -603,6 +604,21 @@ public class UIAgent : IDisposable
             => hasFunctionInvocation ??= _chatClient.GetService<FunctionInvokingChatClient>() is not null;
     }
 
+    /// <summary>
+    /// Throws when the turn used all of its <see cref="UIAgentOptions.MaximumRoundsPerTurn"/>, before the client
+    /// answers anything that only another round could send.
+    /// </summary>
+    internal void ThrowIfNoRoundLeft(PendingTurn turn)
+    {
+        if (turn.Rounds < _options.MaximumRoundsPerTurn)
+            return;
+
+        throw new InvalidOperationException(
+            $"The response did not finish within {_options.MaximumRoundsPerTurn} rounds: after each round's UI "
+            + "actions or approvals, the model asked for more. Raise "
+            + $"{nameof(UIAgentOptions)}.{nameof(UIAgentOptions.MaximumRoundsPerTurn)} if a turn needs more rounds.");
+    }
+
     /// <summary>Creates the error result returned to the model for a call nobody executed.</summary>
     internal FunctionResultContent CreateUnansweredCallResult(FunctionCallContent call)
     {
@@ -625,9 +641,18 @@ public class UIAgent : IDisposable
             ?? (thread.IsStateful ? thread.ConversationId : null);
     }
 
-    private ChatOptions? BuildChatOptions(string? conversationId)
+    /// <summary>Builds the options of one request round from <see cref="UIAgentOptions.ChatOptions"/>.</summary>
+    /// <param name="conversationId">The provider conversation to continue, if any.</param>
+    /// <param name="isFollowUp">
+    /// Whether the round follows another round of the turn, sending the results of its UI actions or approvals.
+    /// </param>
+    private ChatOptions? BuildChatOptions(string? conversationId, bool isFollowUp)
     {
-        if (conversationId is null && _options.UIActions.Count == 0)
+        // FunctionInvokingChatClient drops a required tool mode after the first iteration of a request, so the
+        // model can answer the results instead of calling a tool again. A follow-up round is such an iteration
+        // too; otherwise every round would call a tool, and an automatic UI action would loop until stopped.
+        var relaxToolMode = isFollowUp && _options.ChatOptions?.ToolMode is RequiredChatToolMode;
+        if (conversationId is null && _options.UIActions.Count == 0 && !relaxToolMode)
             return _options.ChatOptions;
 
         var chatOptions = _options.ChatOptions?.Clone() ?? new ChatOptions();
@@ -635,6 +660,8 @@ public class UIAgent : IDisposable
         chatOptions.RawRepresentationFactory = _options.ChatOptions?.RawRepresentationFactory;
         if (conversationId is not null)
             chatOptions.ConversationId = conversationId;
+        if (relaxToolMode)
+            chatOptions.ToolMode = null;
 
         if (_options.UIActions.Count > 0)
         {

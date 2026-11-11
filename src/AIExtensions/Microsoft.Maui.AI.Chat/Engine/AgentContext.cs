@@ -561,6 +561,8 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
                 if (humanInputBlocks.Count == 0 && uiActionBlocks.Count == 0)
                     break;
 
+                _agent.ThrowIfNoRoundLeft(pendingTurn);
+
                 var resultTasks = new List<Task<AIContent[]>>();
 
                 foreach (var uiAction in uiActionBlocks)

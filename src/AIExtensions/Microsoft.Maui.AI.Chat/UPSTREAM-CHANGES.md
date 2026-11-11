@@ -183,6 +183,15 @@ These match upstream so that upstream fixes apply directly:
   results (a call id reused after its result is a new call), not from the blocks that show them, so a
   call that a handler of the app's own folds into its block is answered too. The error result reaches
   the block through the next round's request, like any result.
+- **Follow-up rounds drop a required tool mode, and a turn has a round limit.** Not in upstream, which
+  sends every round of a turn with the same options and drives rounds without a limit. The rounds that
+  send the results of UI actions or approvals send a `RequiredChatToolMode` as no tool mode, as
+  `FunctionInvokingChatClient` does after its first iteration; otherwise every round must call a tool and
+  an automatic UI action loops until stopped, one paid request per round.
+  `UIAgentOptions.MaximumRoundsPerTurn` (default 40, as `FunctionInvokingChatClient.MaximumIterationsPerRequest`)
+  fails the turn with an `InvalidOperationException` once it used all of its rounds, before the last
+  round's UI actions run. `FunctionInvokingChatClient` instead makes one last request without function
+  tools; a UI action needs another round to send its result, so the engine stops before running it.
 - **One block per call id.** Each turn keeps a registry of its function calls, including calls that a
   handler of the app's own claims into a block of its own, whose result it then receives. When
   `FunctionInvokingChatClient` sends an approved call again, a rejected call comes back as

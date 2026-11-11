@@ -19,7 +19,9 @@ public class UIAgentOptions
     /// </summary>
     /// <remarks>
     /// The agent reads the options for every request it sends and passes them to the chat client
-    /// unchanged, unless it must add UI-action tools or a conversation id to a copy. An app can
+    /// unchanged, unless it must add UI-action tools or a conversation id to a copy, or a round that sends
+    /// the results of UI actions or approvals must drop a required <see cref="ChatOptions.ToolMode"/> from
+    /// a copy, as <see cref="FunctionInvokingChatClient"/> does after its first iteration. An app can
     /// therefore change this instance between sends, for example to turn tools off or to set
     /// <see cref="ChatOptions.ToolMode"/>, <see cref="ChatOptions.ResponseFormat"/> or
     /// <see cref="ChatOptions.ModelId"/>, and the next send uses the new values with the same history.
@@ -55,6 +57,30 @@ public class UIAgentOptions
     /// <see cref="AIFunctionArguments.Services"/>.
     /// </summary>
     public IServiceProvider? Services { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum number of request rounds of one turn, including its first request. The
+    /// default is 40, the default of <see cref="FunctionInvokingChatClient.MaximumIterationsPerRequest"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="AgentContext"/> sends another round after a round's UI actions and approvals are answered.
+    /// When the model keeps asking for more, for example by calling an automatic UI action again and again,
+    /// the turn fails with an <see cref="InvalidOperationException"/> once it used all of its rounds, before
+    /// the last round's UI actions run or its approvals are awaited. Server tools that
+    /// <see cref="FunctionInvokingChatClient"/> runs within one request do not count.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is less than 1.</exception>
+    public int MaximumRoundsPerTurn
+    {
+        get => _maximumRoundsPerTurn;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
+            _maximumRoundsPerTurn = value;
+        }
+    }
+
+    private int _maximumRoundsPerTurn = 40;
 
     internal List<IHandlerRegistration> HandlerRegistrations { get; } = new();
     internal Dictionary<string, UIActionRegistration> UIActions { get; } =

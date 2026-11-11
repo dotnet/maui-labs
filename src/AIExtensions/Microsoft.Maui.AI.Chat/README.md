@@ -225,6 +225,14 @@ chatOptions.Tools = null;
 await session.SendMessageAsync("Answer briefly");   // same history, new model, no tools
 ```
 
+A required `ToolMode` (`ChatToolMode.RequireAny` or a required function) applies to the first request of a
+turn only. The rounds that send the results of UI actions or approvals drop it, as
+`FunctionInvokingChatClient` does after its first iteration, so the model can answer the results instead
+of calling a tool again. A turn sends at most `UIAgentOptions.MaximumRoundsPerTurn` rounds (40, the default
+of `FunctionInvokingChatClient.MaximumIterationsPerRequest`); when the model keeps asking for UI actions or
+approvals, the turn fails with an `InvalidOperationException` before the last round's actions run, and
+`RetryAsync` starts it again with all of its rounds.
+
 To compute options for every request instead, add `ConfigureOptions` to the chat client pipeline
 (before `UseFunctionInvocation` when it changes tools).
 

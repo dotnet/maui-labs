@@ -40,11 +40,17 @@ internal sealed class PendingTurn
     /// <summary>Gets the blocks that show the turn's function calls, shared by all of its rounds.</summary>
     internal FunctionCallRegistry Calls { get; } = new();
 
+    /// <summary>Gets the number of request rounds the turn has started.</summary>
+    internal int Rounds { get; private set; }
+
     /// <summary>
     /// Gets the calls of the last completed round that the round did not answer, such as a batch that
     /// <see cref="FunctionInvokingChatClient"/> handed back uninvoked because it included a UI action.
     /// </summary>
     internal IReadOnlyList<FunctionCallContent> OpenCalls { get; private set; } = [];
+
+    /// <summary>Counts a request round that starts.</summary>
+    internal void BeginRound() => Rounds++;
 
     internal void AddRequest(ChatMessage message)
     {
