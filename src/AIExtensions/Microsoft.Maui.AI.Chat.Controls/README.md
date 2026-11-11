@@ -147,6 +147,9 @@ Add `BlockTemplate`s as the view's content. A template matches when every filter
 - Override `When(ContentBlock)` for anything else, and call the base method to keep the filters.
 - Derive a view from `BlockView` to get `Block`, `Session`, and `OnBlockChanged()`. That method runs once per
   batch of streaming updates, not once per token.
+- In a template for a `ToolApprovalBlock` or `UIActionBlock`, bind the buttons to `IsAwaitingInput`
+  (`IsVisible="{Binding IsAwaitingInput}"`): it turns false once the block is answered, while the action runs,
+  and when the turn stops, fails or is restored, after which answers are ignored.
 
 Typed tool blocks from the engine's source generator work the same way:
 

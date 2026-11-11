@@ -1224,6 +1224,75 @@ public class MessageListTests
     });
 
     [Fact]
+    public void RestoredPendingApproval_CanNoLongerBeAnswered() => UIThread.Run(async () =>
+    {
+        var session = ChatHost.Session(new ScriptedChatClient());
+        await session.RestoreAsync(
+        [
+            new ChatMessage(ChatRole.User, "Delete a.txt"),
+            new ChatMessage(ChatRole.Assistant, [new ToolApprovalRequestContent("approval-1", new FunctionCallContent("c1", "delete_file"))]),
+        ]);
+
+        var view = ChatHost.Create(session);
+
+        var row = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is ToolApprovalBlock);
+        var approval = Assert.IsType<ToolApprovalView>(((BlockHost)view.Realize(row)).HostedView);
+        Assert.False(approval.Buttons.IsVisible);
+        Assert.False(approval.ApproveCommand.CanExecute(null));
+        Assert.Equal("Not answered", approval.StatusLabel.Text);
+    });
+
+    [Fact]
+    public void StoppingWhileAnApprovalIsPending_HidesItsButtons() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().RequestApproval("delete_file");
+        var view = ChatHost.Create(ChatHost.Session(client));
+
+        view.Text = "Delete a.txt";
+        var send = view.SendAsync();
+        await UIThread.Until(() => view.Session!.Status == ConversationStatus.AwaitingInput);
+        var row = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is ToolApprovalBlock);
+        var approval = Assert.IsType<ToolApprovalView>(((BlockHost)view.Realize(row)).HostedView);
+        Assert.True(approval.Buttons.IsVisible);
+
+        await view.StopAsync();
+        await send;
+
+        Assert.False(approval.Buttons.IsVisible);
+        Assert.False(approval.ApproveCommand.CanExecute(null));
+        Assert.Equal("Stopped", approval.StatusLabel.Text);
+    });
+
+    [Fact]
+    public void AppTemplate_CanBindItsButtonsToIsAwaitingInput() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().RequestApproval("delete_file");
+        var template = new BlockTemplate
+        {
+            BlockType = typeof(ToolApprovalBlock),
+            Template = new DataTemplate(() =>
+            {
+                var approve = new Button { Text = "Approve" };
+                approve.SetBinding(VisualElement.IsVisibleProperty, nameof(ToolApprovalBlock.IsAwaitingInput));
+                return approve;
+            }),
+        };
+        var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(template));
+
+        view.Text = "Delete a.txt";
+        var send = view.SendAsync();
+        await UIThread.Until(() => view.Session!.Status == ConversationStatus.AwaitingInput);
+        var row = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is ToolApprovalBlock);
+        var approve = Assert.IsType<Button>(((BlockHost)view.Realize(row)).HostedView);
+        Assert.True(approve.IsVisible);
+
+        await view.StopAsync();
+        await send;
+
+        Assert.False(approve.IsVisible);
+    });
+
+    [Fact]
     public void PartialImages_UpdateTheirRowInPlace() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient();

@@ -282,6 +282,9 @@ public class BuiltInViewTests
     {
         var session = ChatHost.Session(new ScriptedChatClient());
         var block = Blocks.Approval("delete_file");
+
+        // The engine abandons a pending approval when its turn ends.
+        block.Abandon();
         var view = new ToolApprovalView();
         view.Resources.MergedDictionaries.Add(new AIChatTheme());
 
@@ -371,6 +374,51 @@ public class BuiltInViewTests
         approval.RejectCommand.Execute(null);
         await send;
         Assert.False(inner.IsEnabled);
+    });
+
+    [Fact]
+    public void ToolApproval_ThatCanNoLongerBeAnswered_ShowsNoButtons()
+    {
+        var block = Blocks.Approval("delete_file");
+        block.Abandon();
+
+        var view = Render<ToolApprovalView>(block);
+
+        Assert.False(view.Buttons.IsVisible);
+        Assert.False(view.ApproveCommand.CanExecute(null));
+        Assert.False(view.RejectCommand.CanExecute(null));
+        Assert.Equal("delete_file", view.TitleLabel.Text);
+        Assert.Equal("Not answered", view.StatusLabel.Text);
+    }
+
+    [Fact]
+    public void UIAction_RunningOrNoLongerRunnable_ShowsNoRunButton() => UIThread.Run(async () =>
+    {
+        // The app runs the action itself, not through the card.
+        var gate = Waiters.Signal();
+        var running = new UIActionBlock(
+            AIFunctionFactory.Create(async () => { await gate.Task; return "done"; }, "slow_action"),
+            UIActionInvocationMode.Manual,
+            Blocks.ToolCall("slow_action"),
+            services: null) { Role = ChatRole.Assistant };
+        var invocation = running.InvokeAsync();
+        var view = Render<UIActionView>(running);
+
+        Assert.False(view.RunButton.IsVisible);
+        Assert.False(view.RunCommand.CanExecute(null));
+        Assert.Equal("Running\u2026", view.StatusLabel.Text);
+
+        gate.SetResult();
+        await invocation;
+        Refresh(view);
+        Assert.Equal("Done", view.StatusLabel.Text);
+
+        // The engine abandons a manual action when its turn ends.
+        var abandoned = Blocks.UIAction("open_map", UIActionInvocationMode.Manual);
+        abandoned.Abandon();
+        Rebind(view, abandoned);
+        Assert.False(view.RunButton.IsVisible);
+        Assert.False(view.RunCommand.CanExecute(null));
     });
 
     [Fact]
