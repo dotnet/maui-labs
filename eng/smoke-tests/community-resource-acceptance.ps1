@@ -24,6 +24,7 @@ $work = (New-Item -ItemType Directory -Path $ArtifactsDirectory).FullName
 $packages = New-Item -ItemType Directory -Path (Join-Path $work 'packages')
 $restore = New-Item -ItemType Directory -Path (Join-Path $work 'restore')
 $env:DOTNET_CLI_HOME = (New-Item -ItemType Directory -Path (Join-Path $work 'dotnet-home')).FullName
+$env:NUGET_PACKAGES = $restore.FullName
 $env:NUGET_HTTP_CACHE_PATH = (New-Item -ItemType Directory -Path (Join-Path $work 'http-cache')).FullName
 
 function Invoke-DotNet {
