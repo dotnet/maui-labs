@@ -333,7 +333,6 @@ public class MarkdownViewTests
         Assert.Equal(ScrollOrientation.Horizontal, scroller.Orientation);
         var code = Assert.IsAssignableFrom<Label>(scroller.Content);
         Assert.Equal("print('a very long line that must not wrap')", code.Text);
-        Assert.Equal(LineBreakMode.NoWrap, code.LineBreakMode);
         Assert.Equal("monospace", code.FontFamily);
 
         var withoutLanguage = Assert.IsAssignableFrom<Border>(view.BlockViews[1]);
@@ -341,6 +340,20 @@ public class MarkdownViewTests
         Assert.Equal(ScrollOrientation.Horizontal, plainScroller.Orientation);
         Assert.IsType<RoundRectangle>(withoutLanguage.StrokeShape);
         Assert.All([scroller, plainScroller], s => Assert.Equal(ScrollBarVisibility.Default, s.HorizontalScrollBarVisibility));
+    }
+
+    [Fact]
+    public void CodeBlocks_KeepEveryLine()
+    {
+        // MAUI shows a NoWrap or truncating label as a single line on iOS, Mac Catalyst and Android. The sideways
+        // scroller measures code at its natural width, so a label that may wrap never does.
+        var view = Themed();
+        view.SetMarkdown("```\nfirst line\nsecond line\nthird line\n```");
+
+        var code = Labels(view).Single(label => label.Text.StartsWith("first", StringComparison.Ordinal));
+        Assert.Equal("first line\nsecond line\nthird line", code.Text);
+        Assert.Equal(-1, code.MaxLines);
+        Assert.Contains(code.LineBreakMode, new[] { LineBreakMode.WordWrap, LineBreakMode.CharacterWrap });
     }
 
     [Theory]
