@@ -156,6 +156,10 @@ public partial class AIChatView : TemplatedView
     public static readonly BindableProperty IsInputVisibleProperty =
         BindableProperty.Create(nameof(IsInputVisible), typeof(bool), typeof(AIChatView), true);
 
+    /// <summary>Backing property for <see cref="InputHeaderContent"/>.</summary>
+    public static readonly BindableProperty InputHeaderContentProperty =
+        BindableProperty.Create(nameof(InputHeaderContent), typeof(View), typeof(AIChatView));
+
     /// <summary>Backing property for <see cref="InputLeadingContent"/>.</summary>
     public static readonly BindableProperty InputLeadingContentProperty =
         BindableProperty.Create(nameof(InputLeadingContent), typeof(View), typeof(AIChatView));
@@ -459,6 +463,16 @@ public partial class AIChatView : TemplatedView
     {
         get => (bool)GetValue(IsInputVisibleProperty);
         set => SetValue(IsInputVisibleProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets content shown above the message box, such as a status banner. It is hidden with the
+    /// message box (<see cref="IsInputVisible"/>) and takes no space while it is <see langword="null"/> or hidden.
+    /// </summary>
+    public View? InputHeaderContent
+    {
+        get => (View?)GetValue(InputHeaderContentProperty);
+        set => SetValue(InputHeaderContentProperty, value);
     }
 
     /// <summary>Gets or sets extra content before the message box, such as more buttons.</summary>

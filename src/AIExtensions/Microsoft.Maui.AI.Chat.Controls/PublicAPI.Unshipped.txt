@@ -37,6 +37,8 @@ Microsoft.Maui.AI.Chat.Controls.AIChatView.HasAttachments.get -> bool
 Microsoft.Maui.AI.Chat.Controls.AIChatView.HasError.get -> bool
 Microsoft.Maui.AI.Chat.Controls.AIChatView.HeaderTemplate.get -> Microsoft.Maui.Controls.DataTemplate?
 Microsoft.Maui.AI.Chat.Controls.AIChatView.HeaderTemplate.set -> void
+Microsoft.Maui.AI.Chat.Controls.AIChatView.InputHeaderContent.get -> Microsoft.Maui.Controls.View?
+Microsoft.Maui.AI.Chat.Controls.AIChatView.InputHeaderContent.set -> void
 Microsoft.Maui.AI.Chat.Controls.AIChatView.InputLeadingContent.get -> Microsoft.Maui.Controls.View?
 Microsoft.Maui.AI.Chat.Controls.AIChatView.InputLeadingContent.set -> void
 Microsoft.Maui.AI.Chat.Controls.AIChatView.InputTrailingContent.get -> Microsoft.Maui.Controls.View?
@@ -209,6 +211,7 @@ static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.ErrorMessageProperty 
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.HasAttachmentsProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.HasErrorProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.HeaderTemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.InputHeaderContentProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.InputLeadingContentProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.InputTrailingContentProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.InstructionsProperty -> Microsoft.Maui.Controls.BindableProperty!

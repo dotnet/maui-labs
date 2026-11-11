@@ -274,6 +274,11 @@
                                  Spacing="8"
                                  IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=IsInputVisible}">
 
+                <!-- Collapsed while InputHeaderContent is null or hidden, so the stack adds no spacing for it. -->
+                <ContentView Content="{Binding Source={RelativeSource TemplatedParent}, Path=InputHeaderContent}"
+                             IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=InputHeaderContent.IsVisible, FallbackValue=False}"
+                             AutomationId="AIChatInputHeader" />
+
                 <Label Style="{DynamicResource AIChat.Style.ErrorText}"
                        Text="{Binding Source={RelativeSource TemplatedParent}, Path=ErrorMessage}"
                        IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=HasError}"
