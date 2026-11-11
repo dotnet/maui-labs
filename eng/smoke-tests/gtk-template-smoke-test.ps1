@@ -17,6 +17,9 @@ if ($DotNetSdkPath) {
 
 function Invoke-DotNet {
     param([string[]]$Arguments)
+    if ($Arguments[0] -in @('pack', 'restore', 'build', 'run')) {
+        $Arguments += '--disable-build-servers'
+    }
     & dotnet @dotnetPrefix @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
