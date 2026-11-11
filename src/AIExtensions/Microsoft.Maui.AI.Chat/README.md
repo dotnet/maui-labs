@@ -58,7 +58,7 @@ failing the turn. Canceling the token passed to `InvokeAsync` cancels only that 
 action can be invoked again. Once a turn stops or fails, its approvals and UI actions accept no
 decision or invocation, and an action that was still running shows no result when it returns. `IsAwaitingInput` on both blocks says whether they can still be answered: true for
 a pending approval and for a manual action that has not run, false once answered, while the action runs,
-and after a stop, failure or restore. The block raises `OnChanged` when it changes, so templates can bind
+and after a stop, failure or restore. The block raises `PropertyChanged` for it, so templates can bind
 their buttons to it. A UI action requested together with a tool that needs approval still runs as a UI
 action. A UI action wrapped in `ApprovalRequiredAIFunction` needs `FunctionInvokingChatClient` too
 (sending throws without it, because nothing would ask for the approval). It shows a
@@ -105,6 +105,90 @@ and receives the action's result, and the action still runs. The block must deri
 - Turn transactions: `CancelAsync` stops a response and keeps its partial output
   (`ConversationTurn.IsStopped`), failed turns commit nothing, are marked `ConversationTurn.IsFailed`
   and can be retried, and `ClearAsync` discards the active response before clearing.
+- A bindable model: the session, its turns and their blocks implement `INotifyPropertyChanged`, and
+  `Turns`, `RequestBlocks` and `ResponseBlocks` are observable collections.
+
+## Binding from XAML
+
+The session, its turns and their blocks raise the standard .NET change events, so a XAML list can bind to
+them directly: a `CollectionView` with a `DataTemplateSelector`, `BindableLayout`, or a third-party list.
+
+- `AgentContext` raises `PropertyChanged` for `Status` and `Error`. `Turns` raises `CollectionChanged`:
+  an `Add` when a send adds a turn, and one `Reset` once a restore loaded every turn or `ClearAsync`
+  removed them.
+- `ConversationTurn` raises `PropertyChanged` for `IsStopped`, `IsFailed`, `ModelId` and `Usage`. Its
+  `RequestBlocks` and `ResponseBlocks` raise an `Add` per block, and `ResponseBlocks` a `Reset` when
+  `RetryAsync` removes the blocks of the failed attempt.
+- Blocks raise `PropertyChanged` for the properties that changed, such as `RawText` and `Content` while
+  text streams, a reasoning block's `Text`, a tool call's `Result` and `HasResult`, an approval's
+  `Status`, a UI action's `IsComplete`, and `IsAwaitingInput`. A block of your own type, including a
+  `[ToolBlock]`, raises it with an empty name (every property may have changed) whenever its handler
+  updates it; raise specific names with `SetProperty` or `OnPropertyChanged`.
+
+`Turns`, `RequestBlocks` and `ResponseBlocks` are `ReadOnlyObservableCollection<T>`; cast one to
+`INotifyCollectionChanged` to subscribe from code. A page whose `BindingContext` is the session can list
+its turns, each showing its response blocks with a template per block type (`chat` maps
+`clr-namespace:Microsoft.Maui.AI.Chat;assembly=Microsoft.Maui.AI.Chat`):
+
+```xml
+<CollectionView ItemsSource="{Binding Turns}">
+    <CollectionView.ItemTemplate>
+        <DataTemplate x:DataType="chat:ConversationTurn">
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding ResponseBlocks}"
+                                 BindableLayout.ItemTemplateSelector="{StaticResource BlockTemplates}" />
+        </DataTemplate>
+    </CollectionView.ItemTemplate>
+</CollectionView>
+```
+
+The selector, in the page's resources:
+
+```xml
+<local:BlockTemplateSelector x:Key="BlockTemplates">
+    <local:BlockTemplateSelector.Text>
+        <DataTemplate x:DataType="chat:RichContentBlock">
+            <Label Text="{Binding RawText}" />
+        </DataTemplate>
+    </local:BlockTemplateSelector.Text>
+    <local:BlockTemplateSelector.ToolCall>
+        <DataTemplate x:DataType="chat:FunctionInvocationContentBlock">
+            <Label Text="{Binding ToolName, StringFormat='Called {0}'}" />
+        </DataTemplate>
+    </local:BlockTemplateSelector.ToolCall>
+    <local:BlockTemplateSelector.Other>
+        <DataTemplate>
+            <ContentView />
+        </DataTemplate>
+    </local:BlockTemplateSelector.Other>
+</local:BlockTemplateSelector>
+```
+
+```csharp
+public class BlockTemplateSelector : DataTemplateSelector
+{
+    public DataTemplate Text { get; set; } = null!;
+    public DataTemplate ToolCall { get; set; } = null!;
+    public DataTemplate Other { get; set; } = null!;
+
+    protected override DataTemplate OnSelectTemplate(object item, BindableObject container) => item switch
+    {
+        RichContentBlock => Text,
+        FunctionInvocationContentBlock => ToolCall,
+        _ => Other,
+    };
+}
+```
+
+Events are raised synchronously on the thread that makes the change, once the state they report is in
+place; the engine has no dispatcher. Drive the session from the UI thread: send, retry, cancel and clear
+there, and the response streams on the UI thread through its synchronization context, so bindings update
+there too. Handlers may call back into the session, for example to send the next message when `Status`
+becomes `Idle`. A handler that runs after such a send reads the new send's `Status`; use
+`RegisterOnStatusChanged` when you need the status each change reported. A handler of a turn's addition,
+of a retry's removal of blocks or of the `Turns` reset cannot start a send or retry (the returned task
+fails with `InvalidOperationException`); send from a status change instead.
+
+The `OnChanged` and `RegisterOn…` callbacks remain available.
 
 ## Changing options between sends
 
@@ -202,7 +286,8 @@ request options. It is transport-neutral request customization, not a provider A
 `UIAgent`, `AgentContext`, blocks, handlers, callbacks, and `IConversationThread` are deliberately
 single-thread-affine and **not thread-safe**. Serialize access and dispatch to your owning
 application thread when entering from background work. The library does not add locks or
-concurrent-caller guarantees.
+concurrent-caller guarantees. Change events and callbacks are raised synchronously on the thread that
+makes the change, so a UI drives the session from its UI thread.
 
 ## Rich text scope
 
