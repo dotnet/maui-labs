@@ -1,0 +1,6 @@
+{
+  "name": "media-capture",
+  "expectedCases": 1,
+  "expectedAssertions": 4,
+  "evidence": ["media-capture.json", "assertions.txt"]
+}

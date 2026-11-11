@@ -4,6 +4,9 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Animations;
 using Microsoft.Maui.Controls;
+#if NET11_0_OR_GREATER
+using Microsoft.Maui.Controls.Platform;
+#endif
 using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platforms.MacOS.Platform;
@@ -90,6 +93,9 @@ public static partial class AppHostBuilderExtensions
     static MauiAppBuilder SetupDefaults(this MauiAppBuilder builder)
     {
         builder.Services.AddSingleton<IDispatcherProvider>(svc => new MacOSDispatcherProvider());
+#if NET11_0_OR_GREATER
+        builder.Services.AddSingleton<IGesturePlatformManagerFactory, MacOSGesturePlatformManagerFactory>();
+#endif
 
         // Replace the default System.Timers.Timer-based ticker with one using NSTimer on the main run loop.
         // This ensures animation property updates happen on the main thread (required for AppKit).

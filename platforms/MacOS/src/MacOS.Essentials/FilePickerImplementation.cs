@@ -33,9 +33,9 @@ class FilePickerImplementation : IFilePicker
         return tcs.Task;
     }
 
-    public Task<IEnumerable<FileResult?>> PickMultipleAsync(PickOptions? options = null)
+    public Task<IEnumerable<FileResult>?> PickMultipleAsync(PickOptions? options = null)
     {
-        var tcs = new TaskCompletionSource<IEnumerable<FileResult?>>();
+        var tcs = new TaskCompletionSource<IEnumerable<FileResult>?>();
 
         CoreFoundation.DispatchQueue.MainQueue.DispatchAsync(() =>
         {
@@ -54,13 +54,13 @@ class FilePickerImplementation : IFilePicker
             {
                 var results = panel.Urls
                     .Where(u => u.Path is not null)
-                    .Select(u => (FileResult?)new FileResult(u.Path!))
+                    .Select(u => new FileResult(u.Path!))
                     .ToList();
                 tcs.TrySetResult(results);
             }
             else
             {
-                tcs.TrySetResult(Enumerable.Empty<FileResult?>());
+                tcs.TrySetResult(Enumerable.Empty<FileResult>());
             }
         });
 

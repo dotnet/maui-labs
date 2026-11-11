@@ -364,7 +364,7 @@ try {
             -PackageId 'Microsoft.Maui.Platforms.MacOS' `
             -Project (Join-Path $repo 'platforms\MacOS\src\MacOS\MacOS.csproj') `
             -TargetFramework 'net11.0-macos' `
-            -PlatformProperties '<RuntimeIdentifier>osx-arm64</RuntimeIdentifier><ValidateXcodeVersion>false</ValidateXcodeVersion><ApplicationId>com.microsoft.maui.resourceacceptance</ApplicationId><ApplicationTitle>Resource Acceptance</ApplicationTitle><ApplicationVersion>1</ApplicationVersion><ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>' `
+            -PlatformProperties '<UseMaui>true</UseMaui><RuntimeIdentifier>osx-arm64</RuntimeIdentifier><ApplicationId>com.microsoft.maui.resourceacceptance</ApplicationId><ApplicationTitle>Resource Acceptance</ApplicationTitle><ApplicationVersion>1</ApplicationVersion><ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>' `
             -ExpectedBackendIdentity 'macos' `
             -RuntimeIdentifier 'osx-arm64'
     }

@@ -1,10 +1,13 @@
 name: CI - macOS AppKit
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - 'platforms/MacOS/**'
+      - 'platforms/Shared/Blazor/**'
+      - 'platforms/Shared/ResourceAcceptance/**'
       - '.github/workflows/ci-macos-appkit.yml'
       - '.github/workflows/_build.yml'
       - 'eng/**'
@@ -15,9 +18,11 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
+    branches: [main, redth-maui-net11-gtk]
     paths:
       - 'platforms/MacOS/**'
+      - 'platforms/Shared/Blazor/**'
+      - 'platforms/Shared/ResourceAcceptance/**'
       - '.github/workflows/ci-macos-appkit.yml'
       - '.github/workflows/_build.yml'
       - 'eng/**'
@@ -28,16 +33,78 @@ on:
       - 'NuGet.config'
 
 jobs:
+  portable-contracts:
+    name: Portable AppKit contracts (.NET 10 and 11)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            10.0.x
+            11.0.100-rc.2.26504.105
+      - name: Run portable lifecycle, resource, and Blazor reconciliation tests
+        run: dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj -c Release
+      - name: Verify native runner contracts
+        run: python3 -B -m unittest discover -s platforms/MacOS/tests/MacOS.RuntimeTests -p 'test_*.py'
+
   build:
     uses: ./.github/workflows/_build.yml
     with:
-      project-path: platforms/MacOS/MacOS.slnx
+      project-path: platforms/MacOS/MacOS-libs.slnf
       project-name: macos-appkit
       os: '["macos-latest"]'
       install-workloads: true
+      workloads: 'macos maui'
+      android-project: ''
       run-tests: true
       pack: true
-      xcode-version: '26.0'
+      xcode-version: '27.0'
+
+  sample-build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: platforms/MacOS/samples/MacOS.Sample/MacOS.Sample.csproj
+      project-name: macos-appkit-sample
+      os: '["macos-latest"]'
+      build-target-framework: net11.0-macos
+      run-tests: false
+      pack: false
+      install-workloads: true
+      workloads: 'macos maui'
+      android-project: ''
+      xcode-version: '27.0'
+
+  resource-acceptance:
+    name: Package-only AppKit resource acceptance
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Select Xcode 27
+        run: |
+          developer_dir="$(cd /Applications/Xcode_27.0.app/Contents/Developer && pwd -P)"
+          sudo xcode-select -s "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+          echo "MD_APPLE_SDK_ROOT=$(cd "$developer_dir/../.." && pwd -P)" >> "$GITHUB_ENV"
+          xcodebuild -version
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install pinned AppKit workloads
+        run: ./eng/common/dotnet.sh workload install macos maui --from-rollback-file eng/workloads/dotnet11-rc2.json
+      - name: Verify referenced-library assets, mutation, publish, and collisions
+        shell: pwsh
+        run: ./eng/smoke-tests/community-resource-acceptance.ps1 -Backend appkit -ArtifactsDirectory "$PWD/artifacts/appkit-resources" -KeepArtifacts
+      - name: Upload resource evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: appkit-resource-acceptance
+          path: artifacts/appkit-resources/
+          if-no-files-found: warn
 
   native-runtime:
     name: AppKit runtime (${{ matrix.scenario }}, ${{ matrix.maui-version || 'default' }})
@@ -64,8 +131,12 @@ jobs:
             maui-version: '10.0.70'
           - scenario: dialog-registration
             maui-version: '10.0.110'
+          - scenario: dialog-registration
+            maui-version: '11.0.0-rc.2.26505.5'
           - scenario: dialogs
             maui-version: '10.0.70'
+          - scenario: dialogs
+            maui-version: '11.0.0-rc.2.26505.5'
           - scenario: picker
             maui-version: ''
           - scenario: tap-buttons
@@ -79,11 +150,12 @@ jobs:
             packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages
+      APPKIT_XCODE_VERSION: ${{ startsWith(matrix.maui-version, '10.') && '26.0' || '27.0' }}
     steps:
       - uses: actions/checkout@v6
       - name: Select Xcode
         run: |
-          developer_dir="$(cd /Applications/Xcode_26.0.app/Contents/Developer && pwd -P)"
+          developer_dir="$(cd "/Applications/Xcode_${APPKIT_XCODE_VERSION}.app/Contents/Developer" && pwd -P)"
           sudo xcode-select -s "$developer_dir"
           echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
           echo "MD_APPLE_SDK_ROOT=$(cd "$developer_dir/../.." && pwd -P)" >> "$GITHUB_ENV"
@@ -116,4 +188,33 @@ jobs:
         with:
           name: appkit-runtime-${{ matrix.scenario }}-${{ matrix.maui-version || 'default' }}
           path: artifacts/appkit-runtime/
+          if-no-files-found: error
+
+  camera-runtime:
+    name: AppKit native camera capture
+    if: vars.MAUI_APPKIT_CAMERA_TESTS == '1'
+    runs-on: [self-hosted, macOS, camera]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install pinned AppKit workload
+        run: ./eng/common/dotnet.sh workload install macos --from-rollback-file eng/workloads/dotnet11-rc2.json
+      - name: Verify Xcode
+        run: xcodebuild -version
+      - name: Run camera-equipped AppKit regression
+        run: >-
+          python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py
+          --scenario media-capture
+          --evidence "$PWD/artifacts/appkit-media-capture"
+      - name: Upload camera evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: appkit-media-capture
+          path: artifacts/appkit-media-capture/
           if-no-files-found: error

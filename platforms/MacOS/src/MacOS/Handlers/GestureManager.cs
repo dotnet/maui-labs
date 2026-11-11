@@ -1,6 +1,9 @@
 using AppKit;
 using CoreGraphics;
 using Microsoft.Maui.Controls;
+#if NET11_0_OR_GREATER
+using Microsoft.Maui.Controls.Platform;
+#endif
 
 using Microsoft.Maui.Platforms.MacOS.Platform;
 
@@ -10,14 +13,61 @@ namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 /// Manages gesture recognizer attachment for macOS NSViews.
 /// Called by MacOSViewHandler when GestureRecognizers are added/removed.
 /// </summary>
+#if NET11_0_OR_GREATER
+public sealed class MacOSGesturePlatformManagerFactory : IGesturePlatformManagerFactory
+{
+    public IGesturePlatformManager CreateGesturePlatformManager(IViewHandler handler)
+        => new MacOSGesturePlatformManager(handler);
+}
+
+sealed class MacOSGesturePlatformManager : IGesturePlatformManager
+{
+    readonly NSView? _platformView;
+    readonly View? _virtualView;
+
+    public MacOSGesturePlatformManager(IViewHandler handler)
+    {
+        _platformView = handler.PlatformView as NSView;
+        _virtualView = handler.VirtualView as View;
+
+        if (_platformView is null || _virtualView is null)
+            return;
+
+        GestureManager.SetupGestures(_platformView, _virtualView);
+        ((System.Collections.Specialized.INotifyCollectionChanged)_virtualView.GestureRecognizers)
+            .CollectionChanged += OnGestureRecognizersChanged;
+    }
+
+    void OnGestureRecognizersChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (_platformView is not null && _virtualView is not null)
+            GestureManager.SetupGestures(_platformView, _virtualView);
+    }
+
+    public void Dispose()
+    {
+        if (_virtualView is not null)
+        {
+            ((System.Collections.Specialized.INotifyCollectionChanged)_virtualView.GestureRecognizers)
+                .CollectionChanged -= OnGestureRecognizersChanged;
+        }
+
+        if (_platformView is not null)
+            GestureManager.ClearManagedGestures(_platformView);
+    }
+}
+#endif
+
 public static class GestureManager
 {
     public static void SetupGestures(NSView platformView, IView virtualView)
     {
-        if (virtualView is not View mauiView)
-            return;
+        if (virtualView is View view)
+            SetupGestures(platformView, view);
+    }
 
-        // Clear existing managed gesture recognizers
+    public static void SetupGestures(NSView platformView, View mauiView)
+    {
         ClearManagedGestures(platformView);
 
         foreach (var gestureRecognizer in mauiView.GestureRecognizers)
@@ -25,25 +75,25 @@ public static class GestureManager
             switch (gestureRecognizer)
             {
                 case TapGestureRecognizer tap:
-                    AddTapGesture(platformView, tap);
+                    AddTapGesture(platformView, mauiView, tap);
                     break;
                 case PanGestureRecognizer pan:
-                    AddPanGesture(platformView, pan);
+                    AddPanGesture(platformView, mauiView, pan);
                     break;
                 case SwipeGestureRecognizer swipe:
-                    AddSwipeGesture(platformView, swipe);
+                    AddSwipeGesture(platformView, mauiView, swipe);
                     break;
                 case PinchGestureRecognizer pinch:
-                    AddPinchGesture(platformView, pinch);
+                    AddPinchGesture(platformView, mauiView, pinch);
                     break;
                 case PointerGestureRecognizer pointer:
-                    AddPointerGesture(platformView, pointer);
+                    AddPointerGesture(platformView, mauiView, pointer);
                     break;
             }
         }
     }
 
-    static void ClearManagedGestures(NSView view)
+    public static void ClearManagedGestures(NSView view)
     {
         if (view is MacOSContainerView container)
             container.InterceptChildHitTesting = false;
@@ -72,9 +122,9 @@ public static class GestureManager
         }
     }
 
-    static void AddTapGesture(NSView view, TapGestureRecognizer tap)
+    static void AddTapGesture(NSView view, View virtualView, TapGestureRecognizer tap)
     {
-        var recognizer = new MacOSTapGestureRecognizer(tap)
+        var recognizer = new MacOSTapGestureRecognizer(virtualView, tap)
         {
             NumberOfClicksRequired = (nint)tap.NumberOfTapsRequired,
             ButtonMask = (nuint)tap.Buttons,
@@ -88,13 +138,13 @@ public static class GestureManager
             container.InterceptChildHitTesting = true;
     }
 
-    static void AddPanGesture(NSView view, PanGestureRecognizer pan)
+    static void AddPanGesture(NSView view, View virtualView, PanGestureRecognizer pan)
     {
-        var recognizer = new MacOSPanGestureRecognizer(pan);
+        var recognizer = new MacOSPanGestureRecognizer(virtualView, pan);
         view.AddGestureRecognizer(recognizer);
     }
 
-    static void AddSwipeGesture(NSView view, SwipeGestureRecognizer swipe)
+    static void AddSwipeGesture(NSView view, View virtualView, SwipeGestureRecognizer swipe)
     {
         // Combine with existing swipe recognizer if present, so we don't have
         // multiple NSPanGestureRecognizers competing on the same view
@@ -114,31 +164,33 @@ public static class GestureManager
         }
         else
         {
-            var recognizer = new MacOSSwipeGestureRecognizer(swipe);
+            var recognizer = new MacOSSwipeGestureRecognizer(virtualView, swipe);
             view.AddGestureRecognizer(recognizer);
         }
     }
 
-    static void AddPinchGesture(NSView view, PinchGestureRecognizer pinch)
+    static void AddPinchGesture(NSView view, View virtualView, PinchGestureRecognizer pinch)
     {
-        var recognizer = new MacOSPinchGestureRecognizer(pinch);
+        var recognizer = new MacOSPinchGestureRecognizer(virtualView, pinch);
         view.AddGestureRecognizer(recognizer);
     }
 
-    static void AddPointerGesture(NSView view, PointerGestureRecognizer pointer)
+    static void AddPointerGesture(NSView view, View virtualView, PointerGestureRecognizer pointer)
     {
-        var area = new MacOSPointerTrackingArea(view, pointer);
+        var area = new MacOSPointerTrackingArea(view, virtualView, pointer);
         view.AddTrackingArea(area);
     }
 }
 
 internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
 {
+    readonly View _view;
     readonly TapGestureRecognizer _tapGesture;
     bool _isConnected;
 
-    public MacOSTapGestureRecognizer(TapGestureRecognizer tapGesture)
+    public MacOSTapGestureRecognizer(View view, TapGestureRecognizer tapGesture)
     {
+        _view = view;
         _tapGesture = tapGesture;
         _tapGesture.PropertyChanged += OnTapGesturePropertyChanged;
         _isConnected = true;
@@ -171,33 +223,36 @@ internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
     [Foundation.Export("handleTap:")]
     void HandleTap(NSGestureRecognizer recognizer)
     {
-        // SendTapped internally calls Command.Execute, so do NOT call it separately.
+#if NET11_0_OR_GREATER
+        _tapGesture.SendTapped(_view, CreateGetPosition(_view, recognizer.View, NSApplication.SharedApplication.CurrentEvent));
+#else
         var sendTapped = typeof(TapGestureRecognizer).GetMethod(
             "SendTapped", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        if (sendTapped != null)
-        {
-            var parent = (_tapGesture as IElement)?.FindParentOfType<View>();
-            var parameters = sendTapped.GetParameters();
-            if (parameters.Length == 1)
-                sendTapped.Invoke(_tapGesture, new object?[] { parent });
-            else if (parameters.Length == 2)
-                sendTapped.Invoke(_tapGesture, new object?[] { parent, null });
-        }
-        else
-        {
-            // Fallback if SendTapped is not found
-            _tapGesture.Command?.Execute(_tapGesture.CommandParameter);
-        }
+        var parameters = sendTapped?.GetParameters();
+        if (parameters?.Length == 1)
+            sendTapped!.Invoke(_tapGesture, new object?[] { _view });
+        else if (parameters?.Length == 2)
+            sendTapped!.Invoke(_tapGesture, new object?[] { _view, null });
+        else if (_tapGesture.Command?.CanExecute(_tapGesture.CommandParameter) == true)
+            _tapGesture.Command.Execute(_tapGesture.CommandParameter);
+#endif
     }
+
+    static Func<IElement?, Point?>? CreateGetPosition(View view, NSView? platformView, NSEvent? theEvent)
+        => platformView is null || theEvent is null
+            ? null
+            : MacOSPointerTrackingArea.CreateGetPosition(view, platformView, theEvent);
 }
 
 internal class MacOSPanGestureRecognizer : NSPanGestureRecognizer
 {
+    readonly View _view;
     readonly PanGestureRecognizer _panGesture;
     CGPoint _startPoint;
 
-    public MacOSPanGestureRecognizer(PanGestureRecognizer panGesture)
+    public MacOSPanGestureRecognizer(View view, PanGestureRecognizer panGesture)
     {
+        _view = view;
         _panGesture = panGesture;
         Action = new ObjCRuntime.Selector("handlePan:");
         Target = this;
@@ -213,11 +268,11 @@ internal class MacOSPanGestureRecognizer : NSPanGestureRecognizer
             case NSGestureRecognizerState.Began:
                 _startPoint = translation;
                 ((IPanGestureController)_panGesture).SendPanStarted(
-                    recognizer.View?.FindMauiView(), PanGestureRecognizer.CurrentId.Value);
+                    _view, PanGestureRecognizer.CurrentId.Value);
                 break;
             case NSGestureRecognizerState.Changed:
                 ((IPanGestureController)_panGesture).SendPan(
-                    recognizer.View?.FindMauiView(),
+                    _view,
                     translation.X - _startPoint.X,
                     translation.Y - _startPoint.Y,
                     PanGestureRecognizer.CurrentId.Value);
@@ -225,7 +280,7 @@ internal class MacOSPanGestureRecognizer : NSPanGestureRecognizer
             case NSGestureRecognizerState.Ended:
             case NSGestureRecognizerState.Cancelled:
                 ((IPanGestureController)_panGesture).SendPanCompleted(
-                    recognizer.View?.FindMauiView(), PanGestureRecognizer.CurrentId.Value);
+                    _view, PanGestureRecognizer.CurrentId.Value);
                 break;
         }
     }
@@ -233,45 +288,46 @@ internal class MacOSPanGestureRecognizer : NSPanGestureRecognizer
 
 internal class MacOSPointerTrackingArea : NSTrackingArea
 {
+    readonly View _view;
     readonly PointerGestureRecognizer _pointerGesture;
-    static readonly System.Reflection.MethodInfo? _sendEntered;
-    static readonly System.Reflection.MethodInfo? _sendExited;
-    static readonly System.Reflection.MethodInfo? _sendMoved;
+#if !NET11_0_OR_GREATER
+    static readonly System.Reflection.MethodInfo? _sendEntered =
+        typeof(PointerGestureRecognizer).GetMethod(
+            "SendPointerEntered",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+    static readonly System.Reflection.MethodInfo? _sendExited =
+        typeof(PointerGestureRecognizer).GetMethod(
+            "SendPointerExited",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+    static readonly System.Reflection.MethodInfo? _sendMoved =
+        typeof(PointerGestureRecognizer).GetMethod(
+            "SendPointerMoved",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+#endif
 
-    static MacOSPointerTrackingArea()
-    {
-        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        _sendEntered = typeof(PointerGestureRecognizer).GetMethod("SendPointerEntered", flags);
-        _sendExited = typeof(PointerGestureRecognizer).GetMethod("SendPointerExited", flags);
-        _sendMoved = typeof(PointerGestureRecognizer).GetMethod("SendPointerMoved", flags);
-    }
-
-    public MacOSPointerTrackingArea(NSView view, PointerGestureRecognizer pointerGesture)
+    public MacOSPointerTrackingArea(NSView view, View virtualView, PointerGestureRecognizer pointerGesture)
         : base(view.Bounds,
             NSTrackingAreaOptions.MouseEnteredAndExited | NSTrackingAreaOptions.MouseMoved |
             NSTrackingAreaOptions.ActiveInKeyWindow | NSTrackingAreaOptions.InVisibleRect,
             view, null)
     {
+        _view = virtualView;
         _pointerGesture = pointerGesture;
     }
 
     public PointerGestureRecognizer Recognizer => _pointerGesture;
 
-    static Func<IElement?, Point?> CreateGetPosition(NSView view, NSEvent? theEvent)
+    internal static Func<IElement?, Point?> CreateGetPosition(View view, NSView platformView, NSEvent theEvent)
     {
         return (IElement? relativeTo) =>
         {
-            if (theEvent == null) return null;
-            // Get mouse location in window coordinates, convert to view
-            var locInView = view.ConvertPointFromView(theEvent.LocationInWindow, null);
-            // Flip Y for MAUI (top-left origin) if view is not flipped
-            if (!view.IsFlipped)
-                locInView.Y = view.Bounds.Height - locInView.Y;
+            var locInView = platformView.ConvertPointFromView(theEvent.LocationInWindow, null);
+            if (!platformView.IsFlipped)
+                locInView.Y = platformView.Bounds.Height - locInView.Y;
 
-            if (relativeTo == null)
+            if (relativeTo == null || ReferenceEquals(relativeTo, view))
                 return new Microsoft.Maui.Graphics.Point(locInView.X, locInView.Y);
 
-            // If relativeTo is the same element, return position in that element's coordinate space
             if (relativeTo is View relView && relView.Handler?.PlatformView is NSView relNative)
             {
                 var locInRel = relNative.ConvertPointFromView(theEvent.LocationInWindow, null);
@@ -286,47 +342,32 @@ internal class MacOSPointerTrackingArea : NSTrackingArea
 
     public void FireEntered(View? sender, NSEvent? theEvent = null)
     {
-        Func<IElement?, Point?>? getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
-        _sendEntered?.Invoke(_pointerGesture, new object?[] { sender!, getPos, null, ButtonsMask.Primary });
+        var getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(_view, view, theEvent) : null;
+#if NET11_0_OR_GREATER
+        _pointerGesture.SendPointerEntered(_view, getPos);
+#else
+        _sendEntered?.Invoke(_pointerGesture, new object?[] { _view, getPos, null, ButtonsMask.Primary });
+#endif
     }
 
     public void FireExited(View? sender, NSEvent? theEvent = null)
     {
-        Func<IElement?, Point?>? getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
-        _sendExited?.Invoke(_pointerGesture, new object?[] { sender!, getPos, null, ButtonsMask.Primary });
+        var getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(_view, view, theEvent) : null;
+#if NET11_0_OR_GREATER
+        _pointerGesture.SendPointerExited(_view, getPos);
+#else
+        _sendExited?.Invoke(_pointerGesture, new object?[] { _view, getPos, null, ButtonsMask.Primary });
+#endif
     }
 
     public void FireMoved(View? sender, NSEvent? theEvent = null)
     {
-        Func<IElement?, Point?>? getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
-        _sendMoved?.Invoke(_pointerGesture, new object?[] { sender!, getPos, null, ButtonsMask.Primary });
-    }
-}
-
-internal static class GestureExtensions
-{
-    public static View? FindMauiView(this NSView? view)
-    {
-        // Walk up the view hierarchy to find the MAUI view element
-        return null; // Placeholder — requires handler → VirtualView lookup
-    }
-
-    public static T? FindParentOfType<T>(this IElement element) where T : class
-    {
-        var current = element.Parent;
-        while (current != null)
-        {
-            if (current is T result)
-                return result;
-            current = current.Parent;
-        }
-        return null;
-    }
-
-    public static void SendTapped(this IGestureRecognizer recognizer, View? view)
-    {
-        if (recognizer is TapGestureRecognizer tap)
-            tap.Command?.Execute(tap.CommandParameter);
+        var getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(_view, view, theEvent) : null;
+#if NET11_0_OR_GREATER
+        _pointerGesture.SendPointerMoved(_view, getPos);
+#else
+        _sendMoved?.Invoke(_pointerGesture, new object?[] { _view, getPos, null, ButtonsMask.Primary });
+#endif
     }
 }
 
@@ -338,11 +379,13 @@ internal static class GestureExtensions
 /// </summary>
 internal class MacOSSwipeGestureRecognizer : NSPanGestureRecognizer
 {
+    readonly View _view;
     readonly List<SwipeGestureRecognizer> _swipeGestures = new();
     CGPoint _startLocation;
 
-    public MacOSSwipeGestureRecognizer(SwipeGestureRecognizer swipeGesture)
+    public MacOSSwipeGestureRecognizer(View view, SwipeGestureRecognizer swipeGesture)
     {
+        _view = view;
         _swipeGestures.Add(swipeGesture);
         Action = new ObjCRuntime.Selector("handleSwipe:");
         Target = this;
@@ -370,18 +413,14 @@ internal class MacOSSwipeGestureRecognizer : NSPanGestureRecognizer
                 // Accumulate swipe distance on all recognizers
                 foreach (var gesture in _swipeGestures)
                 {
-                    var parent = (gesture as IElement)?.FindParentOfType<View>();
-                    ((ISwipeGestureController)gesture).SendSwipe(parent as Element, dx, dy);
+                    ((ISwipeGestureController)gesture).SendSwipe(_view, dx, dy);
                 }
 
                 // On end, check if threshold was met and fire the Swiped event
                 if (recognizer.State == NSGestureRecognizerState.Ended)
                 {
                     foreach (var gesture in _swipeGestures)
-                    {
-                        var parent = (gesture as IElement)?.FindParentOfType<View>();
-                        ((ISwipeGestureController)gesture).DetectSwipe(parent, gesture.Direction);
-                    }
+                        ((ISwipeGestureController)gesture).DetectSwipe(_view, gesture.Direction);
                 }
                 break;
         }
@@ -393,10 +432,12 @@ internal class MacOSSwipeGestureRecognizer : NSPanGestureRecognizer
 /// </summary>
 internal class MacOSPinchGestureRecognizer : NSMagnificationGestureRecognizer
 {
+    readonly View _view;
     readonly PinchGestureRecognizer _pinchGesture;
 
-    public MacOSPinchGestureRecognizer(PinchGestureRecognizer pinchGesture)
+    public MacOSPinchGestureRecognizer(View view, PinchGestureRecognizer pinchGesture)
     {
+        _view = view;
         _pinchGesture = pinchGesture;
         Action = new ObjCRuntime.Selector("handlePinch:");
         Target = this;
@@ -411,19 +452,18 @@ internal class MacOSPinchGestureRecognizer : NSMagnificationGestureRecognizer
         var scalePoint = new Point(0.5, 0.5);
 
         var controller = (IPinchGestureController)_pinchGesture;
-        var parent = (_pinchGesture as IElement)?.FindParentOfType<View>();
 
         switch (recognizer.State)
         {
             case NSGestureRecognizerState.Began:
-                controller.SendPinchStarted(parent!, scalePoint);
+                controller.SendPinchStarted(_view, scalePoint);
                 break;
             case NSGestureRecognizerState.Changed:
-                controller.SendPinch(parent!, scale, scalePoint);
+                controller.SendPinch(_view, scale, scalePoint);
                 break;
             case NSGestureRecognizerState.Ended:
             case NSGestureRecognizerState.Cancelled:
-                controller.SendPinchEnded(parent!);
+                controller.SendPinchEnded(_view);
                 break;
         }
     }

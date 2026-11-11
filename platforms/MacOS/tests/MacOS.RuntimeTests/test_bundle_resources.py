@@ -63,7 +63,8 @@ class PackageConsumerContractTests(unittest.TestCase):
         manifest = load_manifest("bundle-resources")
         baseline = manifest["baseline"]
         result = {
-            "scenario": manifest["name"], "expectedCases": 4, "expectedAssertions": 26,
+            "scenario": manifest["name"], "expectedCases": 4,
+            "expectedAssertions": manifest["expectedAssertions"],
             "assertions": 9, "cases": 0, "exitCode": 42, "outcome": "regression",
             "failureId": baseline["failureId"], "message": baseline["message"],
         }

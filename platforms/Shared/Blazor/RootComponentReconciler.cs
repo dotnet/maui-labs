@@ -1,14 +1,14 @@
-namespace Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView;
+namespace Microsoft.Maui.Platforms.Shared;
 
-internal sealed class RootComponentReconciler
+internal sealed class RootComponentReconciler<T> where T : class
 {
 	readonly SemaphoreSlim _gate = new(1, 1);
-	readonly HashSet<RootComponent> _registered = [];
+	readonly HashSet<T> _registered = [];
 
 	internal async Task SynchronizeAsync(
-		Func<IEnumerable<RootComponent>> getDesired,
-		Func<RootComponent, Task> add,
-		Func<RootComponent, Task> remove)
+		Func<IEnumerable<T>> getDesired,
+		Func<T, Task> add,
+		Func<T, Task> remove)
 	{
 		await _gate.WaitAsync();
 		try

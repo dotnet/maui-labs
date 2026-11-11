@@ -1,10 +1,23 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
-  <!-- Resizetizer does not process the macos TFM. Let the Apple SDK own copying,
-       incremental builds, publishing and signing, using the backend's lookup paths. -->
+  <PropertyGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))">
+    <ResizetizerPlatformType Condition="'$(ResizetizerPlatformType)' == ''">macos-appkit</ResizetizerPlatformType>
+    <ResizetizerAfterImageProcessingTargets>$(ResizetizerAfterImageProcessingTargets);_MacOSCollectProcessedMauiResources</ResizetizerAfterImageProcessingTargets>
+    <MauiActiveBackend Condition="'$(MauiActiveBackend)' == ''">macos</MauiActiveBackend>
+  </PropertyGroup>
+
+  <ItemGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))">
+    <MauiPlatformSpecificFolder Include="Platforms\MacOS\"
+                                TargetPlatformIdentifier="macos"
+                                BackendIdentity="macos" />
+  </ItemGroup>
+
+  <!-- MAUI 10 compatibility path. .NET 11 uses the processed resource contract below. -->
   <Target Name="_MacOSCollectMauiResources"
           BeforeTargets="_CollectBundleResources"
-          Condition="'$(TargetPlatformIdentifier)' == 'macos' and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and !$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
     <ItemGroup>
       <_MacOSMauiBundleResource Include="@(MauiImage)">
         <LogicalName>Images/%(Filename)%(Extension)</LogicalName>
@@ -22,6 +35,71 @@
            SDK may keep the default Raw/ path instead of the MauiAsset logical name. -->
       <BundleResource Remove="@(_MacOSMauiBundleResource)" MatchOnMetadata="FullPath" MatchOnMetadataOptions="PathLike" />
       <BundleResource Include="@(_MacOSMauiBundleResource)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_MacOSPrepareMauiImages"
+          BeforeTargets="ResizetizeImages"
+          DependsOnTargets="ResizetizeCollectItems"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <MauiImage Update="@(MauiImage)" Condition="'%(MauiImage.Link)' != ''">
+        <Link>$([System.String]::Copy('%(MauiImage.Link)').Replace('\', '/'))</Link>
+      </MauiImage>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_MacOSPrepareRawMauiAssets"
+          BeforeTargets="ProcessMauiAssets"
+          DependsOnTargets="ResizetizeCollectItems"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <!-- Keep the AppKit raw-asset default when Resizetizer supplies a source-relative Link. -->
+      <MauiAsset Update="@(MauiAsset)">
+        <LogicalName Condition="'%(MauiAsset.LogicalName)' == ''">%(Filename)%(Extension)</LogicalName>
+      </MauiAsset>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_MacOSCollectProcessedMauiResources"
+          AfterTargets="ResizetizeImages"
+          BeforeTargets="_CollectBundleResources"
+          DependsOnTargets="ProcessMauiFonts;ProcessMauiAssets"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <_MacOSProcessedMauiBundleResource Include="@(MauiProcessedImage)"
+                                         Condition="'%(MauiProcessedImage.IsAppIcon)' != 'true'
+                                                    and '%(MauiProcessedImage.MSBuildSourceProjectFile)' == ''">
+        <LogicalName>Images/%(MauiProcessedImage.Filename)%(MauiProcessedImage.Extension)</LogicalName>
+      </_MacOSProcessedMauiBundleResource>
+      <_MacOSProcessedMauiBundleResource Include="@(MauiProcessedFont)"
+                                         Condition="'%(MauiProcessedFont.MSBuildSourceProjectFile)' == ''">
+        <LogicalName>Fonts/%(MauiProcessedFont.Filename)%(MauiProcessedFont.Extension)</LogicalName>
+      </_MacOSProcessedMauiBundleResource>
+      <_MacOSProcessedMauiBundleResource Include="@(MauiProcessedAsset)"
+                                         Condition="'%(MauiProcessedAsset.MSBuildSourceProjectFile)' == ''">
+        <LogicalName Condition="'%(MauiProcessedAsset.LogicalName)' != ''">%(MauiProcessedAsset.LogicalName)</LogicalName>
+        <LogicalName Condition="'%(MauiProcessedAsset.LogicalName)' == '' and '%(MauiProcessedAsset.Link)' != ''">%(MauiProcessedAsset.Link)</LogicalName>
+        <LogicalName Condition="'%(MauiProcessedAsset.LogicalName)' == '' and '%(MauiProcessedAsset.Link)' == '' and '%(MauiProcessedAsset.TargetPath)' != ''">%(MauiProcessedAsset.TargetPath)</LogicalName>
+        <LogicalName Condition="'%(MauiProcessedAsset.Link)' == '' and '%(MauiProcessedAsset.TargetPath)' == '' and '%(MauiProcessedAsset.LogicalName)' == ''">%(MauiProcessedAsset.RecursiveDir)%(MauiProcessedAsset.Filename)%(MauiProcessedAsset.Extension)</LogicalName>
+      </_MacOSProcessedMauiBundleResource>
+      <_MacOSProcessedMauiBundleResource>
+        <LogicalName>$([System.String]::Copy('%(_MacOSProcessedMauiBundleResource.LogicalName)').Replace('\', '/'))</LogicalName>
+      </_MacOSProcessedMauiBundleResource>
+
+      <BundleResource Remove="@(MauiImage);@(MauiFont);@(MauiAsset)"
+                      MatchOnMetadata="FullPath"
+                      MatchOnMetadataOptions="PathLike" />
+      <BundleResource Remove="@(_MacOSProcessedMauiBundleResource)"
+                      MatchOnMetadata="FullPath"
+                      MatchOnMetadataOptions="PathLike" />
+      <BundleResource Include="@(_MacOSProcessedMauiBundleResource)" />
     </ItemGroup>
   </Target>
 

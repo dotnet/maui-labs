@@ -13,6 +13,7 @@
     <MauiImage Include="Resources\Images\blue.svg" BaseSize="16,16" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="../../../Shared/Blazor/RootComponentReconcilerTests.cs" Link="RootComponentReconcilerTests.cs" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="xunit" />
     <ProjectReference Include="..\..\src\Linux.Gtk4.BlazorWebView\Linux.Gtk4.BlazorWebView.csproj" />

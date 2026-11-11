@@ -1,0 +1,11 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <ItemGroup>
+    <AvailableItemName Include="MauiAsset" />
+    <AvailableItemName Include="MauiImage" />
+    <AvailableItemName Include="MauiIcon" />
+    <AvailableItemName Include="MauiFont" />
+    <AvailableItemName Include="MauiSplashScreen" />
+  </ItemGroup>
+
+</Project>

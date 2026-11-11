@@ -6,10 +6,10 @@
   "evidence": ["registration.json", "assertions.txt"],
   "fixedEvidence": ["dialogs.jsonl", "action-sheet.png", "prompt.png", "alert.png"],
   "baseline": {
-    "source": "platforms/MacOS/src/MacOS/Platform/AlertManagerSubscription.cs",
+    "source": "platforms/MacOS/src/MacOS/Hosting/AppHostBuilderExtensions.cs",
     "replace": {
-      "old": "static readonly Type? IAlertManagerSubscriptionType = typeof(Window).Assembly\n        .GetType(\"Microsoft.Maui.Controls.Platform.IAlertManagerSubscription\")\n        ?? AlertManagerType?.GetNestedType(\"IAlertManagerSubscription\", BindingFlags.Public | BindingFlags.NonPublic);\n\n    public static void Register(IServiceCollection services)\n    {\n        if (IAlertManagerSubscriptionType == null)\n            throw new NotSupportedException($\"Cannot register AppKit dialogs: IAlertManagerSubscription was not found in {typeof(Window).Assembly.FullName}.\");",
-      "new": "static readonly Type? IAlertManagerSubscriptionType = AlertManagerType?\n        .GetNestedType(\"IAlertManagerSubscription\", BindingFlags.Public | BindingFlags.NonPublic);\n\n    public static void Register(IServiceCollection services)\n    {\n        if (IAlertManagerSubscriptionType == null)\n            return;"
+      "old": "        AlertManagerSubscription.Register(builder.Services);",
+      "new": "        // Regression baseline: omit the platform dialog subscription."
     },
     "exitCode": 1,
     "outcome": "failed",
