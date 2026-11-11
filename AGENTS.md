@@ -15,7 +15,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 | **Comet** | `Comet`, `Comet.SourceGenerator`, `Comet.Layout.Yoga` | Experimental MVU UI framework for .NET MAUI — C# fluent UI, signals/reactive state, Yoga layout. |
 | **Go** | `Microsoft.Maui.Go.Server` + Comet Go companion app | Single-file Comet apps server and companion app for rapid prototyping (alpha; sister to Comet). |
 | **Essentials.AI** | `Microsoft.Maui.Essentials.AI` | On-device AI for .NET MAUI — semantic search, chat completion, embeddings, and tool use against local models. |
-| **AIExtensions** | `Microsoft.Maui.AI.Attributes`, `Microsoft.Maui.AI.Chat`, `Microsoft.Maui.AI.Chat.Controls` | Source-generated AI tools, the headless block/pipeline agent engine, and the drop-in native AI chat control (`AIChatView`). |
+| **AIExtensions** | `Microsoft.Maui.AI.Attributes`, `Microsoft.Maui.AI.Chat`, `Microsoft.Maui.AI.Chat.Controls` | Source-generated AI tools, the headless block/pipeline chat engine, and XAML block templates that show its blocks with your own views. |
 | **AppProjectReference** | `Microsoft.Maui.Build.AppProjectReference` | MSBuild SDK extension that enables referencing MAUI app projects from test and tooling projects. |
 | **Linux GTK4** | `Microsoft.Maui.Platforms.Linux.Gtk4` + associated packages | .NET MAUI platform backend for Linux using GTK4 — handler, Essentials, BlazorWebView, and project templates. |
 | **macOS AppKit** | `Microsoft.Maui.Platforms.MacOS` + associated packages | .NET MAUI platform backend for macOS AppKit — handler, Essentials, BlazorWebView, and project templates. |
@@ -315,7 +315,10 @@ maui-labs/
 │   │   └── Microsoft.Maui.Essentials.AI/ # On-device AI package
 │   ├── AIExtensions/                     # AI Extensions product
 │   │   ├── Microsoft.Maui.AI.Attributes/           # Runtime library (attributes + AIToolContext base class)
-│   │   └── Microsoft.Maui.AI.Attributes.Generators/ # Roslyn incremental source generator
+│   │   ├── Microsoft.Maui.AI.Attributes.Generators/ # Roslyn incremental source generator
+│   │   ├── Microsoft.Maui.AI.Chat/                 # Headless chat engine (blocks, UIAgent, AgentContext)
+│   │   ├── Microsoft.Maui.AI.Chat.Generators/      # [ToolBlock] source generator
+│   │   └── Microsoft.Maui.AI.Chat.Controls/        # XAML block templates for the engine's blocks
 │   ├── AppProjectReference/              # AppProjectReference product
 │   │   └── Microsoft.Maui.Build.AppProjectReference/ # MSBuild SDK extension
 │   ├── Comet/                            # Comet MVU framework

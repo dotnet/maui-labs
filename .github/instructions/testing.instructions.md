@@ -19,6 +19,7 @@ applyTo: "**/*Tests*/**,**/*.Tests.*"
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Generators.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Controls.Tests/` | `net10.0` |
+| AIExtensions | `tests/AIExtensions/AIExtensions.Sample.ChatPlayground.Tests/` | `net10.0` |
 | AppProjectReference | `src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference.Tests/` | `net10.0` |
 | Essentials.AI | `tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/` | `net10.0` |
 | Essentials.AI | `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/` | multi-TFM |
@@ -93,29 +94,18 @@ public void VisualTreeWalker_FindsElementById()
 }
 ```
 
-### AI Chat Controls Tests
+### AI Chat Tests
 
-`tests/AIExtensions/Microsoft.Maui.AI.Chat.Controls.Tests/` drives `AIChatView` against real engine sessions
-with no platform or device:
+The chat tests need no platform or device:
 
-- Run async tests with `UIThread.Run(async () => ...)`. This keeps every continuation on the test thread,
-  like the UI thread in an app.
-- Script the model with `ScriptedChatClient`: `Reply`, `ReplyLive` (stream as the test writes),
-  `WaitThenReply`, `Fail`, and `RequestApproval`.
-- Create views with `ChatHost.Create`, which attaches them to a `Window` so `Loaded` and `Unloaded` fire.
-  `ChatHost.Realize(row)` builds the item view the list would show for a row.
-- A module initializer installs an inline dispatcher, so the message list flushes synchronously. Install
-  `TestDispatcher` when a test needs to observe coalesced updates.
-- Install `UIThreadDispatcher` (inside `UIThread.Run`, before creating the view) to test callbacks raised on
-  another thread: like a device, only the test thread has a dispatcher.
-- Test the built-in speech recognizer over `FakeSpeechToText`, which raises updates the way each platform's
-  CommunityToolkit.Maui service does (`SayOnApple`, `SayOnWindows`, `SayOnAndroid`), and move its pause timer
-  with `ManualTimeProvider`.
-- Build the view's own parts from the internal element types in `Views/ChatElements.cs` (`ChatLabel`,
-  `ChatButton`, ...), never the standard controls, so the app's implicit styles leave them alone. A new built-in
-  type gets the `ChatElements.EnsureTheme()` field initializer and an entry in `ChatElements.Types`.
-  `StyleIsolationTests` renders every part with the default MAUI template's styles and with garish ones and
-  fails on any part that changes; add a scenario there when you add a part.
+- `Microsoft.Maui.AI.Chat.Controls.Tests/` covers the block template layer: the matches, `BlockTemplateSelector`,
+  `ViewTemplate`, `BlockView` and the markup extensions, with blocks from `TestHelpers/Blocks.cs`. A module
+  initializer installs a dispatcher that runs work inline; install `TestDispatcher` to observe coalesced updates.
+- `AIExtensions.Sample.ChatPlayground.Tests/` links the playground sources that need no running app and drives the real engine.
+  `PlaygroundChatHarness` wires the session the way `ChatViewModel` does, and `ScriptedChatClient` plays the model
+  from short scripted `ChatResponseUpdate`s. Wrap it in a `FunctionInvokingChatClient` when the tools should run,
+  as they do in the app. Follow the session with standard change notifications (`TestHelpers/SessionEvents.cs`),
+  not the engine's `RegisterOn…` callbacks.
 
 ### Naming Convention
 
