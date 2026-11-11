@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Collections.Specialized;
 using System.Text;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -49,6 +50,7 @@ public sealed class GtkBlazorWebView : IDisposable
 	private readonly IServiceProvider _serviceProvider;
 	private GtkWebViewManager? _webViewManager;
 	private UserContentManager? _userContentManager;
+	private readonly HashSet<RootComponent> _registeredRootComponents = [];
 	private bool _disposed;
 	private string? _hostPage;
 	private static int _moduleInitialized;
@@ -78,6 +80,7 @@ public sealed class GtkBlazorWebView : IDisposable
 		_serviceProvider = serviceProvider;
 		WebKitWebView = CreateWebView();
 		RootComponents = new RootComponentsCollection();
+		RootComponents.CollectionChanged += OnRootComponentsCollectionChanged;
 	}
 
 	internal WebView WebKitWebView { get; }
@@ -106,6 +109,7 @@ public sealed class GtkBlazorWebView : IDisposable
 		if (_disposed)
 			return;
 		_disposed = true;
+		RootComponents.CollectionChanged -= OnRootComponentsCollectionChanged;
 
 		if (_userContentManager != null)
 		{
@@ -127,6 +131,7 @@ public sealed class GtkBlazorWebView : IDisposable
 				catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"GtkBlazorWebView: DisposeAsync failed: {ex.Message}"); }
 			}).Wait(TimeSpan.FromSeconds(5));
 		}
+		_registeredRootComponents.Clear();
 
 		WebKitWebView.Dispose();
 	}
@@ -241,12 +246,40 @@ public sealed class GtkBlazorWebView : IDisposable
 		foreach (var rootComponent in RootComponents)
 		{
 			_ = rootComponent.AddToWebViewManagerAsync(_webViewManager);
+			_registeredRootComponents.Add(rootComponent);
 		}
 
 		_webViewManager.Navigate(StartPath);
 	}
 
-	private static IFileProvider CreateFileProvider(string contentRootDir)
+	private void OnRootComponentsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs eventArgs)
+		=> SynchronizeRootComponents();
+
+	private void SynchronizeRootComponents()
+	{
+		var manager = _webViewManager;
+		if (manager == null)
+			return;
+
+		_ = manager.Dispatcher.InvokeAsync(async () =>
+		{
+			var desiredComponents = RootComponents.ToHashSet();
+
+			foreach (var item in _registeredRootComponents.Except(desiredComponents).ToArray())
+			{
+				await item.RemoveFromWebViewManagerAsync(manager);
+				_registeredRootComponents.Remove(item);
+			}
+
+			foreach (var item in desiredComponents.Except(_registeredRootComponents).ToArray())
+			{
+				await item.AddToWebViewManagerAsync(manager);
+				_registeredRootComponents.Add(item);
+			}
+		});
+	}
+
+	internal static IFileProvider CreateFileProvider(string contentRootDir)
 	{
 		string contentRoot = System.IO.Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!;
 		string bundleRootDir = System.IO.Path.Combine(contentRoot, contentRootDir);
@@ -256,6 +289,14 @@ public sealed class GtkBlazorWebView : IDisposable
 
 		return new NullFileProvider();
 	}
+
+#if NET11_0_OR_GREATER
+	internal Task<bool> TryDispatchAsync(Action<IServiceProvider> workItem)
+	{
+		ArgumentNullException.ThrowIfNull(workItem);
+		return _webViewManager?.TryDispatchAsync(workItem) ?? Task.FromResult(false);
+	}
+#endif
 
 	private static void FinishUriSchemeRequest(URISchemeRequest request, uint statusCode, string statusText, string message)
 	{

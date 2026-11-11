@@ -52,7 +52,6 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			["VerticalScrollBarVisibility"] = MapScrollBarVisibility,
 			[nameof(IView.Background)] = MapBackgroundColor,
 			["BackgroundColor"] = MapBackgroundColor,
-			// Accessibility properties — registered as no-ops to prevent warnings
 			["IsInAccessibleTree"] = MapAccessibility,
 			["Description"] = MapAccessibility,
 			["HeadingLevel"] = MapAccessibility,
@@ -124,6 +123,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 	{
 		var listItem = (Gtk.ListItem)args.Object;
 		var label = CreateItemLabel(string.Empty);
+		label.AccessibleRole = Gtk.AccessibleRole.ListItem;
 
 		// Add a one-time CSS provider for group header styling via CSS class
 		var cssProvider = Gtk.CssProvider.New();
@@ -773,7 +773,32 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		MapItemsSource(handler, view);
 	}
 	public static void MapCanReorderItems(CollectionViewHandler handler, IView view) { }
-	public static void MapAccessibility(CollectionViewHandler handler, IView view) { }
+	public static void MapAccessibility(CollectionViewHandler handler, IView view)
+	{
+		if (handler.PlatformView is null || handler._listView is null || view is not BindableObject bindable)
+			return;
+
+		var excluded = AutomationProperties.GetExcludedWithChildren(bindable);
+		var inAccessibleTree = AutomationProperties.GetIsInAccessibleTree(bindable);
+		var role = excluded == true || inAccessibleTree == false
+			? Gtk.AccessibleRole.None
+			: Gtk.AccessibleRole.List;
+
+		handler.PlatformView.AccessibleRole = role;
+		handler._listView.AccessibleRole = role;
+		if (view is CollectionView collectionView)
+		{
+			var description = SemanticProperties.GetDescription(collectionView);
+			var hint = SemanticProperties.GetHint(collectionView);
+			var isHeading = SemanticProperties.GetHeadingLevel(collectionView) != SemanticHeadingLevel.None;
+			foreach (var widget in new Gtk.Widget[] { handler.PlatformView, handler._listView })
+			{
+				widget.SetAccessibleText(Gtk.AccessibleProperty.Description, description);
+				widget.SetAccessibleText(Gtk.AccessibleProperty.HelpText, hint);
+				widget.SetHeading(isHeading);
+			}
+		}
+	}
 
 	void UpdateDisplayedChild(CollectionView collectionView)
 	{

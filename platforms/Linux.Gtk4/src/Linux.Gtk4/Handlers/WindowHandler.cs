@@ -1,4 +1,6 @@
+#if NET10_0
 using System.Reflection;
+#endif
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
@@ -295,8 +297,9 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 			GtkMenuBarManager.ApplyToWindow(handler.PlatformView, page);
 		}
 
-		// Ensure AlertManager.Subscribe() is called so DI-registered
-		// IAlertManagerSubscription gets picked up for DisplayAlert etc.
+#if NET10_0
+		// MAUI 10 does not expose this lifecycle hook. The net11 asset relies on
+		// Window.TryResolveAlertManager()/Subscribe() and the public typed service.
 		if (window is Microsoft.Maui.Controls.Window mauiWindow)
 		{
 			try
@@ -310,6 +313,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 			}
 			catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"AlertManager setup failed: {ex.Message}"); }
 		}
+#endif
 	}
 
 	public static void MapWidth(WindowHandler handler, IWindow window)

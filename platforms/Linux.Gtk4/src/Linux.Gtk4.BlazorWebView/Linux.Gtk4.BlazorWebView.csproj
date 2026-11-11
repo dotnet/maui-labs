@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>$(LinuxGtk4TargetFrameworks)</TargetFrameworks>
     <RootNamespace>Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView</RootNamespace>
     <AssemblyName>Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView</AssemblyName>
     <PackageId>Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView</PackageId>
@@ -16,8 +16,20 @@
   <ItemGroup>
     <PackageReference Include="GirCore.Gtk-4.0" Version="0.7.0" />
     <PackageReference Include="GirCore.WebKit-6.0" Version="0.7.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView" Version="$(MicrosoftAspNetCoreComponentsWebViewVersion)" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MicrosoftAspNetCoreComponentsWebViewMauiVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView"
+                      Version="$(MicrosoftAspNetCoreComponentsWebViewVersion)"
+                      Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui"
+                      Version="$(LinuxGtk4Maui10Version)"
+                      ExcludeAssets="build;buildTransitive"
+                      Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView"
+                      Version="$(CommunityPlatformAspNetCoreComponentsWebViewVersion)"
+                      Condition="'$(TargetFramework)' == 'net11.0'" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui"
+                      Version="$(LinuxGtk4Maui11Version)"
+                      ExcludeAssets="build;buildTransitive"
+                      Condition="'$(TargetFramework)' == 'net11.0'" />
   </ItemGroup>
 
   <ItemGroup>

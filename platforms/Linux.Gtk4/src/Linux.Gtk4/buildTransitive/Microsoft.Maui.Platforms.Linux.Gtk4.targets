@@ -1,5 +1,20 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
+  <!-- NuGet .props imports run before the consumer's TargetFramework property is
+       evaluated. Keep TFM-dependent backend identity and resource configuration
+       in .targets so package consumers see the final project properties. -->
+  <PropertyGroup>
+    <_LinuxGtk4UseMaui11Contracts>$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.0'))</_LinuxGtk4UseMaui11Contracts>
+    <ResizetizerPlatformType Condition="'$(_LinuxGtk4UseMaui11Contracts)' == 'True' and '$(ResizetizerPlatformType)' == ''">linux</ResizetizerPlatformType>
+    <MauiActiveBackend Condition="'$(_LinuxGtk4UseMaui11Contracts)' == 'True' and '$(MauiActiveBackend)' == ''">linux</MauiActiveBackend>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(_LinuxGtk4UseMaui11Contracts)' == 'True'">
+    <MauiPlatformSpecificFolder Include="Platforms\Linux\"
+                                TargetPlatformIdentifier="linux"
+                                BackendIdentity="linux" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(ApplicationId)' != ''">
     <AssemblyMetadata Include="MauiApplicationId" Value="$(ApplicationId)" />
   </ItemGroup>
@@ -10,7 +25,46 @@
     <MauiIcon Include="Resources\AppIcon\appicon.ico" Condition="!Exists('Resources\AppIcon\appicon.svg') and !Exists('Resources\AppIcon\appicon.png') and Exists('Resources\AppIcon\appicon.ico')" />
   </ItemGroup>
 
-  <ItemGroup>
+  <Target Name="_LinuxGtk4CollectProcessedMauiResources"
+          Condition="'$(_LinuxGtk4UseMaui11Contracts)' == 'True' and '$(_LinuxGtk4ProcessedResourcesCollected)' != 'true'"
+          DependsOnTargets="ProcessMauiAssets;ProcessMauiFonts;ResizetizeImages"
+          AfterTargets="ResizetizeImages"
+          BeforeTargets="GetCopyToOutputDirectoryItems;GetCopyToPublishDirectoryItems;ComputeFilesToPublish">
+    <ItemGroup>
+      <ContentWithTargetPath Include="@(MauiProcessedImage)"
+                             Condition="'%(MauiProcessedImage.IsAppIcon)' != 'true' and '%(MauiProcessedImage.MSBuildSourceProjectFile)' == ''">
+        <TargetPath Condition="'%(MauiProcessedImage.TargetPath)' != ''">%(MauiProcessedImage.TargetPath)</TargetPath>
+        <TargetPath Condition="'%(MauiProcessedImage.TargetPath)' == ''">%(MauiProcessedImage.Filename)%(MauiProcessedImage.Extension)</TargetPath>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ContentWithTargetPath>
+
+      <ContentWithTargetPath Include="@(MauiProcessedFont)"
+                             Condition="'%(MauiProcessedFont.MSBuildSourceProjectFile)' == ''">
+        <TargetPath Condition="'%(MauiProcessedFont.TargetPath)' != ''">%(MauiProcessedFont.TargetPath)</TargetPath>
+        <TargetPath Condition="'%(MauiProcessedFont.TargetPath)' == ''">%(MauiProcessedFont.Filename)%(MauiProcessedFont.Extension)</TargetPath>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ContentWithTargetPath>
+
+      <ContentWithTargetPath Include="@(MauiProcessedAsset)"
+                             Condition="'%(MauiProcessedAsset.MSBuildSourceProjectFile)' == ''">
+        <TargetPath Condition="'%(MauiProcessedAsset.TargetPath)' != ''">%(MauiProcessedAsset.TargetPath)</TargetPath>
+        <TargetPath Condition="'%(MauiProcessedAsset.TargetPath)' == '' and '%(MauiProcessedAsset.LogicalName)' != ''">%(MauiProcessedAsset.LogicalName)</TargetPath>
+        <TargetPath Condition="'%(MauiProcessedAsset.TargetPath)' == '' and '%(MauiProcessedAsset.LogicalName)' == '' and '%(MauiProcessedAsset.Link)' != ''">%(MauiProcessedAsset.Link)</TargetPath>
+        <TargetPath Condition="'%(MauiProcessedAsset.TargetPath)' == '' and '%(MauiProcessedAsset.LogicalName)' == '' and '%(MauiProcessedAsset.Link)' == ''">%(MauiProcessedAsset.RecursiveDir)%(MauiProcessedAsset.Filename)%(MauiProcessedAsset.Extension)</TargetPath>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ContentWithTargetPath>
+    </ItemGroup>
+    <PropertyGroup>
+      <_LinuxGtk4ProcessedResourcesCollected>true</_LinuxGtk4ProcessedResourcesCollected>
+    </PropertyGroup>
+  </Target>
+
+  <!-- MAUI 10 has no processed-resource outputs for external backends. Keep the
+       established raw-copy contract isolated to the net10 compatibility asset. -->
+  <ItemGroup Condition="'$(_LinuxGtk4UseMaui11Contracts)' != 'True'">
     <ContentWithTargetPath Include="@(MauiImage)">
       <TargetPath>%(Filename)%(Extension)</TargetPath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -29,7 +83,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </ContentWithTargetPath>
+  </ItemGroup>
 
+  <ItemGroup>
     <ContentWithTargetPath Include="@(MauiIcon)">
       <TargetPath>hicolor/scalable/apps/%(Filename)%(Extension)</TargetPath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

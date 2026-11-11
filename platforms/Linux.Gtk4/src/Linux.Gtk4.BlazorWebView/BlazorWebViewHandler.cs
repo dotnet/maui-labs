@@ -2,12 +2,19 @@ using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
 using Microsoft.AspNetCore.Components.WebView.Maui;
+#if NET11_0_OR_GREATER
+using Microsoft.Extensions.FileProviders;
+#endif
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView;
 
 public class BlazorWebViewHandler : ViewHandler<IBlazorWebView, Gtk.Box>
+#if NET11_0_OR_GREATER
+	, IBlazorWebViewHandler
+#endif
 {
 	private GtkBlazorWebView? _blazorWebView;
+	private Microsoft.AspNetCore.Components.WebView.Maui.RootComponentsCollection? _rootComponents;
 
 	public static IPropertyMapper<IBlazorWebView, BlazorWebViewHandler> BlazorWebViewMapper =
 		new PropertyMapper<IBlazorWebView, BlazorWebViewHandler>(ViewHandler.ViewMapper)
@@ -55,6 +62,12 @@ public class BlazorWebViewHandler : ViewHandler<IBlazorWebView, Gtk.Box>
 
 	protected override void DisconnectHandler(Gtk.Box platformView)
 	{
+		if (_rootComponents != null)
+		{
+			_rootComponents.CollectionChanged -= OnRootComponentsCollectionChanged;
+			_rootComponents = null;
+		}
+
 		_blazorWebView?.Dispose();
 		_blazorWebView = null;
 		base.DisconnectHandler(platformView);
@@ -116,6 +129,17 @@ public class BlazorWebViewHandler : ViewHandler<IBlazorWebView, Gtk.Box>
 		return new Size(widthConstraint, Math.Min(400, heightConstraint));
 	}
 
+#if NET11_0_OR_GREATER
+	public IFileProvider CreateFileProvider(string contentRootDir) =>
+		GtkBlazorWebView.CreateFileProvider(contentRootDir);
+
+	public Task<bool> TryDispatchAsync(Action<IServiceProvider> workItem)
+	{
+		ArgumentNullException.ThrowIfNull(workItem);
+		return _blazorWebView?.TryDispatchAsync(workItem) ?? Task.FromResult(false);
+	}
+#endif
+
 	public static void MapHostPage(BlazorWebViewHandler handler, IBlazorWebView webView)
 	{
 		if (handler._blazorWebView != null && webView.HostPage != null)
@@ -132,18 +156,40 @@ public class BlazorWebViewHandler : ViewHandler<IBlazorWebView, Gtk.Box>
 	}
 
 	public static void MapRootComponents(BlazorWebViewHandler handler, IBlazorWebView webView)
+		=> handler.TrackRootComponents(webView.RootComponents);
+
+	private void TrackRootComponents(
+		Microsoft.AspNetCore.Components.WebView.Maui.RootComponentsCollection rootComponents)
 	{
-		if (handler._blazorWebView == null)
+		if (ReferenceEquals(_rootComponents, rootComponents))
 			return;
 
-		handler._blazorWebView.RootComponents.Clear();
-		foreach (var rc in webView.RootComponents)
+		if (_rootComponents != null)
+			_rootComponents.CollectionChanged -= OnRootComponentsCollectionChanged;
+
+		_rootComponents = rootComponents;
+		_rootComponents.CollectionChanged += OnRootComponentsCollectionChanged;
+		SynchronizeRootComponents();
+	}
+
+	private void OnRootComponentsCollectionChanged(
+		object? sender,
+		System.Collections.Specialized.NotifyCollectionChangedEventArgs eventArgs)
+		=> SynchronizeRootComponents();
+
+	private void SynchronizeRootComponents()
+	{
+		if (_blazorWebView == null || _rootComponents == null)
+			return;
+
+		_blazorWebView.RootComponents.Clear();
+		foreach (var rootComponent in _rootComponents)
 		{
-			handler._blazorWebView.RootComponents.Add(new RootComponent
+			_blazorWebView.RootComponents.Add(new RootComponent
 			{
-				Selector = rc.Selector,
-				ComponentType = rc.ComponentType,
-				Parameters = rc.Parameters,
+				Selector = rootComponent.Selector,
+				ComponentType = rootComponent.ComponentType,
+				Parameters = rootComponent.Parameters,
 			});
 		}
 	}

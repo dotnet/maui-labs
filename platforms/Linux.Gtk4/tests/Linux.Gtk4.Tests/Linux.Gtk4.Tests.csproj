@@ -1,12 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>$(LinuxGtk4TargetFrameworks)</TargetFrameworks>
     <AssemblyName>Microsoft.Maui.Platforms.Linux.Gtk4.Tests</AssemblyName>
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
+    <UseMaui>true</UseMaui>
+    <EnableDefaultMauiResourceItems>false</EnableDefaultMauiResourceItems>
     <!-- Managed tests are portable; native GTK tests explicitly opt in on Linux. -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
+  <ItemGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.0'))">
+    <MauiImage Include="Resources\Images\red.svg" BaseSize="16,16" />
+    <MauiImage Include="Resources\Images\blue.svg" BaseSize="16,16" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="xunit" />
@@ -15,4 +21,8 @@
     <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
     <Using Include="Xunit" />
   </ItemGroup>
+  <Import Project="..\..\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.props"
+          Condition="'$(_LinuxGtk4BuildPropsImported)' != 'true'" />
+  <Import Project="..\..\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.targets"
+          Condition="'$(_LinuxGtk4BuildTargetsImported)' != 'true'" />
 </Project>
