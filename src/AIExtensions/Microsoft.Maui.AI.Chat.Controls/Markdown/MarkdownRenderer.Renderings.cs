@@ -112,10 +112,11 @@ internal sealed partial class MarkdownRenderer
         private readonly Border _border;
         private readonly Label _code;
         private readonly Label? _language;
+        private readonly ScrollView _scroller;
 
         internal CodeRendering(MarkdownRenderer owner, RichTextNode node, BlockContext context, BlockKind kind)
             : base(owner, node, context, kind) =>
-            _border = RenderCodeBlock(GetCode(node), GetLanguage(node), out _code, out _language);
+            _border = RenderCodeBlock(GetCode(node), GetLanguage(node), out _code, out _language, out _scroller);
 
         internal override View View => _border;
 
@@ -129,6 +130,7 @@ internal sealed partial class MarkdownRenderer
             if (_language is not null)
                 _language.Text = language;
             _code.Text = GetCode(node);
+            ResizeSideScroller(_scroller);
             return true;
         }
 
@@ -542,6 +544,7 @@ internal sealed partial class MarkdownRenderer
             }
 
             SetRows(table, rows);
+            ResizeSideScroller(_view);
             return true;
         }
 
