@@ -9,7 +9,7 @@ internal abstract class ChatRow
     public void NotifyChanged() => Changed?.Invoke(this, EventArgs.Empty);
 }
 
-/// <summary>The user's message: the text and media they sent in one bubble.</summary>
+/// <summary>The user's message: the text and media they sent.</summary>
 internal sealed class UserMessageRow(ConversationTurn turn) : ChatRow
 {
     public ConversationTurn Turn { get; } = turn;
