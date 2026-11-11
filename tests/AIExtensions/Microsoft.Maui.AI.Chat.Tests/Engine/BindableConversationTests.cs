@@ -115,7 +115,7 @@ public class BindableConversationTests
     }
 
     [Fact]
-    public async Task FailedTurn_RaisesIsFailedAndError_AndRetryClearsTheTurnBeforeItStreamsAgain()
+    public async Task FailedTurn_RaisesItsErrorAndIsFailed_AndRetryClearsTheTurnBeforeItStreamsAgain()
     {
         var model = new ScriptedChatClient();
         model.Enqueue(ct => ResponseEmitters.EmitErrorAfterTokens(["Partial"], new InvalidOperationException("offline"), ct));
@@ -131,6 +131,7 @@ public class BindableConversationTests
                 "Status=Streaming",
                 "RequestBlocks Add 0 TextContentBlock",
                 "ResponseBlocks Add 0 TextContentBlock",
+                "turn.Error=offline (Error)",
                 "turn.IsFailed=True (Error)",
                 "Error=offline",
                 "Status=Error",
@@ -143,6 +144,7 @@ public class BindableConversationTests
         Assert.Equal(
             [
                 "ResponseBlocks Reset",
+                "turn.Error=none (Streaming)",
                 "turn.IsFailed=False (Streaming)",
                 "Error=none",
                 "Status=Streaming",
@@ -174,6 +176,7 @@ public class BindableConversationTests
             [
                 "Reset (0 blocks, no model)",
                 "ModelId (0 blocks, no model)",
+                "Error (0 blocks, no model)",
                 "IsFailed (0 blocks, no model)",
                 "Add (1 blocks, no model)",
             ],
@@ -502,6 +505,7 @@ public class BindableConversationTests
     {
         turn.PropertyChanged += (_, e) => log.Add(e.PropertyName switch
         {
+            nameof(ConversationTurn.Error) => $"turn.Error={turn.Error?.Message ?? "none"} ({context.Status})",
             nameof(ConversationTurn.IsFailed) => $"turn.IsFailed={turn.IsFailed} ({context.Status})",
             nameof(ConversationTurn.IsStopped) => $"turn.IsStopped={turn.IsStopped} ({context.Status})",
             nameof(ConversationTurn.ModelId) => $"turn.ModelId={turn.ModelId} ({context.Status})",

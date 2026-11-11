@@ -98,17 +98,22 @@ public class AgentContextFinalStatusHandlerTests
                 next = context.SendMessageAsync("second");
         });
         var seen = new List<string>();
-        context.OnStatusChanged(status => seen.Add($"{status}, first turn failed: {context.Turns[0].IsFailed}"));
+        context.OnStatusChanged(status => seen.Add(
+            $"{status}, first turn failed: {context.Turns[0].IsFailed} ({context.Turns[0].Error?.Message ?? "no error"}), "
+            + $"context error: {context.Error?.Message ?? "none"}"));
 
         await context.SendMessageAsync("first");
 
         // The second handler hears the next turn start before the end of the first one, which the first handler
         // reacted to. When the end reaches it, it reads the status of the next send, as PropertyChanged reports the
-        // current value; the first turn says how it ended.
-        var first = $"first turn failed: {fail}";
+        // current value, and the next send already cleared the context's error; the first turn says how it ended
+        // and why it failed.
+        var first = fail
+            ? "first turn failed: True (provider failed), context error: none"
+            : "first turn failed: False (no error), context error: none";
         Assert.Equal(
             [
-                "Streaming, first turn failed: False",
+                "Streaming, first turn failed: False (no error), context error: none",
                 $"Streaming, {first}",
                 $"Streaming, {first}",
             ],
