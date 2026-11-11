@@ -16,7 +16,10 @@ public interface IChatAudioRecorder
     bool IsRecording { get; }
 
     /// <summary>Starts recording.</summary>
-    /// <param name="cancellationToken">Cancels the start.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the start. If the start completes anyway, the chat view releases the microphone with
+    /// <see cref="CancelAsync"/>.
+    /// </param>
     /// <returns>A task that completes when recording has started.</returns>
     Task StartAsync(CancellationToken cancellationToken = default);
 
@@ -29,7 +32,7 @@ public interface IChatAudioRecorder
     /// </returns>
     Task<DataContent?> StopAsync(long maximumBytes, CancellationToken cancellationToken = default);
 
-    /// <summary>Stops recording and discards the captured audio.</summary>
+    /// <summary>Stops recording and discards the captured audio. Does nothing when nothing is recording.</summary>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>A task that completes when the microphone is released.</returns>
     Task CancelAsync(CancellationToken cancellationToken = default);

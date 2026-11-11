@@ -53,6 +53,9 @@ internal sealed class FakeAudioRecorder(DataContent? recording = null) : IChatAu
 
     public TaskCompletionSource<DataContent?>? StopGate { get; set; }
 
+    /// <summary>Gets or sets a gate the start waits for; the start then completes even if it was cancelled.</summary>
+    public TaskCompletionSource? StartGate { get; set; }
+
     public int StartCount { get; private set; }
 
     public int StopCount { get; private set; }
@@ -67,8 +70,16 @@ internal sealed class FakeAudioRecorder(DataContent? recording = null) : IChatAu
         StartCount++;
         if (StartError is not null)
             return Task.FromException(StartError);
+        if (StartGate is { } gate)
+            return StartLateAsync(gate);
         IsRecording = true;
         return Task.CompletedTask;
+
+        async Task StartLateAsync(TaskCompletionSource gate)
+        {
+            await gate.Task;
+            IsRecording = true;
+        }
     }
 
     public Task<DataContent?> StopAsync(long maximumBytes, CancellationToken cancellationToken = default)
