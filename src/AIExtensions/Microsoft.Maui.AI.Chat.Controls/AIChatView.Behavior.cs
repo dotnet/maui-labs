@@ -200,6 +200,17 @@ public partial class AIChatView
         _composer.CancelCapture();
     }
 
+    /// <inheritdoc/>
+    protected override void OnHandlerChanging(HandlerChangingEventArgs args)
+    {
+        base.OnHandlerChanging(args);
+
+        // The view is going away (MAUI disconnects the handlers of a popped page), unlike a plain Unloaded such as
+        // a tab switch: stop the session this view created, so a response doesn't keep streaming and running tools.
+        if (args.OldHandler is not null && args.NewHandler is null)
+            ReleaseOwnedSession();
+    }
+
     private void EnsureTheme()
     {
         if (AIChatTheme.EnsureLoaded())
@@ -270,6 +281,29 @@ public partial class AIChatView
         if (previousOwned is not null && !ReferenceEquals(previousOwned, _ownedSession))
             previousOwned.Dispose();
 
+        UpdateState();
+    }
+
+    /// <summary>Stops and disposes the session this view created. An app's <see cref="Session"/> is the app's to dispose.</summary>
+    private void ReleaseOwnedSession()
+    {
+        if (_ownedSession is not { } owned)
+            return;
+
+        _ownedSession = null;
+        if (ReferenceEquals(_effectiveSession, owned.Context))
+        {
+            if (_isLoaded)
+                DetachSession();
+
+            _effectiveSession = null;
+            _composer.Reset(clearDraft: true);
+
+            if (_isLoaded)
+                AttachSession();
+        }
+
+        owned.Dispose();
         UpdateState();
     }
 
