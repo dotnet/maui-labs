@@ -5,20 +5,92 @@ namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 public class BuiltInViewTests
 {
     [Fact]
-    public void TextBlock_ShowsTheTextFullWidthWithoutABubble()
+    public void TextBlock_RendersTheAnswerAsMarkdownFullWidth()
     {
-        var view = Render<TextBlockView>(Blocks.Text("Hello"));
+        var view = Render<TextBlockView>(Blocks.Text("## Plan\n\nUse **bold**, `code` and [docs](https://example.com)."));
 
-        Assert.Equal("Hello", view.Label.Text);
-        Assert.Same(view.Label, view.Content);
         Assert.Equal("AIChatAssistantText", view.AutomationId);
+        Assert.Same(view.Markdown, view.Content);
+        Assert.Collection(
+            view.Markdown.BlockViews,
+            heading => Assert.Equal(SemanticHeadingLevel.Level2, SemanticProperties.GetHeadingLevel(Assert.IsType<Label>(heading))),
+            paragraph => Assert.IsType<Label>(paragraph));
 
-        // Blank lines around a message would only pad the row.
-        Assert.Equal("One\n\nTwo", Render<TextBlockView>(Blocks.Text("\nOne\n\nTwo\n\n")).Label.Text);
+        // The chat theme styles it: body text, the theme's code font, accent links.
+        var paragraph = (Label)view.Markdown.BlockViews[1]!;
+        Assert.Equal(Theme(view)[AIChatThemeKeys.AssistantTextStyle], paragraph.Style);
+        var spans = paragraph.FormattedText!.Spans;
+        Assert.Contains(spans, span => span.Text == "bold" && span.FontAttributes == FontAttributes.Bold);
+        Assert.Equal("monospace", spans.Single(span => span.Text == "code").FontFamily);
+        Assert.Equal(Theme(view)[AIChatThemeKeys.AccentColor], spans.Single(span => span.Text == "docs").TextColor);
     }
 
     [Fact]
-    public void RichText_RendersStructuredNodesNatively()
+    public void TextBlock_WhileStreaming_RebuildsOnlyTheGrowingBlock()
+    {
+        var block = Blocks.Text("# Title\n\nFirst paragraph.\n\nSec");
+        var view = Render<TextBlockView>(block);
+        var title = view.Markdown.BlockViews[0];
+        var first = view.Markdown.BlockViews[1];
+
+        block.AppendText("ond paragraph");
+        Refresh(view);
+
+        Assert.Same(title, view.Markdown.BlockViews[0]);
+        Assert.Same(first, view.Markdown.BlockViews[1]);
+        Assert.Equal("Second paragraph", Assert.IsType<Label>(view.Markdown.BlockViews[2]).Text);
+
+        block.AppendText("\n\n- a list");
+        Refresh(view);
+
+        Assert.Equal(4, view.Markdown.BlockViews.Count);
+        Assert.Same(first, view.Markdown.BlockViews[1]);
+    }
+
+    [Fact]
+    public void TextBlock_TheFirstAndLastBlocksHaveNoOuterMargin()
+    {
+        var view = Render<TextBlockView>(Blocks.Text("# Top\n\nText\n\n## Middle\n\nMore\n\n---"));
+        var blocks = view.Markdown.BlockViews;
+
+        Assert.Equal(0, blocks[0]!.Margin.Top);
+        Assert.True(blocks[2]!.Margin.Top > 0);
+        Assert.Equal(0, blocks[^1]!.Margin.Bottom);
+
+        // A block that stops being the last gets its margin back.
+        var block = Blocks.Text("Text\n\n---");
+        view = Render<TextBlockView>(block);
+        Assert.Equal(0, view.Markdown.BlockViews[^1]!.Margin.Bottom);
+        block.AppendText("\n\nAfter");
+        Refresh(view);
+        Assert.True(view.Markdown.BlockViews[1]!.Margin.Bottom > 0);
+    }
+
+    [Fact]
+    public void Markdown_ImagesThatCannotLoadShowAChip()
+    {
+        var view = Render<TextBlockView>(Blocks.Text(
+            "![edited](attachment://edited_image.png)\n\n![](attachment://chart.png)\n\n![cat](https://example.com/cat.png)"));
+        var blocks = view.Markdown.BlockViews;
+
+        // Not a web link: a chip with the description and the file, not an empty gap, and nothing to open.
+        var edited = Assert.IsType<Border>(blocks[0]);
+        Assert.Equal("edited, Image \u00B7 edited_image.png", SemanticProperties.GetDescription(edited));
+        Assert.Empty(edited.GestureRecognizers);
+        Assert.Equal("chart.png, Image", SemanticProperties.GetDescription(Assert.IsType<Border>(blocks[1])));
+
+        // A web image loads inline; if it fails, the same chip replaces it and opens the link.
+        var image = Assert.IsType<LinkedImageView>(blocks[2]);
+        Assert.Equal(new Uri("https://example.com/cat.png"), Assert.IsType<UriImageSource>(image.Image.Source).Uri);
+        Assert.Equal("cat", SemanticProperties.GetDescription(image.Image));
+        image.ShowFallback();
+        var chip = Assert.IsType<Border>(image.Content);
+        Assert.Equal("cat, Image \u00B7 cat.png", SemanticProperties.GetDescription(chip));
+        Assert.Single(chip.GestureRecognizers.OfType<TapGestureRecognizer>());
+    }
+
+    [Fact]
+    public void RichText_RendersProviderNodesWithTheMarkdownRenderer()
     {
         var heading = new HeadingNode(2);
         heading.AddChild(new TextNode("Heading"));
@@ -66,13 +138,14 @@ public class BuiltInViewTests
 
         var view = Render<RichTextBlockView>(block);
 
-        var document = Assert.IsType<VerticalStackLayout>(view.RenderedContent);
-        Assert.Equal(10, document.Children.Count);
-        var headingLabel = Assert.IsType<Label>(document.Children[0]);
+        Assert.Equal("AIChatRichText", view.AutomationId);
+        var blocks = view.Markdown.BlockViews;
+        Assert.Equal(10, blocks.Count);
+        var headingLabel = Assert.IsType<Label>(blocks[0]);
         Assert.Equal(FontAttributes.Bold, headingLabel.FontAttributes);
         Assert.Equal(SemanticHeadingLevel.Level2, SemanticProperties.GetHeadingLevel(headingLabel));
 
-        var spans = Assert.IsType<Label>(document.Children[1]).FormattedText!.Spans;
+        var spans = Assert.IsType<Label>(blocks[1]).FormattedText!.Spans;
         Assert.Contains(spans, span => span.Text == "bold" && span.FontAttributes.HasFlag(FontAttributes.Bold));
         Assert.Contains(spans, span => span.Text == " italic" && span.FontAttributes.HasFlag(FontAttributes.Italic));
         Assert.Contains(spans, span => span.Text == " removed" && span.TextDecorations.HasFlag(TextDecorations.Strikethrough));
@@ -80,14 +153,16 @@ public class BuiltInViewTests
         Assert.Single(spans, span => span.Text == " link").GestureRecognizers.Single();
         Assert.Empty(Assert.Single(spans, span => span.Text == " unsafe").GestureRecognizers);
 
-        Assert.Equal("var answer = 42;", Assert.IsType<Label>(Assert.IsType<Border>(document.Children[2]).Content).Text);
-        Assert.IsType<Grid>(document.Children[3]);
-        Assert.Contains(((Element)document.Children[4]).Descendants<Label>(), label => label.Text == "3.");
-        Assert.IsType<ScrollView>(document.Children[5]);
-        Assert.IsType<BoxView>(document.Children[6]);
-        Assert.Equal("unsafe image", Assert.IsType<Label>(document.Children[7]).Text);
-        Assert.Contains(((Element)document.Children[8]).Descendants<Label>().Prepend(document.Children[8] as Label).OfType<Label>(), label => label.Text == "<b>escaped</b>");
-        Assert.IsType<HorizontalStackLayout>(document.Children[9]);
+        var code = Assert.IsType<Border>(blocks[2]);
+        Assert.Equal(Theme(view)[AIChatThemeKeys.CodeBlockStyle], code.Style);
+        Assert.Contains(code.Descendants<Label>(), label => label.Text == "var answer = 42;");
+        Assert.IsType<Grid>(blocks[3]);
+        Assert.Contains(((Element)blocks[4]!).Descendants<Label>(), label => label.Text == "3.");
+        Assert.IsType<ScrollView>(blocks[5]);
+        Assert.IsAssignableFrom<BoxView>(blocks[6]);
+        Assert.Equal("unsafe image, Image \u00B7 bad", SemanticProperties.GetDescription(Assert.IsType<Border>(blocks[7])));
+        Assert.Equal("<b>escaped</b>", Assert.IsType<Label>(blocks[8]).Text);
+        Assert.IsType<Grid>(blocks[9]);
     }
 
     [Fact]
@@ -98,7 +173,7 @@ public class BuiltInViewTests
 
         var view = Render<RichTextBlockView>(block);
 
-        Assert.Equal("raw fallback", Assert.IsType<Label>(view.RenderedContent).Text);
+        Assert.Equal("raw fallback", Assert.IsType<Label>(Assert.Single(view.Markdown.BlockViews)).Text);
     }
 
     [Theory]
@@ -472,7 +547,7 @@ public class BuiltInViewTests
         Assert.Same(image.Image, image.Content);
 
         // An image that cannot be loaded leaves its link.
-        image.ShowLink();
+        image.ShowFallback();
         Assert.StartsWith("cat.png, ", SemanticProperties.GetDescription(Assert.IsType<Border>(image.Content)));
 
         var link = Render<MediaBlockView>(Blocks.Media(new UriContent(new Uri("https://example.com/docs/q3%20report.pdf"), "application/pdf"))).MediaView;
@@ -536,6 +611,21 @@ public class BuiltInViewTests
     }
 
     [Fact]
+    public void UserBubble_ShowsTheUsersMarkdownAsTyped()
+    {
+        var row = new UserMessageRow(new ConversationTurn());
+        row.SetBlocks([Blocks.Text("Make **this** a `list`:\n- one", ChatRole.User)]);
+        var view = new UserMessageView();
+        view.Resources.MergedDictionaries.Add(new AIChatTheme());
+        view.BindingContext = row;
+
+        var text = Assert.IsType<Label>(Assert.Single(view.Stack.Children));
+        Assert.Equal("Make **this** a `list`:\n- one", text.Text);
+        Assert.Null(text.FormattedText);
+        Assert.Empty(view.Descendants<MarkdownView>());
+    }
+
+    [Fact]
     public void Thinking_IsAnnouncedToScreenReaders() =>
         Assert.Equal("The assistant is thinking", SemanticProperties.GetDescription(new ThinkingView()));
 
@@ -571,4 +661,6 @@ public class BuiltInViewTests
     private static void Refresh(BlockView view) => BlockView.Bind(view, view.Block!, owner: null, session: null);
 
     private static void Rebind(BlockView view, ContentBlock block) => BlockView.Bind(view, block, owner: null, session: null);
+
+    private static AIChatTheme Theme(VisualElement view) => view.Resources.MergedDictionaries.OfType<AIChatTheme>().Single();
 }

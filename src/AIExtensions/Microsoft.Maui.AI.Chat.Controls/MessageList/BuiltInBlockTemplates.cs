@@ -4,8 +4,8 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 internal static class BuiltInBlockTemplates
 {
     /// <summary>
-    /// Gets the built-in templates. Assistant text renders as plain text until the Markdown renderer
-    /// replaces the <see cref="TextContentBlock"/> entry here.
+    /// Gets the built-in templates. Assistant text (<see cref="TextContentBlock"/>) renders as Markdown, and a
+    /// provider's structured rich text (<see cref="RichContentBlock"/>) with the same renderer.
     /// </summary>
     public static IReadOnlyList<BlockTemplate> All { get; } =
     [

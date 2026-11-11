@@ -130,6 +130,7 @@ embedded in the source tree but are restored at build time.
 Package                             License     Project URL
 ---------------------------------   --------    -----------------------------------------
 Fizzler                             MIT         https://github.com/atifaziz/Fizzler
+Markdig                             BSD-2       https://github.com/xoofx/markdig
 SkiaSharp                           MIT         https://github.com/mono/SkiaSharp
 Spectre.Console                     MIT         https://github.com/spectreconsole/spectre.console
 System.CommandLine                  MIT         https://github.com/dotnet/command-line-api

@@ -20,8 +20,58 @@ internal static class MarkdownTestHelpers
     // (URLs, titles, alt text, code languages, list numbers and task checks).
     public static string GetVisibleText(IReadOnlyList<RichTextNode> nodes)
     {
+        // A loop over pending work, not recursion: the parser tests map trees thousands of levels deep, and
+        // the thread running a test may have a small stack.
         var builder = new StringBuilder();
-        AppendVisibleText(builder, nodes);
+        var pending = new Stack<object>();
+        Push(pending, nodes);
+        while (pending.Count > 0)
+        {
+            switch (pending.Pop())
+            {
+                case string text:
+                    builder.Append(text);
+                    break;
+                case TextNode text:
+                    builder.Append(text.Text);
+                    break;
+                case InlineCodeNode code:
+                    builder.Append(code.Code);
+                    break;
+                case CodeBlockNode block:
+                    builder.Append(block.Language).Append('\n').Append(block.Code).Append('\n');
+                    break;
+                case LineBreakNode:
+                    builder.Append('\n');
+                    break;
+                case ImageNode image:
+                    builder.Append(image.Alt).Append(' ').Append(image.Url).Append(' ').Append(image.Title);
+                    break;
+                case LinkNode link:
+                    pending.Push(" " + link.Url + " " + link.Title);
+                    Push(pending, link.Children);
+                    break;
+                case ListNode list:
+                    var number = list.Start ?? 1;
+                    var parts = new List<object>();
+                    foreach (var item in list.Children)
+                    {
+                        if (list.Ordered)
+                            parts.Add(number++ + ". ");
+                        if (item is ListItemNode { Checked: true })
+                            parts.Add("[x] ");
+                        parts.AddRange(item.Children);
+                        parts.Add("\n");
+                    }
+                    Push(pending, parts);
+                    break;
+                case RichTextNode node:
+                    pending.Push(" ");
+                    Push(pending, node.Children);
+                    break;
+            }
+        }
+
         return builder.ToString();
     }
 
@@ -110,48 +160,11 @@ internal static class MarkdownTestHelpers
         builder.Append(')');
     }
 
-    private static void AppendVisibleText(StringBuilder builder, IReadOnlyList<RichTextNode> nodes)
+    // Pushes in reverse, so the first item is handled first.
+    private static void Push<T>(Stack<object> pending, IReadOnlyList<T> items)
+        where T : notnull
     {
-        foreach (var node in nodes)
-        {
-            switch (node)
-            {
-                case TextNode text:
-                    builder.Append(text.Text);
-                    break;
-                case InlineCodeNode code:
-                    builder.Append(code.Code);
-                    break;
-                case CodeBlockNode block:
-                    builder.Append(block.Language).Append('\n').Append(block.Code).Append('\n');
-                    break;
-                case LineBreakNode:
-                    builder.Append('\n');
-                    break;
-                case ImageNode image:
-                    builder.Append(image.Alt).Append(' ').Append(image.Url).Append(' ').Append(image.Title);
-                    break;
-                case LinkNode link:
-                    AppendVisibleText(builder, link.Children);
-                    builder.Append(' ').Append(link.Url).Append(' ').Append(link.Title);
-                    break;
-                case ListNode list:
-                    var number = list.Start ?? 1;
-                    foreach (var item in list.Children)
-                    {
-                        if (list.Ordered)
-                            builder.Append(number++).Append(". ");
-                        if (item is ListItemNode { Checked: true })
-                            builder.Append("[x] ");
-                        AppendVisibleText(builder, item.Children);
-                        builder.Append('\n');
-                    }
-                    break;
-                default:
-                    AppendVisibleText(builder, node.Children);
-                    builder.Append(' ');
-                    break;
-            }
-        }
+        for (var i = items.Count - 1; i >= 0; i--)
+            pending.Push(items[i]);
     }
 }

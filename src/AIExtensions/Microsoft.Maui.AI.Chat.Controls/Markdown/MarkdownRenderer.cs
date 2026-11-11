@@ -8,15 +8,15 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>Builds native MAUI views for rich-text blocks. Used by <see cref="MarkdownView"/>.</summary>
 /// <remarks>
-/// Colors never come from code: every element takes a style from <see cref="MarkdownThemeKeys"/>
-/// as a dynamic resource, with the matching <see cref="MarkdownTheme"/> style as the fallback.
+/// Colors and fonts never come from code: every element takes a chat theme style (see <see cref="AIChatThemeKeys"/>)
+/// as a dynamic resource. Only sizes are set here, from <see cref="FontSize"/> and <see cref="CodeFontSize"/>, so
+/// headings and inline code scale with the text around them.
 /// </remarks>
 internal sealed class MarkdownRenderer
 {
-    private const double CodeScale = 0.9;
-    private const double CaptionScale = 0.8;
     private const double ContainerSpacing = 6;
     private const double MaximumImageHeight = 320;
+    private const double MaximumImageWidth = 480;
     private const int MaxRenderDepth = 32;
 
     // Heading sizes relative to the body font size (h1 … h6).
@@ -34,76 +34,32 @@ internal sealed class MarkdownRenderer
     {
         ArgumentNullException.ThrowIfNull(openLink);
         _linkCommand = new Command<string>(url => _ = openLink(url));
-        MonospaceFontFamily = GetMonospaceFontFamily(GetCurrentPlatform());
     }
 
+    /// <summary>The body font size; headings scale from it.</summary>
     internal double FontSize { get; set; } = 15;
 
-    internal string MonospaceFontFamily { get; }
+    /// <summary>The font size of code in body text; inline code in a heading keeps the same ratio.</summary>
+    internal double CodeFontSize { get; set; } = 13;
 
     internal View? RenderBlock(RichTextNode node) =>
-        RenderBlock(node, new BlockContext(MarkdownThemeKeys.TextStyle, ListDepth: 0, Depth: 0));
+        RenderBlock(node, new BlockContext(AIChatThemeKeys.AssistantTextStyle, ListDepth: 0, Depth: 0));
 
     // ── Theme ───────────────────────────────────────────────────────────
 
-    /// <summary>Applies a theme style key, falling back to the default theme's style when the key is missing.</summary>
-    internal static void ApplyStyle(Element target, BindableProperty styleProperty, string key) =>
-        ApplyThemeValue(target, styleProperty, key);
+    private static T Styled<T>(T element, string key)
+        where T : VisualElement =>
+        element.Styled(key);
 
-    /// <summary>Binds <paramref name="property"/> to a theme key with the default theme value as fallback.</summary>
-    internal static void ApplyThemeValue(Element target, BindableProperty property, string key)
-    {
-        // A binding has lower precedence than a dynamic resource, so the default only shows
-        // while no ancestor (or the application) provides the key.
-        if (MarkdownTheme.Defaults.TryGetValue(key, out var fallback))
-            target.SetAppTheme(property, fallback, fallback);
-        target.SetDynamicResource(property, key);
-    }
-
-    internal static string GetMonospaceFontFamily(DevicePlatform platform)
-    {
-        if (platform == DevicePlatform.iOS
-            || platform == DevicePlatform.MacCatalyst
-            || platform == DevicePlatform.macOS
-            || platform == DevicePlatform.tvOS)
-        {
-            return "Menlo";
-        }
-
-        if (platform == DevicePlatform.WinUI)
-            return "Consolas";
-
-        // Android, and fontconfig on Linux, resolve the generic family.
-        return "monospace";
-    }
-
-    private static DevicePlatform GetCurrentPlatform()
-    {
-        try
-        {
-            return DeviceInfo.Platform;
-        }
-        catch (Exception)
-        {
-            return DevicePlatform.Unknown;
-        }
-    }
+    private static void Styled(Span span, string key) =>
+        span.SetDynamicResource(Span.StyleProperty, key);
 
     // ── Links ───────────────────────────────────────────────────────────
 
-    internal static bool TryCreateLinkUri(string? value, out Uri uri) =>
-        TryCreateUri(value, allowMailTo: true, out uri);
-
-    internal static bool TryCreateImageUri(string? value, out Uri uri) =>
-        TryCreateUri(value, allowMailTo: false, out uri);
-
-    private static bool TryCreateUri(string? value, bool allowMailTo, out Uri uri)
+    /// <summary>Gets the link to open for <paramref name="value"/>: http, https, and mailto only.</summary>
+    internal static bool TryCreateLinkUri(string? value, out Uri uri)
     {
-        if (!string.IsNullOrWhiteSpace(value)
-            && Uri.TryCreate(value, UriKind.Absolute, out var candidate)
-            && (candidate.Scheme == Uri.UriSchemeHttp
-                || candidate.Scheme == Uri.UriSchemeHttps
-                || (allowMailTo && candidate.Scheme == Uri.UriSchemeMailto)))
+        if (Uri.TryCreate(value, UriKind.Absolute, out var candidate) && ChatVisuals.IsSafeUri(candidate))
         {
             uri = candidate;
             return true;
@@ -112,6 +68,10 @@ internal sealed class MarkdownRenderer
         uri = null!;
         return false;
     }
+
+    /// <summary>Gets the image to load for <paramref name="value"/>: http and https only.</summary>
+    internal static bool TryCreateImageUri(string? value, out Uri uri) =>
+        TryCreateLinkUri(value, out uri) && uri.Scheme != Uri.UriSchemeMailto;
 
     // ── Reference definitions ───────────────────────────────────────────
 
@@ -168,9 +128,9 @@ internal sealed class MarkdownRenderer
             ListNode list => RenderList(list, context),
             TableNode table => RenderTable(table),
             ThematicBreakNode => RenderThematicBreak(),
-            ImageNode image => RenderImage(image.Url, image.Alt, image.Title, context),
+            ImageNode image => RenderImage(image.Url, image.Alt, image.Title),
             ImageReferenceNode reference => RenderImageReference(reference, context),
-            HtmlNode html => RenderLiteral(html.Value, context),
+            HtmlNode html => RenderLiteral(html.Value),
             DefinitionNode => null,
             FootnoteDefinitionNode footnote => RenderFootnoteDefinition(footnote, context),
             _ when IsInline(node) => CreateInlineLabel([node], context.TextStyleKey, FontSize, FontAttributes.None),
@@ -226,11 +186,9 @@ internal sealed class MarkdownRenderer
             }
 
             FlushRun();
-            var image = inline is ImageNode node
-                ? RenderImage(node.Url, node.Alt, node.Title, context)
-                : RenderImageReference((ImageReferenceNode)inline, context);
-            if (image is not null)
-                views.Add(image);
+            views.Add(inline is ImageNode node
+                ? RenderImage(node.Url, node.Alt, node.Title)
+                : RenderImageReference((ImageReferenceNode)inline, context));
         }
 
         FlushRun();
@@ -255,7 +213,7 @@ internal sealed class MarkdownRenderer
         var level = Math.Clamp(heading.Level, 1, 6);
         var label = CreateInlineLabel(
             heading.Children,
-            MarkdownThemeKeys.HeadingStyle,
+            AIChatThemeKeys.MarkdownHeadingStyle,
             FontSize * s_headingScales[level - 1],
             FontAttributes.Bold);
         label.Margin = new Thickness(0, level <= 2 ? 4 : 2, 0, 0);
@@ -263,16 +221,11 @@ internal sealed class MarkdownRenderer
         return label;
     }
 
-    private Border RenderCodeBlock(string code, string? language)
+    private static Border RenderCodeBlock(string code, string? language)
     {
-        var text = new Label
-        {
-            Text = code,
-            FontFamily = MonospaceFontFamily,
-            FontSize = FontSize * CodeScale,
-            LineBreakMode = LineBreakMode.NoWrap,
-        };
-        ApplyStyle(text, VisualElement.StyleProperty, MarkdownThemeKeys.CodeBlockTextStyle);
+        // The chat's code styles, so code looks the same in answers and in tool cards.
+        var text = Styled(new Label { Text = code }, AIChatThemeKeys.CodeTextStyle);
+        text.LineBreakMode = LineBreakMode.NoWrap;
 
         // Code keeps its line structure; long lines scroll sideways instead of wrapping.
         var scroller = new ScrollView
@@ -282,39 +235,27 @@ internal sealed class MarkdownRenderer
             Content = text,
         };
 
-        var border = new Border();
-        ApplyStyle(border, VisualElement.StyleProperty, MarkdownThemeKeys.CodeBlockStyle);
+        var border = Styled(new Border(), AIChatThemeKeys.CodeBlockStyle);
         if (string.IsNullOrWhiteSpace(language))
         {
             border.Content = scroller;
             return border;
         }
 
-        var caption = new Label
-        {
-            Text = language,
-            FontSize = FontSize * CaptionScale,
-            LineBreakMode = LineBreakMode.TailTruncation,
-        };
-        ApplyStyle(caption, VisualElement.StyleProperty, MarkdownThemeKeys.CodeBlockLanguageStyle);
+        var caption = Styled(new Label { Text = language }, AIChatThemeKeys.MarkdownCodeBlockLanguageStyle);
         border.Content = new VerticalStackLayout { Spacing = 4, Children = { caption, scroller } };
         return border;
     }
 
     private Grid RenderBlockQuote(BlockQuoteNode quote, BlockContext context)
     {
-        var bar = new BoxView
-        {
-            WidthRequest = 3,
-            HeightRequest = 0,
-            VerticalOptions = LayoutOptions.Fill,
-        };
-        ApplyStyle(bar, VisualElement.StyleProperty, MarkdownThemeKeys.BlockQuoteBarStyle);
+        // The style sets the bar's width; the bar stretches to the height of the quote.
+        var bar = Styled(new LineView(), AIChatThemeKeys.MarkdownBlockQuoteBarStyle);
 
         var content = RenderContainer(
                 quote.Children,
-                context.Nested() with { TextStyleKey = MarkdownThemeKeys.BlockQuoteTextStyle })
-            ?? CreateTextLabel(string.Empty, MarkdownThemeKeys.BlockQuoteTextStyle);
+                context.Nested() with { TextStyleKey = AIChatThemeKeys.MarkdownBlockQuoteTextStyle })
+            ?? CreateTextLabel(string.Empty, AIChatThemeKeys.MarkdownBlockQuoteTextStyle);
 
         var grid = new Grid
         {
@@ -358,13 +299,9 @@ internal sealed class MarkdownRenderer
                 _ => s_bullets[context.ListDepth % s_bullets.Length],
             };
 
-            var marker = new Label
-            {
-                Text = markerText,
-                FontSize = FontSize,
-                HorizontalTextAlignment = TextAlignment.End,
-            };
-            ApplyStyle(marker, VisualElement.StyleProperty, MarkdownThemeKeys.ListMarkerStyle);
+            var marker = Styled(
+                new Label { Text = markerText, FontSize = FontSize, HorizontalTextAlignment = TextAlignment.End },
+                AIChatThemeKeys.MarkdownListMarkerStyle);
 
             var content = (item is null ? RenderBlock(child, itemContext) : RenderContainer(item.Children, itemContext))
                 ?? CreateTextLabel(string.Empty, context.TextStyleKey);
@@ -426,7 +363,7 @@ internal sealed class MarkdownRenderer
             {
                 var label = CreateInlineLabel(
                     column < cells.Count ? cells[column].Children : [],
-                    isHeader ? MarkdownThemeKeys.TableHeaderCellStyle : MarkdownThemeKeys.TableCellStyle,
+                    isHeader ? AIChatThemeKeys.MarkdownTableHeaderCellStyle : AIChatThemeKeys.MarkdownTableCellStyle,
                     FontSize,
                     isHeader ? FontAttributes.Bold : FontAttributes.None);
                 label.Padding = new Thickness(10, 6);
@@ -436,20 +373,12 @@ internal sealed class MarkdownRenderer
             }
         }
 
-        var border = new Border { Content = grid, HorizontalOptions = LayoutOptions.Start };
-        ApplyStyle(border, VisualElement.StyleProperty, MarkdownThemeKeys.TableBorderStyle);
+        var border = Styled(new Border { Content = grid, HorizontalOptions = LayoutOptions.Start }, AIChatThemeKeys.MarkdownTableBorderStyle);
         return new ScrollView { Orientation = ScrollOrientation.Horizontal, Content = border };
     }
 
-    private static BoxView CreateTableLine(bool horizontal)
-    {
-        // Zero requests stop the BoxView's 40x40 default size from widening auto tracks.
-        var line = horizontal
-            ? new BoxView { HeightRequest = 1, WidthRequest = 0 }
-            : new BoxView { WidthRequest = 1, HeightRequest = 0 };
-        ApplyStyle(line, VisualElement.StyleProperty, MarkdownThemeKeys.TableLineStyle);
-        return line;
-    }
+    private static BoxView CreateTableLine(bool horizontal) =>
+        Styled(horizontal ? new LineView { HeightRequest = 1 } : new LineView { WidthRequest = 1 }, AIChatThemeKeys.MarkdownTableLineStyle);
 
     private static TextAlignment GetAlignment(TableNode table, int column) =>
         column < table.Alignment.Count
@@ -461,26 +390,18 @@ internal sealed class MarkdownRenderer
             }
             : TextAlignment.Start;
 
-    private static BoxView RenderThematicBreak()
-    {
-        var rule = new BoxView
-        {
-            HeightRequest = 1,
-            HorizontalOptions = LayoutOptions.Fill,
-            Margin = new Thickness(0, 4),
-        };
-        ApplyStyle(rule, VisualElement.StyleProperty, MarkdownThemeKeys.ThematicBreakStyle);
-        return rule;
-    }
+    // The style sets the rule's thickness.
+    private static BoxView RenderThematicBreak() =>
+        Styled(new LineView { Margin = new Thickness(0, 4) }, AIChatThemeKeys.MarkdownThematicBreakStyle);
 
-    private View? RenderImage(string url, string? alt, string? title, BlockContext context)
+    private static View RenderImage(string url, string? alt, string? title)
     {
         var description = string.IsNullOrWhiteSpace(alt) ? title : alt;
+
+        // Only http(s) images load. Any other source (an attachment:// reference, a relative path), or an image that
+        // fails to load, shows as a chip with its description instead of an empty gap.
         if (!TryCreateImageUri(url, out var uri))
-        {
-            // Only http(s) images load; anything else shows its alt text.
-            return string.IsNullOrWhiteSpace(description) ? null : CreateTextLabel(description, context.TextStyleKey);
-        }
+            return ChatVisuals.CreateImageChip(url, description);
 
         var image = new Image
         {
@@ -488,28 +409,24 @@ internal sealed class MarkdownRenderer
             Aspect = Aspect.AspectFit,
             HorizontalOptions = LayoutOptions.Start,
             MaximumHeightRequest = MaximumImageHeight,
+            MaximumWidthRequest = MaximumImageWidth,
         };
-        if (!string.IsNullOrWhiteSpace(description))
-            SemanticProperties.SetDescription(image, description);
-        return image;
+        SemanticProperties.SetDescription(image, string.IsNullOrWhiteSpace(description) ? "Image" : description);
+        return new LinkedImageView(image, () => ChatVisuals.CreateImageChip(url, description));
     }
 
-    private View? RenderImageReference(ImageReferenceNode reference, BlockContext context) =>
+    private View RenderImageReference(ImageReferenceNode reference, BlockContext context) =>
         _definitions.TryGetValue(reference.Label, out var definition)
-            ? RenderImage(definition.Url, reference.Alt, definition.Title, context)
+            ? RenderImage(definition.Url, reference.Alt, definition.Title)
             : CreateTextLabel(reference.Alt ?? "[" + reference.Label + "]", context.TextStyleKey);
 
-    private Label RenderLiteral(string text, BlockContext context)
-    {
-        var label = CreateTextLabel(text, context.TextStyleKey);
-        label.FontFamily = MonospaceFontFamily;
-        label.FontSize = FontSize * CodeScale;
-        return label;
-    }
+    // Raw HTML is shown as source text, in the code font.
+    private static Label RenderLiteral(string text) =>
+        Styled(new Label { Text = text }, AIChatThemeKeys.CodeTextStyle);
 
     private Grid RenderFootnoteDefinition(FootnoteDefinitionNode footnote, BlockContext context)
     {
-        var marker = CreateTextLabel("[" + footnote.Label + "]", MarkdownThemeKeys.ListMarkerStyle);
+        var marker = CreateTextLabel("[" + footnote.Label + "]", AIChatThemeKeys.MarkdownListMarkerStyle);
         var content = RenderContainer(footnote.Children, context.Nested())
             ?? CreateTextLabel(string.Empty, context.TextStyleKey);
         var grid = new Grid
@@ -545,17 +462,8 @@ internal sealed class MarkdownRenderer
         string? LinkUrl,
         double FontSize);
 
-    private Label CreateTextLabel(string text, string styleKey)
-    {
-        var label = new Label
-        {
-            Text = text,
-            FontSize = FontSize,
-            LineBreakMode = LineBreakMode.WordWrap,
-        };
-        ApplyStyle(label, VisualElement.StyleProperty, styleKey);
-        return label;
-    }
+    private Label CreateTextLabel(string text, string styleKey) =>
+        Styled(new Label { Text = text, FontSize = FontSize, LineBreakMode = LineBreakMode.WordWrap }, styleKey);
 
     private Label CreateInlineLabel(
         IReadOnlyList<RichTextNode> nodes,
@@ -563,12 +471,7 @@ internal sealed class MarkdownRenderer
         double fontSize,
         FontAttributes baseAttributes)
     {
-        var label = new Label
-        {
-            FontSize = fontSize,
-            LineBreakMode = LineBreakMode.WordWrap,
-        };
-        ApplyStyle(label, VisualElement.StyleProperty, styleKey);
+        var label = Styled(new Label { FontSize = fontSize, LineBreakMode = LineBreakMode.WordWrap }, styleKey);
 
         if (nodes.Count == 0)
         {
@@ -673,7 +576,7 @@ internal sealed class MarkdownRenderer
         var decorations = state.Decorations;
         if (state.LinkUrl is not null)
         {
-            ApplyStyle(span, Span.StyleProperty, MarkdownThemeKeys.LinkStyle);
+            Styled(span, AIChatThemeKeys.LinkSpanStyle);
             AddLinkGesture(span, state.LinkUrl);
             // A local decoration replaces the style's underline, so keep it explicitly.
             if (decorations != TextDecorations.None)
@@ -690,15 +593,11 @@ internal sealed class MarkdownRenderer
         if (code.Length == 0)
             return;
 
-        var span = new Span
-        {
-            Text = code,
-            FontFamily = MonospaceFontFamily,
-            FontSize = state.FontSize * CodeScale,
-        };
+        // The style sets the code font; the size keeps the theme's code-to-body ratio, also inside headings.
+        var span = new Span { Text = code, FontSize = FontSize > 0 ? state.FontSize * CodeFontSize / FontSize : CodeFontSize };
         if (state.Attributes != FontAttributes.None)
             span.FontAttributes = state.Attributes;
-        ApplyStyle(span, Span.StyleProperty, MarkdownThemeKeys.InlineCodeStyle);
+        Styled(span, AIChatThemeKeys.MarkdownInlineCodeStyle);
 
         var decorations = state.Decorations;
         if (state.LinkUrl is not null)
@@ -720,6 +619,17 @@ internal sealed class MarkdownRenderer
         });
 
     // ── Helpers ─────────────────────────────────────────────────────────
+
+    /// <summary>A rule, bar, or grid line: it fills its row or column across, and asks only for its thickness.</summary>
+    /// <remarks>
+    /// A plain <see cref="BoxView"/> asks for 40 × 40 without a size request, which would widen auto table columns and
+    /// pad short quotes, and a zero size request would stop it from stretching at all.
+    /// </remarks>
+    private sealed class LineView : BoxView
+    {
+        protected override Size MeasureOverride(double widthConstraint, double heightConstraint) =>
+            new(Math.Max(0, WidthRequest) + Margin.HorizontalThickness, Math.Max(0, HeightRequest) + Margin.VerticalThickness);
+    }
 
     private static bool IsInline(RichTextNode node) =>
         node is TextNode

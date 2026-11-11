@@ -9,7 +9,7 @@ public class MarkdownViewTests
     [Fact]
     public void SetMarkdown_RendersANativeViewForEveryBlock()
     {
-        var view = new MarkdownView();
+        var view = Themed();
 
         view.SetMarkdown("""
             ## Heading
@@ -41,11 +41,11 @@ public class MarkdownViewTests
             block => Assert.Equal(SemanticHeadingLevel.Level2, SemanticProperties.GetHeadingLevel(Assert.IsType<Label>(block))),
             block => Assert.NotNull(Assert.IsType<Label>(block).FormattedText),
             block => Assert.IsType<Border>(block),
-            block => Assert.IsType<BoxView>(Assert.IsType<Grid>(block).Children[0]),
+            block => Assert.IsAssignableFrom<BoxView>(Assert.IsType<Grid>(block).Children[0]),
             block => Assert.IsType<Grid>(block),
             block => Assert.IsType<Border>(Assert.IsType<ScrollView>(block).Content),
-            block => Assert.IsType<BoxView>(block),
-            block => Assert.Equal("A cat", SemanticProperties.GetDescription(Assert.IsType<Image>(block))));
+            block => Assert.IsAssignableFrom<BoxView>(block),
+            block => Assert.Equal("A cat", SemanticProperties.GetDescription(Assert.IsType<LinkedImageView>(block).Image)));
 
         var spans = ((Label)view.BlockViews[1]!).FormattedText.Spans;
         Assert.Contains(spans, span => span.Text == "bold" && span.FontAttributes == FontAttributes.Bold);
@@ -57,7 +57,7 @@ public class MarkdownViewTests
     [Fact]
     public void Headings_ScaleFromTheBodyFontSizeAndExposeTheirLevel()
     {
-        var view = new MarkdownView();
+        var view = Themed();
         view.SetMarkdown("# 1\n## 2\n### 3\n#### 4\n##### 5\n###### 6\n\nbody");
 
         var headings = view.BlockViews.Take(6).Cast<Label>().ToArray();
@@ -293,7 +293,7 @@ public class MarkdownViewTests
     [Fact]
     public void CodeBlocks_UseAHorizontalScrollViewAndMonospaceText()
     {
-        var view = new MarkdownView();
+        var view = Themed();
         view.SetMarkdown("```python\nprint('a very long line that must not wrap')\n```\n\n```\nno language\n```");
 
         var withLanguage = Assert.IsType<Border>(view.BlockViews[0]);
@@ -319,7 +319,7 @@ public class MarkdownViewTests
     [InlineData("Android", "monospace")]
     [InlineData("WinUI", "Consolas")]
     [InlineData("Unknown", "monospace")]
-    public void MonospaceFont_DependsOnThePlatform(string platform, string expected)
+    public void CodeFont_DependsOnThePlatform(string platform, string expected)
     {
         var devicePlatform = platform switch
         {
@@ -331,7 +331,7 @@ public class MarkdownViewTests
             _ => DevicePlatform.Unknown,
         };
 
-        Assert.Equal(expected, MarkdownRenderer.GetMonospaceFontFamily(devicePlatform));
+        Assert.Equal(expected, AIChatTheme.GetCodeFontFamily(devicePlatform));
     }
 
     [Fact]
@@ -355,7 +355,7 @@ public class MarkdownViewTests
     [Fact]
     public void Tables_UseAGridWithLinesAlignmentAndAHeaderStyle()
     {
-        var view = new MarkdownView();
+        var view = Themed();
         view.SetMarkdown("| Left | Center | Right |\n|:--|:-:|--:|\n| a | **b** | c |\n| d | e |");
 
         var scroller = Assert.IsType<ScrollView>(view.BlockViews[0]);
@@ -375,22 +375,47 @@ public class MarkdownViewTests
     }
 
     [Fact]
+    public void QuoteBarsTableLinesAndRules_AskOnlyForTheirThickness()
+    {
+        var view = Themed();
+        view.SetMarkdown("> quote\n\n---\n\n| a | b |\n|---|---|\n| 1 | 2 |");
+
+        // No height request: the bar stretches to the quote's height instead of asking for BoxView's default 40.
+        var bar = (BoxView)((Grid)view.BlockViews[0]!).Children[0];
+        Assert.Equal(-1, bar.HeightRequest);
+        Assert.Equal(LayoutOptions.Fill, bar.VerticalOptions);
+        Assert.Equal(new Size(3, 0), ((IView)bar).Measure(100, 100));
+
+        var rule = Assert.IsAssignableFrom<BoxView>(view.BlockViews[1]);
+        Assert.Equal(new Size(0, 1 + 8), ((IView)rule).Measure(500, 500));
+
+        // Grid lines fill their track across and do not widen the auto rows and columns they cross.
+        var table = Assert.IsType<Border>(Assert.IsType<ScrollView>(view.BlockViews[2]).Content);
+        Assert.Collection(
+            Assert.IsType<Grid>(table.Content).Children.OfType<BoxView>(),
+            row => Assert.Equal(new Size(0, 1), ((IView)row).Measure(500, 500)),
+            column => Assert.Equal(new Size(1, 0), ((IView)column).Measure(500, 500)));
+    }
+
+    [Fact]
     public void Images_LoadOnlyHttpSourcesAndDescribeThemselves()
     {
-        var view = new MarkdownView();
+        var view = Themed();
         view.SetMarkdown("![Diagram](https://example.com/d.png \"Title\")\n\n![Local](file:///tmp/x.png)\n\nText ![inline](https://example.com/i.png) after");
 
-        var image = Assert.IsType<Image>(view.BlockViews[0]);
+        var image = Assert.IsType<LinkedImageView>(view.BlockViews[0]).Image;
         Assert.Equal(new Uri("https://example.com/d.png"), Assert.IsType<UriImageSource>(image.Source).Uri);
         Assert.Equal("Diagram", SemanticProperties.GetDescription(image));
+        Assert.Equal(320, image.MaximumHeightRequest);
 
-        Assert.Equal("Local", Assert.IsType<Label>(view.BlockViews[1]).Text);
+        // Anything else is a chip with the description, never an empty gap.
+        Assert.Equal("Local, Image \u00B7 x.png", SemanticProperties.GetDescription(Assert.IsType<Border>(view.BlockViews[1])));
 
         var mixed = Assert.IsType<VerticalStackLayout>(view.BlockViews[2]);
         Assert.Collection(
             mixed.Children,
             child => Assert.Equal("Text ", ((Label)child).Text),
-            child => Assert.Equal("inline", SemanticProperties.GetDescription((Image)child)),
+            child => Assert.Equal("inline", SemanticProperties.GetDescription(((LinkedImageView)child).Image)),
             child => Assert.Equal(" after", ((Label)child).Text));
     }
 
@@ -429,25 +454,45 @@ public class MarkdownViewTests
     }
 
     [Fact]
-    public void Styles_FallBackToTheDefaultThemeWhenKeysAreMissing()
+    public void Styles_UseTheChatPaletteAndFollowIt()
     {
+        var host = new ContentView();
+        var theme = new AIChatTheme();
+        host.Resources.MergedDictionaries.Add(theme);
         var view = new MarkdownView();
-        view.SetMarkdown("Text with [a link](https://example.com) and `code`.\n\n```\nblock\n```");
+        host.Content = view;
+        view.SetMarkdown("Text with [a link](https://example.com) and `code`.\n\n```\nblock\n```\n\n> quoted");
 
         var paragraph = (Label)view.BlockViews[0]!;
-        Assert.Same(MarkdownTheme.Defaults[MarkdownThemeKeys.TextStyle], paragraph.Style);
+        Assert.Same(theme[AIChatThemeKeys.AssistantTextStyle], paragraph.Style);
         Assert.Equal(Color.FromArgb("#16181C"), paragraph.TextColor);
 
         var link = Spans(view).Single(span => span.Text == "a link");
-        Assert.Equal(Color.FromArgb("#0969DA"), link.TextColor);
+        Assert.Equal(Color.FromArgb("#2563EB"), link.TextColor);
         Assert.Equal(TextDecorations.Underline, link.TextDecorations);
 
         var code = Spans(view).Single(span => span.Text == "code");
-        Assert.Equal(Color.FromArgb("#14000000"), code.BackgroundColor);
+        Assert.Equal(Color.FromArgb("#F0F2F5"), code.BackgroundColor);
+        Assert.Equal("monospace", code.FontFamily);
 
         var block = (Border)view.BlockViews[1]!;
-        Assert.Equal(Color.FromArgb("#0D000000"), block.BackgroundColor);
+        Assert.Same(theme[AIChatThemeKeys.CodeBlockStyle], block.Style);
+        Assert.Equal(Color.FromArgb("#F0F2F5"), block.BackgroundColor);
+        var quoteBar = (BoxView)((Grid)view.BlockViews[2]!).Children[0];
+        Assert.Equal(Color.FromArgb("#DEE1E6"), quoteBar.Color);
         Assert.Equal(15d, view.FontSize);
+
+        // Overriding a chat color recolors Markdown too.
+        host.Resources[AIChatThemeKeys.AccentColor] = Colors.Red;
+        Assert.Equal(Colors.Red, link.TextColor);
+        host.Resources.Remove(AIChatThemeKeys.AccentColor);
+
+        // And the dark palette applies to Markdown like to the rest of the chat.
+        theme.ApplyTheme(AppTheme.Dark);
+        Assert.Equal(Color.FromArgb("#ECEDEF"), paragraph.TextColor);
+        Assert.Equal(Color.FromArgb("#4C8DF6"), link.TextColor);
+        Assert.Equal(Color.FromArgb("#2A2D33"), code.BackgroundColor);
+        Assert.Equal(Color.FromArgb("#3A3E45"), quoteBar.Color);
     }
 
     [Fact]
@@ -458,12 +503,12 @@ public class MarkdownViewTests
         view.SetMarkdown("Text with [a link](https://example.com).\n\n```\nblock\n```\n\n> quote");
         host.Content = view;
 
-        host.Resources[MarkdownThemeKeys.LinkStyle] = SpanStyle(Colors.Red);
-        host.Resources[MarkdownThemeKeys.CodeBlockStyle] = new Style(typeof(Border))
+        host.Resources[AIChatThemeKeys.LinkSpanStyle] = SpanStyle(Colors.Red);
+        host.Resources[AIChatThemeKeys.CodeBlockStyle] = new Style(typeof(Border))
         {
             Setters = { new Setter { Property = VisualElement.BackgroundColorProperty, Value = Colors.Orange } },
         };
-        host.Resources[MarkdownThemeKeys.BlockQuoteBarStyle] = new Style(typeof(BoxView))
+        host.Resources[AIChatThemeKeys.MarkdownBlockQuoteBarStyle] = new Style(typeof(BoxView))
         {
             Setters = { new Setter { Property = BoxView.ColorProperty, Value = Colors.Purple } },
         };
@@ -473,7 +518,7 @@ public class MarkdownViewTests
         Assert.Equal(Colors.Orange, ((Border)view.BlockViews[1]!).BackgroundColor);
         Assert.Equal(Colors.Purple, ((BoxView)((Grid)view.BlockViews[2]!).Children[0]).Color);
 
-        host.Resources[MarkdownThemeKeys.LinkStyle] = SpanStyle(Colors.Green);
+        host.Resources[AIChatThemeKeys.LinkSpanStyle] = SpanStyle(Colors.Green);
 
         Assert.Equal(Colors.Green, link.TextColor);
 
@@ -490,8 +535,8 @@ public class MarkdownViewTests
         view.SetMarkdown("## Heading\n\nbody");
         host.Content = view;
 
-        host.Resources[MarkdownThemeKeys.FontSize] = 20d;
-        host.Resources[MarkdownThemeKeys.BlockSpacing] = 24d;
+        host.Resources[AIChatThemeKeys.BodyFontSize] = 20d;
+        host.Resources[AIChatThemeKeys.MarkdownBlockSpacing] = 24d;
 
         Assert.Equal(20d, view.FontSize);
         Assert.Equal(20d, ((Label)view.BlockViews[1]!).FontSize);
@@ -500,18 +545,22 @@ public class MarkdownViewTests
     }
 
     [Fact]
-    public void MarkdownTheme_DefinesEveryKeyWithTheRightType()
+    public void MarkdownTheme_DefinesEveryMarkdownKeyWithTheRightType()
     {
-        var theme = new MarkdownTheme();
-        var keys = typeof(MarkdownThemeKeys)
+        var theme = new AIChatTheme();
+        var keys = typeof(AIChatThemeKeys)
             .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
-            .Where(field => field.IsLiteral)
+            .Where(field => field.IsLiteral && field.Name.StartsWith("Markdown", StringComparison.Ordinal))
             .Select(field => (string)field.GetValue(null)!)
             .ToArray();
 
-        Assert.Equal(17, keys.Length);
+        Assert.Equal(12, keys.Length);
         foreach (var key in keys)
         {
+            Assert.StartsWith("AIChat.Markdown.", key, StringComparison.Ordinal);
+
+            // Defined by the Markdown dictionary, and reachable through the chat theme that merges it.
+            Assert.True(new MarkdownTheme().ContainsKey(key), key);
             Assert.True(theme.TryGetValue(key, out var value), key);
             if (key.EndsWith("Style", StringComparison.Ordinal))
                 Assert.IsType<Style>(value);
@@ -519,9 +568,17 @@ public class MarkdownViewTests
                 Assert.IsType<double>(value);
         }
 
-        Assert.Equal(typeof(Span), ((Style)theme[MarkdownThemeKeys.LinkStyle]).TargetType);
-        Assert.Equal(typeof(Border), ((Style)theme[MarkdownThemeKeys.CodeBlockStyle]).TargetType);
-        Assert.Equal(typeof(BoxView), ((Style)theme[MarkdownThemeKeys.ThematicBreakStyle]).TargetType);
+        Assert.Equal(typeof(Span), ((Style)theme[AIChatThemeKeys.MarkdownInlineCodeStyle]).TargetType);
+        Assert.Equal(typeof(Border), ((Style)theme[AIChatThemeKeys.MarkdownTableBorderStyle]).TargetType);
+        Assert.Equal(typeof(BoxView), ((Style)theme[AIChatThemeKeys.MarkdownThematicBreakStyle]).TargetType);
+        Assert.Equal(typeof(Label), ((Style)theme[AIChatThemeKeys.MarkdownHeadingStyle]).TargetType);
+    }
+
+    private static MarkdownView Themed()
+    {
+        var view = new MarkdownView();
+        view.Resources.MergedDictionaries.Add(new AIChatTheme());
+        return view;
     }
 
     private static Style SpanStyle(Color color) => new(typeof(Span))

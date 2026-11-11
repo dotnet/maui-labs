@@ -8,7 +8,7 @@ AI integration packages for .NET MAUI, built on [`Microsoft.Extensions.AI`](http
 |---------|-------------|
 | [`Microsoft.Maui.AI.Attributes`](Microsoft.Maui.AI.Attributes/) | Source-generated AI tool contexts — `[ExportAIFunction]`, DI binding, AOT-safe |
 | [`Microsoft.Maui.AI.Chat`](Microsoft.Maui.AI.Chat/) | Headless chat engine — streaming blocks, tools/approval/UI actions, typed state, thread restore/retry, reasoning, media, and `[ToolBlock]` generation |
-| [`Microsoft.Maui.AI.Chat.Controls`](Microsoft.Maui.AI.Chat.Controls/) | Drop-in MAUI chat control. `AIChatView` binds to the engine session and covers streaming, tool cards and approvals, attachments, audio notes, dictation, live voice, XAML block templates, and themes |
+| [`Microsoft.Maui.AI.Chat.Controls`](Microsoft.Maui.AI.Chat.Controls/) | Drop-in MAUI chat control. `AIChatView` binds to the engine session and covers streaming Markdown answers, tool cards and approvals, attachments, audio notes, dictation, live voice, XAML block templates, and themes |
 
 `Microsoft.Maui.AI.Chat` supports caller-provided `IConversationThread` persistence, history
 restore, retry, and coherent clear/reset behavior. No storage provider is built in:

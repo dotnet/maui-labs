@@ -4,7 +4,7 @@
 
 A drop-in .NET MAUI chat control for AI agents. `AIChatView` binds directly to a
 [`Microsoft.Maui.AI.Chat`](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat/) session
-(`AgentContext`). It streams responses and renders tool calls, approvals, reasoning, and media. Its composer
+(`AgentContext`). It streams Markdown answers and renders tool calls, approvals, reasoning, and media. Its composer
 handles attachments, audio notes, dictation, and live voice. You can change how any block renders with XAML
 templates, restyle it with resource keys, or replace the whole layout.
 
@@ -13,6 +13,8 @@ templates, restyle it with resource keys, or replace the whole layout.
 - **Chat layout:** the user's messages sit in a right-aligned bubble and assistant text is full width. There
   are no avatars, names, or timestamps. A thinking row shows until content arrives, and the list
   auto-scrolls while you are at the bottom.
+- **Markdown answers:** headings, emphasis, lists and task lists, tables, block quotes, code, links, and images
+  render as native views while the answer streams. Your own messages stay plain text.
 - **Agent content:** tool calls are compact cards with expandable arguments and results. An approval is one
   card: Approve and Reject, then the decision, with the arguments and result folded away like a tool call's.
   There are also client UI actions, collapsible reasoning (encrypted reasoning without text is not shown),
@@ -221,6 +223,37 @@ buttons to the view's commands (`SendCommand`, `StopCommand`, `PickAttachmentsCo
 `PART_Header`, `PART_Messages`, `PART_EmptyView`, `PART_Suggestions`, `PART_Attachments`, and `PART_Input`
 are optional.
 
+### Markdown
+
+Assistant text, and rich text from a provider (`RichContentBlock`), render as Markdown parsed with
+[Markdig](https://github.com/xoofx/markdig). While an answer streams, only the block that is still growing is
+rebuilt, so the text above it does not flicker. Raw HTML shows as text and is never rendered.
+
+Markdown uses the chat's keys: `AIChat.Style.AssistantText` for paragraphs and list items,
+`AIChat.Style.LinkSpan` for links, `AIChat.Style.CodeBlock` and `AIChat.Style.CodeText` for code blocks (the same
+as in tool cards), and the `AIChat.Color.*` and `AIChat.FontFamily.Code` resources for the rest. Recoloring the
+chat recolors Markdown in both themes. Text sizes come from `AIChat.FontSize.Body` and `AIChat.FontSize.Code`
+(headings scale from the body size), not from the styles. These keys style what only Markdown has:
+
+| Key | Type | Styles |
+|---|---|---|
+| `AIChat.Markdown.BlockSpacing` | `x:Double` | Space between blocks |
+| `AIChat.Markdown.HeadingStyle` | `Label` style | Headings |
+| `AIChat.Markdown.InlineCodeStyle` | `Span` style | Inline code |
+| `AIChat.Markdown.CodeBlockLanguageStyle` | `Label` style | The language caption above a fenced code block |
+| `AIChat.Markdown.BlockQuoteBarStyle` | `BoxView` style | The bar beside a block quote |
+| `AIChat.Markdown.BlockQuoteTextStyle` | `Label` style | Block quote text |
+| `AIChat.Markdown.ListMarkerStyle` | `Label` style | Bullets, numbers, and task boxes |
+| `AIChat.Markdown.TableBorderStyle` | `Border` style | The table outline |
+| `AIChat.Markdown.TableLineStyle` | `BoxView` style | Lines between rows and columns |
+| `AIChat.Markdown.TableHeaderCellStyle` | `Label` style | Header cells |
+| `AIChat.Markdown.TableCellStyle` | `Label` style | Body cells |
+| `AIChat.Markdown.ThematicBreakStyle` | `BoxView` style | Horizontal rules |
+
+Only `http`, `https`, and `mailto` links open; other links read as plain text. Images load inline only from
+`http` and `https`, up to 480 × 320. An image from any other source (such as an `attachment://` reference), or
+one that fails to load, shows as a chip with its description instead.
+
 ## Attachments, audio, and voice
 
 | Property | Behavior |
@@ -261,6 +294,7 @@ even without `UseAIChat()`.
 
 - .NET 10 and .NET MAUI 10
 - A `Microsoft.Extensions.AI` `IChatClient`
+- [Markdig](https://www.nuget.org/packages/Markdig/), restored with the package
 
 ## Related packages
 

@@ -21,7 +21,7 @@ public partial class AIChatTheme : ResourceDictionary
     public AIChatTheme()
     {
         InitializeComponent();
-        this[AIChatThemeKeys.CodeFontFamily] = GetCodeFontFamily();
+        this[AIChatThemeKeys.CodeFontFamily] = GetCodeFontFamily(GetPlatform());
 
         var application = Application.Current;
         ApplyTheme(GetRequestedTheme(application));
@@ -127,21 +127,28 @@ public partial class AIChatTheme : ResourceDictionary
         }
     }
 
-    private static string GetCodeFontFamily()
+    /// <summary>Gets the monospace font family for code on <paramref name="platform"/>.</summary>
+    internal static string GetCodeFontFamily(DevicePlatform platform)
+    {
+        if (platform == DevicePlatform.iOS || platform == DevicePlatform.MacCatalyst || platform == DevicePlatform.macOS)
+            return "Menlo";
+        if (platform == DevicePlatform.WinUI)
+            return "Consolas";
+
+        // Android, and fontconfig on Linux, resolve the generic family.
+        return "monospace";
+    }
+
+    private static DevicePlatform GetPlatform()
     {
         try
         {
-            var platform = DeviceInfo.Platform;
-            if (platform == DevicePlatform.iOS || platform == DevicePlatform.MacCatalyst || platform == DevicePlatform.macOS)
-                return "Menlo";
-            if (platform == DevicePlatform.WinUI)
-                return "Consolas";
+            return DeviceInfo.Platform;
         }
         catch
         {
-            // No platform (unit tests): fall through to the generic family name.
+            // No platform (unit tests).
+            return DevicePlatform.Unknown;
         }
-
-        return "monospace";
     }
 }
