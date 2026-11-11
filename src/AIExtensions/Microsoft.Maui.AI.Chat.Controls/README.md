@@ -2,166 +2,181 @@
 
 > **Experimental:** APIs may change between preview releases.
 
-A drop-in .NET MAUI chat control for AI agents. `AIChatView` binds directly to a
-[`Microsoft.Maui.AI.Chat`](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat/) session
-(`AgentContext`). It streams Markdown answers and renders tool calls, approvals, reasoning, and media. Its composer
-handles attachments, audio notes, dictation, and live voice. You can change how any block renders with XAML
-templates, restyle it with resource keys, or replace the whole layout.
+XAML block templates for the [`Microsoft.Maui.AI.Chat`](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat/)
+engine. The engine turns a chat client's streamed responses into conversation turns and content blocks (text, tool
+calls, approvals, reasoning, media, and your own `[ToolBlock]` cards), and every one of them is bindable. This
+package picks the view that shows each block, so you can build a chat UI from a plain `CollectionView`:
 
-## Features
+- **`BlockTemplateSelector`**, a `DataTemplateSelector` for any list of blocks: the first `BlockTemplate` whose
+  condition matches a block wins.
+- **`BlockMatch`** conditions: a block's type, its tool, its role, and `All`, `Any`, and `Not` to combine them, with
+  markup extensions for the common ones (`{chat:Is chat:TextContentBlock}`, `{chat:Tool calculate}`,
+  `{chat:Role user}`). A new kind of condition is a new `BlockMatch` type.
+- **`ViewTemplate`** (`{chat:ViewTemplate local:CalculatorCard}`), a `DataTemplate` that creates a view through the
+  app's services.
+- **`BlockView`**, a base view that updates itself when its block changes, once per dispatcher pass however many
+  tokens streamed in.
 
-- **Chat layout:** the user's messages sit in a right-aligned bubble sized to the text, with attached images and
-  files as right-aligned thumbnails and chips above it, and assistant text is full width. There are no avatars,
-  names, or timestamps. A thinking row shows until content arrives. The list follows new content while you are
-  at the bottom, and again whenever a new turn starts.
-- **Markdown answers:** headings, emphasis, lists and task lists, tables, block quotes, code, links, and images
-  render as native views while the answer streams. Images from the web show as chips until you allow them
-  (`AllowRemoteImages`). Your own messages stay plain text.
-- **Agent content:** tool calls are compact cards with expandable arguments and results. An approval is one
-  card: Approve and Reject, then the decision, with the arguments and result folded away like a tool call's.
-  There are also client UI actions, collapsible reasoning (encrypted reasoning without text is not shown),
-  inline images (data or links, with a link chip when an image cannot load), and file and link chips.
-- **Turn states:** a stopped response keeps its partial output under a "Stopped" marker. A failed response
-  keeps its partial output and shows the error with Retry; if another message is sent instead, the failed one
-  is marked "Not sent". A restored conversation renders without sending.
-- **Composer:** Send and Stop, suggestion chips, attachments (picker, file types, size and count limits, and
-  thumbnails for images), audio notes, dictation, and continuous live voice. Errors appear in one place.
-- **Customization:** `BlockTemplate` matches by block type (including `[ToolBlock]` types), tool name, role,
-  priority, or a `When` override. There are header, empty, messages-header, and response-footer templates,
-  input slots, resource keys, and a replaceable `ControlTemplate`.
-- **Light and dark themes** that your app's implicit styles don't change, monochrome icons from an embedded icon
-  font, accessible names on every action, and services resolved from dependency injection.
-
-## Platform support
-
-| | Android | iOS | Mac Catalyst | Windows |
-|---|:-:|:-:|:-:|:-:|
-| Chat view, templates, themes | ✅ | ✅ | ✅ | ✅ |
-| Attachments (platform file picker) | ✅ | ✅ | ✅ | ✅ |
-| Audio notes (built-in WAV recorder) | ✅ | ✅ | ✅ | ✅ |
-| Live voice (built-in recognizer) | ✅¹ | ✅¹ | ✅¹ | ✅¹ |
-
-¹ Implemented over the .NET MAUI Community Toolkit speech-to-text service; not yet verified on devices.
-
-The package targets `net10.0` and works with any .NET MAUI backend. On other backends, register your own
-`IChatAudioRecorder` and `IChatSpeechRecognizer`.
+The package draws no chat UI of its own. The ChatPlayground sample,
+[`samples/AIExtensions.Sample.ChatPlayground`](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground),
+builds a complete chat with it: a list of turns, a composer, tool cards and approvals, a calculator worksheet that
+folds several tool calls into one card, and notes that the user and the model edit together.
 
 ## Install
 
-```xml
-<PackageReference Include="Microsoft.Maui.AI.Chat.Controls" Version="0.1.0-preview.*" />
+```shell
+dotnet add package Microsoft.Maui.AI.Chat.Controls --prerelease
 ```
 
-```csharp
-builder
-    .UseMauiApp<App>()
-    .UseAIChat();
+It references `Microsoft.Maui.AI.Chat`. In XAML, one namespace covers both packages:
 
-// Optional: a chat view without a Session or ChatClient uses the registered client.
-builder.Services.AddChatClient(services => /* any Microsoft.Extensions.AI IChatClient */);
+```xml
+xmlns:chat="http://schemas.microsoft.com/dotnet/2026/maui/ai/chat"
 ```
 
 ## Quick start
 
+A session (`AgentContext`) holds the conversation. Its `Turns`, and each turn's `RequestBlocks` (what the user sent)
+and `ResponseBlocks` (the answer), are observable collections, so a `CollectionView` of turns with a
+`BindableLayout` of blocks shows the conversation as it streams:
+
+```csharp
+public sealed class ChatViewModel(IChatClient chatClient)
+{
+    public AgentContext Session { get; } = new(new UIAgent(chatClient));
+
+    public Task SendAsync(string text) => Session.SendMessageAsync(text);
+}
+```
+
 ```xml
-<ContentPage xmlns:chat="http://schemas.microsoft.com/dotnet/2026/maui/ai/chat">
-    <chat:AIChatView ChatClient="{Binding ChatClient}"
-                     Instructions="You are a helpful assistant."
-                     WelcomeMessage="Ask me anything."
-                     AllowAttachments="True" />
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:chat="http://schemas.microsoft.com/dotnet/2026/maui/ai/chat"
+             xmlns:local="clr-namespace:MyApp"
+             x:Class="MyApp.ChatPage"
+             x:DataType="local:ChatViewModel">
+    <ContentPage.Resources>
+        <chat:BlockTemplateSelector x:Key="Blocks">
+            <!-- A card of your own for one tool, created through the app's services. -->
+            <chat:BlockTemplate When="{chat:Tool get_weather}" Template="{chat:ViewTemplate local:WeatherCard}" />
+
+            <!-- Text, which streams in: RawText raises PropertyChanged, so the binding follows it. -->
+            <chat:BlockTemplate When="{chat:Is chat:RichContentBlock}">
+                <DataTemplate x:DataType="chat:RichContentBlock">
+                    <Label Text="{Binding RawText}" />
+                </DataTemplate>
+            </chat:BlockTemplate>
+
+            <!-- Every other tool call. -->
+            <chat:BlockTemplate When="{chat:Is chat:FunctionInvocationContentBlock}">
+                <DataTemplate x:DataType="chat:FunctionInvocationContentBlock">
+                    <Label Text="{Binding ToolName, StringFormat='Used {0}'}" FontSize="12" />
+                </DataTemplate>
+            </chat:BlockTemplate>
+        </chat:BlockTemplateSelector>
+    </ContentPage.Resources>
+
+    <CollectionView ItemsSource="{Binding Session.Turns}">
+        <CollectionView.ItemTemplate>
+            <DataTemplate x:DataType="chat:ConversationTurn">
+                <VerticalStackLayout Padding="16,8" Spacing="8">
+                    <VerticalStackLayout HorizontalOptions="End"
+                                         BindableLayout.ItemsSource="{Binding RequestBlocks}"
+                                         BindableLayout.ItemTemplateSelector="{StaticResource Blocks}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding ResponseBlocks}"
+                                         BindableLayout.ItemTemplateSelector="{StaticResource Blocks}" />
+                </VerticalStackLayout>
+            </DataTemplate>
+        </CollectionView.ItemTemplate>
+    </CollectionView>
 </ContentPage>
 ```
 
-The one `chat` namespace covers the controls and the engine's block types (`{x:Type chat:ReasoningContentBlock}`).
+Drive the session from the UI thread, as you would any collection a view is bound to: the engine changes the turns
+and blocks on the thread that calls it (`SendMessageAsync` continues on the caller's context), and raises its
+events there.
 
-From code:
+## Match blocks
 
-```csharp
-var chat = new AIChatView
-{
-    ChatClient = client,
-    Instructions = "You are a helpful assistant.",
-    Tools = [AIFunctionFactory.Create(GetWeather)],
-};
-```
+| Condition | XAML | Code | Matches |
+|---|---|---|---|
+| `BlockTypeMatch` | `{chat:Is chat:TextContentBlock}` | `BlockMatch.Is<TextContentBlock>()` | The type and derived types, including `[ToolBlock]` types |
+| `ToolMatch` | `{chat:Tool calculate}` | `BlockMatch.Tool("calculate")` | The tool's calls, approvals, and UI actions (case-insensitive) |
+| `RoleMatch` | `{chat:Role user}` | `BlockMatch.Role(ChatRole.User)` | Blocks with the role (case-insensitive) |
+| `AllMatch` | `<chat:AllMatch>…</chat:AllMatch>` | `BlockMatch.All(…)` | Blocks that satisfy every condition |
+| `AnyMatch` | `<chat:AnyMatch>…</chat:AnyMatch>` | `BlockMatch.Any(…)` | Blocks that satisfy one condition |
+| `NotMatch` | `<chat:NotMatch>…</chat:NotMatch>` | `BlockMatch.Not(…)` | Blocks that don't satisfy the condition |
+| | | `BlockMatch.When(block => …)` | Blocks the predicate accepts |
 
-When you set `ChatClient`, the view creates and owns the session. If the client has no
-`FunctionInvokingChatClient`, the view adds one so `Tools` run. Changes to `Instructions` and `Tools` apply to
-the next message. Replacing `ChatClient` starts a new conversation.
-
-### Bring your own session
-
-Set `Session` to use an `AgentContext` you configure, for example with generated tool blocks or persistence:
-
-```csharp
-var agent = new UIAgent(client.AsBuilder().UseFunctionInvocation().Build(), options =>
-{
-    options.ChatOptions = new ChatOptions { Tools = [AIFunctionFactory.Create(GetWeather)] };
-    options.AddGeneratedToolBlocks();
-});
-chat.Session = new AgentContext(agent);
-```
-
-`Session` wins over `ChatClient`, and the view never disposes a session it did not create. The session it
-creates for `ChatClient` lasts until the view's handler is disconnected (for example when its page is popped),
-which stops a response in progress.
-
-To continue a saved conversation, restore it into the session, before or after you assign it: `RestoreAsync()`
-loads the turns of the agent's conversation thread, and `RestoreAsync(messages)` loads recorded `ChatMessage`s.
-Restored turns render right away, recorded tool calls show their recorded results and never run again, and the
-next message continues the conversation:
-
-```csharp
-var session = new AgentContext(agent);
-await session.RestoreAsync(savedMessages);
-chat.Session = session;
-```
-
-`ClearAsync()` stops any response in progress and clears the conversation. `StopAsync()` completes once the
-response has stopped.
-
-## Customize blocks
-
-Add `BlockTemplate`s as the view's content. A template matches when every filter you set matches:
+Combine them as elements. This template shows a tool's calls but not its approvals:
 
 ```xml
-<chat:AIChatView Session="{Binding Session}">
-    <!-- A view for one tool, created through dependency injection when available. -->
-    <chat:BlockTemplate ToolName="get_weather" ViewType="{x:Type views:WeatherCard}" />
-
-    <!-- An inline template. The binding context is the block; a binding refreshes when the property it reads changes. -->
-    <chat:BlockTemplate BlockType="{x:Type chat:FunctionInvocationContentBlock}">
-        <DataTemplate x:DataType="chat:FunctionInvocationContentBlock">
-            <Label Text="{Binding ToolName, StringFormat='Used {0}'}" />
-        </DataTemplate>
-    </chat:BlockTemplate>
-
-    <!-- A template without a view hides the blocks it matches. -->
-    <chat:BlockTemplate BlockType="{x:Type chat:ReasoningContentBlock}" />
-</chat:AIChatView>
+<chat:BlockTemplate Template="{chat:ViewTemplate local:CalculatorCard}">
+    <chat:BlockTemplate.When>
+        <chat:AllMatch>
+            <chat:BlockTypeMatch Type="chat:FunctionInvocationContentBlock" />
+            <chat:ToolMatch Name="calculate" />
+        </chat:AllMatch>
+    </chat:BlockTemplate.When>
+</chat:BlockTemplate>
 ```
 
-- Your templates always win over the built-in ones. Among yours, the highest `Priority` wins, then the most
-  specific: a tool name beats a block type, a derived type beats its base type, and a type beats a role. If
-  they are still tied, the last one declared wins.
-- `Role="user"` templates can take over the user's own blocks, which otherwise render as the built-in user message.
-- Override `When(ContentBlock)` for anything else, and call the base method to keep the filters.
-- The binding context is the block and stays the block while the response streams. Bindings follow the standard
-  .NET contract: a binding refreshes when the property it reads raises `PropertyChanged`, so `{Binding ToolName}`
-  and `{Binding Result.Result}` stay live. Two kinds of binding keep their first value: a binding to the block
-  itself (`{Binding .}`, or `{Binding Converter=…}` over the whole block), and a binding that hands a view an object
-  or list the block changes in place (`ItemsSource="{Binding Rows}"`), because reading the property again returns
-  the same instance. Put logic over the whole block in a `BlockView` or in a property of the block, and make a
-  list that changes in place an `ObservableCollection<T>`.
-- Derive a view from `BlockView` to get `Block`, `Session`, and `OnBlockChanged()`. That method runs when the
-  block is assigned and after each change the block reports, at most once per batch of streaming updates, not once
-  per token. A block of your own reports a change when its handler updates it or when it calls `NotifyChanged()`;
-  raising `PropertyChanged` alone refreshes bindings but doesn't call `OnBlockChanged()`.
-- In a template for a `ToolApprovalBlock` or `UIActionBlock`, bind the buttons to `IsAwaitingInput`
-  (`IsVisible="{Binding IsAwaitingInput}"`): it turns false once the block is answered, while the action runs,
-  and when the turn stops, fails or is restored, after which answers are ignored.
+For any other condition, derive from `BlockMatch`. Selecting a template can run often, so keep `Matches` fast and
+free of side effects:
 
-Typed tool blocks from the engine's source generator work the same way:
+```csharp
+public sealed class JsonAnswerMatch : BlockMatch
+{
+    public override bool Matches(ContentBlock block) =>
+        block is TextContentBlock { RawText: var text } && block.Role == ChatRole.Assistant &&
+        text.TrimStart().StartsWith('{');
+}
+```
+
+```xml
+<chat:BlockTemplate Template="{chat:ViewTemplate local:JsonCard}">
+    <chat:BlockTemplate.When>
+        <local:JsonAnswerMatch />
+    </chat:BlockTemplate.When>
+</chat:BlockTemplate>
+```
+
+A list selects a block's template when it shows the block, and doesn't select again when the block changes, so in
+a plain `CollectionView` or `BindableLayout` match on what a block is (its type, tool, and role) rather than on
+content that streams in.
+
+## Templates
+
+- **First match wins.** A `BlockTemplateSelector` tries its templates in order: put the most specific first and a
+  catch-all (a template without `When`) last. There are no priorities.
+- **No match, no view.** A block no template matches, and a block whose matching template has no `Template`, get
+  one shared empty template (an empty `ContentView`), because a list needs a template for every item. Add a
+  catch-all template to show every block.
+- **Stable templates.** The selector returns the templates it holds, never copies, so a `CollectionView`, which
+  reuses item views per template, reuses yours. A `DataTemplateSelector` used as a `Template`, such as another
+  `BlockTemplateSelector`, is evaluated against the block.
+- **Views from the app's services.** `{chat:ViewTemplate local:WeatherCard}` (or `new ViewTemplate(typeof(WeatherCard))`)
+  creates each view through `IPlatformApplication.Current.Services`, the services `MauiProgram` builds, like a page
+  Shell navigation creates: a view registered there (`builder.Services.AddTransient<WeatherCard>()`) is resolved,
+  and any other view gets its constructor's parameters from those services. Register views as transient, since
+  every block needs its own view. Without app services (before the app starts), the view's public parameterless
+  constructor creates it.
+
+## Views and bindings
+
+A view's `BindingContext` is its block, and stays the block while the response streams. Bindings follow the standard
+.NET contract: a binding refreshes when the property it reads raises `PropertyChanged`. The engine's blocks raise
+their properties (`RawText`, `ToolName`, `Result`, `Status`, `IsAwaitingInput`, …), and the engine raises them for
+any other block when its handler updates it, so `{Binding RawText}` and `{Binding Result.Result}` stay live. Two
+kinds of binding keep their first value:
+
+- a binding to the block itself (`{Binding .}`, or a converter over the whole block), which no property change
+  refreshes;
+- a binding that hands a view an object or list the block changes in place (`ItemsSource="{Binding Rows}"`),
+  because reading the property again returns the same instance. Make such a list an `ObservableCollection<T>`.
+
+Put logic over the whole block in a property of the block, or in a `BlockView`:
 
 ```csharp
 [ToolBlock("get_weather")]
@@ -174,24 +189,34 @@ public sealed partial class WeatherBlock : FunctionInvocationContentBlock
     public double Temperature { get; set; }
 }
 
-public sealed class WeatherCard : BlockView
+public sealed class WeatherCard : BlockView<WeatherBlock>
 {
     private readonly Label _label = new();
 
     public WeatherCard() => Content = _label;
 
     protected override void OnBlockChanged() =>
-        _label.Text = Block is WeatherBlock { HasResult: true } weather
+        _label.Text = Block is { HasResult: true } weather
             ? $"{weather.City}: {weather.Temperature}°"
             : "Checking the weather…";
 }
 ```
 
 ```xml
-<chat:BlockTemplate BlockType="{x:Type local:WeatherBlock}" ViewType="{x:Type local:WeatherCard}" />
+<chat:BlockTemplate When="{chat:Is local:WeatherBlock}" Template="{chat:ViewTemplate local:WeatherCard}" />
 ```
 
-Generated blocks need `options.AddGeneratedToolBlocks()` on the agent, so assign a `Session` you build yourself.
+- `Block` is the binding context when it is a block (`BlockView<TBlock>` types it, and gives `null` for any other
+  type).
+- `OnBlockChanged()` runs when the view gets its block (or loses it), and after the block raises
+  `PropertyChanged`: once for all the changes raised before the view's dispatcher runs it, however many tokens
+  streamed in. Override `OnBlockPropertyChanged(string?)` to see each change as it is raised, on the thread that
+  raised it.
+- The block holds the view only weakly, like a binding, so a session that outlives a page doesn't keep its views.
+- Generated `[ToolBlock]` blocks need `options.AddGeneratedToolBlocks()` on the agent.
+- In a template for a `ToolApprovalBlock` or `UIActionBlock`, bind the buttons to `IsAwaitingInput`
+  (`IsVisible="{Binding IsAwaitingInput}"`): it turns false once the block is answered, while the action runs, and
+  when the turn stops, fails, or is restored, after which answers are ignored.
 
 ### Combine tool calls into one card
 
@@ -243,207 +268,27 @@ var agent = new UIAgent(chatClient, options => options.AddBlockHandler(new Weath
 ```
 
 ```xml
-<chat:AIChatView Session="{Binding Session}">
-    <chat:BlockTemplate BlockType="{x:Type local:WeatherComparisonBlock}"
-                        ViewType="{x:Type local:WeatherComparisonView}" />
-</chat:AIChatView>
+<chat:BlockTemplate When="{chat:Is local:WeatherComparisonBlock}"
+                    Template="{chat:ViewTemplate local:WeatherComparisonView}" />
 ```
 
 `WeatherComparisonView` derives from `BlockView` and redraws the rows in `OnBlockChanged`, which runs after the
-handler updates the block, at most once per batch. `Rows` is a plain `List<T>` that the handler changes in place,
-which no binding can see; to bind the rows instead (`BindableLayout.ItemsSource="{Binding Rows}"`), make `Rows` an
+handler updates the block. `Rows` is a plain `List<T>` that the handler changes in place, which no binding can see;
+to bind the rows instead (`BindableLayout.ItemsSource="{Binding Rows}"`), make `Rows` an
 `ObservableCollection<T>`, which raises `CollectionChanged` for each row added or replaced. Mark the results handled
 as well as the calls: a custom block is not one of the engine's function blocks, so an unclaimed result is dropped.
 With `ChatOptions.AllowMultipleToolCalls = false` the card fills in one row at a time; with parallel calls, a
-batch's results arrive together. The ChatPlayground sample's Agentic tab shows it ("Combined tool calls"), next to
-activities that update in place, shared and predictive state, and a conversation that survives restarting the app.
-
-## Layout slots
-
-| Property | Shows |
-|---|---|
-| `HeaderTemplate` | Content above the messages, such as a model picker |
-| `EmptyViewTemplate` | Content before the first message. The default shows `WelcomeTitle` and `WelcomeMessage` |
-| `Suggestions` | Prompt chips shown while the conversation is empty. Tapping one sends it |
-| `MessagesHeaderTemplate` | Content at the top of the scrolling list, such as a disclaimer |
-| `ResponseFooterTemplate` | Content after each completed response (not after a failed one). The binding context is the `ConversationTurn`, with its final `ModelId`, `Usage`, and `IsStopped` |
-| `InputHeaderContent` | A view above the message box, such as a status banner. It hides with the message box |
-| `InputLeadingContent`, `InputTrailingContent` | Extra views beside the message box |
-
-App content in these slots inherits the view's `BindingContext`. Use `Placeholder`, `IsInputEnabled` (for
-example, while a model loads), and `IsInputVisible` to shape the composer.
-
-## Theme
-
-The first `AIChatView` merges `AIChatTheme` into `Application.Resources` at index 0, so your own resources
-win. Every visual uses `DynamicResource`, so changes apply at runtime. All keys are constants
-on `AIChatThemeKeys`.
-
-The view's own parts ignore your app's implicit styles (such as the `Button`, `Label`, and `Border` styles of the
-default MAUI template), so the chat looks the same in any app: restyle them with these keys. Content you supply
-(slots, block templates, a replaced `ControlTemplate`) takes your implicit styles as usual. Text uses the platform
-font unless you set `AIChat.FontFamily`.
-
-```xml
-<Application.Resources>
-    <!-- Your app's font for every text but code. -->
-    <x:String x:Key="AIChat.FontFamily">OpenSansRegular</x:String>
-    <!-- One color in both themes. -->
-    <Color x:Key="AIChat.Color.Accent">#7C3AED</Color>
-    <!-- Or per theme: AIChat.Light.* and AIChat.Dark.* switch with the app theme. -->
-    <Color x:Key="AIChat.Dark.UserBubble">#3B2F5C</Color>
-    <x:Double x:Key="AIChat.FontSize.Body">16</x:Double>
-    <Style x:Key="AIChat.Style.UserBubble" TargetType="Border">
-        <Setter Property="BackgroundColor" Value="{DynamicResource AIChat.Color.UserBubble}" />
-        <Setter Property="StrokeShape" Value="RoundRectangle 8" />
-        <Setter Property="Padding" Value="12,8" />
-        <Setter Property="HorizontalOptions" Value="End" />
-    </Style>
-</Application.Resources>
-```
-
-The message box sits at the bottom of the composer with its buttons: one line of text is centred on them, and as
-the text grows, its last line stays level with them. A margin on `AIChat.Style.Input`, measured for each platform
-with the default `AIChat.FontSize.Body`, does this; if you change the body size, base your own input style on the
-default and adjust its `Margin`.
-
-### Icons
-
-The built-in icons are glyphs of `AIChatIcons`, a subset of the
-[Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT) embedded in the package. The view
-registers the font with your app's fonts itself: there is nothing to add to `MauiProgram`. Each icon is a string
-resource, and `AIChat.FontFamily.Icons` names the font of all of them:
-
-| Key | Icon of |
-|---|---|
-| `AIChat.Icon.Attach` | The button that adds attachments |
-| `AIChat.Icon.Microphone` | The button that records an audio note |
-| `AIChat.Icon.LiveVoice` | The button that starts live voice |
-| `AIChat.Icon.Send` | The send button |
-| `AIChat.Icon.Stop` | The buttons that stop the response, a recording, or live voice |
-| `AIChat.Icon.Transcribing` | The audio button while a recording is transcribed (tap to cancel) |
-| `AIChat.Icon.Remove` | The button that removes a staged attachment |
-| `AIChat.Icon.Link`, `AIChat.Icon.Audio`, `AIChat.Icon.Document`, `AIChat.Icon.Image` | Link, audio, file, and image chips |
-| `AIChat.Icon.Expand`, `AIChat.Icon.Collapse` | Collapsed and expanded details (tool cards and reasoning) |
-
-Icons take the color of what they are in: `AIChat.Color.SecondaryText`, `AIChat.Color.OnAccent` on the send and stop
-button, and `AIChat.Color.Error` while recording or listening. Staged images show a thumbnail instead of an icon. To
-use your own icon font, register it in `MauiProgram` (`ConfigureFonts`) and set `AIChat.FontFamily.Icons` and every
-`AIChat.Icon.*` key:
-
-```xml
-<x:String x:Key="AIChat.FontFamily.Icons">MyIcons</x:String>
-<x:String x:Key="AIChat.Icon.Send">&#xE724;</x:String>
-<!-- ...and the other AIChat.Icon.* keys -->
-```
-
-### Your own template
-
-To change the whole layout, set `ControlTemplate` (or define the `AIChat.Template.ChatView` resource). Bind
-buttons to the view's commands (`SendCommand`, `StopCommand`, `PickAttachmentsCommand`,
-`ToggleAudioCaptureCommand`, `ToggleLiveSpeechCommand`) and its state (`CanSend`, `CanStop`, `IsBusy`,
-`ErrorMessage`, `HasError`, `Attachments`, `IsRecordingAudio`, `IsListening`, and others). The named parts
-`PART_Header`, `PART_Messages`, `PART_EmptyView`, `PART_Suggestions`, `PART_Attachments`, and `PART_Input`
-are optional.
-
-To start from a copy of the default template (`AIChat.Template.ChatView` in `Themes/AIChatTheme.xaml`), replace its
-internal element types with the standard controls (`Button` for `chat:ChatButton`, `Grid` for `chat:ChatGrid`, and
-so on). Keep the `AIChat.Style.*` styles and the `{DynamicResource AIChat.Icon.*}` texts: the icon styles set the
-icon font, which the view registers whatever its template. Your copy's elements take your app's implicit styles, so
-check them in your app.
-
-### Markdown
-
-Assistant text renders as Markdown, parsed with [Markdig](https://github.com/xoofx/markdig). Rich text from a
-provider (another `RichContentBlock`) is not parsed: the same renderer draws the provider's own nodes, so it looks
-like an answer, and a block without nodes shows its text as written. While an answer streams, the views of what
-changed update in place (the growing paragraph, list item, table row, or code block), so the text above it does not
-flicker or jump. Raw HTML shows as text and is never rendered. Input far beyond any real answer is shown more
-simply, so it cannot stall the chat: a paragraph or heading with more than 1,000 emphasis or link markers shows its
-text unformatted, and a table with more than 64 columns or 2,000 cells shows as text, one row per line.
-
-Markdown uses the chat's keys: `AIChat.Style.AssistantText` for paragraphs and list items,
-`AIChat.Style.LinkSpan` for links, `AIChat.Style.CodeBlock` and `AIChat.Style.CodeText` for code blocks (the same
-as in tool cards), and the `AIChat.Color.*` and `AIChat.FontFamily.Code` resources for the rest. Recoloring the
-chat recolors Markdown in both themes. Text sizes come from `AIChat.FontSize.Body` and `AIChat.FontSize.Code`
-(headings scale from the body size), not from the styles: a `FontSize` setter in `AIChat.Style.AssistantText`
-doesn't resize an answer, so set those keys instead. These keys style what only Markdown has:
-
-| Key | Type | Styles |
-|---|---|---|
-| `AIChat.Markdown.BlockSpacing` | `x:Double` | Space between blocks |
-| `AIChat.Markdown.HeadingStyle` | `Label` style | Headings |
-| `AIChat.Markdown.InlineCodeStyle` | `Span` style | Inline code |
-| `AIChat.Markdown.CodeBlockLanguageStyle` | `Label` style | The language caption above a fenced code block |
-| `AIChat.Markdown.BlockQuoteBarStyle` | `BoxView` style | The bar beside a block quote |
-| `AIChat.Markdown.BlockQuoteTextStyle` | `Label` style | Block quote text |
-| `AIChat.Markdown.ListMarkerStyle` | `Label` style | Bullets, numbers, and task boxes |
-| `AIChat.Markdown.TableBorderStyle` | `Border` style | The table outline |
-| `AIChat.Markdown.TableLineStyle` | `BoxView` style | Lines between rows and columns |
-| `AIChat.Markdown.TableHeaderCellStyle` | `Label` style | Header cells |
-| `AIChat.Markdown.TableCellStyle` | `Label` style | Body cells |
-| `AIChat.Markdown.ThematicBreakStyle` | `BoxView` style | Horizontal rules |
-
-Only `http`, `https`, and `mailto` links open; other links read as plain text.
-
-Images from the web don't load unless you set `AllowRemoteImages="True"`. An answer is untrusted text: a web
-page, document, or tool result that the model read can make it write an image link whose address carries parts of
-the conversation, and loading that image would send them to the site. While `AllowRemoteImages` is off (the
-default), an `http` or `https` image shows as a chip with its description and the site's host, and tapping the
-chip opens the image in the browser. When it is on, images load inline, up to 480 × 320, within limits: a download
-stops at 10 MB or after 30 seconds, and an image larger than 16 megapixels, or one whose size can't be read from
-its header (PNG, JPEG, GIF, BMP, and WebP can), shows as the chip instead of being decoded. Changing the setting
-updates the answers already shown. An image from any other source (such as an `attachment://` reference), or one
-that fails to load, also shows as a chip. A link around an image, such as a badge, shows the image (or its chip,
-naming the link's site) and follows the link when tapped. An image inside other text, such as in a heading or a
-table cell, reads as its alt text, title, or address. `AllowRemoteImages` covers images in Markdown and in a provider's rich
-text; images that tools and providers return as media (`MediaContentBlock`) are not affected.
-
-## Attachments, audio, and voice
-
-| Property | Behavior |
-|---|---|
-| `AllowAttachments`, `AttachmentFileTypes` | Show the attach button and filter the picker |
-| `MaximumAttachmentBytes`, `MaximumAttachmentCount` | Per-file (10 MB) and per-message (10) limits. Audio recordings use the same per-file limit. All attachments of a message together can be up to 50 MB, or up to `MaximumAttachmentBytes` when that is larger |
-| `AllowAudioCapture` | Record an audio note and attach it as WAV; a new recording replaces the previous one. With an `IChatAudioTranscriber`, the recording is dictated into the message box instead |
-| `ShowInterimAudioTranscript` | Show words while recording, using the speech recognizer |
-| `AllowLiveSpeech` | Continuous live voice. `LiveSpeechAutoSubmit` sends each finished utterance, and `ShowInterimSpeechText` and `SpeechRecognitionCulture` tune it |
-
-Live voice ends an utterance when the speaker pauses. Android ends it itself; on iOS, Mac Catalyst, and Windows,
-whose recognizers never end on their own, the built-in recognizer ends it after about two seconds without new
-words (on Windows, only while the platform reports silence). Turning live voice off keeps what it heard so far
-in the message box.
-
-Attachments and recordings are sent as `DataContent` next to the message text. Recording and live voice never
-share the microphone. Declare microphone access in your app:
-
-- Android: `RECORD_AUDIO`
-- iOS and Mac Catalyst: `NSMicrophoneUsageDescription` and `NSSpeechRecognitionUsageDescription`
-- Windows: the `microphone` capability
-
-## Services
-
-| Interface | Default (`UseAIChat()`) | Used for |
-|---|---|---|
-| `IChatClient` | none | A view without `Session` or `ChatClient` |
-| `IChatAttachmentPicker` | Platform file picker, read into memory | The attach button |
-| `IChatAudioRecorder` | Mono WAV recorder (Plugin.Maui.Audio) | Audio notes and dictation |
-| `IChatAudioTranscriber` | none | Dictation |
-| `IChatSpeechRecognizer` | .NET MAUI Community Toolkit speech-to-text | Live voice and interim transcripts |
-
-The view uses its matching property (`AttachmentPicker`, `AudioRecorder`, `AudioTranscriber`, or
-`SpeechRecognizer`) first, then the registered service, then the built-in default. The default picker works
-even without `UseAIChat()`.
+batch's results arrive together. The ChatPlayground sample's calculator worksheet works this way: an
+`ActivityHandler` folds every `calculate` call of a response into one worksheet, with a row per calculation.
 
 ## Requirements
 
-- .NET 10 and .NET MAUI 10
-- A `Microsoft.Extensions.AI` `IChatClient`
-- [Markdig](https://www.nuget.org/packages/Markdig/), restored with the package
+- .NET 10 and .NET MAUI 10 (`net10.0`; the package runs on every platform MAUI supports).
+- `Microsoft.Maui.AI.Chat`, referenced by this package.
 
-## Related packages
+## Related
 
-| Package | Purpose |
-|---|---|
-| [`Microsoft.Maui.AI.Chat`](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat/) | The headless agent engine: turns, blocks, tools, approvals, and persistence |
-| [`Microsoft.Maui.AI.Attributes`](https://www.nuget.org/packages/Microsoft.Maui.AI.Attributes/) | AOT-friendly source-generated `AIFunction` tools |
+- [`Microsoft.Maui.AI.Chat`](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat/): the engine (sessions, turns,
+  blocks, tool approvals, UI actions, state).
+- [`samples/AIExtensions.Sample.ChatPlayground`](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground):
+  a MAUI app whose chat uses both packages with real models.

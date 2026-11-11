@@ -1,4 +1,4 @@
 using Xunit;
 
-// The chat views share Application.Current, dispatchers and synchronization contexts.
+// The tests share Application.Current and the current dispatcher provider.
 [assembly: CollectionBehavior(DisableTestParallelization = true)]

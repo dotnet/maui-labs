@@ -49,9 +49,7 @@ internal sealed class TestDispatcher : IDispatcher, IDispatcherProvider, IDispos
     public void Dispose() => ImmediateDispatcher.Install();
 }
 
-/// <summary>
-/// Runs dispatched work inline. Bindings need a dispatcher; with this one the message list flushes synchronously.
-/// </summary>
+/// <summary>Runs dispatched work inline. Bindings need a dispatcher; with this one a view updates synchronously.</summary>
 internal sealed class ImmediateDispatcher : IDispatcher, IDispatcherProvider
 {
     private static readonly ImmediateDispatcher Instance = new();
@@ -75,50 +73,4 @@ internal sealed class ImmediateDispatcher : IDispatcher, IDispatcherProvider
     public IDispatcherTimer CreateTimer() => throw new NotSupportedException();
 
     public IDispatcher? GetForCurrentThread() => this;
-}
-
-/// <summary>
-/// The dispatcher of the test's UI thread (the <see cref="UIThread.Run"/> thread), like a device's: other threads
-/// have no dispatcher, and work they dispatch is queued to the UI thread.
-/// </summary>
-internal sealed class UIThreadDispatcher : IDispatcher, IDispatcherProvider, IDisposable
-{
-    private readonly SynchronizationContext _context;
-
-    private UIThreadDispatcher()
-    {
-        _context = SynchronizationContext.Current
-            ?? throw new InvalidOperationException("Install the dispatcher inside UIThread.Run.");
-        ThreadId = Environment.CurrentManagedThreadId;
-    }
-
-    public int ThreadId { get; }
-
-    public bool IsDispatchRequired => Environment.CurrentManagedThreadId != ThreadId;
-
-    /// <summary>Installs the dispatcher. Create views afterwards: they keep the dispatcher they were created with.</summary>
-    public static UIThreadDispatcher Install()
-    {
-        var dispatcher = new UIThreadDispatcher();
-        DispatcherProvider.SetCurrent(dispatcher);
-        return dispatcher;
-    }
-
-    public bool Dispatch(Action action)
-    {
-        _context.Post(static state => ((Action)state!)(), action);
-        return true;
-    }
-
-    public bool DispatchDelayed(TimeSpan delay, Action action)
-    {
-        _ = Task.Delay(delay).ContinueWith(_ => Dispatch(action), TaskScheduler.Default);
-        return true;
-    }
-
-    public IDispatcherTimer CreateTimer() => throw new NotSupportedException();
-
-    public IDispatcher? GetForCurrentThread() => IsDispatchRequired ? null : this;
-
-    public void Dispose() => ImmediateDispatcher.Install();
 }

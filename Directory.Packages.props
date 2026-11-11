@@ -41,14 +41,10 @@
 
   <!-- AI (Microsoft.Extensions.AI + Azure OpenAI) -->
   <ItemGroup Label="AI">
-    <PackageVersion Include="CommunityToolkit.Maui.Core" Version="14.0.1" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="$(MicrosoftExtensionsAIVersion)" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="$(MicrosoftExtensionsAIOpenAIVersion)" />
     <PackageVersion Include="Azure.AI.OpenAI" Version="$(AzureAIOpenAIVersion)" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="$(CommunityToolkitMvvmVersion)" />
-    <!-- Markdown parsing for Microsoft.Maui.AI.Chat.Controls; also used by the EssentialsAI sample -->
-    <PackageVersion Include="Markdig" Version="1.5.1" />
-    <PackageVersion Include="Plugin.Maui.Audio" Version="4.0.0" />
   </ItemGroup>
 
   <!-- Roslyn (for source generators) -->
@@ -122,6 +118,7 @@
     <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="$(MicrosoftAgentsAIWorkflowsVersion)" />
     <PackageVersion Include="Microsoft.Agents.AI.Workflows.Generators" Version="$(MicrosoftAgentsAIWorkflowsGeneratorsVersion)" />
     <!-- Sample app: additional packages (pinned) -->
+    <PackageVersion Include="Markdig" Version="0.31.0" />
     <PackageVersion Include="OpenAI" Version="2.11.0" />
     <!-- Unit tests -->
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
