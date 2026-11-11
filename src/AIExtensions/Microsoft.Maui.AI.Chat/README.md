@@ -3,9 +3,12 @@
 > **Experimental:** APIs may change between preview releases.
 
 A headless conversation engine for `Microsoft.Extensions.AI`. It transforms streaming
-`ChatResponseUpdate` content into observable, strongly typed blocks and drives backend tools,
-approvals, automatic UI actions, retry, cancellation, typed state, and optional conversation
-persistence. It has no dependency on MAUI Controls or Blazor.
+`ChatResponseUpdate` content into observable, strongly typed blocks, shows the tool calls that
+`FunctionInvokingChatClient` runs, and drives approvals, UI actions, retry, stop, typed state, and
+optional conversation persistence. It has no dependency on MAUI Controls or Blazor.
+
+It is a port of the engine in ASP.NET Core's `Microsoft.AspNetCore.Components.AI`; the differences are
+listed in [UPSTREAM-CHANGES.md](https://github.com/dotnet/maui-labs/blob/main/src/AIExtensions/Microsoft.Maui.AI.Chat/UPSTREAM-CHANGES.md).
 
 ## Install
 
@@ -34,9 +37,28 @@ foreach (var block in turn.ResponseBlocks)
     Console.WriteLine(block);
 ```
 
+## Server tools and UI actions
+
+The engine does not invoke tools itself. Tools in `ChatOptions.Tools` run inside
+`FunctionInvokingChatClient`, so add it to the client pipeline:
+
+```csharp
+IChatClient client = providerClient.AsBuilder().UseFunctionInvocation().Build();
+```
+
+Sending throws `InvalidOperationException` when `ChatOptions.Tools` contains an invocable
+`AIFunction` but the client has no `FunctionInvokingChatClient`. Tools wrapped in
+`ApprovalRequiredAIFunction` show a `ToolApprovalBlock` and wait for `Approve()` or `Reject()`.
+
+Actions that must run in the app, such as reading the current location or asking the user to pick
+something, are registered with `options.RegisterUIAction(function, mode)`. `Automatic` actions are
+invoked by the engine on the caller's thread; `Manual` actions wait until the app calls
+`UIActionBlock.InvokeAsync()`. An action that throws sends an error result to the model instead of
+failing the turn.
+
 ## Features
 
-- Streaming text projected into `TextContentBlock : RichContentBlock`.
+- Streaming text projected into `TextContentBlock : RichContentBlock`, one block per message.
 - Minimal paragraph/text rich-content AST plus an extensible rich-node vocabulary.
 - Function call/result correlation, including batched out-of-order results. Each call id is shown
   once per turn, even when `FunctionInvokingChatClient` replays an approved call; informational
@@ -121,8 +143,10 @@ No storage provider ships. Implementations own serialization and storage. Custom
 discriminators must survive serialization; `RawRepresentation` is not durable unless explicitly
 persisted. The engine writes a thread only when a turn commits (`AppendUserMessage`, then
 `AppendUpdate` for each update, then `CompleteTurn`), so failed or discarded turns never reach it.
-Call `RestoreAsync` to load a thread's turns and message history. Restored approvals and UI actions
-are display history, not resumable pending work.
+A stopped turn is committed with its partial output, without tool calls that never got a result.
+Threads must round-trip `ChatResponseUpdate.AdditionalProperties`, which mark continuation rounds and
+stopped turns. Call `RestoreAsync` to load a thread's turns and message history. Restored approvals
+and UI actions are display history, not resumable pending work.
 
 To show and continue a conversation that no thread wrote, such as a recording or an import, pass its
 messages to `AgentContext.RestoreAsync(messages)` (or `UIAgent.RestoreAsync(messages)`) on a context
@@ -141,8 +165,8 @@ without a recorded result are shown but left out of the history.
 
 `StateMapperContext` maps inbound updates to application state. It runs for every configured
 update; call `MarkHandled` only for content that should not be rendered. `ChatOptions.RawRepresentationFactory`
-is retained when the engine adds AG-UI stateful-thread or UI-action metadata. It is
-transport-neutral request customization, not a provider API or dependency.
+is retained when the engine adds a stateful thread's conversation id or UI-action declarations to the
+request options. It is transport-neutral request customization, not a provider API or dependency.
 
 ## Threading contract
 

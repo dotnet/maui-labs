@@ -151,10 +151,13 @@ https://github.com/dotnet/aspnetcore/tree/25e1cee7f159b7c2c3c0868fe5613518a6add4
 The headless chat engine in src/AIExtensions/Microsoft.Maui.AI.Chat (content blocks,
 block-mapping pipeline, UIAgent, AgentContext, conversation turns and state) and the
 [ToolBlock] source generator in src/AIExtensions/Microsoft.Maui.AI.Chat.Generators are
-adapted from src/Components/AI/src and src/Components/AI/gen. The MAUI differences are
-documented in src/AIExtensions/Microsoft.Maui.AI.Chat/UPSTREAM-CHANGES.md. The AIChatView
-message list in src/AIExtensions/Microsoft.Maui.AI.Chat.Controls follows the structure of
-the upstream components in src/Components/AI/src/Components (MessageList,
+adapted from src/Components/AI/src and src/Components/AI/gen. Tests in
+tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests and
+tests/AIExtensions/Microsoft.Maui.AI.Chat.Generators.Tests port scenarios from
+src/Components/AI/test, src/Components/AI/gen/test and dotnet/aspnetcore#68672. The MAUI
+differences are documented in src/AIExtensions/Microsoft.Maui.AI.Chat/UPSTREAM-CHANGES.md.
+The AIChatView message list in src/AIExtensions/Microsoft.Maui.AI.Chat.Controls follows
+the structure of the upstream components in src/Components/AI/src/Components (MessageList,
 ConversationTurnRenderer, BlockRenderer).
 
 Copyright (c) .NET Foundation and Contributors.

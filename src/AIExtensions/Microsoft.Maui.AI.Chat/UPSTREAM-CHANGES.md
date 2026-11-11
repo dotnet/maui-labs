@@ -1,232 +1,200 @@
-# ASP.NET Components.AI convergence
+# Differences from ASP.NET Core Components.AI
 
-`Microsoft.Maui.AI.Chat` shares its block/pipeline ancestry with the experimental
-`Microsoft.AspNetCore.Components.AI` work in dotnet/aspnetcore.
+`Microsoft.Maui.AI.Chat` and `Microsoft.Maui.AI.Chat.Generators` are a port of the engine half of
+`Microsoft.AspNetCore.Components.AI` (dotnet/aspnetcore `src/Components/AI`). The port stays close to
+upstream so that fixes can be carried over cheaply. This file lists every intentional difference and
+why it exists. Anything not listed here is meant to behave like upstream.
 
-## 2026-10-22 merged-upstream audit
+## Reference
 
-No Components.AI runtime or public API feature changes landed after the September parity audit.
-The ASP.NET changes in that window were package-reference, central-package-management, and
-source-generator dependency-isolation changes.
-
-AgenticUI moved `AGUI.Client` and `AGUI.Server` from 0.0.6 to 1.0.0 and clarified the client-tool
-boundary:
-
-- executable automatic frontend tools belong in `ChatOptions.Tools`;
-- `RegisterUIAction` is for interactions that require application UI or a user decision;
-- renderers project tool/action state but do not trigger duplicate execution.
-
-The MAUI AG-UI sample now uses AG-UI 1.0.0, registers weather and plan rendering as executable
-client tools, and keeps predictive document review as a manual UI action. The stronger MAUI
-thread abort, rollback, reasoning, media, and composer behavior remains intentionally preserved.
-
-ASP.NET multimodal input PR #68672 and AgenticUI real-time voice PR #8 remain unmerged and are
-watch items rather than merged parity requirements.
-
-The old monolithic PR #67673 is closed. The current reference is the incremental
-05-10 stack whose top is:
-
-- PR: [dotnet/aspnetcore#68672](https://github.com/dotnet/aspnetcore/pull/68672)
-- Branch: `milosk/components-ai-10-production-app`
-- Compared SHA: `b67462b1ab1111bc24a24cbe46edf7352d42dc1f`
-- ASP.NET main: `e072299dd7ec1733e9fb20c60993c5a48208c625`
-- Compared on: 2026-08-22
-
-Client tools (#68325) and server tools (#68327) are now merged to ASP.NET
-`main`. Human approval through predictive state (#68329-#68335) remains stacked
-and has incorporated a full human-review pass. Multimodal input (#68672) is a
-new tenth layer and still needs rebase/review. The stack-top Components E2E run
-is green; the next-to-merge approval layer has unrelated QuickGrid flakes.
-
-## Portable engine status
-
-| Capability | MAUI status |
+| | |
 |---|---|
-| Block lifecycle/change notifications | Converged; `ContentBlock.Id` remains publicly settable for external custom blocks |
-| Two-phase block mapping/custom handlers | Converged |
-| Streaming plain text | Converged |
-| Provider-supplied rich AST | Converged with `RichTextContent` + `RichTextContentHandler` |
-| Rich-text node vocabulary | Converged; provider supplies a parsed tree and the library does not claim a Markdown parser |
-| Native rich rendering | MAUI equivalent covers headings, inline styles, code, quotes, lists, safe links/images, tables, and footnotes |
-| Function call/result pairing | Converged with order-independent `CallId` matching |
-| Media | Converged; MAUI maps provider data into neutral `MediaMessageContent` and adds native audio playback |
-| Multimodal input | Converged with native file/audio/speech services and one reusable `ChatInputContext` |
-| Reasoning/protected reasoning | MAUI preserved; current ASP.NET stack removed reasoning blocks/handlers |
-| Approval | Converged; decisions are single-use and rejection reasons propagate |
-| UI actions | Converged: automatic actions auto-run; manual actions are interactive UI entries |
-| Typed state/state mapper | Converged: mapping and explicit content filtering are independent |
-| Predictive state | Converged: provisional values can be accepted/rejected and otherwise roll back at turn completion, cancellation, error, clear, or dispose |
-| Shared state/stateful provider | Converged through thread replay plus `ConversationId` forwarding |
-| Conversation threads/restore | Converged plus explicit thread `Clear()` |
-| Retry/cancellation | Converged with separate graceful cancel, observable caller cancellation, transactional direct history, and pending-thread abort |
-| `[ToolBlock]` generator | Converged in `Microsoft.Maui.AI.Chat.Generators` |
-| Activity blocks | Converged as opt-in handlers; not added to defaults |
+| Compared against | dotnet/aspnetcore `main` at [`25e1cee7f`](https://github.com/dotnet/aspnetcore/tree/25e1cee7f159b7c2c3c0868fe5613518a6add482/src/Components/AI) (includes dotnet/aspnetcore#69445) |
+| Also reviewed (unmerged) | dotnet/aspnetcore#68672 (multimodal input), dotnet/aspnetcore#70314 (MCP Apps) |
+| Compared on | 2026-11-11 |
 
-## 2026-08-18 human-review hardening
+To update: diff `src/Components/AI/{src,gen,test}` between `25e1cee7f` and the new commit, port fixes
+to the matching files below, port new tests from `test/` and `gen/test/`, then update this file and
+the commit in `THIRD-PARTY-NOTICES.txt`.
 
-The current ASP.NET stack's first substantive human reviews exposed several
-correctness issues in the shared engine shape. ASP.NET still has them; MAUI
-audited and hardened the corresponding paths:
+## Where things live
 
-- informational `FunctionCallContent` no longer creates duplicate UI-action,
-  function, or generated tool blocks;
-- call and result content arriving in one update produces one completed block;
-- later UI-action calls cannot be consumed by an already-active handler state;
-- a second send is rejected while the context awaits human input;
-- state-only content is filtered from local chat history while raw thread
-  updates remain available for durable replay;
-- state mapping always applies its typed or predictive value; only explicitly handled content is
-  filtered from rendering/history;
-- a state mapper supplying the wrong state type fails explicitly instead of
-  silently hiding content;
-- restore is transactional for local history and typed state, starts from the
-  initial state, and rejects replayed predictive snapshots rather than reviving
-  stale predictions;
-- generated tool handlers cover informational calls and same-update results.
+| Upstream | Here |
+|---|---|
+| Namespace `Microsoft.AspNetCore.Components.AI` | `Microsoft.Maui.AI.Chat` |
+| `src/Engine/*` | `Engine/*` |
+| `src/Pipeline/*` (core) | `Pipeline/*` |
+| `src/Pipeline/UIAgentOptions.cs` | `Engine/UIAgentOptions.cs` |
+| `src/Pipeline/*Handler.cs` and `src/Blocks/*` | `Blocks/<Feature>/` (each block next to its handler) |
+| `src/Attributes/*` | `Attributes/*` (same API) |
+| `FunctionApprovalBlock`, `FunctionApprovalHandler` | `ToolApprovalBlock`, `ToolApprovalHandler` (named after M.E.AI `ToolApprovalRequestContent`) |
+| `TextBlockHandler` emitting `RichContentBlock` | `TextBlockHandler` emitting `TextContentBlock : RichContentBlock` |
+| `gen/` (`ToolBlockGenerator`, `ToolBlockParser`, `ToolBlockEmitter`, diagnostics `BAIC001`-`BAIC010`) | `Microsoft.Maui.AI.Chat.Generators` (`ToolBlockGenerator`, `Models`, diagnostics `MAUIAI101`-`MAUIAI111`) |
+| `src/Components/*`, `wwwroot/` (Blazor) | Not ported. Native controls live in a separate MAUI package. |
+| #68672 `MediaContentBlock` (internal, Blazor `RenderFragment`), `DataContentHandler`, `MediaContentFactory` | Public `MediaContentBlock` and internal `MediaContentHandler`; no rendering code |
 
-## 2026-08-22 multimodal convergence
+## Kept identical
 
-ASP.NET PR #68672 adds a browser `MessageInputContext`, attachment/send/stop
-components, recorded audio, continuous speech recognition, and a `DataContent`
-block handler. MAUI ports the portable state machine rather than the Blazor/JS
-surface:
+These match upstream so that upstream fixes apply directly:
 
-- `ChatInputContext` is the single bindable composer boundary for text,
-  attachments, status/error, composing state, send/stop, audio, and live speech;
-- audio and speech are injectable, with real Android/iOS/Mac Catalyst/Windows
-  defaults and deterministic sample services;
-- `ChatView` owns the native control-template parts and platform permission UX;
-- failed/cancelled `UIAgent` attempts restore local history and call
-  `IConversationThread.AbortTurn`, so persistent pending updates cannot leak;
-- audio transcription and speech passes use operation identity checks so stale
-  callbacks cannot overwrite newer input.
+- Block lifecycle and change notifications, `BlockMappingPipeline` (two-phase mapping, handler
+  entries, `BlockMappingResult<T>`), `BlockMappingPipelineLog`.
+- The rich-text node vocabulary and `RichTextContent` (copies its node list), and
+  `RichTextContentHandler` (last snapshot in an update wins, co-sent `TextContent` is claimed, a new
+  message id starts a new block).
+- `RichContentBlock` public surface: non-virtual `AppendText`, internal `Content` setter and
+  `ReplaceContent`.
+- Approvals arriving in separate updates each get their own block.
+- Informational calls (`FunctionCallContent.InformationalOnly`) are rendered and never invoked.
+- `BlockMappingContext.CreateInnerBlock` copies role, author, message id and creation time to the
+  inner block and leaves it inactive.
+- `StateMapperContext.UnhandledContents` is an `IEnumerable<AIContent>`; `UIAgentOptions<TState>.State`
+  lets a state mapper read and merge the current state; predictive state is accepted, rejected or
+  rolled back with the same rules.
+- `ActivityContentBlock` and `ActivityHandler<TBlock>` (opt-in, not registered by default).
+- Logging event ids 100 to 104, including 104 `ProcessingError` from #69445.
+- `AgentContext` is sealed and guards its arguments. `UIAgentOptions.ChatOptions` is read for every
+  request and passed through unchanged when the engine has nothing to add, so changing it between
+  sends takes effect.
+- `IConversationThread` has upstream's seven members (plus `Clear()`), and a failed request is never
+  written to it.
+- `[ToolBlock]`, `[ToolParameter]` and `[ToolResult]`; init-only setters are rejected; primitive
+  parameters and results are converted without reflection.
 
-## Current ASP.NET changes deliberately interpreted, not copied
+## Differences
 
-### Rich text
+### Package and threading
 
-ASP.NET now accepts a `RichTextContent` `AIContent` carrying both source text and
-an already-parsed node tree. It does not parse Markdown in the library. MAUI
-uses the same contract and renders the shared node vocabulary with native
-controls rather than HTML.
+- **Engine and UI are separate packages.** Upstream ships the engine together with its Blazor
+  components. Here the engine is plain `net10.0` with no UI dependency, so it can be tested on its own
+  and used by any MAUI controls package.
+- **No `ConfigureAwait(false)`.** Upstream uses it throughout `UIAgent`. Here blocks change and
+  notify on the caller's context, because MAUI bindings must be updated on the UI thread.
+- **No locks.** Upstream locks inside `FunctionApprovalBlock` and `UIActionBlock`. The engine here is
+  single-thread-affine and documents that callers serialize access. Approval and UI-action results
+  still complete with `TaskCreationOptions.RunContinuationsAsynchronously` (as upstream), so
+  approving never runs the next request inside the `Approve()` call.
 
-### Predictive state
+### Turns, history and the thread
 
-`StateMapperContext.SetPredictiveState` applies a typed state value
-provisionally. `AgentState<T>.AcceptPredictiveState()` commits it;
-`RejectPredictiveState()` restores the value that existed before the first
-pending prediction. An unaccepted prediction is rejected when the turn ends,
-is cancelled, fails, is cleared, or the context is disposed.
+- **One owner for a turn.** `UIAgent` keeps the committed history and a pending turn (request
+  messages, response messages, raw updates and tool calls). Nothing reaches the history or the thread
+  until the turn commits. Upstream adds the request to the history before streaming and does not
+  remove it when the request fails, so a retry sends it twice.
+- **One thread turn per conversation turn.** On commit the engine writes `AppendUserMessage`, then
+  every update of every request round, then `CompleteTurn`. Messages sent in continuation rounds
+  (approval responses, UI-action results) are stored as updates marked with
+  `Microsoft.Maui.AI.Chat.Persistence.IsContinuation.v1`. Upstream writes each continuation round as
+  a new user turn. Keeping one turn lets restore rebuild the same `ConversationTurn`s the user saw.
+- **Smaller thread contract.** `IConversationThread` has upstream's seven members plus `Clear()`.
+  Earlier previews also had `AbortTurn()` and `GetMessageHistory()`; they are gone because nothing
+  pending is ever written and history is rebuilt from `GetUpdates()`, as upstream does.
+- **Stopping keeps the partial answer.** `CancelAsync` (and the caller's token) stops the response and
+  completes once it has unwound, as in #68672. The turn then commits with its request and partial
+  output, minus tool calls and approvals that never got a result, and is marked
+  `ConversationTurn.IsStopped`; the thread stores it with
+  `Microsoft.Maui.AI.Chat.Persistence.IsStopped.v1`. A stopped turn does not advance a stateful
+  provider's conversation id. Upstream main only requests cancellation, and the stopped round is never
+  written.
+- **Errors discard the turn, retry resends all of it.** A failed turn commits nothing and keeps its
+  partial blocks on screen. `RetryAsync` clears the turn's response blocks
+  (`RegisterOnResponseBlocksCleared` tells a list to drop them) and sends the whole turn again. #68672
+  instead retries only the failed round and truncates that round's blocks; that would resend an
+  approval and run its tool again without asking.
+- **`ClearAsync`.** Not in upstream. It waits for the active response to stop, then clears the turns,
+  the history, the thread and the typed state, so a response that was still running cannot change the
+  cleared conversation.
+- **Turn ids** are the request message id. Upstream leaves `ConversationTurn.Id` empty.
+- **Per-turn metadata.** `ConversationTurn.ModelId` (the last model id reported by the provider) and
+  `ConversationTurn.Usage` (token usage summed over the turn's requests) are not in upstream. Both are
+  restored from the thread.
 
-This remains inbound server-to-client state mapping. Neither implementation
-ships a symmetric outbound state channel.
+### Restore
 
-### UI surface
+- **Grouping.** Each user message starts a turn, except a user message that only answers approvals or
+  tool calls, which continues the previous turn. Upstream main starts a turn at every user-role block,
+  so a message with text and an image becomes two turns; #68672 groups by update.
+- **Transactional.** Restore rebuilds history and typed state from the initial state and rolls both
+  back if it fails. Predictive state found in the thread is rejected rather than revived. System
+  messages are kept in the history but not shown.
+- **Restore from messages.** `AgentContext.RestoreAsync(IEnumerable<ChatMessage>)` and
+  `UIAgent.RestoreAsync(IEnumerable<ChatMessage>)` show a recorded or imported conversation and make it
+  the history for the next send. Recorded tool calls show their recorded results and are never
+  invoked; calls without a result and their approvals are shown but left out of the history. Upstream
+  can only restore from a thread.
 
-Earlier ASP.NET layers removed the old attachment input; #68672 replaces it
-with production-oriented browser components and JavaScript media services.
-Those renderers and browser APIs are not copied directly. MAUI keeps its native
-shell, virtualization, XAML templates, file picker, recorder, and speech APIs.
+### Tools, UI actions and approvals
 
-## Deliberate MAUI differences
+- **Server tools need `FunctionInvokingChatClient`,** as upstream. Upstream silently never runs a tool
+  when it is missing; here `SendMessageAsync` throws `InvalidOperationException` when `ChatOptions.Tools`
+  contains an invocable `AIFunction` and the client pipeline has no `FunctionInvokingChatClient`.
+- **Calls left unanswered in a continuation round** get an error result. When one call of a batch
+  targets a UI action, `FunctionInvokingChatClient` hands the whole batch back, and providers reject a
+  continuation that leaves a call without a result.
+- **One block per call id.** Each turn keeps a registry of its function calls. When
+  `FunctionInvokingChatClient` sends an approved call again, a rejected call comes back as
+  informational, or a replayed conversation repeats a call, the existing block (for an approval, its
+  inner block) is updated and receives the result. Upstream shows such repeats as extra blocks. A call
+  id reused after its result is a new call.
+- **UI actions run in the engine.** An `Automatic` UI action is invoked by the engine on the caller's
+  thread; a `Manual` one waits for the app to call `InvokeAsync`
+  (`ConversationStatus.AwaitingInput`). Upstream always leaves invocation to the renderer. A UI action
+  that throws returns an error result to the model instead of failing the turn, and
+  `UIAgentOptions.Services` is passed to it as `AIFunctionArguments.Services`.
+- **`InteractiveFunctionBlock`.** `ToolApprovalBlock` and `UIActionBlock` both wrap an inner
+  `FunctionInvocationContentBlock` that carries the call and result. Upstream's
+  `FunctionApprovalBlock.InnerBlock` is a `ContentBlock` and its `UIActionBlock` has no inner block, so
+  an approval can wrap a UI action there. That nesting is not ported: `FunctionInvokingChatClient` only
+  asks approval for `ApprovalRequiredAIFunction`s, and UI actions are sent as declarations.
+- **Same-update call and result.** Handlers here complete a block whose result arrives in the same
+  update (`IsAlreadyComplete`); upstream re-invokes the handler after emitting a function block. The
+  outcome is the same.
 
-### Package layering
+### Blocks
 
-- `Microsoft.Maui.AI.Chat` - plain `net10.0`, no MAUI/Blazor dependency.
-- `Microsoft.Maui.AI.Chat.Controls` - native AI controls/templates.
-- `Microsoft.Maui.Chat.Controls` - provider-neutral human/group chat surface.
+- **`ContentBlock.Id` has a public setter** so blocks defined outside the engine can be given ids, and
+  **`ContentBlock.CreatedAt`** records when a block was created. Upstream's `Id` setter is internal.
+- **`TextContentBlock`** marks plain streamed text so a renderer can tell it from a provider's rich
+  text. A new block starts when the update's message id changes; upstream appends consecutive
+  messages' text to one block. Paragraphs are built only when `Content` is read, and finished
+  paragraphs are kept, so a long reply is not re-split on every token as upstream does.
+- **Reasoning.** `ReasoningContentBlock` and its handler show reasoning and protected reasoning (with
+  cached text). Upstream has no reasoning blocks.
+- **Media.** One `MediaContentBlock` per item, each with its own id, as in #68672, but the block is
+  public and holds the item (`AIContent Content`: a `DataContent` or `UriContent`) instead of a Blazor
+  render fragment. `UriContent` is rendered too, and each output of an image-generation tool result
+  gets its own block; partial images replace the content of their block. The handlers for reasoning and
+  media run before the text handlers.
+- **`FunctionInvocationContentBlock.Call`** sets the block id from the call id only when the id is
+  empty, and falls back to a new id when the call id is empty.
 
-ASP.NET currently ships its engine and Blazor components together.
+### State
 
-### Native rendering
+- `AgentState<T>` and `StateMapperContext` are sealed. `AgentState<T>` can also checkpoint and reset
+  itself, which restore and `ClearAsync` use.
 
-MAUI uses:
+### Logging
 
-- virtualized `CollectionView` message rendering;
-- zero-configuration `CopilotChatView`;
-- a provider-neutral `ChatView`;
-- priority-based XAML content templates;
-- replaceable control templates;
-- dynamic resource theming;
-- native file picking, audio capture/playback, and speech recognition;
-- coalesced in-place streaming refresh;
-- explicit session/conversation binding.
+- Event ids 105 (a UI action failed) and 106 (a tool call was not executed) are added.
 
-### Tool generation
+### Source generator
 
-- `Microsoft.Maui.AI.Attributes` generates AOT-friendly `AIFunction`s with
-  DI/keyed-DI binding.
-- `Microsoft.Maui.AI.Chat.Generators` generates simple one-call/one-result block
-  handlers.
+- Reports every declaration error at once (upstream stops at the first); all diagnostics are errors.
+- `MAUIAI110` requires a public parameterless constructor (upstream's generated code would not
+  compile). A property with a private or init-only setter is reported by `MAUIAI107` and no handler is
+  generated; upstream warns and skips the property.
+- Generated handlers are named `{Block}GeneratedHandler` to avoid clashing with user types, and a
+  single `[ToolResult(Name = "...")]` property reads that property of the JSON result.
+- Primitive values sent as strings, such as `"5"`, are parsed with the invariant culture. A value that
+  cannot be converted leaves its property unchanged; upstream fails the turn. Complex types use
+  reflection-based `System.Text.Json`, as upstream.
 
-Many-to-one aggregation and custom event projection remain handwritten
-handlers.
+## Not ported
 
-### Threading
-
-The engine and controls are deliberately single-thread-affine and not
-thread-safe. Callers serialize access and enter the owning application thread.
-No locks, semaphores, operation gates, or arbitrary concurrent-caller contract
-is added.
-
-## MAUI improvements intentionally preserved
-
-- Public `ContentBlock.Id` keeps arbitrary external custom blocks viable.
-- Function results match by `CallId`, including reverse-order batches.
-- `ImageGenerationToolResultContent.Outputs` are unwrapped into media blocks.
-- Media and reasoning remain supported despite their removal upstream.
-- `AgentContext.Clear()` resets local and persistent history coherently.
-- Automatic UI actions auto-run and do not stall in `AwaitingInput`; manual UI actions deliberately
-  await UI input and can edit arguments before invoking.
-- `ChatOptions.RawRepresentationFactory` survives stateful/UI-action request option cloning.
-- Mixed approval and tool results continue as separate user/tool messages.
-- Failed or canceled sends cannot grow local or persistent pending history.
-- Informational calls and same-update call/results are handled without
-  duplicate execution.
-- Restore rolls back typed state/history on failure and cannot revive a rejected
-  predictive snapshot.
-- Default errors are generic; diagnostics remain on `AgentContext.Error`.
-- Native virtualization and streaming coalescing are retained.
-- Response-block removals are notified precisely rather than rediscovered with
-  an O(n) projection diff.
-- The full XAML/template/resource customization model remains MAUI-native.
-
-## Upstream limitations not copied
-
-- External non-function custom blocks still cannot assign ASP.NET's required
-  internal-set `ContentBlock.Id`.
-- Client/UI actions still require renderer code to call `InvokeAsync`; the
-  engine otherwise waits indefinitely.
-- The activity handler remains unregistered and `Pending` lifecycle remains
-  unused.
-- Restore still rebuilds display history rather than resumable interactions.
-- Server-tool handlers still render informational calls; MAUI filters them.
-- The ASP.NET direct-history fix does not add an explicit persistent-thread
-  abort contract; MAUI requires one.
-- `RawRepresentation` is not a durable serialized discriminator.
-- No production conversation-thread provider ships.
-- Pipeline handler cancellation remains reserved rather than propagated.
-- Blazor `MessageList` is not virtualized.
-- The rich-text library accepts provider ASTs but does not parse Markdown.
-- Reasoning handling remains absent from the current ASP.NET stack.
-
-## Persistence limitations
-
-`IConversationThread` stores committed raw `ChatResponseUpdate`s, not rendered
-block snapshots. Restore replays updates through current handlers and the state
-mapper.
-
-- Applications own persistence and serialization.
-- Custom handlers must remain registered.
-- Custom discriminators must survive serialization.
-- Restored pending approvals/UI actions are display history, not resumable work.
-- The thread must round-trip roles, IDs, contents, additional properties, and
-  provider conversation IDs.
-- `AbortTurn` must discard pending updates after failure/cancellation while
-  preserving committed turns.
-
-## Updating the reference
-
-Fetch the latest #68672 head plus every parent in the effective stack. Re-check
-blocks, engine, pipeline, generator, tests, dojo scenarios, review threads, and
-completed CI runs rather than reviewing only the newest layer's diff.
+- Blazor components, CSS, the JavaScript input stack, `MediaContentFactory` and the
+  `RenderFragment`-based media block (#68672), and the MCP Apps host (#70314).
+- `ConfigureAwait(false)` and locks (see above).
+- Per-round retry and `ConversationTurn.TruncateResponseBlocks` (#68672).
+- Writing continuation rounds to the thread as separate user turns.
+- The `FunctionApproval*` names, to avoid renaming public types.
+- `UIAgent.Dispose(bool)` (#68672).
