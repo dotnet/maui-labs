@@ -382,6 +382,23 @@ public class BuiltInViewTests
     });
 
     [Fact]
+    public void ActionButtons_NameTheirTool()
+    {
+        var approval = Render<ToolApprovalView>(Blocks.Approval("delete_file"));
+        var approve = approval.ByAutomationId<Button>("ApproveToolButton");
+        var reject = approval.ByAutomationId<Button>("RejectToolButton");
+        Assert.Equal("Approve delete_file", SemanticProperties.GetDescription(approve));
+        Assert.Equal("Reject delete_file", SemanticProperties.GetDescription(reject));
+
+        Rebind(approval, Blocks.Approval("move_file"));
+        Assert.Equal("Approve move_file", SemanticProperties.GetDescription(approve));
+        Assert.Equal("Reject move_file", SemanticProperties.GetDescription(reject));
+
+        var action = Render<UIActionView>(Blocks.UIAction("open_map", UIActionInvocationMode.Manual));
+        Assert.Equal("Run open_map", SemanticProperties.GetDescription(action.RunButton));
+    }
+
+    [Fact]
     public void UIAction_AutomaticActionShowsItsProgress()
     {
         var block = Blocks.UIAction("refresh", UIActionInvocationMode.Automatic);
