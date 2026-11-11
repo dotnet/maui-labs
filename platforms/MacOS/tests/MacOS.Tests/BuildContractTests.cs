@@ -29,6 +29,10 @@ public sealed class BuildContractTests
 	{
 		var targets = XDocument.Load(Path.Combine(GetBuildContractsDirectory(),
 			"Microsoft.Maui.Platforms.MacOS.targets"));
+		var collect = targets.Descendants().Single(element =>
+			element.Attribute("Name")?.Value == "_MacOSCollectProcessedMauiResources");
+		Assert.Contains("ResizetizeImages", collect.Attribute("DependsOnTargets")?.Value);
+		Assert.Null(Element(targets, "ResizetizerAfterImageProcessingTargets"));
 		var prepare = targets.Descendants().Single(element =>
 			element.Attribute("Name")?.Value == "_MacOSPrepareRawMauiAssets");
 		Assert.Equal("ProcessMauiAssets", prepare.Attribute("BeforeTargets")?.Value);
@@ -42,6 +46,22 @@ public sealed class BuildContractTests
 		Assert.Equal("%(MauiProcessedAsset.LogicalName)", names[0].Value);
 		Assert.All(names.Skip(1), name =>
 			Assert.Contains("'%(MauiProcessedAsset.LogicalName)' == ''", name.Attribute("Condition")?.Value));
+	}
+
+	[Fact]
+	public void BundleResources_RegisterNativeOutputsBeforeIncrementalClean()
+	{
+		var targets = XDocument.Load(Path.Combine(GetBuildContractsDirectory(),
+			"Microsoft.Maui.Platforms.MacOS.targets"));
+		Assert.Contains("_MacOSTrackBundleResourceOutputs",
+			Element(targets, "IncrementalCleanDependsOn")?.Value);
+		var track = targets.Descendants().Single(element =>
+			element.Attribute("Name")?.Value == "_MacOSTrackBundleResourceOutputs");
+		Assert.Equal("_ComputeBundleResourceOutputPaths", track.Attribute("DependsOnTargets")?.Value);
+		Assert.Contains("'$(_CanOutputAppBundle)' == 'true'", track.Attribute("Condition")?.Value);
+		Assert.Contains("'$(EnableMacOSMauiResourceMapping)' != 'false'", track.Attribute("Condition")?.Value);
+		Assert.Equal("@(_BundleResourceWithOutputPath -> '%(OutputPath)')",
+			track.Elements().Single().Elements().Single().Attribute("Include")?.Value);
 	}
 
 	static XElement? Element(XDocument document, string localName) =>

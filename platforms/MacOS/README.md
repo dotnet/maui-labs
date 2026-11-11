@@ -300,7 +300,10 @@ unrelated `BundleResource` items are unchanged.
 For apps that intentionally manage all these paths using custom `BundleResource` items,
 set `EnableMacOSMauiResourceMapping` to `false` to retain that mapping instead.
 
-Images are processed by Resizetizer, including resizing and SVG conversion. The
+Images are processed by Resizetizer, including resizing and SVG conversion, before
+Apple collects bundle resources. Native resource outputs, including unpacked library
+resources, participate in MSBuild's incremental clean so renamed or removed assets
+do not survive in the next app bundle. The
 MAUI 10 compatibility target retains the prior raw-item mapping and is isolated
 from the .NET 11 path. Image names and font names must be unique within their respective bundle directories.
 Use `LogicalName` to preserve nested raw-asset paths.

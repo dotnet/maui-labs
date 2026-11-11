@@ -2,8 +2,8 @@
 
   <PropertyGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))">
     <ResizetizerPlatformType Condition="'$(ResizetizerPlatformType)' == ''">macos-appkit</ResizetizerPlatformType>
-    <ResizetizerAfterImageProcessingTargets>$(ResizetizerAfterImageProcessingTargets);_MacOSCollectProcessedMauiResources</ResizetizerAfterImageProcessingTargets>
     <MauiActiveBackend Condition="'$(MauiActiveBackend)' == ''">macos</MauiActiveBackend>
+    <IncrementalCleanDependsOn>$(IncrementalCleanDependsOn);_MacOSTrackBundleResourceOutputs</IncrementalCleanDependsOn>
   </PropertyGroup>
 
   <ItemGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))">
@@ -68,7 +68,7 @@
   <Target Name="_MacOSCollectProcessedMauiResources"
           AfterTargets="ResizetizeImages"
           BeforeTargets="_CollectBundleResources"
-          DependsOnTargets="ProcessMauiFonts;ProcessMauiAssets"
+          DependsOnTargets="ProcessMauiFonts;ProcessMauiAssets;ResizetizeImages"
           Condition="'$(TargetPlatformIdentifier)' == 'macos'
                      and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
                      and '$(EnableMacOSMauiResourceMapping)' != 'false'">
@@ -100,6 +100,19 @@
                       MatchOnMetadata="FullPath"
                       MatchOnMetadataOptions="PathLike" />
       <BundleResource Include="@(_MacOSProcessedMauiBundleResource)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Apple copies bundle resources after CoreBuild, so register their outputs
+       before IncrementalClean compares this build with the previous file list. -->
+  <Target Name="_MacOSTrackBundleResourceOutputs"
+          DependsOnTargets="_ComputeBundleResourceOutputPaths"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(_CanOutputAppBundle)' == 'true'
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <FileWrites Include="@(_BundleResourceWithOutputPath -> '%(OutputPath)')" />
     </ItemGroup>
   </Target>
 
