@@ -25,7 +25,7 @@ internal sealed class PlaygroundChatHarness : IDisposable
 
     /// <param name="live">The live client, or <see langword="null"/> for only Replay.</param>
     /// <param name="descriptor">The live client's descriptor; defaults to <see cref="LiveDescriptor"/>.</param>
-    /// <param name="record">Whether the live client records into <see cref="Recording"/>, as in the app.</param>
+    /// <param name="record">Whether the router records live exchanges into <see cref="Recording"/>, as in the app.</param>
     public PlaygroundChatHarness(IChatClient? live = null, ChatClientDescriptor? descriptor = null, bool record = false)
     {
         Recording = new ChatSessionService(
@@ -33,15 +33,13 @@ internal sealed class PlaygroundChatHarness : IDisposable
         ReplayRequests = new CapturingChatClient(new ReplayChatClient(Recording));
         Replay = new DescribedChatClient(ReplayRequests, ReplayDescriptor);
         if (live is not null)
-        {
-            // The app records outside everything else, so the recording holds what the engine sent and received.
-            var described = new DescribedChatClient(live, descriptor ?? LiveDescriptor);
-            Live = record ? new RecordingChatClient(described, Recording) : described;
-        }
+            Live = new DescribedChatClient(live, descriptor ?? LiveDescriptor);
 
         Settings = new SettingsPaneViewModel(Live is null ? [Replay] : [Live, Replay]);
         Tools = new PlaygroundTools(() => new ConnectionStatusResult("Internet", ["WiFi"]));
-        Router = new PlaygroundChatClient(() => Settings.SelectedClient, Replay, Settings, Tools);
+
+        // The app's router records around the selected client, so the recording holds what the engine sent and received.
+        Router = new PlaygroundChatClient(() => Settings.SelectedClient, Replay, Settings, Tools, record ? Recording : null);
         Session = new AgentContext(new UIAgent(Router, new ChatOptions(), NullLoggerFactory.Instance));
         Driver = new ChatReplayDriver(Session, Router, Recording);
     }

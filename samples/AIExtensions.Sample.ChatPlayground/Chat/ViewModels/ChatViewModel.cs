@@ -34,7 +34,7 @@ public partial class ChatViewModel : ObservableObject
         Diagnostics = diagnostics;
         Readiness = readiness;
         _replayClient = settings.Clients.Single(option => option.Descriptor.IsReplay).Client;
-        _router = new PlaygroundChatClient(() => _selectedClient, _replayClient, settings, tools);
+        _router = new PlaygroundChatClient(() => _selectedClient, _replayClient, settings, tools, recording);
 
         // One session for the whole tab. The router reads the settings for every request, so the session's own
         // options stay empty; New chat clears the session rather than replacing it.

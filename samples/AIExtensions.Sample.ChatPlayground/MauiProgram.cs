@@ -30,6 +30,7 @@ public static class MauiProgram
         builder.Logging.AddFilter<ChatDiagnostics>(ChatDiagnostics.ProviderLogCategory, LogLevel.Debug);
         builder.Logging.AddFilter<ChatDiagnostics>(ChatDiagnostics.SourceName, LogLevel.Debug);
         builder.Services.AddChatFeature(aiSettings);
+        builder.Services.AddScenarioFeature();
         builder.Services.AddEmbeddingFeature(aiSettings);
         builder.Services.AddImageFeature(aiSettings);
         builder.Services.AddTransient<MainWindow>();

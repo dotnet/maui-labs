@@ -56,7 +56,6 @@ internal static class ChatServiceCollectionExtensions
     private static IChatClient CreateWindowsChatClient(IServiceProvider serviceProvider) =>
         new WindowsAIChatClient()
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "windows-ai-chat",
                 "Windows AI",
@@ -74,7 +73,6 @@ internal static class ChatServiceCollectionExtensions
     private static IChatClient CreateAppleChatClient(IServiceProvider serviceProvider) =>
         new AppleIntelligenceChatClient(serviceProvider.GetRequiredService<ILoggerFactory>())
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "apple-intelligence-chat",
                 "Apple Intelligence",
@@ -93,7 +91,6 @@ internal static class ChatServiceCollectionExtensions
     private static IChatClient CreateGeminiChatClient(IServiceProvider serviceProvider) =>
         new GeminiNanoChatClient()
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "gemini-nano-chat",
                 "Gemini Nano",
@@ -151,11 +148,10 @@ internal static class ChatServiceCollectionExtensions
             ? null
             : serviceProvider.GetRequiredService<IImageGenerator>();
 
-        // Recording wraps the tool and image middleware so the saved response is the one shown in chat.
+        // The chat's router records around this whole pipeline, so the saved response is the one shown in chat.
         var builder = openAIClient.GetResponsesClient()
             .AsIChatClient(deploymentName)
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "azure-openai-chat",
                 "Azure OpenAI",
@@ -181,9 +177,6 @@ internal static class ChatServiceCollectionExtensions
                 "Play the saved chat without contacting a model. Switch to a live client after playback to continue.",
                 IsReplay: true))
             .Build();
-
-    private static ChatClientBuilder UseRecording(this ChatClientBuilder builder, IChatRecordingSession recording) =>
-        builder.Use(inner => new RecordingChatClient(inner, recording));
 
     private static ChatClientBuilder UseDescriptor(this ChatClientBuilder builder, ChatClientDescriptor descriptor) =>
         builder.Use(inner => new DescribedChatClient(inner, descriptor));

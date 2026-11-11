@@ -9,11 +9,11 @@ namespace AIExtensions.Sample.ChatPlayground;
 /// again, and the replay client answers with the recorded response, so a replay renders exactly like the original.
 /// </summary>
 /// <remarks>
-/// Call it on the thread that owns the session. Approvals that a replayed turn asks for are answered from the recorded
-/// request that continued the turn. Interactions that are not a user turn are restored as history instead of being
-/// sent. When a recorded request continues a different conversation than the one shown, for example because the
-/// recording starts part-way through a conversation or a turn was stopped before it was recorded, that conversation is
-/// restored before its message is sent.
+/// Call it on the thread that owns the session. Approvals and manual UI actions that a replayed turn waits for are
+/// answered from the recorded request that continued the turn. Interactions that are not a user turn are restored as
+/// history instead of being sent. When a recorded request continues a different conversation than the one shown, for
+/// example because the recording starts part-way through a conversation or a turn was stopped before it was recorded,
+/// that conversation is restored before its message is sent.
 /// </remarks>
 public sealed class ChatReplayDriver
 {
@@ -91,7 +91,7 @@ public sealed class ChatReplayDriver
     private async Task ReplayTurnAsync(
         RecordedInteraction interaction, ChatReplayResult result, CancellationToken cancellationToken)
     {
-        var request = ChatRecordingSerializer.ReadRequestMessages(interaction.Request);
+        var request = ReadConversation(interaction);
         InteractionStarting?.Invoke(this, interaction);
         if (request.Count == 0 || !IsUserTurn(request[^1]))
         {
@@ -109,16 +109,16 @@ public sealed class ChatReplayDriver
             result.RestoredHistory++;
         }
 
-        var approvals = new List<ToolApprovalBlock>();
+        var waiting = new List<InteractiveFunctionBlock>();
         var stoppedByReplay = false;
         using var blockAdded = _session.RegisterOnBlockAdded((_, block) =>
         {
-            if (block is ToolApprovalBlock approval)
-                approvals.Add(approval);
+            if (block is ToolApprovalBlock or UIActionBlock { Mode: UIActionInvocationMode.Manual })
+                waiting.Add((InteractiveFunctionBlock)block);
         });
         using var statusChanged = _session.RegisterOnStatusChanged(status =>
         {
-            if (status != ConversationStatus.AwaitingInput || AnswerFromRecording(approvals, result))
+            if (status != ConversationStatus.AwaitingInput || AnswerFromRecording(waiting, result))
                 return;
 
             // Waiting for input the recording cannot supply would never end, so the turn is stopped, as it was when it
@@ -147,39 +147,63 @@ public sealed class ChatReplayDriver
     }
 
     /// <summary>
-    /// Answers the turn's open approvals from the recorded request that continued the turn: the next one, when it ends
-    /// with approval answers rather than with a new user message.
+    /// Answers what the turn waits for from the recorded request that continued the turn: the next one, when it ends
+    /// with approval answers or action results rather than with a new user message. Approvals are decided as recorded,
+    /// and manual UI actions run with the arguments their recorded call had when it ran.
     /// </summary>
-    /// <returns>Whether every open approval was answered.</returns>
-    private bool AnswerFromRecording(List<ToolApprovalBlock> approvals, ChatReplayResult result)
+    /// <returns>Whether everything the turn waits for was answered.</returns>
+    private bool AnswerFromRecording(List<InteractiveFunctionBlock> waiting, ChatReplayResult result)
     {
         // A turn that was stopped after its approvals were answered was never recorded past them, but the requests
         // after it still carry those answers in their history. Only answers that end a request continued this turn.
-        var answers = _recording.HasReplayRemaining
-            ? ReadContinuationAnswers(ChatRecordingSerializer.ReadRequestMessages(_recording.PeekNext().Request))
-            : [];
+        var request = _recording.HasReplayRemaining ? ReadConversation(_recording.PeekNext()) : [];
+        var continuation = ReadContinuation(request);
 
         var answered = 0;
         var unanswered = false;
-        foreach (var approval in approvals)
+        foreach (var block in waiting)
         {
-            if (approval.Status != ApprovalStatus.Pending)
-                continue;
-
-            var answer = answers.FirstOrDefault(response =>
-                string.Equals(response.RequestId, approval.ApprovalRequest.RequestId, StringComparison.Ordinal));
-            if (answer is null)
+            switch (block)
             {
-                unanswered = true;
-                result.UnansweredApprovals.Add(approval.ToolName ?? "a tool");
-                continue;
-            }
+                case ToolApprovalBlock { Status: ApprovalStatus.Pending } approval:
+                    var answer = continuation.OfType<ToolApprovalResponseContent>().FirstOrDefault(response =>
+                        string.Equals(response.RequestId, approval.ApprovalRequest.RequestId, StringComparison.Ordinal));
+                    if (answer is null)
+                    {
+                        unanswered = true;
+                        result.UnansweredApprovals.Add(approval.ToolName ?? "a tool");
+                        continue;
+                    }
 
-            answered++;
-            if (answer.Approved)
-                approval.Approve();
-            else
-                approval.Reject(answer.Reason);
+                    answered++;
+                    if (answer.Approved)
+                        approval.Approve();
+                    else
+                        approval.Reject(answer.Reason);
+                    break;
+
+                case UIActionBlock { IsAwaitingInput: true, Call: { } call } action:
+                    if (!continuation.OfType<FunctionResultContent>().Any(ran =>
+                        string.Equals(ran.CallId, call.CallId, StringComparison.Ordinal)))
+                    {
+                        unanswered = true;
+                        result.UnansweredApprovals.Add(action.ToolName ?? "an action");
+                        continue;
+                    }
+
+                    // What the user supplied, such as a decision that a custom card added to the call's arguments, is
+                    // in the recorded call that the continuation sent with the action's result.
+                    if (FindCall(request, call.CallId)?.Arguments is { } recordedArguments)
+                    {
+                        call.Arguments ??= new Dictionary<string, object?>();
+                        foreach (var (name, value) in recordedArguments)
+                            call.Arguments[name] = value;
+                    }
+
+                    answered++;
+                    _ = action.InvokeAsync();
+                    break;
+            }
         }
 
         if (!unanswered && answered == 0)
@@ -191,13 +215,19 @@ public sealed class ChatReplayDriver
         return !unanswered;
     }
 
-    private static List<ToolApprovalResponseContent> ReadContinuationAnswers(IReadOnlyList<ChatMessage> request)
+    /// <summary>Reads the contents of the approval answers and tool results that end a recorded request.</summary>
+    private static List<AIContent> ReadContinuation(IReadOnlyList<ChatMessage> request)
     {
-        var answers = new List<ToolApprovalResponseContent>();
+        var contents = new List<AIContent>();
         for (var index = request.Count - 1; index >= 0 && PlaygroundChatClient.IsContinuation(request[index]); index--)
-            answers.AddRange(request[index].Contents.OfType<ToolApprovalResponseContent>());
-        return answers;
+            contents.AddRange(request[index].Contents);
+        return contents;
     }
+
+    private static FunctionCallContent? FindCall(IReadOnlyList<ChatMessage> request, string callId) =>
+        request.SelectMany(static message => message.Contents)
+            .OfType<FunctionCallContent>()
+            .LastOrDefault(call => string.Equals(call.CallId, callId, StringComparison.Ordinal));
 
     /// <summary>
     /// Gets whether the conversation shown is the one a recorded request continues: the previous interaction's request
@@ -218,7 +248,7 @@ public sealed class ChatReplayDriver
         }
         else
         {
-            shown = [.. ChatRecordingSerializer.ReadRequestMessages(previous.Request), .. ReadResponse(previous).Messages];
+            shown = [.. ReadConversation(previous), .. ReadResponse(previous).Messages];
         }
 
         return DescribeConversation(shown).SequenceEqual(DescribeConversation(history), StringComparer.Ordinal);
@@ -235,6 +265,14 @@ public sealed class ChatReplayDriver
         // The turns the replay stopped are no longer shown.
         result.UnansweredApprovals.Clear();
     }
+
+    /// <summary>
+    /// Reads the conversation a recorded request carried, without the messages added to that request only, such as a
+    /// scenario's state: they were never part of the conversation, and the next request carries its own.
+    /// </summary>
+    private static List<ChatMessage> ReadConversation(RecordedInteraction interaction) =>
+        [.. ChatRecordingSerializer.ReadRequestMessages(interaction.Request)
+            .Where(static message => !PlaygroundChatClient.IsRequestContext(message))];
 
     private static ChatResponse ReadResponse(RecordedInteraction interaction) =>
         interaction.IsStreaming
@@ -363,6 +401,9 @@ public sealed class ChatReplayResult
     /// </summary>
     public int RestoredHistory { get; internal set; }
 
-    /// <summary>Gets the tools whose approval the recording never answered; their turns are shown stopped.</summary>
+    /// <summary>
+    /// Gets the tools whose approval, or the manual UI actions whose run, the recording never answered; their turns are
+    /// shown stopped.
+    /// </summary>
     public List<string> UnansweredApprovals { get; } = [];
 }

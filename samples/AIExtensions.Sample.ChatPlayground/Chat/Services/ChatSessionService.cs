@@ -13,13 +13,19 @@ public sealed class ChatSessionService : IChatRecordingSession
     private ChatRecording _recording = new();
     private int _cursor;
 
-    public ChatSessionService(ILogger<ChatSessionService> logger, string dataDirectory, string exportDirectory)
+    /// <param name="logger">Logs a recording that could not be restored.</param>
+    /// <param name="dataDirectory">The directory that holds the autosaved recording.</param>
+    /// <param name="exportDirectory">The directory that exports are written to.</param>
+    /// <param name="name">Names the recording's folder and export file, so each chat keeps its own recording.</param>
+    public ChatSessionService(
+        ILogger<ChatSessionService> logger, string dataDirectory, string exportDirectory, string name = "chat-playground")
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(exportDirectory);
-        AutosavePath = Path.Combine(dataDirectory, "chat-playground", "current.json");
-        ExportPath = Path.Combine(exportDirectory, "chat-playground.json");
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        AutosavePath = Path.Combine(dataDirectory, name, "current.json");
+        ExportPath = Path.Combine(exportDirectory, name + ".json");
         try
         {
             if (File.Exists(AutosavePath))
