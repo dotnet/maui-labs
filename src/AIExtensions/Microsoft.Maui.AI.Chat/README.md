@@ -56,7 +56,10 @@ invoked by the engine on the caller's thread; `Manual` actions wait until the ap
 `UIActionBlock.InvokeAsync()`. An action that throws sends an error result to the model instead of
 failing the turn. Canceling the token passed to `InvokeAsync` cancels only that invocation; the
 action can be invoked again. Once a turn stops or fails, its approvals and UI actions accept no
-decision or invocation, and an action that was still running shows no result when it returns. `IsAwaitingInput` on both blocks says whether they can still be answered: true for
+decision or invocation, and an action that was still running shows no result when it returns. Once a
+turn ends, whether it completed, stopped or failed, each of its calls has a result or is marked
+`IsAbandoned`, and a call's `Approval` is the approval that wraps it (see
+[Binding from XAML](#binding-from-xaml)). `IsAwaitingInput` on both blocks says whether they can still be answered: true for
 a pending approval and for a manual action that has not run, false once answered, while the action runs,
 and after a stop, failure or restore. The block raises `PropertyChanged` for it, so templates can bind
 their buttons to it. A UI action requested together with a tool that needs approval still runs as a UI
@@ -125,6 +128,13 @@ third-party list.
   `Status`, a UI action's `IsComplete`, and `IsAwaitingInput`. A block of your own type, including a
   `[ToolBlock]`, raises it with an empty name (every property may have changed) whenever its handler
   updates it; raise specific names with `SetProperty` or `OnPropertyChanged`.
+- A tool call's block tells its card everything, so the card never searches the session.
+  `FunctionInvocationContentBlock.HasResult` turns true when the result arrives, and `IsAbandoned` when
+  the turn ends without one: it completed, stopped or failed, or left the call's approval or UI action
+  unanswered. A restored call without a recorded result is abandoned too. `Approval` is the
+  `ToolApprovalBlock` that wraps the call, or null: bind `Approval.IsAwaitingInput` to show that the call
+  waits for approval, and check `Approval.Status` for a rejection, whose result only says that the call
+  was rejected. Approvals and UI actions forward `IsAbandoned` like their call's other properties.
 - `UIAgent<TState>.State` raises `PropertyChanged` for `Value` and `HasPendingPredictiveState`, so a view
   can bind to `State.Value` and show a pending prediction. Assigning `Value` raises it even for the current
   instance, so after changing the value in place, assign it again to refresh bindings to its properties
@@ -165,7 +175,11 @@ The selector, in the page's resources:
     </local:BlockTemplateSelector.Text>
     <local:BlockTemplateSelector.ToolCall>
         <DataTemplate x:DataType="chat:FunctionInvocationContentBlock">
-            <Label Text="{Binding ToolName, StringFormat='Called {0}'}" />
+            <VerticalStackLayout>
+                <Label Text="{Binding ToolName, StringFormat='Called {0}'}" />
+                <Label Text="{Binding Result.Result}" IsVisible="{Binding HasResult}" />
+                <Label Text="Not run" IsVisible="{Binding IsAbandoned}" />
+            </VerticalStackLayout>
         </DataTemplate>
     </local:BlockTemplateSelector.ToolCall>
     <local:BlockTemplateSelector.Other>
@@ -275,7 +289,8 @@ Threads must round-trip `ChatResponseUpdate.AdditionalProperties`, which mark co
 stopped turns. Call `RestoreAsync` to load a thread's turns and message history; until it has loaded
 them, a send fails and `ClearAsync` waits for it. Restored approvals
 and UI actions are display history, not resumable pending work: they accept no decision or
-invocation, and their `IsAwaitingInput` is false.
+invocation, and their `IsAwaitingInput` is false. A restored call without a recorded result is
+`IsAbandoned`.
 
 To show and continue a conversation that no thread wrote, such as a recording or an import, pass its
 messages to `AgentContext.RestoreAsync(messages)` (or `UIAgent.RestoreAsync(messages)`) on a context

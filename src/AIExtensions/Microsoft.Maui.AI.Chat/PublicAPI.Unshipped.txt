@@ -114,11 +114,13 @@ Microsoft.Maui.AI.Chat.FootnoteReferenceNode.FootnoteReferenceNode() -> void
 Microsoft.Maui.AI.Chat.FootnoteReferenceNode.Label.get -> string!
 Microsoft.Maui.AI.Chat.FootnoteReferenceNode.Label.set -> void
 Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock
+Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock.Approval.get -> Microsoft.Maui.AI.Chat.ToolApprovalBlock?
 Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock.Arguments.get -> System.Collections.Generic.IDictionary<string!, object?>?
 Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock.Call.get -> Microsoft.Extensions.AI.FunctionCallContent?
 Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock.Call.set -> void
 Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock.FunctionInvocationContentBlock() -> void
 Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock.HasResult.get -> bool
+Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock.IsAbandoned.get -> bool
 Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock.Result.get -> Microsoft.Extensions.AI.FunctionResultContent?
 Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock.Result.set -> void
 Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock.ToolName.get -> string?
@@ -171,6 +173,7 @@ Microsoft.Maui.AI.Chat.InteractiveFunctionBlock.Call.get -> Microsoft.Extensions
 Microsoft.Maui.AI.Chat.InteractiveFunctionBlock.HasResult.get -> bool
 Microsoft.Maui.AI.Chat.InteractiveFunctionBlock.InnerBlock.get -> Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock!
 Microsoft.Maui.AI.Chat.InteractiveFunctionBlock.InteractiveFunctionBlock(Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock! innerBlock) -> void
+Microsoft.Maui.AI.Chat.InteractiveFunctionBlock.IsAbandoned.get -> bool
 Microsoft.Maui.AI.Chat.InteractiveFunctionBlock.Result.get -> Microsoft.Extensions.AI.FunctionResultContent?
 Microsoft.Maui.AI.Chat.InteractiveFunctionBlock.ToolName.get -> string?
 Microsoft.Maui.AI.Chat.LineBreakNode

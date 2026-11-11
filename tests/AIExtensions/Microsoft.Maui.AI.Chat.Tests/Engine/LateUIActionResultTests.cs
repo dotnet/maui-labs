@@ -79,6 +79,7 @@ public class LateUIActionResultTests
             ? Assert.Single(turn.ResponseBlocks.OfType<ToolApprovalBlock>())
             : Assert.Single(turn.ResponseBlocks.OfType<UIActionBlock>());
         var action = card as UIActionBlock ?? ((ToolApprovalBlock)card).UIAction!;
+        Assert.True(card.IsAbandoned);
         var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var changed = action.OnChanged(() => settled.TrySetResult());
         logs.Logged += entry =>
@@ -92,6 +93,7 @@ public class LateUIActionResultTests
 
         Assert.Null(card.Result);
         Assert.False(card.HasResult);
+        Assert.True(card.IsAbandoned);
         Assert.False(card.IsAwaitingInput);
         Assert.False(action.IsComplete);
         if (kind == ActionKind.Approved)

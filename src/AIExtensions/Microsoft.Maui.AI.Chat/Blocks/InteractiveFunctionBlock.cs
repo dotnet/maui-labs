@@ -13,8 +13,9 @@ namespace Microsoft.Maui.AI.Chat;
 /// <remarks>
 /// Base of <see cref="ToolApprovalBlock"/>; pairs with <see cref="IInteractiveBlock"/>. When the inner block
 /// raises <see cref="ContentBlock.PropertyChanged"/> for <see cref="Call"/>, <see cref="ToolName"/>,
-/// <see cref="Arguments"/>, <see cref="Result"/> or <see cref="HasResult"/>, this block raises it for its
-/// property of the same name, and for all five when the inner block reports that everything changed.
+/// <see cref="Arguments"/>, <see cref="Result"/>, <see cref="HasResult"/> or <see cref="IsAbandoned"/>, this
+/// block raises it for its property of the same name, and for all six when the inner block reports that
+/// everything changed.
 /// </remarks>
 public abstract class InteractiveFunctionBlock : ContentBlock
 {
@@ -23,6 +24,7 @@ public abstract class InteractiveFunctionBlock : ContentBlock
     private static readonly PropertyChangedEventArgs s_argumentsChanged = new(nameof(Arguments));
     private static readonly PropertyChangedEventArgs s_resultChanged = new(nameof(Result));
     private static readonly PropertyChangedEventArgs s_hasResultChanged = new(nameof(HasResult));
+    private static readonly PropertyChangedEventArgs s_isAbandonedChanged = new(nameof(IsAbandoned));
     private static readonly PropertyChangedEventArgs s_isAwaitingInputChanged = new(nameof(IsAwaitingInput));
 
     private bool? _reportedAwaitingInput;
@@ -47,6 +49,13 @@ public abstract class InteractiveFunctionBlock : ContentBlock
     public IDictionary<string, object?>? Arguments => InnerBlock.Arguments;
 
     public bool HasResult => InnerBlock.HasResult;
+
+    /// <summary>
+    /// Gets whether the call will never get a result, because its turn ended without one: for example an
+    /// approval or UI action left unanswered when the turn stopped. See
+    /// <see cref="FunctionInvocationContentBlock.IsAbandoned"/>.
+    /// </summary>
+    public bool IsAbandoned => InnerBlock.IsAbandoned;
 
     /// <summary>
     /// Gets whether the block waits for the user: an approval that is still pending, or a manual UI action
@@ -109,12 +118,14 @@ public abstract class InteractiveFunctionBlock : ContentBlock
                 RaisePropertyChanged(s_argumentsChanged);
                 RaisePropertyChanged(s_resultChanged);
                 RaisePropertyChanged(s_hasResultChanged);
+                RaisePropertyChanged(s_isAbandonedChanged);
                 break;
             case nameof(Call):
             case nameof(ToolName):
             case nameof(Arguments):
             case nameof(Result):
             case nameof(HasResult):
+            case nameof(IsAbandoned):
                 RaisePropertyChanged(e);
                 break;
             default:

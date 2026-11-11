@@ -33,6 +33,7 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
         ApprovalRequest = request;
         _status = ApprovalStatus.Pending;
         CaptureAwaitingInput();
+        innerBlock.Approval = this;
     }
 
     public ApprovalStatus Status => _status;

@@ -81,8 +81,9 @@ public class ConversationTurn : INotifyPropertyChanged
     /// <remarks>
     /// A stopped turn keeps its request and partial response. Approvals and UI actions that were
     /// still waiting for input when the turn stopped no longer respond, and a UI action that was still
-    /// running shows no result when it returns, because the result is never sent. The change is raised
-    /// once the context is <see cref="ConversationStatus.Idle"/>, before its status change.
+    /// running shows no result when it returns, because the result is never sent. Its calls without a
+    /// result are <see cref="FunctionInvocationContentBlock.IsAbandoned"/>. The change is raised once the
+    /// context is <see cref="ConversationStatus.Idle"/>, before its status change.
     /// </remarks>
     public bool IsStopped
     {
@@ -101,8 +102,10 @@ public class ConversationTurn : INotifyPropertyChanged
     /// Set before the <see cref="ConversationStatus.Error"/> status change that reports the failure is
     /// raised, and cleared when <see cref="AgentContext.RetryAsync"/> runs the turn again, before the
     /// <see cref="ConversationStatus.Streaming"/> status change is raised. Its change is raised once the
-    /// context's status and error are in place, before their own changes. A failed turn that is not the
-    /// last turn can no longer be retried: another message was sent after it.
+    /// context's status and error are in place, before their own changes. The failed attempt's calls
+    /// without a result are <see cref="FunctionInvocationContentBlock.IsAbandoned"/>; a retry replaces
+    /// its response blocks. A failed turn that is not the last turn can no longer be retried: another
+    /// message was sent after it.
     /// </remarks>
     public bool IsFailed
     {

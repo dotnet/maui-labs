@@ -474,8 +474,9 @@ public class UIAgent : IDisposable
             _historyVersion++;
             CompleteStateRestore();
 
-            // Restored approvals and UI actions are history: a decision or result could not be sent. Nothing
-            // shows these blocks yet, so the change needs no notification.
+            // Restored approvals and UI actions are history: a decision or result could not be sent, and a call
+            // without a recorded result never gets one. Nothing shows these blocks yet, so the change needs no
+            // notification.
             foreach (var turn in turns)
             {
                 foreach (var block in turn.RequestBlocks.Concat(turn.ResponseBlocks))
@@ -484,6 +485,11 @@ public class UIAgent : IDisposable
                     {
                         interactive.Abandon();
                         interactive.CaptureAwaitingInput();
+                        interactive.InnerBlock.Abandon();
+                    }
+                    else if (block is FunctionInvocationContentBlock call)
+                    {
+                        call.Abandon();
                     }
                 }
             }
