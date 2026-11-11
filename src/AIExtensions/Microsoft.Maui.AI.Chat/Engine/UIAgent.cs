@@ -269,8 +269,84 @@ public class UIAgent : IDisposable
     /// </remarks>
     public async Task<IReadOnlyList<ContentBlock>> RestoreAsync(
         CancellationToken cancellationToken = default)
+        => Flatten(await RestoreTurnsAsync(cancellationToken));
+
+    /// <summary>
+    /// Loads an existing conversation, such as a recorded or imported one: replays its messages
+    /// through newly-created block pipelines and makes them the history that the next
+    /// <see cref="SendMessageAsync"/> continues.
+    /// </summary>
+    /// <param name="messages">The conversation's messages in order.</param>
+    /// <param name="cancellationToken">Cancels the restore.</param>
+    /// <returns>The blocks that show the conversation.</returns>
+    /// <remarks>
+    /// <para>
+    /// Each user message starts a turn, except one that only answers approvals or tool calls. Nothing
+    /// is invoked: tool calls and UI actions are shown with their recorded results, and approvals and
+    /// UI actions are not resumed. System messages are part of the history but are not shown.
+    /// </para>
+    /// <para>
+    /// The history keeps the messages as given, except tool calls without a recorded result and their
+    /// approvals, which a provider would reject or execute. A send that is still running is never
+    /// committed. This overload cannot be used with a configured <see cref="IConversationThread"/>,
+    /// which is the source of truth for its conversation.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyList<ContentBlock>> RestoreAsync(
+        IEnumerable<ChatMessage> messages,
+        CancellationToken cancellationToken = default)
+        => Flatten(await RestoreTurnsAsync(messages, cancellationToken));
+
+    internal Task<IReadOnlyList<RestoredTurn>> RestoreTurnsAsync(CancellationToken cancellationToken)
     {
-        var turns = await RestoreTurnsAsync(cancellationToken);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var thread = _options.Thread;
+        return thread is null
+            ? Task.FromResult<IReadOnlyList<RestoredTurn>>(Array.Empty<RestoredTurn>())
+            : ReplayAsync(thread.GetUpdates(), history: null, cancellationToken);
+    }
+
+    internal Task<IReadOnlyList<RestoredTurn>> RestoreTurnsAsync(
+        IEnumerable<ChatMessage> messages,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (_options.Thread is not null)
+        {
+            throw new InvalidOperationException(
+                "A conversation cannot be restored from messages when UIAgentOptions.Thread is set. " +
+                "Restore from the thread instead.");
+        }
+
+        var history = messages.ToArray();
+        foreach (var message in history)
+        {
+            if (message is null)
+                throw new ArgumentException("The messages cannot contain null.", nameof(messages));
+        }
+
+        var updates = history
+            .Select(message => CreateMessageUpdate(EnsureMessageId(message), isContinuation: false))
+            .ToArray();
+        var answered = new HashSet<string>(
+            history
+                .SelectMany(message => message.Contents)
+                .OfType<FunctionResultContent>()
+                .Select(result => result.CallId),
+            StringComparer.Ordinal);
+        return ReplayAsync(
+            updates,
+            UnansweredCalls.Remove(history, answered, includeApprovals: true),
+            cancellationToken);
+    }
+
+    private static List<ContentBlock> Flatten(IReadOnlyList<RestoredTurn> turns)
+    {
         var blocks = new List<ContentBlock>();
         foreach (var turn in turns)
         {
@@ -281,25 +357,19 @@ public class UIAgent : IDisposable
         return blocks;
     }
 
-    internal Task<IReadOnlyList<RestoredTurn>> RestoreTurnsAsync(CancellationToken cancellationToken)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var thread = _options.Thread;
-        return thread is null
-            ? Task.FromResult<IReadOnlyList<RestoredTurn>>(Array.Empty<RestoredTurn>())
-            : ReplayAsync(thread.GetUpdates(), cancellationToken);
-    }
-
+    /// <summary>Rebuilds turns, typed state and the history from committed updates.</summary>
+    /// <param name="updates">The updates to replay.</param>
+    /// <param name="history">The history to use, or <see langword="null"/> to rebuild it from the updates.</param>
+    /// <param name="cancellationToken">Cancels the replay.</param>
     private async Task<IReadOnlyList<RestoredTurn>> ReplayAsync(
         IReadOnlyList<ChatResponseUpdate> updates,
+        IReadOnlyList<ChatMessage>? history,
         CancellationToken cancellationToken)
     {
         var previousHistory = _history.ToArray();
         var stateCheckpoint = CaptureStateCheckpoint();
         var turns = new List<RestoredTurn>();
-        var history = new List<ChatMessage>();
+        var replayedHistory = new List<ChatMessage>();
         var responseUpdates = new List<ChatResponseUpdate>();
         RestoredTurn? currentTurn = null;
         BlockMappingPipeline? responsePipeline = null;
@@ -311,6 +381,14 @@ public class UIAgent : IDisposable
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
+                // Instructions are history, not part of a turn.
+                if (update.Role == ChatRole.System)
+                {
+                    FlushResponseHistory();
+                    replayedHistory.Add(CreateHistoryMessage(update));
+                    continue;
+                }
+
                 var isContinuation = IsContinuation(update);
                 if (update.Role == ChatRole.User && !isContinuation)
                 {
@@ -321,7 +399,7 @@ public class UIAgent : IDisposable
                             ?? Guid.NewGuid().ToString("N"),
                         IsStopped(update));
                     turns.Add(currentTurn);
-                    history.Add(CreateHistoryMessage(update));
+                    replayedHistory.Add(CreateHistoryMessage(update));
                     calls = new FunctionCallRegistry();
 
                     var requestPipeline = new BlockMappingPipeline(
@@ -380,7 +458,7 @@ public class UIAgent : IDisposable
 
             CompleteRestoredTurn();
             _history.Clear();
-            _history.AddRange(history);
+            _history.AddRange(history ?? replayedHistory);
             _historyVersion++;
             CompleteStateRestore();
             return turns;
@@ -397,10 +475,15 @@ public class UIAgent : IDisposable
         {
             responsePipeline?.Finalize();
             responsePipeline = null;
+            FlushResponseHistory();
+        }
+
+        void FlushResponseHistory()
+        {
             if (responseUpdates.Count == 0)
                 return;
 
-            history.AddRange(responseUpdates.ToChatResponse().Messages);
+            replayedHistory.AddRange(responseUpdates.ToChatResponse().Messages);
             responseUpdates.Clear();
         }
     }
@@ -567,11 +650,16 @@ public class UIAgent : IDisposable
         };
     }
 
+    /// <summary>
+    /// Gets whether an update is a request that continues its turn, rather than a user message that
+    /// starts one: either marked as such, or a user update that only answers approvals or tool calls.
+    /// </summary>
     private static bool IsContinuation(ChatResponseUpdate update)
         => HasMarker(update.AdditionalProperties, ContinuationPropertyName)
-            || (update.Contents.Count > 0
+            || (update.Role == ChatRole.User
+                && update.Contents.Count > 0
                 && update.Contents.All(
-                    content => content is ToolApprovalResponseContent));
+                    content => content is ToolApprovalResponseContent or FunctionResultContent));
 
     private static bool IsStopped(ChatResponseUpdate update)
         => HasMarker(update.AdditionalProperties, StoppedPropertyName);

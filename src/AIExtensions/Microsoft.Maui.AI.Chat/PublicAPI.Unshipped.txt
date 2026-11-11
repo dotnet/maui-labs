@@ -11,6 +11,7 @@ Microsoft.Maui.AI.Chat.AgentContext.RegisterOnBlockAdded(System.Action<Microsoft
 Microsoft.Maui.AI.Chat.AgentContext.RegisterOnResponseBlocksCleared(System.Action<Microsoft.Maui.AI.Chat.ConversationTurn!>! callback) -> System.IDisposable!
 Microsoft.Maui.AI.Chat.AgentContext.RegisterOnStatusChanged(System.Action<Microsoft.Maui.AI.Chat.ConversationStatus>! callback) -> System.IDisposable!
 Microsoft.Maui.AI.Chat.AgentContext.RegisterOnTurnAdded(System.Action<Microsoft.Maui.AI.Chat.ConversationTurn!>! callback) -> System.IDisposable!
+Microsoft.Maui.AI.Chat.AgentContext.RestoreAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.AgentContext.RestoreAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.AgentContext.RetryAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.AgentContext.SendMessageAsync(Microsoft.Extensions.AI.ChatMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
@@ -291,6 +292,7 @@ Microsoft.Maui.AI.Chat.UIActionInvocationMode.Manual = 1 -> Microsoft.Maui.AI.Ch
 Microsoft.Maui.AI.Chat.UIAgent
 Microsoft.Maui.AI.Chat.UIAgent.ClearHistory() -> void
 Microsoft.Maui.AI.Chat.UIAgent.Dispose() -> void
+Microsoft.Maui.AI.Chat.UIAgent.RestoreAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.ContentBlock!>!>!
 Microsoft.Maui.AI.Chat.UIAgent.RestoreAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.ContentBlock!>!>!
 Microsoft.Maui.AI.Chat.UIAgent.SendMessageAsync(Microsoft.Extensions.AI.ChatMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Maui.AI.Chat.ContentBlock!>!
 Microsoft.Maui.AI.Chat.UIAgent.UIAgent(Microsoft.Extensions.AI.IChatClient! chatClient) -> void

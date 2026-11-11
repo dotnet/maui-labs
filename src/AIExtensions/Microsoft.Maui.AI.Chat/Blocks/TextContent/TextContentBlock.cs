@@ -15,4 +15,6 @@ namespace Microsoft.Maui.AI.Chat;
 /// </remarks>
 public class TextContentBlock : RichContentBlock
 {
+    /// <summary>Gets or sets the identifier of the message whose text the block shows.</summary>
+    internal string? MessageId { get; set; }
 }

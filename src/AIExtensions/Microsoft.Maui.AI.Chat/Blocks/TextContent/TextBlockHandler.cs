@@ -32,12 +32,21 @@ internal sealed class TextBlockHandler : ContentBlockHandler<TextContentBlock>
             return BlockMappingResult<TextContentBlock>.Pass();
         }
 
+        // Each message gets its own block, for example consecutive restored assistant messages.
+        if (state.MessageId is { Length: > 0 } blockMessageId
+            && context.Update.MessageId is { Length: > 0 } messageId
+            && !string.Equals(blockMessageId, messageId, StringComparison.Ordinal))
+        {
+            return BlockMappingResult<TextContentBlock>.Complete();
+        }
+
         context.MarkHandled(textContent);
         state.AppendText(textContent.Text ?? string.Empty);
         RebuildParagraphs(state);
 
         if (state.Id == string.Empty)
         {
+            state.MessageId = context.Update.MessageId;
             state.Id = context.Update.MessageId ?? Guid.NewGuid().ToString("N");
             return BlockMappingResult<TextContentBlock>.Emit(state, state);
         }

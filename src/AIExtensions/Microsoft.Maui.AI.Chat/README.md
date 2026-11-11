@@ -97,6 +97,19 @@ persisted. The engine writes a thread only when a turn commits (`AppendUserMessa
 Call `RestoreAsync` to load a thread's turns and message history. Restored approvals and UI actions
 are display history, not resumable pending work.
 
+To show and continue a conversation that no thread wrote, such as a recording or an import, pass its
+messages to `AgentContext.RestoreAsync(messages)` (or `UIAgent.RestoreAsync(messages)`) on a context
+without a thread:
+
+```csharp
+await session.RestoreAsync(recordedMessages);   // renders turns; invokes nothing
+await session.SendMessageAsync("Follow-up");    // continues with the recorded history
+```
+
+Each user message starts a turn unless it only answers approvals or tool calls. Recorded tool calls
+show their recorded results, system messages are sent with the history but not shown, and tool calls
+without a recorded result are shown but left out of the history.
+
 ## State and provider metadata
 
 `StateMapperContext` maps inbound updates to application state. It runs for every configured
