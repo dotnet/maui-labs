@@ -67,7 +67,7 @@ public sealed class LinuxMediaPicker : IMediaPicker
 		dialog.SetFilters(filterList);
 
 		var window = GetActiveWindow("select media");
-		var file = await dialog.OpenAsync(window);
+		var file = await PickOrCancelAsync(() => dialog.OpenAsync(window));
 		var path = file?.GetPath();
 		return path is not null ? new FileResult(path) : null;
 	}
@@ -84,7 +84,7 @@ public sealed class LinuxMediaPicker : IMediaPicker
 		dialog.SetFilters(filterList);
 
 		var window = GetActiveWindow("select media");
-		var files = await dialog.OpenMultipleAsync(window);
+		var files = await PickOrCancelAsync(() => dialog.OpenMultipleAsync(window));
 		if (files is null)
 			return [];
 
@@ -97,6 +97,24 @@ public sealed class LinuxMediaPicker : IMediaPicker
 				results.Add(new FileResult(path));
 		}
 		return results;
+	}
+
+	internal static async Task<T?> PickOrCancelAsync<T>(Func<Task<T?>> pick) where T : class
+	{
+		try
+		{
+			return await pick();
+		}
+		catch (OperationCanceledException)
+		{
+			return null;
+		}
+		// GirCore 0.7 exposes only the GError message on GException, as in LinuxFilePicker.
+		catch (GLib.GException ex) when (string.Equals(ex.Message, "Dismissed by user", StringComparison.OrdinalIgnoreCase))
+		{
+			ex.Dispose();
+			return null;
+		}
 	}
 
 	internal static Gtk.Window GetActiveWindow(string operation) =>
@@ -454,10 +472,11 @@ internal sealed class GStreamerMediaCaptureProvider : ILinuxMediaCaptureProvider
 
 	internal static string? FindVideoDevice() =>
 		Directory.Exists("/dev")
-			? Directory.EnumerateFiles("/dev", "video*")
-				.Order(StringComparer.Ordinal)
-				.FirstOrDefault()
+			? FindVideoDevice(Directory.EnumerateFiles("/dev", "video*"), V4l2DeviceProbe.CanCapture)
 			: null;
+
+	internal static string? FindVideoDevice(IEnumerable<string> candidates, Func<string, bool> canCapture) =>
+		candidates.Order(StringComparer.Ordinal).FirstOrDefault(canCapture);
 
 	static string? FindExecutable(string name)
 	{

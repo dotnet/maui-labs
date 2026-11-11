@@ -482,7 +482,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 	/// Maps MAUI SemanticProperties to GTK4 accessibility.
 	/// GTK4 uses the Gtk.Accessible interface with AT-SPI on Linux.
 	/// </summary>
-	static void MapSemantics(GtkViewHandler<TVirtualView, TPlatformView> handler, IView view)
+	protected static void MapSemantics(GtkViewHandler<TVirtualView, TPlatformView> handler, IView view)
 	{
 		var widget = handler.PlatformView;
 		if (widget == null)

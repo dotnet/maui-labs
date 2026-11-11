@@ -4,6 +4,8 @@ using System.Text;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using WebKit;
 using WebView = WebKit.WebView;
@@ -50,7 +52,8 @@ public sealed class GtkBlazorWebView : IDisposable
 	private readonly IServiceProvider _serviceProvider;
 	private GtkWebViewManager? _webViewManager;
 	private UserContentManager? _userContentManager;
-	private readonly HashSet<RootComponent> _registeredRootComponents = [];
+	private readonly RootComponentReconciler _rootComponentReconciler = new();
+	private RootComponent[] _desiredRootComponents = [];
 	private bool _disposed;
 	private string? _hostPage;
 	private static int _moduleInitialized;
@@ -131,8 +134,6 @@ public sealed class GtkBlazorWebView : IDisposable
 				catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"GtkBlazorWebView: DisposeAsync failed: {ex.Message}"); }
 			}).Wait(TimeSpan.FromSeconds(5));
 		}
-		_registeredRootComponents.Clear();
-
 		WebKitWebView.Dispose();
 	}
 
@@ -243,40 +244,53 @@ public sealed class GtkBlazorWebView : IDisposable
 			contentRootDir,
 			hostPageRelativePath);
 
-		foreach (var rootComponent in RootComponents)
-		{
-			_ = rootComponent.AddToWebViewManagerAsync(_webViewManager);
-			_registeredRootComponents.Add(rootComponent);
-		}
-
-		_webViewManager.Navigate(StartPath);
+		SynchronizeRootComponents(navigate: true);
 	}
 
 	private void OnRootComponentsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs eventArgs)
 		=> SynchronizeRootComponents();
 
-	private void SynchronizeRootComponents()
+	internal void SetRootComponents(IEnumerable<RootComponent> components)
+	{
+		RootComponents.CollectionChanged -= OnRootComponentsCollectionChanged;
+		try
+		{
+			RootComponents.Clear();
+			foreach (var component in components)
+				RootComponents.Add(component);
+		}
+		finally
+		{
+			RootComponents.CollectionChanged += OnRootComponentsCollectionChanged;
+		}
+		SynchronizeRootComponents();
+	}
+
+	private async void SynchronizeRootComponents(bool navigate = false)
 	{
 		var manager = _webViewManager;
-		if (manager == null)
+		if (manager == null || _disposed)
 			return;
 
-		_ = manager.Dispatcher.InvokeAsync(async () =>
+		Volatile.Write(ref _desiredRootComponents, RootComponents.ToArray());
+		try
 		{
-			var desiredComponents = RootComponents.ToHashSet();
-
-			foreach (var item in _registeredRootComponents.Except(desiredComponents).ToArray())
+			await manager.Dispatcher.InvokeAsync(async () =>
 			{
-				await item.RemoveFromWebViewManagerAsync(manager);
-				_registeredRootComponents.Remove(item);
-			}
-
-			foreach (var item in desiredComponents.Except(_registeredRootComponents).ToArray())
-			{
-				await item.AddToWebViewManagerAsync(manager);
-				_registeredRootComponents.Add(item);
-			}
-		});
+				await _rootComponentReconciler.SynchronizeAsync(
+					() => _disposed ? [] : Volatile.Read(ref _desiredRootComponents),
+					item => item.AddToWebViewManagerAsync(manager),
+					item => item.RemoveFromWebViewManagerAsync(manager));
+				if (navigate && !_disposed)
+					manager.Navigate(StartPath);
+			});
+		}
+		catch (Exception ex)
+		{
+			_serviceProvider.GetService<ILogger<GtkBlazorWebView>>()?
+				.LogError(ex, "GTK Blazor root component synchronization failed.");
+			System.Diagnostics.Trace.TraceError($"GTK Blazor root component synchronization failed: {ex}");
+		}
 	}
 
 	internal static IFileProvider CreateFileProvider(string contentRootDir)

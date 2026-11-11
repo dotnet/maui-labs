@@ -198,9 +198,13 @@ function Invoke-BackendAcceptance {
     Assert-SingleFile $output 'Shared/Renamed/payload.bin' $payloadV2 | Out-Null
     Assert-NoFile $output 'Shared/Nested/payload.bin'
 
-    $libraryText = [System.IO.File]::ReadAllText($libraryProject)
-    $libraryText = $libraryText.Replace('    <MauiAsset Include="Resources/Raw/zero.bin" LogicalName="Shared/zero.bin" />' + [Environment]::NewLine, '')
-    [System.IO.File]::WriteAllText($libraryProject, $libraryText)
+    [xml] $libraryXml = [System.IO.File]::ReadAllText($libraryProject)
+    $zeroAsset = $libraryXml.SelectSingleNode('/Project/ItemGroup/MauiAsset[@LogicalName="Shared/zero.bin"]')
+    if ($null -eq $zeroAsset) {
+        throw "The fixture must contain the zero-byte asset before testing its removal."
+    }
+    $zeroAsset.ParentNode.RemoveChild($zeroAsset) | Out-Null
+    $libraryXml.Save($libraryProject)
     Invoke-DotNet (@('build', $consumerProject, '--no-restore') + $buildArguments)
     Assert-NoFile $output 'Shared/zero.bin'
 

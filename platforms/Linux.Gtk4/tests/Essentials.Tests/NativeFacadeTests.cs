@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Hosting;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Accessibility;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Media;
 using Microsoft.Maui.Storage;
@@ -23,6 +24,12 @@ public class NativeFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
                 activated = true;
                 try
                 {
+                    var screenReader = new LinuxSemanticScreenReader();
+                    screenReader.Announce(" ");
+                    Assert.Null(gtkApp.GetActiveWindow());
+                    var announcementError = Assert.Throws<InvalidOperationException>(
+                        () => screenReader.Announce("Before window activation"));
+                    Assert.Contains("window is required", announcementError.Message);
                     var nativeDisplay = Gdk.Display.GetDefault();
                     Assert.NotNull(nativeDisplay);
                     var monitors = nativeDisplay.GetMonitors();

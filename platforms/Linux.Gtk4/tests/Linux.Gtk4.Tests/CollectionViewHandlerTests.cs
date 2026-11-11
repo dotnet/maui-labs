@@ -15,6 +15,48 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 public class CollectionViewHandlerTests(ITestOutputHelper output)
 {
 	[GtkRuntimeFact]
+	public void Accessibility_ExclusionWinsOverHeading_AndRestoresCurrentRole()
+	{
+		Gtk.Module.Initialize();
+		Gtk.Functions.Init();
+		using var app = MauiApp.CreateBuilder().UseMauiAppLinuxGtk4<Application>().Build();
+		var collection = new CollectionView { ItemsSource = new[] { "Item" } };
+		var handler = new CollectionViewHandler();
+		handler.SetMauiContext(new GtkMauiContext(app.Services));
+		handler.SetVirtualView(collection);
+		try
+		{
+			var widgets = new[] { (Gtk.Widget)handler.PlatformView, handler.PlatformView.GetChild()! };
+			void AssertRoles(Gtk.AccessibleRole expected)
+			{
+				CollectionViewHandler.MapAccessibility(handler, collection);
+				handler.UpdateValue(nameof(IView.Semantics));
+				Assert.All(widgets, widget => Assert.Equal(expected, widget.AccessibleRole));
+			}
+
+			SemanticProperties.SetHeadingLevel(collection, SemanticHeadingLevel.Level1);
+			AssertRoles(Gtk.AccessibleRole.Heading);
+			AutomationProperties.SetExcludedWithChildren(collection, true);
+			AssertRoles(Gtk.AccessibleRole.None);
+			SemanticProperties.SetHeadingLevel(collection, SemanticHeadingLevel.None);
+			AssertRoles(Gtk.AccessibleRole.None);
+			AutomationProperties.SetExcludedWithChildren(collection, false);
+			AssertRoles(Gtk.AccessibleRole.List);
+			AutomationProperties.SetIsInAccessibleTree(collection, false);
+			SemanticProperties.SetHeadingLevel(collection, SemanticHeadingLevel.Level2);
+			AssertRoles(Gtk.AccessibleRole.None);
+			AutomationProperties.SetIsInAccessibleTree(collection, true);
+			AssertRoles(Gtk.AccessibleRole.Heading);
+			SemanticProperties.SetHeadingLevel(collection, SemanticHeadingLevel.None);
+			AssertRoles(Gtk.AccessibleRole.List);
+		}
+		finally
+		{
+			((IElementHandler)handler).DisconnectHandler();
+		}
+	}
+
+	[GtkRuntimeFact]
 	public void NativeFactory_ParentsRealizedItems_AndCleansUpOnReloadRebuildAndDisconnect()
 	{
 		Gtk.Module.Initialize();

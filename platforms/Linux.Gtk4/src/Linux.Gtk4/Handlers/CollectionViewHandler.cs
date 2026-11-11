@@ -57,6 +57,11 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			["HeadingLevel"] = MapAccessibility,
 			["Hint"] = MapAccessibility,
 			["ExcludedWithChildren"] = MapAccessibility,
+			[nameof(IView.Semantics)] = (handler, view) =>
+			{
+				MapSemantics(handler, view);
+				MapAccessibility(handler, view);
+			},
 		};
 
 	public CollectionViewHandler() : base(Mapper) { }
@@ -784,8 +789,6 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			? Gtk.AccessibleRole.None
 			: Gtk.AccessibleRole.List;
 
-		handler.PlatformView.AccessibleRole = role;
-		handler._listView.AccessibleRole = role;
 		if (view is CollectionView collectionView)
 		{
 			var description = SemanticProperties.GetDescription(collectionView);
@@ -795,7 +798,10 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			{
 				widget.SetAccessibleText(Gtk.AccessibleProperty.Description, description);
 				widget.SetAccessibleText(Gtk.AccessibleProperty.HelpText, hint);
-				widget.SetHeading(isHeading);
+				widget.SetHeading(false);
+				widget.AccessibleRole = role == Gtk.AccessibleRole.None
+					? role
+					: isHeading ? Gtk.AccessibleRole.Heading : role;
 			}
 		}
 	}

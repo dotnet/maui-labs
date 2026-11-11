@@ -182,16 +182,13 @@ public class BlazorWebViewHandler : ViewHandler<IBlazorWebView, Gtk.Box>
 		if (_blazorWebView == null || _rootComponents == null)
 			return;
 
-		_blazorWebView.RootComponents.Clear();
-		foreach (var rootComponent in _rootComponents)
-		{
-			_blazorWebView.RootComponents.Add(new RootComponent
+		_blazorWebView.SetRootComponents(_rootComponents.Select(rootComponent =>
+			new RootComponent
 			{
 				Selector = rootComponent.Selector,
 				ComponentType = rootComponent.ComponentType,
 				Parameters = rootComponent.Parameters,
-			});
-		}
+			}));
 	}
 
 	static void MapFocus(BlazorWebViewHandler handler, IBlazorWebView view, object? args)

@@ -161,6 +161,42 @@ jobs:
         shell: pwsh
         run: ./eng/smoke-tests/community-resource-acceptance.ps1 -Backend gtk
 
+  media-primitives:
+    name: Headless Linux media contracts
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      # GLib errors and V4L2 rejection do not require GTK, a display, or a camera.
+      - name: Verify native cancellation errors and V4L2 probing
+        shell: pwsh
+        env:
+          ESSENTIALS_NATIVE_GTK: '1'
+        run: |
+          dotnet test platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj `
+            --configuration Release --framework net11.0 `
+            --filter FullyQualifiedName~Essentials.Tests.MediaPickerTests. `
+            --logger 'trx;LogFileName=media-primitives.trx' `
+            --results-directory artifacts/TestResults/media-primitives
+          if ($LASTEXITCODE -ne 0) { throw 'Linux media contracts failed.' }
+          [xml] $trx = Get-Content artifacts/TestResults/media-primitives/media-primitives.trx -Raw
+          $counts = $trx.TestRun.ResultSummary.Counters
+          if ([int] $counts.total -le 0 -or [int] $counts.executed -ne [int] $counts.total -or
+              [int] $counts.passed -ne [int] $counts.total -or [int] $counts.notExecuted -ne 0) {
+            throw "Linux media contracts must all execute and pass: $($counts.OuterXml)"
+          }
+      - name: Upload headless Linux results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gtk-media-primitives
+          path: artifacts/TestResults/media-primitives/
+          if-no-files-found: error
+
   runtime:
     name: Native GTK runtime (${{ matrix.test-class }}${{ matrix.maui && format(', MAUI {0}', matrix.maui) || '' }})
     runs-on: ubuntu-24.04

@@ -6,6 +6,70 @@ namespace Essentials.Tests;
 public sealed class MediaPickerTests
 {
 	[Fact]
+	public async Task PickerCancellation_ReturnsNull_WithoutHidingOtherFailures()
+	{
+		Assert.Null(await LinuxMediaPicker.PickOrCancelAsync<string>(
+			() => Task.FromException<string?>(new OperationCanceledException())));
+		var failure = new InvalidOperationException("The backend dismissed a failed operation.");
+		Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			LinuxMediaPicker.PickOrCancelAsync<string>(() => Task.FromException<string?>(failure))));
+		Assert.Equal("selected", await LinuxMediaPicker.PickOrCancelAsync(() => Task.FromResult<string?>("selected")));
+		Assert.Null(await LinuxMediaPicker.PickOrCancelAsync(() => Task.FromResult<string?>(null)));
+	}
+
+	[NativeGtkFact]
+	public async Task GtkPickerDismissal_ReturnsNull_ButOtherGErrorsPropagate()
+	{
+		GLib.Module.Initialize();
+		using var dismissedText = GLib.Internal.NonNullableUtf8StringOwnedHandle.Create("Dismissed by user");
+		using var dismissed = new GLib.GException(GLib.Internal.Error.NewLiteral(
+			GLib.Functions.QuarkFromString("gtk-dialog-error-quark"), 2, dismissedText));
+		Assert.Null(await LinuxMediaPicker.PickOrCancelAsync<string>(() => Task.FromException<string?>(dismissed)));
+
+		using var failureText = GLib.Internal.NonNullableUtf8StringOwnedHandle.Create("Dialog dismissed because the file portal failed");
+		using var failure = new GLib.GException(GLib.Internal.Error.NewLiteral(
+			GLib.Functions.QuarkFromString("gtk-dialog-error-quark"), 0, failureText));
+		Assert.Same(failure, await Assert.ThrowsAsync<GLib.GException>(() =>
+			LinuxMediaPicker.PickOrCancelAsync<string>(() => Task.FromException<string?>(failure))));
+	}
+
+	[Theory]
+	[InlineData(0x04000001u, 0u, true)]
+	[InlineData(0x01000001u, 0u, true)]
+	[InlineData(0x04001000u, 0u, true)]
+	[InlineData(0x04000002u, 0u, false)]
+	[InlineData(0x04800000u, 0u, false)]
+	[InlineData(0x00000001u, 0u, false)]
+	[InlineData(0x84000001u, 0x04800000u, false)]
+	[InlineData(0x84000001u, 0x04000001u, true)]
+	public void V4l2Probe_RequiresPerDeviceCaptureAndIoCapabilities(
+		uint capabilities, uint deviceCapabilities, bool expected) =>
+		Assert.Equal(expected, V4l2DeviceProbe.HasCaptureCapability(capabilities, deviceCapabilities));
+
+	[Fact]
+	public void DeviceSelection_SkipsUnusableNodes_AndFindsLaterCamera()
+	{
+		var probed = new List<string>();
+		var selected = GStreamerMediaCaptureProvider.FindVideoDevice(
+			["/dev/video2", "/dev/video0", "/dev/video1"],
+			path =>
+			{
+				probed.Add(path);
+				return path == "/dev/video2";
+			});
+		Assert.Equal("/dev/video2", selected);
+		Assert.Equal(["/dev/video0", "/dev/video1", "/dev/video2"], probed);
+		Assert.Null(GStreamerMediaCaptureProvider.FindVideoDevice(["/dev/video0"], _ => false));
+	}
+
+	[NativeGtkFact]
+	public void V4l2Probe_RejectsMissingNodesAndNonVideoDescriptors()
+	{
+		Assert.False(V4l2DeviceProbe.CanCapture("/dev/no-such-maui-camera"));
+		Assert.False(V4l2DeviceProbe.CanCapture("/dev/null"));
+	}
+
+	[Fact]
 	public async Task CaptureWrapsProviderFiles()
 	{
 		var provider = new TestCaptureProvider("/capture/photo.jpg", "/capture/video.webm");

@@ -186,12 +186,20 @@ GStreamer `v4l2src`, `videoconvert`, `jpegenc`, `vp8enc`, and `webmmux`
 plugins. Photo capture writes JPEG and video capture writes VP8/WebM. The native
 capture window supports cancellation and graceful video Stop; partial files are
 deleted after cancellation, failure, empty output, or finalization timeout.
-Capture selects an actual `/dev/video*` V4L2 device and never uses
+Capture opens candidates read/write and queries V4L2 capabilities, skipping inaccessible,
+metadata-only and output-only nodes. Per-device capabilities take precedence over
+aggregate capabilities. Capture selects the first usable `/dev/video*` device and never uses
 `autovideosrc`, because that element can silently substitute `videotestsrc`
 when no camera is available. Portal-only cameras without a V4L2 device are
 therefore reported as unsupported. Missing tools/plugins, absent devices,
 permission failures, and pipeline failures are explicit rather than an empty or
 synthetic successful result.
+
+Semantic announcements use the active GTK window's accessibility context, not a
+separate speech process. Nonblank announcements without an active application window
+throw `InvalidOperationException`; call after activation, on the application dispatcher.
+Blank announcements are ignored. This explicit precondition is not a best-effort
+speech fallback and does not guarantee delivery by an assistive technology.
 
 #### Use your own ISecureStorage implementation
 
