@@ -149,6 +149,8 @@ repository target import. It checks the actual packed font target and its consum
 integration, then compares native font identity, glyphs, and pixels against an
 independent trusted Open Sans control in three working directories for both build
 and no-build/no-restore publish output. The normal template window check still runs.
+The proof uses framework-dependent output with `PublishReadyToRun=false` consistently
+for restore, build, and publish; it verifies resource deployment, not ReadyToRun compilation.
 The package contract, evaluated imports, native results, and tested packages are
 retained in the smoke-test artifacts.
 

@@ -323,6 +323,8 @@ Unicode logical names, zero-byte files, incremental updates, rename/removal
 cleanup, successful **no-build publish**, and the expected `NETSDK1152` collision
 failure. `-Backend switch` restores the same consumer across GTK/WPF and both
 frameworks, then returns to GTK 11 and publishes without rebuilding.
+Backend packing and consumers share one fresh, explicit NuGet cache, so an
+inherited global cache cannot mask missing package build imports.
 
 The WPF PR workflow is not restricted to PRs targeting `main`, so stacked PRs
 receive Windows-native coverage. Handler and Essentials suites run separately
