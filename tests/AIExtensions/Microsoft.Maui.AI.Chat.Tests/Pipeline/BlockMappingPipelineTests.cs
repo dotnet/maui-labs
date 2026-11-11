@@ -76,6 +76,35 @@ public class BlockMappingPipelineTests
     }
 
     [Fact]
+    public async Task Process_UpdateWithoutText_CompletesActiveBlock()
+    {
+        var pipeline = CreatePipelineWithTextHandler();
+        var blocks = await ProcessAsync(pipeline, new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "msg-1",
+            Contents = [new TextContent("Hello")],
+        });
+
+        await ProcessAsync(pipeline, new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "msg-1",
+            Contents = [],
+        });
+
+        Assert.Equal(BlockLifecycleState.Inactive, blocks[0].LifecycleState);
+    }
+
+    [Fact]
+    public void AddBlockHandler_NullHandlerThrows()
+    {
+        var options = new UIAgentOptions();
+
+        Assert.Throws<ArgumentNullException>(() => options.AddBlockHandler<RichContentBlock>(null!));
+    }
+
+    [Fact]
     public async Task Process_TextFromANewMessage_StartsANewBlock()
     {
         var pipeline = CreatePipelineWithTextHandler();

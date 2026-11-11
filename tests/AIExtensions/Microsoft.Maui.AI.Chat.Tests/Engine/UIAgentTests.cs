@@ -148,6 +148,28 @@ public class UIAgentTests
     }
 
     [Fact]
+    public void Constructor_NullChatClientThrows()
+    {
+        Assert.Throws<ArgumentNullException>(() => new UIAgent(null!));
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_AfterDispose_Throws()
+    {
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((msgs, opts, ct) => ResponseEmitters.EmitTextResponse("ok"));
+        var agent = new UIAgent(client);
+        agent.Dispose();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () =>
+        {
+            await foreach (var _ in agent.SendMessageAsync(new ChatMessage(ChatRole.User, "Hi")))
+            {
+            }
+        });
+    }
+
+    [Fact]
     public async Task SendMessageAsync_PassesChatOptions_ToIChatClient()
     {
         ChatOptions? capturedOptions = null;

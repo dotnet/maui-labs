@@ -14,6 +14,24 @@ public class AgentStateTests
     }
 
     [Fact]
+    public void OnChanged_CanDisposeRegistrationDuringNotification()
+    {
+        var state = new AgentState<TestState>();
+        IDisposable? registration = null;
+        var callbackCount = 0;
+        registration = state.OnChanged(() =>
+        {
+            callbackCount++;
+            registration!.Dispose();
+        });
+
+        state.Value = new TestState();
+        state.Value = new TestState();
+
+        Assert.Equal(1, callbackCount);
+    }
+
+    [Fact]
     public void Value_NoInitialValue_CreatesDefaultState()
     {
         var agent = new UIAgent<TestState>(new DelegatingStreamingChatClient());

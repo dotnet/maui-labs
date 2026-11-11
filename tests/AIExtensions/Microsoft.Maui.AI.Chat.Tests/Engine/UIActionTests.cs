@@ -359,6 +359,32 @@ public class UIActionTests
     }
 
     [Fact]
+    public async Task UIAction_NameMatchingIsOrdinal()
+    {
+        var invoked = false;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+            EmitUIActionCall("call-1", "CHANGE_BACKGROUND", cancellationToken));
+        using var agent = new UIAgent(client, options =>
+        {
+            options.RegisterUIAction(AIFunctionFactory.Create(
+                () =>
+                {
+                    invoked = true;
+                    return "changed";
+                },
+                "change_background",
+                "Changes the background."));
+        });
+        using var context = new AgentContext(agent);
+
+        await context.SendMessageAsync("Change it");
+
+        Assert.False(invoked);
+        Assert.Empty(Assert.Single(context.Turns).ResponseBlocks.OfType<UIActionBlock>());
+    }
+
+    [Fact]
     public async Task UIAction_InformationalCall_RendersWithoutInvoking()
     {
         var invocationCount = 0;
