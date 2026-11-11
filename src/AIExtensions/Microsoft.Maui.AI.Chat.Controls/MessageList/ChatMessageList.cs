@@ -16,7 +16,15 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </remarks>
 internal sealed class ChatMessageList : CollectionView
 {
-    private const double UnpinDistance = 32;
+    // A backwards scroll is the user's when it is a drag: a few steps, each soon after the one before, adding up to more
+    // than rounding. The platform's own corrections (a row measured after the list scrolled to it, a list at the end
+    // clamping its offset after a row got shorter) arrive as single steps.
+    private const int DragSteps = 2;
+    private const double DragDistance = 4;
+    private const long DragStepGapMilliseconds = 120;
+
+    // How long after a row that can get shorter changes backwards scrolls are taken for the platform's.
+    private const long SettleMilliseconds = 250;
 
     // Turns that failed. The engine commits nothing for a failed turn and forgets the failure once another message
     // is sent, so the view keeps it, for as long as the turn lives.
@@ -43,6 +51,11 @@ internal sealed class ChatMessageList : CollectionView
     private bool _isPinned = true;
     private bool _isUpdatingRows;
     private bool _statusChanged;
+    private long _settleUntil;
+    private long _lastBackwardAt;
+    private int _backwardSteps;
+    private double _backwardDistance;
+    private double _awayDistance;
 
     public ChatMessageList(AIChatView owner)
     {
@@ -59,6 +72,9 @@ internal sealed class ChatMessageList : CollectionView
 
     /// <summary>Gets or sets how long engine notifications are batched before the rows refresh.</summary>
     internal TimeSpan FlushDelay { get; set; } = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>Gets or sets the clock, in milliseconds, that times how long rows take to settle. Replaceable for tests.</summary>
+    internal Func<long> Clock { get; set; } = static () => Environment.TickCount64;
 
     internal IReadOnlyList<ChatRow> Rows => _rows;
 
@@ -116,6 +132,9 @@ internal sealed class ChatMessageList : CollectionView
     public void PinToEnd()
     {
         _isPinned = true;
+        _backwardSteps = 0;
+        _backwardDistance = 0;
+        _awayDistance = 0;
         ScrollToEnd();
     }
 
@@ -128,6 +147,7 @@ internal sealed class ChatMessageList : CollectionView
 
         bool structureChanged;
         var refreshed = false;
+        var mayShrink = false;
 
         // Removing a row (the thinking row, a cleared response) shrinks the content, and a list scrolled to the end
         // reports the clamped offset as a scroll back through the history. Those scrolls are ours, not the user's.
@@ -158,6 +178,9 @@ internal sealed class ChatMessageList : CollectionView
                 {
                     row.NotifyChanged();
                     refreshed = true;
+
+                    // Streaming text only grows; other rows (an approval or a tool card settling) can get shorter.
+                    mayShrink |= row is not BlockRow { Block: RichContentBlock };
                 }
             }
             _dirtyRows.Clear();
@@ -166,6 +189,9 @@ internal sealed class ChatMessageList : CollectionView
         {
             _isUpdatingRows = false;
         }
+
+        if (structureChanged || mayShrink)
+            _settleUntil = Clock() + SettleMilliseconds;
 
         if ((structureChanged || refreshed) && _isPinned)
             ScrollToEnd();
@@ -478,13 +504,46 @@ internal sealed class ChatMessageList : CollectionView
         if (_isUpdatingRows)
             return;
 
-        // While the newest row is on screen, a small backwards scroll is the platform correcting its layout (a row
-        // measured after the list scrolled to it), not the user reading back through the history.
+        var now = Clock();
         var newestVisible = e.LastVisibleItemIndex >= _rows.Count - 1;
-        if (e.VerticalDelta < -UnpinDistance || (e.VerticalDelta < -1 && !newestVisible))
-            _isPinned = false;
-        else if (newestVisible)
-            _isPinned = true;
+        var delta = e.VerticalDelta;
+
+        if (delta < 0)
+        {
+            // Right after a row that can get shorter changed (an approval collapsing to its decision), a list at the
+            // end clamps its offset in the next layout pass, after the flush has finished. That is not the user.
+            if (newestVisible && now < _settleUntil)
+                return;
+
+            if (now - _lastBackwardAt > DragStepGapMilliseconds)
+            {
+                _backwardSteps = 0;
+                _backwardDistance = 0;
+            }
+
+            _lastBackwardAt = now;
+            _backwardSteps++;
+            _backwardDistance -= delta;
+
+            if (!_isPinned)
+            {
+                _awayDistance -= delta;
+            }
+            else if ((_backwardSteps >= DragSteps && _backwardDistance >= DragDistance) || (delta < -1 && !newestVisible))
+            {
+                // A drag back, however slow, even while a tall answer keeps the newest row on screen; or the newest
+                // row scrolled out of view. A single step with the newest row on screen is a layout correction.
+                _isPinned = false;
+                _awayDistance = _backwardDistance;
+            }
+        }
+        else if (delta > 0 && !_isPinned)
+        {
+            // Following resumes once the user scrolls back down to where it stopped.
+            _awayDistance -= delta;
+            if (newestVisible && _awayDistance <= 1)
+                _isPinned = true;
+        }
     }
 
     private sealed class RowTemplateSelector : DataTemplateSelector
