@@ -29,10 +29,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
     <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Controls\Microsoft.Maui.AI.Chat.Controls.csproj" />
-    <!-- The linked scenarios have [ToolBlock] cards, whose handlers the generator writes. -->
-    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Generators\Microsoft.Maui.AI.Chat.Generators.csproj"
-                      OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -120,9 +116,6 @@
              Link="Services\AtomicFile.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ImageAttachment.cs"
              Link="Services\ImageAttachment.cs" />
-    <!-- The agentic scenarios: their tools, block handlers, state mappers and conversation thread. -->
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Scenarios\Core\**\*.cs"
-             Link="Scenarios\Core\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -131,8 +124,5 @@
              Link="TestData\multi-turn-image-in-out.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Resources\Raw\playground_sample.png"
              Link="TestData\playground_sample.png" CopyToOutputDirectory="PreserveNewest" />
-    <!-- The scenarios' bundled examples, which the tests replay. -->
-    <Content Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Resources\Raw\scenarios\*.json"
-             Link="TestData\scenarios\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

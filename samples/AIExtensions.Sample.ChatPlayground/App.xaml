@@ -26,9 +26,6 @@
             <Color x:Key="ModelWarningBackgroundDark">#422F0D</Color>
             <Color x:Key="ModelWarningText">#713F12</Color>
             <Color x:Key="ModelWarningTextDark">#FDE68A</Color>
-            <Color x:Key="SuccessGreen">#16A34A</Color>
-            <Color x:Key="SelectedItemBackground">#DBEAFE</Color>
-            <Color x:Key="SelectedItemBackgroundDark">#17385C</Color>
 
             <!--
                 AIChatView theming: the chat reads its colors from AIChat.Light.* and AIChat.Dark.* (see
@@ -77,15 +74,6 @@
                 <Setter Property="TextColor"
                         Value="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
                 <Setter Property="PlaceholderColor"
-                        Value="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextDark}}" />
-                <Setter Property="HeightRequest" Value="{OnPlatform 44, MacCatalyst=38, WinUI=38}" />
-            </Style>
-            <Style x:Key="InputPicker" TargetType="Picker">
-                <Setter Property="BackgroundColor"
-                        Value="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}" />
-                <Setter Property="TextColor"
-                        Value="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
-                <Setter Property="TitleColor"
                         Value="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextDark}}" />
                 <Setter Property="HeightRequest" Value="{OnPlatform 44, MacCatalyst=38, WinUI=38}" />
             </Style>
