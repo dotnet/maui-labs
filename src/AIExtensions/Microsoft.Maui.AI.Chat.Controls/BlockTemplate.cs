@@ -64,6 +64,22 @@ public class BlockTemplate : BindableObject
 
     private DataTemplate? _dataTemplate;
 
+    /// <summary>Initializes a new instance of the <see cref="BlockTemplate"/> class.</summary>
+    public BlockTemplate()
+    {
+        PropertyChanged += static (sender, e) =>
+        {
+            if (e.PropertyName != BindingContextProperty.PropertyName)
+                ((BlockTemplate)sender!).Version++;
+        };
+    }
+
+    /// <summary>
+    /// Changes whenever a property that affects matching or the created view changes, so rows recreate their
+    /// views for an edited template even when it still wins (or was edited while the chat view was unloaded).
+    /// </summary>
+    internal int Version { get; private set; }
+
     /// <summary>
     /// Gets or sets the block type to match, including derived types — for example
     /// <c>{x:Type chat:FunctionInvocationContentBlock}</c> or a type generated with <c>[ToolBlock]</c>.

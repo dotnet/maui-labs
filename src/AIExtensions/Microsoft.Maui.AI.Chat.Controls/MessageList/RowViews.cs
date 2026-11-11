@@ -50,7 +50,7 @@ internal sealed class BlockHost(BlockTemplate template) : RowView<BlockRow>
     protected override void Render(BlockRow row, bool isNewRow)
     {
         EnsureView(row);
-        BlockView.Bind(_view!, row.Block, row.Owner, row.Session);
+        BlockView.Bind(_view!, row.Block, row.Owner, row.Session, row.Turn);
     }
 
     private void EnsureView(BlockRow row)

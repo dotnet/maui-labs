@@ -334,8 +334,11 @@ public partial class AIChatView : TemplatedView
     /// The view never disposes a session it did not create.
     /// </summary>
     /// <remarks>
-    /// Restore persisted history (<see cref="AgentContext.RestoreAsync"/>) before assigning the session; the
-    /// engine does not announce restored turns.
+    /// Restore saved history before assigning the session — from its thread with
+    /// <see cref="AgentContext.RestoreAsync(CancellationToken)"/>, or from recorded messages with
+    /// <see cref="AgentContext.RestoreAsync(IEnumerable{ChatMessage}, CancellationToken)"/>. The engine does not
+    /// announce restored turns, so turns restored into a session that is already shown appear only with its next
+    /// change.
     /// </remarks>
     public AgentContext? Session
     {
@@ -647,15 +650,23 @@ public partial class AIChatView : TemplatedView
     /// <summary>Gets a command that turns live voice on or off.</summary>
     public ICommand ToggleLiveSpeechCommand { get; }
 
-    /// <summary>Sends the draft. Failures are reported through <see cref="ErrorMessage"/>.</summary>
-    /// <returns>A task that completes when the response has finished.</returns>
+    /// <summary>
+    /// Sends the draft. A message the session could not accept is reported through <see cref="ErrorMessage"/>;
+    /// a response that fails shows an error with Retry in the message list.
+    /// </summary>
+    /// <returns>A task that completes when the response has finished, stopped, or failed.</returns>
     public Task SendAsync() => _composer.SendAsync();
 
-    /// <summary>Stops the response in progress.</summary>
-    /// <returns>A task that completes when the stop has been requested.</returns>
+    /// <summary>
+    /// Stops the response in progress. The turn keeps the user's message and the partial response, and is marked
+    /// as stopped.
+    /// </summary>
+    /// <returns>A task that completes when the response has stopped.</returns>
     public Task StopAsync() => _composer.StopAsync();
 
-    /// <summary>Clears the conversation, keeping the session and its tools.</summary>
+    /// <summary>
+    /// Stops and discards any response in progress, then clears the conversation, keeping the session and its tools.
+    /// </summary>
     /// <returns>A task that completes when the conversation is cleared.</returns>
     public Task ClearAsync() => ClearSessionAsync();
 

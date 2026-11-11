@@ -13,9 +13,11 @@ templates, restyle it with resource keys, or replace the whole layout.
 - **Chat layout:** the user's messages sit in a right-aligned bubble and assistant text is full width. There
   are no avatars, names, or timestamps. A thinking row shows until content arrives, and the list
   auto-scrolls while you are at the bottom.
-- **Agent content:** tool calls are compact cards with expandable arguments and results. Approvals have
-  Approve and Reject buttons. There are also client UI actions, collapsible reasoning, inline images,
-  file chips, and failed turns with Retry.
+- **Agent content:** tool calls are compact cards with expandable arguments and results. An approval is one
+  card with Approve and Reject buttons that then shows the decision and the call's result. There are also
+  client UI actions, collapsible reasoning, inline images (data or links), and file and link chips.
+- **Turn states:** a stopped response keeps its partial output under a "Stopped" marker. A failed response
+  keeps its partial output and shows the error with Retry. A restored conversation renders without sending.
 - **Composer:** Send and Stop, suggestion chips, attachments (picker, file types, size and count limits),
   audio notes, dictation, and continuous live voice. Errors appear in one place.
 - **Customization:** `BlockTemplate` matches by block type (including `[ToolBlock]` types), tool name, role,
@@ -92,8 +94,21 @@ var agent = new UIAgent(client.AsBuilder().UseFunctionInvocation().Build(), opti
 chat.Session = new AgentContext(agent);
 ```
 
-`Session` wins over `ChatClient`, and the view never disposes a session it did not create. Restore saved history
-(`RestoreAsync`) before you assign the session.
+`Session` wins over `ChatClient`, and the view never disposes a session it did not create.
+
+To continue a saved conversation, restore it before you assign the session: `RestoreAsync()` loads the turns of
+the agent's conversation thread, and `RestoreAsync(messages)` loads recorded `ChatMessage`s. Restored turns render
+right away, recorded tool calls show their recorded results and never run again, and the next message continues
+the conversation:
+
+```csharp
+var session = new AgentContext(agent);
+await session.RestoreAsync(savedMessages);
+chat.Session = session;
+```
+
+`ClearAsync()` stops any response in progress and clears the conversation. `StopAsync()` completes once the
+response has stopped.
 
 ## Customize blocks
 
@@ -164,7 +179,7 @@ Generated blocks need `options.AddGeneratedToolBlocks()` on the agent, so assign
 | `EmptyViewTemplate` | Content before the first message. The default shows `WelcomeTitle` and `WelcomeMessage` |
 | `Suggestions` | Prompt chips shown while the conversation is empty. Tapping one sends it |
 | `MessagesHeaderTemplate` | Content at the top of the scrolling list, such as a disclaimer |
-| `ResponseFooterTemplate` | Content after each completed response. The binding context is the `ConversationTurn` |
+| `ResponseFooterTemplate` | Content after each completed response. The binding context is the `ConversationTurn`, with its final `ModelId`, `Usage`, and `IsStopped` |
 | `InputLeadingContent`, `InputTrailingContent` | Extra views beside the message box |
 
 App content in these slots inherits the view's `BindingContext`. Use `Placeholder`, `IsInputEnabled` (for

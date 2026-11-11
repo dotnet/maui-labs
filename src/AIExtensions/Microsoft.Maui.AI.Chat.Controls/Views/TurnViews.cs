@@ -18,10 +18,7 @@ internal sealed class UserMessageView : RowView<UserMessageRow>
         _stack.Children.Clear();
 
         foreach (var media in row.Blocks.OfType<MediaContentBlock>())
-        {
-            foreach (var item in media.Items)
-                _stack.Children.Add(ChatVisuals.CreateMediaView(item, alignEnd: true));
-        }
+            _stack.Children.Add(ChatVisuals.CreateMediaView(media.Content, alignEnd: true));
 
         var text = string.Join(
             "\n",
@@ -56,6 +53,23 @@ internal sealed class ThinkingView : RowView<ThinkingRow>
     }
 
     protected override void Render(ThinkingRow row, bool isNewRow)
+    {
+    }
+}
+
+/// <summary>A subtle marker under a response the user stopped. The partial output above it stays.</summary>
+internal sealed class TurnStoppedView : RowView<TurnStoppedRow>
+{
+    internal const string Message = "Stopped";
+
+    public TurnStoppedView()
+    {
+        AutomationId = "AIChatStopped";
+        Content = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle, Message);
+        SemanticProperties.SetDescription(this, "The response was stopped");
+    }
+
+    protected override void Render(TurnStoppedRow row, bool isNewRow)
     {
     }
 }

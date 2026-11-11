@@ -5,7 +5,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// <summary>
 /// The message list: rows projected straight from <see cref="AgentContext.Turns"/>, like the upstream
 /// <c>MessageList</c>. Each turn shows the user's bubble, one row per rendered response block, then a thinking
-/// row, an error row, or the app's response footer.
+/// row, an error row, or a stopped marker, and the app's response footer.
 /// </summary>
 /// <remarks>
 /// Engine notifications only mark the list dirty. One flush per dispatcher tick (about 50 ms) reconciles the
@@ -25,7 +25,9 @@ internal sealed class ChatMessageList : CollectionView
     private readonly HashSet<ChatRow> _dirtyRows = [];
     private readonly Dictionary<ConversationTurn, UserMessageRow> _userRows = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<ConversationTurn, TurnErrorRow> _errorRows = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<ConversationTurn, TurnStoppedRow> _stoppedRows = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<ConversationTurn, TurnFooterRow> _footerRows = new(ReferenceEqualityComparer.Instance);
+    private readonly List<ChatRow> _lastTurnRows = [];
     private readonly ThinkingRow _thinkingRow = new();
     private readonly List<IDisposable> _sessionSubscriptions = [];
     private AgentContext? _session;
@@ -33,6 +35,7 @@ internal sealed class ChatMessageList : CollectionView
     private int _flushGeneration;
     private bool _isPinned = true;
     private bool _isUpdatingRows;
+    private bool _statusChanged;
 
     public ChatMessageList(AIChatView owner)
     {
@@ -64,7 +67,7 @@ internal sealed class ChatMessageList : CollectionView
         if (session is not null)
         {
             _sessionSubscriptions.Add(session.RegisterOnTurnAdded(_ => Invalidate()));
-            _sessionSubscriptions.Add(session.RegisterOnStatusChanged(_ => Invalidate()));
+            _sessionSubscriptions.Add(session.RegisterOnStatusChanged(_ => OnStatusChanged()));
             _sessionSubscriptions.Add(session.RegisterOnBlockAdded((_, _) => Invalidate()));
             _sessionSubscriptions.Add(session.RegisterOnResponseBlocksCleared(_ => Invalidate()));
         }
@@ -88,13 +91,11 @@ internal sealed class ChatMessageList : CollectionView
         _changedBlocks.Clear();
     }
 
-    /// <summary>Re-selects every block's template on the next flush (templates were added, removed, or edited).</summary>
-    public void InvalidateTemplates()
-    {
-        _blockRows.Clear();
-        _footerRows.Clear();
-        Invalidate();
-    }
+    /// <summary>
+    /// Re-selects every block's template on the next flush (templates were added, removed, or edited). Rows whose
+    /// template and its <see cref="BlockTemplate.Version"/> are unchanged keep their views.
+    /// </summary>
+    public void InvalidateTemplates() => Invalidate();
 
     /// <summary>Scrolls to the newest row and keeps following new content.</summary>
     public void PinToEnd()
@@ -125,6 +126,14 @@ internal sealed class ChatMessageList : CollectionView
                     _dirtyRows.Add(row);
             }
             _changedBlocks.Clear();
+
+            // A turn's rows show its state (a call still running, an approval still open, the footer's usage):
+            // refresh them when the conversation's status changes, since the blocks themselves did not.
+            if (_statusChanged)
+            {
+                _statusChanged = false;
+                _dirtyRows.UnionWith(_lastTurnRows);
+            }
 
             foreach (var row in _dirtyRows)
             {
@@ -167,6 +176,12 @@ internal sealed class ChatMessageList : CollectionView
         });
     }
 
+    private void OnStatusChanged()
+    {
+        _statusChanged = true;
+        Invalidate();
+    }
+
     private void OnBlockChanged(ContentBlock block)
     {
         _changedBlocks.Add(block);
@@ -178,6 +193,7 @@ internal sealed class ChatMessageList : CollectionView
         var desired = new List<ChatRow>();
         var liveBlocks = new HashSet<ContentBlock>(ReferenceEqualityComparer.Instance);
         var liveTurns = new HashSet<ConversationTurn>(ReferenceEqualityComparer.Instance);
+        _lastTurnRows.Clear();
 
         if (_session is { } session)
         {
@@ -190,6 +206,7 @@ internal sealed class ChatMessageList : CollectionView
             {
                 var turn = turns[index];
                 var isLast = index == turns.Count - 1;
+                var start = desired.Count;
                 liveTurns.Add(turn);
 
                 AddRequestRows(desired, liveBlocks, session, turn, templates);
@@ -201,7 +218,7 @@ internal sealed class ChatMessageList : CollectionView
                     var template = BuiltInBlockTemplates.Select(block, templates, includeBuiltIns: true);
                     if (template is { CanRender: true })
                     {
-                        desired.Add(GetBlockRow(block, template, session));
+                        desired.Add(GetBlockRow(block, template, session, turn));
                         lastVisible = block;
                     }
                 }
@@ -215,9 +232,15 @@ internal sealed class ChatMessageList : CollectionView
                 if (isLast && status == ConversationStatus.Error)
                     desired.Add(GetRow(_errorRows, turn, () => new TurnErrorRow(turn, session)));
 
+                if (turn.IsStopped)
+                    desired.Add(GetRow(_stoppedRows, turn, () => new TurnStoppedRow(turn)));
+
                 var isComplete = !isLast || status == ConversationStatus.Idle;
                 if (footer is not null && isComplete && turn.ResponseBlocks.Count > 0)
-                    desired.Add(GetRow(_footerRows, turn, () => new TurnFooterRow(turn, footer)));
+                    desired.Add(GetFooterRow(turn, footer));
+
+                if (isLast)
+                    _lastTurnRows.AddRange(desired.Skip(start));
             }
         }
 
@@ -244,7 +267,7 @@ internal sealed class ChatMessageList : CollectionView
             if (BuiltInBlockTemplates.Select(block, templates, includeBuiltIns: false) is { } template)
             {
                 if (template.CanRender)
-                    desired.Add(GetBlockRow(block, template, session));
+                    desired.Add(GetBlockRow(block, template, session, turn));
                 continue;
             }
 
@@ -282,17 +305,29 @@ internal sealed class ChatMessageList : CollectionView
         }
     }
 
-    private BlockRow GetBlockRow(ContentBlock block, BlockTemplate template, AgentContext session)
+    private BlockRow GetBlockRow(ContentBlock block, BlockTemplate template, AgentContext session, ConversationTurn turn)
     {
         if (_blockRows.TryGetValue(block, out var row) &&
             ReferenceEquals(row.Template, template) &&
+            row.TemplateVersion == template.Version &&
             ReferenceEquals(row.Session, session))
         {
             return row;
         }
 
-        row = new BlockRow(block, template, session, _owner);
+        row = new BlockRow(block, template, session, turn, _owner);
         _blockRows[block] = row;
+        return row;
+    }
+
+    private TurnFooterRow GetFooterRow(ConversationTurn turn, DataTemplate footer)
+    {
+        if (!_footerRows.TryGetValue(turn, out var row) || !ReferenceEquals(row.Template, footer))
+        {
+            row = new TurnFooterRow(turn, footer);
+            _footerRows[turn] = row;
+        }
+
         return row;
     }
 
@@ -321,6 +356,7 @@ internal sealed class ChatMessageList : CollectionView
 
         PruneTurns(_userRows, liveTurns);
         PruneTurns(_errorRows, liveTurns);
+        PruneTurns(_stoppedRows, liveTurns);
         PruneTurns(_footerRows, liveTurns);
     }
 
@@ -383,6 +419,7 @@ internal sealed class ChatMessageList : CollectionView
         private readonly DataTemplate _user = new(static () => new UserMessageView());
         private readonly DataTemplate _thinking = new(static () => new ThinkingView());
         private readonly DataTemplate _error = new(static () => new TurnErrorView());
+        private readonly DataTemplate _stopped = new(static () => new TurnStoppedView());
         private readonly Dictionary<DataTemplate, DataTemplate> _footers = [];
 
         protected override DataTemplate OnSelectTemplate(object item, BindableObject container) =>
@@ -392,6 +429,7 @@ internal sealed class ChatMessageList : CollectionView
                 UserMessageRow => _user,
                 ThinkingRow => _thinking,
                 TurnErrorRow => _error,
+                TurnStoppedRow => _stopped,
                 TurnFooterRow row => GetFooter(row.Template),
                 _ => Empty,
             };
