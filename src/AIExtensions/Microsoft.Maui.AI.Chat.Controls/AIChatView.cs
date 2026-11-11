@@ -520,6 +520,10 @@ public partial class AIChatView : TemplatedView
     /// <summary>
     /// Gets or sets the largest attachment or audio recording, in bytes. Defaults to 10 MB; values below 1 are ignored.
     /// </summary>
+    /// <remarks>
+    /// All attachments of one message together can be up to 50 MB, or up to this limit when it is larger, so a
+    /// file this size always fits on its own.
+    /// </remarks>
     public long MaximumAttachmentBytes
     {
         get => (long)GetValue(MaximumAttachmentBytesProperty);
