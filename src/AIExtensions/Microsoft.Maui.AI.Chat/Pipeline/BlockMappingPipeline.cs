@@ -116,6 +116,7 @@ internal class BlockMappingPipeline
         // Phase 2: Inactive handlers try to claim remaining content
         if (!context.AllHandled)
         {
+            List<(int Position, ContentBlock Block)>? emitted = null;
             for (var i = 0; i < _handlers.Count; i++)
             {
                 if (context.AllHandled)
@@ -129,6 +130,7 @@ internal class BlockMappingPipeline
                 while (!context.AllHandled)
                 {
                     var progressBefore = context.HandledProgress;
+                    context.BeginClaim();
                     var activeEntry = handler.TryHandle(context);
                     if (activeEntry is not null)
                     {
@@ -144,10 +146,7 @@ internal class BlockMappingPipeline
                         if (!alreadyComplete)
                             _activeStack.Add(activeEntry);
                         RegisterCall(emitBlock, activeEntry);
-
-                        BlockMappingPipelineLog.EmittingBlock(_logger, emitBlock.GetType().Name, emitBlock.Id, emitBlock.Role?.Value);
-
-                        yield return emitBlock;
+                        (emitted ??= new()).Add((context.FirstClaimed, emitBlock));
 
                         // If the handler emitted without consuming any content, stop
                         // re-invoking it to prevent infinite loops.
@@ -160,6 +159,18 @@ internal class BlockMappingPipeline
                     {
                         break;
                     }
+                }
+            }
+
+            if (emitted is not null)
+            {
+                // Handlers run in registration order, but the blocks follow the order of the contents they
+                // show, so a message with reasoning, text and a call reads in that order. A block that
+                // claimed no content goes last. OrderBy is a stable sort.
+                foreach (var (_, emitBlock) in emitted.OrderBy(static emission => emission.Position))
+                {
+                    BlockMappingPipelineLog.EmittingBlock(_logger, emitBlock.GetType().Name, emitBlock.Id, emitBlock.Role?.Value);
+                    yield return emitBlock;
                 }
             }
         }

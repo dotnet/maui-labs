@@ -15,6 +15,7 @@ public class BlockMappingContext
     private readonly bool[] _handled;
     private int _handledCount;
     private int _progress;
+    private int _firstClaimed = int.MaxValue;
     private bool _updateHandled;
     private readonly IReadOnlyList<IHandlerEntry>? _inactiveHandlers;
     private readonly FunctionCallRegistry? _calls;
@@ -49,19 +50,13 @@ public class BlockMappingContext
 
     public void MarkHandled(AIContent content)
     {
-        var contents = Update.Contents;
-        for (var i = 0; i < contents.Count; i++)
-        {
-            if (ReferenceEquals(contents[i], content))
-            {
-                if (!_handled[i])
-                {
-                    _handled[i] = true;
-                    _handledCount++;
-                }
-                return;
-            }
-        }
+        var index = IndexOf(content);
+        if (index < 0 || _handled[index])
+            return;
+
+        _handled[index] = true;
+        _handledCount++;
+        RecordClaim(index);
     }
 
     public void MarkUpdateHandled()
@@ -75,10 +70,43 @@ public class BlockMappingContext
     internal int HandledProgress => _handledCount + _progress + (_updateHandled ? 1 : 0);
 
     /// <summary>
+    /// Gets the position in the update of the first content claimed since <see cref="BeginClaim"/>, or
+    /// <see cref="int.MaxValue"/> when none was.
+    /// </summary>
+    internal int FirstClaimed => _firstClaimed;
+
+    /// <summary>Starts recording which contents the next handler claims.</summary>
+    internal void BeginClaim() => _firstClaimed = int.MaxValue;
+
+    /// <summary>
     /// Records that a handler emitted a block for part of a content item it has not marked handled
     /// yet, so the pipeline asks it again for the rest of the item.
     /// </summary>
-    internal void ReportProgress() => _progress++;
+    internal void ReportProgress(AIContent content)
+    {
+        _progress++;
+        var index = IndexOf(content);
+        if (index >= 0)
+            RecordClaim(index);
+    }
+
+    private void RecordClaim(int index)
+    {
+        if (index < _firstClaimed)
+            _firstClaimed = index;
+    }
+
+    private int IndexOf(AIContent content)
+    {
+        var contents = Update.Contents;
+        for (var i = 0; i < contents.Count; i++)
+        {
+            if (ReferenceEquals(contents[i], content))
+                return i;
+        }
+
+        return -1;
+    }
 
     public ContentBlock? CreateInnerBlock(AIContent content)
         => CreateInnerBlock(content, claimUIActions: true, out _);
