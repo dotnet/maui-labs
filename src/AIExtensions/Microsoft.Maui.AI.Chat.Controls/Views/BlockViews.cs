@@ -1,22 +1,5 @@
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>Assistant text. Full width, no bubble.</summary>
-/// <remarks>Plain text for now; the Markdown renderer replaces this view in <see cref="BuiltInBlockTemplates"/>.</remarks>
-internal sealed class TextBlockView : BlockView
-{
-    private readonly Label _label = ChatVisuals.Label(AIChatThemeKeys.AssistantTextStyle);
-
-    public TextBlockView()
-    {
-        AutomationId = "AIChatAssistantText";
-        Content = _label;
-    }
-
-    internal Label Label => _label;
-
-    protected override void OnBlockChanged() => _label.Text = (Block as RichContentBlock)?.RawText;
-}
-
 /// <summary>A compact tool call card: name and status, with expandable arguments and result.</summary>
 internal sealed class ToolCallView : BlockView
 {
@@ -93,43 +76,40 @@ internal sealed class ToolCallView : BlockView
         var block = Block as FunctionInvocationContentBlock;
         var name = block?.ToolName ?? "Tool";
         _title.Text = name;
-        _status.Text = GetStatus(block);
+        _status.Text = ChatVisuals.DescribeCall(block, IsTurnActive, Turn?.IsStopped == true);
+        _status.IsVisible = _status.Text.Length > 0;
 
         var arguments = ChatVisuals.FormatArguments(block?.Arguments);
         _arguments.Text = arguments;
         _argumentsHeader.IsVisible = _argumentsBlock.IsVisible = arguments.Length > 0;
 
         var result = block?.Result;
-        _result.Text = result is null
-            ? string.Empty
-            : result.Exception?.Message ?? ChatVisuals.FormatValue(result.Result);
+        _result.Text = result is null ? string.Empty : ChatVisuals.FormatResult(result);
         _resultHeader.IsVisible = _resultBlock.IsVisible = result is not null;
 
         _details.IsVisible = _expanded;
         _toggle.Text = _expanded ? "\u25BE" : "\u25B8";
         var action = _expanded ? "Hide" : "Show";
         SemanticProperties.SetDescription(_toggle, $"{action} details for {name}");
-        SemanticProperties.SetDescription(_title, $"Tool {name}, {_status.Text}");
+        SemanticProperties.SetDescription(_title, _status.Text.Length > 0 ? $"Tool {name}, {_status.Text}" : $"Tool {name}");
     }
-
-    private static string GetStatus(FunctionInvocationContentBlock? block) =>
-        block?.Result switch
-        {
-            null => "Running…",
-            { Exception: not null } => "Failed",
-            _ => "Completed",
-        };
 }
 
-/// <summary>Asks the user to approve or reject a tool call.</summary>
+/// <summary>
+/// Asks the user to approve or reject a tool call, then shows the decision and, once the call ran, its result —
+/// one card per call.
+/// </summary>
 internal sealed class ToolApprovalView : BlockView
 {
     private readonly Label _title = ChatVisuals.Label(AIChatThemeKeys.CardTitleStyle);
+    private readonly Label _status = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle);
     private readonly ContentView _details = new();
     private readonly Label _arguments = ChatVisuals.Label(AIChatThemeKeys.CodeTextStyle);
     private readonly Border _argumentsBlock;
+    private readonly Label _resultHeader = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle, "Result");
+    private readonly Label _result = ChatVisuals.Label(AIChatThemeKeys.CodeTextStyle);
+    private readonly Border _resultBlock;
     private readonly HorizontalStackLayout _buttons;
-    private readonly Label _resolution = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle);
     private BlockTemplate? _innerTemplate;
     private View? _innerView;
 
@@ -137,10 +117,13 @@ internal sealed class ToolApprovalView : BlockView
     {
         AutomationId = "AIChatToolApproval";
         _title.LineBreakMode = LineBreakMode.WordWrap;
+        _title.VerticalOptions = LayoutOptions.Center;
+        _status.VerticalOptions = LayoutOptions.Center;
         _argumentsBlock = ChatVisuals.CodeBlock(_arguments);
+        _resultBlock = ChatVisuals.CodeBlock(_result);
 
-        ApproveCommand = new Command(Approve, () => Pending is not null);
-        RejectCommand = new Command(Reject, () => Pending is not null);
+        ApproveCommand = new Command(Approve, () => CanDecide);
+        RejectCommand = new Command(Reject, () => CanDecide);
 
         var approve = new Button { Text = "Approve", AutomationId = "ApproveToolButton", Command = ApproveCommand }
             .Styled(AIChatThemeKeys.PrimaryButtonStyle);
@@ -148,10 +131,18 @@ internal sealed class ToolApprovalView : BlockView
             .Styled(AIChatThemeKeys.SecondaryButtonStyle);
         _buttons = new HorizontalStackLayout { Spacing = 8, Children = { approve, reject } };
 
+        var header = new Grid
+        {
+            ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto) },
+            ColumnSpacing = 8,
+        };
+        header.Add(_title, 0);
+        header.Add(_status, 1);
+
         Content = ChatVisuals.Card(new VerticalStackLayout
         {
             Spacing = 8,
-            Children = { _title, _details, _buttons, _resolution },
+            Children = { header, _details, _resultHeader, _resultBlock, _buttons },
         });
     }
 
@@ -161,40 +152,63 @@ internal sealed class ToolApprovalView : BlockView
 
     internal Label TitleLabel => _title;
 
-    internal Label ResolutionLabel => _resolution;
+    internal Label StatusLabel => _status;
+
+    internal Label ResultLabel => _result;
 
     internal HorizontalStackLayout Buttons => _buttons;
 
     internal View? InnerView => _innerView;
 
-    private ToolApprovalBlock? Pending => Block is ToolApprovalBlock { Status: ApprovalStatus.Pending } block ? block : null;
+    /// <summary>Gets whether the user can still decide: the request is pending and its turn is still waiting.</summary>
+    private bool CanDecide => Block is ToolApprovalBlock { Status: ApprovalStatus.Pending } && IsTurnActive;
 
     protected override void OnBlockChanged()
     {
         var block = Block as ToolApprovalBlock;
         var name = block?.ToolName ?? "this tool";
-        var status = block?.Status ?? ApprovalStatus.Pending;
+        var canDecide = CanDecide;
 
-        _title.Text = status == ApprovalStatus.Pending ? $"Allow {name} to run?" : name;
-        UpdateDetails(block);
+        _title.Text = canDecide ? $"Allow {name} to run?" : name;
+        UpdateDetails(block, canDecide);
 
-        _buttons.IsVisible = status == ApprovalStatus.Pending;
-        _resolution.IsVisible = status != ApprovalStatus.Pending;
-        _resolution.Text = status switch
-        {
-            ApprovalStatus.Approved => "Approved",
-            ApprovalStatus.Rejected => "Rejected",
-            _ => null,
-        };
-        _resolution.SetDynamicResource(
-            Label.TextColorProperty,
-            status == ApprovalStatus.Approved ? AIChatThemeKeys.SuccessColor : AIChatThemeKeys.ErrorColor);
+        var (status, colorKey) = Describe(block);
+        _status.Text = status;
+        _status.IsVisible = status.Length > 0;
+        _status.SetDynamicResource(Label.TextColorProperty, colorKey);
 
+        // An app template for the call shows its result itself.
+        var result = block?.Result;
+        var showResult = result is not null && _innerView is null;
+        _result.Text = showResult ? ChatVisuals.FormatResult(result!) : null;
+        _resultHeader.IsVisible = _resultBlock.IsVisible = showResult;
+
+        _buttons.IsVisible = canDecide;
+        SemanticProperties.SetDescription(_title, status.Length > 0 ? $"{name}, {status}" : _title.Text);
         ApproveCommand.ChangeCanExecute();
         RejectCommand.ChangeCanExecute();
     }
 
-    private void UpdateDetails(ToolApprovalBlock? block)
+    private (string Text, string ColorKey) Describe(ToolApprovalBlock? block)
+    {
+        var stopped = Turn?.IsStopped == true;
+        return block?.Status switch
+        {
+            ApprovalStatus.Rejected => ("Rejected", AIChatThemeKeys.ErrorColor),
+            ApprovalStatus.Approved => block.Result switch
+            {
+                { Exception: not null } => ("Approved \u00B7 Failed", AIChatThemeKeys.ErrorColor),
+                not null => ("Approved", AIChatThemeKeys.SuccessColor),
+                _ when IsTurnActive => ("Approved \u00B7 Running\u2026", AIChatThemeKeys.SecondaryTextColor),
+                _ when stopped => ("Approved \u00B7 Stopped", AIChatThemeKeys.SecondaryTextColor),
+                _ => ("Approved \u00B7 Not completed", AIChatThemeKeys.SecondaryTextColor),
+            },
+            _ when CanDecide || block is null => (string.Empty, AIChatThemeKeys.SecondaryTextColor),
+            _ => (stopped ? "Stopped" : "Not answered", AIChatThemeKeys.SecondaryTextColor),
+        };
+    }
+
+    private void UpdateDetails(ToolApprovalBlock? block, bool canDecide)
     {
         // An app template for the tool call (for example a [ToolBlock] card) renders inside the approval.
         var inner = block?.InnerBlock;
@@ -207,8 +221,8 @@ internal sealed class ToolApprovalView : BlockView
                 _innerView = template.CreateView(inner, this, Owner?.Services);
             }
 
-            Bind(_innerView, inner, Owner, Session);
-            _innerView.IsEnabled = block?.Status == ApprovalStatus.Pending;
+            Bind(_innerView, inner, Owner, Session, Turn);
+            _innerView.IsEnabled = canDecide;
             _details.Content = _innerView;
             _details.IsVisible = true;
             return;
@@ -224,7 +238,7 @@ internal sealed class ToolApprovalView : BlockView
 
     private void Approve()
     {
-        if (Pending is not { } block)
+        if (!CanDecide || Block is not ToolApprovalBlock block)
             return;
 
         block.Approve();
@@ -233,7 +247,7 @@ internal sealed class ToolApprovalView : BlockView
 
     private void Reject()
     {
-        if (Pending is not { } block)
+        if (!CanDecide || Block is not ToolApprovalBlock block)
             return;
 
         block.Reject();
@@ -270,7 +284,8 @@ internal sealed class UIActionView : BlockView
 
     internal Button RunButton => _run;
 
-    private bool CanRun => Block is UIActionBlock { Mode: UIActionInvocationMode.Manual, IsComplete: false } && !_isRunning;
+    private bool CanRun =>
+        Block is UIActionBlock { Mode: UIActionInvocationMode.Manual, IsComplete: false } && !_isRunning && IsTurnActive;
 
     protected override void OnBlockChanged()
     {
@@ -280,10 +295,12 @@ internal sealed class UIActionView : BlockView
         _status.Text = action switch
         {
             { IsComplete: true } => "Done",
-            { Mode: UIActionInvocationMode.Manual } when !_isRunning => "Waiting for you to run it",
-            _ => "Running…",
+            _ when _isRunning => "Running\u2026",
+            _ when !IsTurnActive => Turn?.IsStopped == true ? "Stopped" : "Not run",
+            { Mode: UIActionInvocationMode.Manual } => "Waiting for you to run it",
+            _ => "Running\u2026",
         };
-        _run.IsVisible = action is { Mode: UIActionInvocationMode.Manual, IsComplete: false };
+        _run.IsVisible = CanRun;
         SemanticProperties.SetDescription(_title, $"Action {name}, {_status.Text}");
         RunCommand.ChangeCanExecute();
     }
@@ -370,26 +387,25 @@ internal sealed class ReasoningView : BlockView
     }
 }
 
-/// <summary>Media the assistant returned: images inline, anything else as a file chip.</summary>
+/// <summary>
+/// One media item the assistant returned: an image inline, a link as a link chip, anything else as a file chip.
+/// A streaming image (a partial image replaced by the next) updates in place.
+/// </summary>
 internal sealed class MediaBlockView : BlockView
 {
-    private readonly VerticalStackLayout _items = new() { Spacing = 8 };
+    private AIContent? _shown;
 
-    public MediaBlockView()
-    {
-        AutomationId = "AIChatMedia";
-        Content = _items;
-    }
+    public MediaBlockView() => AutomationId = "AIChatMedia";
 
-    internal VerticalStackLayout Items => _items;
+    internal View? MediaView => Content;
 
     protected override void OnBlockChanged()
     {
-        _items.Children.Clear();
-        if (Block is not MediaContentBlock media)
+        var content = (Block as MediaContentBlock)?.Content;
+        if (ReferenceEquals(content, _shown))
             return;
 
-        foreach (var item in media.Items)
-            _items.Children.Add(ChatVisuals.CreateMediaView(item));
+        _shown = content;
+        Content = content is null ? null : ChatVisuals.UpdateMediaView(Content, content);
     }
 }

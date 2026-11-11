@@ -48,14 +48,27 @@ public class BlockView : ContentView
     /// <summary>Gets the chat view that hosts this view, used by built-in views to resolve nested templates.</summary>
     internal AIChatView? Owner { get; set; }
 
+    /// <summary>Gets the turn that contains <see cref="Block"/>, when the view is shown in a chat view.</summary>
+    internal ConversationTurn? Turn { get; set; }
+
+    /// <summary>
+    /// Gets whether the block's turn is still running, so a call without a result may still get one and an
+    /// approval or UI action can still be answered. Without a session nothing says the turn ended.
+    /// </summary>
+    internal bool IsTurnActive =>
+        Session is not { } session ||
+        (session.Status is ConversationStatus.Streaming or ConversationStatus.AwaitingInput &&
+         (Turn is null || (session.Turns.Count > 0 && ReferenceEquals(session.Turns[^1], Turn))));
+
     /// <summary>Shows <paramref name="block"/> in a view created by a <see cref="BlockTemplate"/>, or refreshes it.</summary>
-    internal static void Bind(View view, ContentBlock block, AIChatView? owner, AgentContext? session)
+    internal static void Bind(View view, ContentBlock block, AIChatView? owner, AgentContext? session, ConversationTurn? turn = null)
     {
         var blockView = view as BlockView;
         if (blockView is not null)
         {
             blockView.Owner = owner;
             blockView.Session = session;
+            blockView.Turn = turn;
         }
 
         // Blocks don't raise property changes: resetting the context re-evaluates every binding once.

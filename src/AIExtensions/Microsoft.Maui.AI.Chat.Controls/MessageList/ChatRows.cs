@@ -28,13 +28,18 @@ internal sealed class UserMessageRow(ConversationTurn turn) : ChatRow
 }
 
 /// <summary>One content block rendered with the template selected for it.</summary>
-internal sealed class BlockRow(ContentBlock block, BlockTemplate template, AgentContext session, AIChatView owner) : ChatRow
+internal sealed class BlockRow(ContentBlock block, BlockTemplate template, AgentContext session, ConversationTurn turn, AIChatView owner) : ChatRow
 {
     public ContentBlock Block { get; } = block;
 
     public BlockTemplate Template { get; } = template;
 
+    /// <summary>Gets the <see cref="BlockTemplate.Version"/> the row was created with; an edited template recreates its views.</summary>
+    public int TemplateVersion { get; } = template.Version;
+
     public AgentContext Session { get; } = session;
+
+    public ConversationTurn Turn { get; } = turn;
 
     public AIChatView Owner { get; } = owner;
 }
@@ -50,6 +55,12 @@ internal sealed class TurnErrorRow(ConversationTurn turn, AgentContext session) 
     public ConversationTurn Turn { get; } = turn;
 
     public AgentContext Session { get; } = session;
+}
+
+/// <summary>Marks a response the user stopped; its partial output stays above it.</summary>
+internal sealed class TurnStoppedRow(ConversationTurn turn) : ChatRow
+{
+    public ConversationTurn Turn { get; } = turn;
 }
 
 /// <summary>The app's <see cref="AIChatView.ResponseFooterTemplate"/> under a completed response.</summary>

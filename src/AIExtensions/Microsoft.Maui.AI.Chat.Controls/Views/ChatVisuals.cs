@@ -23,26 +23,107 @@ internal static class ChatVisuals
     public static Border CodeBlock(Label text) =>
         new Border { Content = text }.Styled(AIChatThemeKeys.CodeBlockStyle);
 
-    /// <summary>Creates an inline image for image content, or a file chip for anything else.</summary>
-    public static View CreateMediaView(DataContent content, bool alignEnd = false)
-    {
-        var name = string.IsNullOrWhiteSpace(content.Name) ? null : content.Name;
-        if (content.HasTopLevelMediaType("image") && !content.Data.IsEmpty)
+    /// <summary>
+    /// Creates the view for one media item: an inline image for image data or an image link, a file chip for
+    /// other data, and a link chip for other links.
+    /// </summary>
+    public static View CreateMediaView(AIContent content, bool alignEnd = false) =>
+        content switch
         {
-            var bytes = content.Data;
-            var image = new Image
-            {
-                Source = ImageSource.FromStream(() => new MemoryStream(bytes.ToArray())),
-                Aspect = Aspect.AspectFit,
-                MaximumHeightRequest = 240,
-                MaximumWidthRequest = 320,
-                HorizontalOptions = alignEnd ? LayoutOptions.End : LayoutOptions.Start,
-            };
-            SemanticProperties.SetDescription(image, name ?? "Image");
+            DataContent data when data.HasTopLevelMediaType("image") && !data.Data.IsEmpty =>
+                CreateImage(CreateImageSource(data)!, data.Name, alignEnd),
+            UriContent link when link.HasTopLevelMediaType("image") && IsWebUri(link.Uri) =>
+                CreateImage(CreateImageSource(link)!, GetLinkName(link.Uri), alignEnd),
+            DataContent data => CreateFileChip(data, alignEnd),
+            UriContent link => CreateLinkChip(link, alignEnd),
+            _ => Label(AIChatThemeKeys.SecondaryTextStyle, content.GetType().Name),
+        };
+
+    /// <summary>
+    /// Shows <paramref name="content"/> in <paramref name="current"/> when both are images, so an image that is
+    /// replaced while it streams (a partial image) updates in place; otherwise creates a new view.
+    /// </summary>
+    public static View UpdateMediaView(View? current, AIContent content, bool alignEnd = false)
+    {
+        if (current is Image image && CreateImageSource(content) is { } source)
+        {
+            image.Source = source;
             return image;
         }
 
-        return CreateFileChip(content, alignEnd);
+        return CreateMediaView(content, alignEnd);
+    }
+
+    private static ImageSource? CreateImageSource(AIContent content) =>
+        content switch
+        {
+            DataContent data when data.HasTopLevelMediaType("image") && !data.Data.IsEmpty =>
+                ImageSource.FromStream(() => new MemoryStream(data.Data.ToArray())),
+            UriContent link when link.HasTopLevelMediaType("image") && IsWebUri(link.Uri) =>
+                ImageSource.FromUri(link.Uri),
+            _ => null,
+        };
+
+    private static Image CreateImage(ImageSource source, string? name, bool alignEnd)
+    {
+        var image = new Image
+        {
+            Source = source,
+            Aspect = Aspect.AspectFit,
+            MaximumHeightRequest = 240,
+            MaximumWidthRequest = 320,
+            HorizontalOptions = alignEnd ? LayoutOptions.End : LayoutOptions.Start,
+        };
+        SemanticProperties.SetDescription(image, string.IsNullOrWhiteSpace(name) ? "Image" : name);
+        return image;
+    }
+
+    /// <summary>A chip for media the model linked to rather than returned; tapping it opens the link.</summary>
+    public static View CreateLinkChip(UriContent content, bool alignEnd = false)
+    {
+        var uri = content.Uri;
+        var name = GetLinkName(uri);
+        var detail = uri.IsAbsoluteUri ? $"{DescribeMediaType(content.MediaType)} · {uri.Host}" : DescribeMediaType(content.MediaType);
+        var chip = CreateChip("\U0001F517", name, detail, alignEnd, trailing: null);
+        if (IsSafeUri(uri))
+        {
+            chip.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(async () => await OpenLinkAsync(uri)) });
+            SemanticProperties.SetHint(chip, "Opens the link");
+        }
+
+        return chip;
+    }
+
+    private static string GetLinkName(Uri uri)
+    {
+        if (!uri.IsAbsoluteUri)
+            return uri.OriginalString;
+
+        var name = Path.GetFileName(uri.AbsolutePath);
+        return string.IsNullOrEmpty(name) ? uri.Host : Uri.UnescapeDataString(name);
+    }
+
+    /// <summary>Gets whether a link is safe to open or load: http, https, or mailto.</summary>
+    public static bool IsSafeUri(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) && IsSafeUri(uri);
+
+    public static bool IsSafeUri(Uri uri) =>
+        uri.IsAbsoluteUri && uri.Scheme is "http" or "https" or "mailto";
+
+    private static bool IsWebUri(Uri uri) =>
+        uri.IsAbsoluteUri && uri.Scheme is "http" or "https";
+
+    /// <summary>Opens a link in the platform browser or mail app, when the platform has one.</summary>
+    public static async Task OpenLinkAsync(Uri uri)
+    {
+        try
+        {
+            await Launcher.Default.OpenAsync(uri);
+        }
+        catch (Exception ex) when (ex is FeatureNotSupportedException or InvalidOperationException or NotImplementedException)
+        {
+            // No browser or launcher on this platform; the link text stays readable.
+        }
     }
 
     public static View CreateFileChip(DataContent content, bool alignEnd = false, View? trailing = null)
@@ -50,7 +131,11 @@ internal static class ChatVisuals
         var name = string.IsNullOrWhiteSpace(content.Name) ? DescribeMediaType(content.MediaType) : content.Name!;
         var glyph = content.HasTopLevelMediaType("audio") ? "\U0001F3B5" : "\U0001F4C4";
         var detail = $"{DescribeMediaType(content.MediaType)} · {FormatSize(content.Data.Length)}";
+        return CreateChip(glyph, name, detail, alignEnd, trailing);
+    }
 
+    private static Border CreateChip(string glyph, string name, string detail, bool alignEnd, View? trailing)
+    {
         var text = new VerticalStackLayout
         {
             Spacing = 0,
@@ -100,6 +185,26 @@ internal static class ChatVisuals
             < 1024 * 1024 => (bytes / 1024d).ToString("0.#", CultureInfo.InvariantCulture) + " KB",
             _ => (bytes / (1024d * 1024)).ToString("0.#", CultureInfo.InvariantCulture) + " MB",
         };
+
+    /// <summary>
+    /// Describes a tool call: its result when it has one, otherwise whether it is still running, was stopped, or
+    /// never finished. Informational calls (run by the provider, or replayed from history) without a result have no
+    /// status.
+    /// </summary>
+    public static string DescribeCall(FunctionInvocationContentBlock? block, bool isTurnActive, bool isTurnStopped) =>
+        block?.Result switch
+        {
+            { Exception: not null } => "Failed",
+            not null => "Completed",
+            _ when isTurnActive => "Running\u2026",
+            _ when block?.Call is { InformationalOnly: true } => string.Empty,
+            _ when isTurnStopped => "Stopped",
+            _ => "Not completed",
+        };
+
+    /// <summary>Formats a tool result for a code block: the error message, or the value.</summary>
+    public static string FormatResult(FunctionResultContent result) =>
+        result.Exception?.Message ?? FormatValue(result.Result);
 
     public static string FormatArguments(IDictionary<string, object?>? arguments)
     {

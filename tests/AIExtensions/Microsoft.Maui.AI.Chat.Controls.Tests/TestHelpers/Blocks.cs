@@ -48,13 +48,7 @@ internal static class Blocks
         return block;
     }
 
-    public static MediaContentBlock Media(params DataContent[] items)
-    {
-        var block = new MediaContentBlock { Role = ChatRole.Assistant };
-        foreach (var item in items)
-            block.AddContent(item);
-        return block;
-    }
+    public static MediaContentBlock Media(AIContent content) => new(content) { Role = ChatRole.Assistant };
 
     public static DataContent Png(string name = "image.png") => new(new byte[] { 137, 80, 78, 71 }, "image/png") { Name = name };
 

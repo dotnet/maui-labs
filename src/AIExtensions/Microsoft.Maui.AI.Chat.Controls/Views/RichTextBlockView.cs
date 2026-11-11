@@ -11,9 +11,6 @@ internal sealed class RichTextBlockView : BlockView
 
     internal View? RenderedContent => Content;
 
-    internal static bool IsSafeUri(string? value) =>
-        Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" or "mailto";
-
     protected override void OnBlockChanged()
     {
         if (Block is not RichContentBlock rich)
@@ -164,7 +161,7 @@ internal sealed class RichTextBlockView : BlockView
 
     private View RenderImage(string url, string? alt)
     {
-        if (!IsSafeUri(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        if (!ChatVisuals.IsSafeUri(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
             return CreateTextLabel(alt ?? url);
 
         var image = new Image
@@ -262,25 +259,13 @@ internal sealed class RichTextBlockView : BlockView
     {
         var text = GetPlainText(children);
         var span = CreateSpan(text.Length == 0 ? url : text, attributes, decorations);
-        if (IsSafeUri(url) && Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        if (ChatVisuals.IsSafeUri(url) && Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
             span.SetDynamicResource(Span.StyleProperty, AIChatThemeKeys.LinkSpanStyle);
-            span.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(async () => await OpenAsync(uri)) });
+            span.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(async () => await ChatVisuals.OpenLinkAsync(uri)) });
         }
 
         formatted.Spans.Add(span);
-    }
-
-    private static async Task OpenAsync(Uri uri)
-    {
-        try
-        {
-            await Launcher.Default.OpenAsync(uri);
-        }
-        catch (Exception ex) when (ex is FeatureNotSupportedException or InvalidOperationException or NotImplementedException)
-        {
-            // No browser or launcher on this platform; the link text stays readable.
-        }
     }
 
     private void AppendChildren(FormattedString formatted, IReadOnlyList<RichTextNode> children, FontAttributes attributes, TextDecorations decorations)

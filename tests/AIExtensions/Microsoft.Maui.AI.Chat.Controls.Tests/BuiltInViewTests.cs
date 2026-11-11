@@ -107,7 +107,7 @@ public class BuiltInViewTests
     [InlineData("relative/path", false)]
     [InlineData(null, false)]
     public void RichText_OnlyOpensSafeLinks(string? uri, bool safe) =>
-        Assert.Equal(safe, RichTextBlockView.IsSafeUri(uri));
+        Assert.Equal(safe, ChatVisuals.IsSafeUri(uri));
 
     [Fact]
     public void ToolCall_ShowsNameAndStatusAndExpandsToDetails()
@@ -168,16 +168,70 @@ public class BuiltInViewTests
 
         Assert.Equal(ApprovalStatus.Approved, approve.Status);
         Assert.False(approveView.Buttons.IsVisible);
-        Assert.Equal("Approved", approveView.ResolutionLabel.Text);
+        Assert.Equal("delete_file", approveView.TitleLabel.Text);
+        Assert.Equal("Approved \u00B7 Running\u2026", approveView.StatusLabel.Text);
         Assert.False(approveView.ApproveCommand.CanExecute(null));
         Assert.False(approveView.RejectCommand.CanExecute(null));
+
+        // The call's result lands in the approval's inner block: the same card shows it.
+        approve.InnerBlock.Result = new FunctionResultContent("call-1", "deleted /tmp/a");
+        Refresh(approveView);
+        Assert.Equal("Approved", approveView.StatusLabel.Text);
+        Assert.Equal("deleted /tmp/a", approveView.ResultLabel.Text);
+        Assert.True(approveView.ResultLabel.Parent is Border { IsVisible: true });
 
         var reject = Blocks.Approval("delete_file");
         var rejectView = Render<ToolApprovalView>(reject);
         rejectView.RejectCommand.Execute(null);
 
         Assert.Equal(ApprovalStatus.Rejected, reject.Status);
-        Assert.Equal("Rejected", rejectView.ResolutionLabel.Text);
+        Assert.Equal("Rejected", rejectView.StatusLabel.Text);
+    }
+
+    [Fact]
+    public void ToolApproval_InAnEndedTurn_CanNoLongerBeAnswered()
+    {
+        var session = ChatHost.Session(new ScriptedChatClient());
+        var block = Blocks.Approval("delete_file");
+        var view = new ToolApprovalView();
+        view.Resources.MergedDictionaries.Add(new AIChatTheme());
+
+        BlockView.Bind(view, block, owner: null, session, new ConversationTurn { IsStopped = true });
+
+        Assert.False(view.Buttons.IsVisible);
+        Assert.False(view.ApproveCommand.CanExecute(null));
+        Assert.Equal("delete_file", view.TitleLabel.Text);
+        Assert.Equal("Stopped", view.StatusLabel.Text);
+
+        BlockView.Bind(view, block, owner: null, session, new ConversationTurn());
+        Assert.Equal("Not answered", view.StatusLabel.Text);
+
+        var approved = Blocks.Approval("delete_file");
+        approved.Approve();
+        BlockView.Bind(view, approved, owner: null, session, new ConversationTurn { IsStopped = true });
+        Assert.Equal("Approved \u00B7 Stopped", view.StatusLabel.Text);
+
+        BlockView.Bind(view, approved, owner: null, session, new ConversationTurn());
+        Assert.Equal("Approved \u00B7 Not completed", view.StatusLabel.Text);
+        Assert.False(view.ResultLabel.Parent is Border { IsVisible: true });
+    }
+
+    [Theory]
+    [InlineData(false, false, "Not completed")]
+    [InlineData(false, true, "Stopped")]
+    [InlineData(true, false, "")]
+    public void ToolCall_WithoutAResultInAnEndedTurn_SaysWhy(bool informational, bool stopped, string expected)
+    {
+        var session = ChatHost.Session(new ScriptedChatClient());
+        var block = Blocks.ToolCall("search");
+        block.Call!.InformationalOnly = informational;
+        var view = new ToolCallView();
+        view.Resources.MergedDictionaries.Add(new AIChatTheme());
+
+        BlockView.Bind(view, block, owner: null, session, new ConversationTurn { IsStopped = stopped });
+
+        Assert.Equal(expected, view.StatusLabel.Text);
+        Assert.Equal(expected.Length > 0, view.StatusLabel.IsVisible);
     }
 
     [Fact]
@@ -303,17 +357,51 @@ public class BuiltInViewTests
     [Fact]
     public void Media_ShowsImagesInlineAndFilesAsChips()
     {
-        var view = Render<MediaBlockView>(Blocks.Media(Blocks.Png("photo.png"), Blocks.Pdf("report.pdf", bytes: 2048), FakeAudioRecorder.Wav(name: "note.wav")));
+        var image = Render<MediaBlockView>(Blocks.Media(Blocks.Png("photo.png"))).MediaView;
+        Assert.IsType<Image>(image);
+        Assert.Equal("photo.png", SemanticProperties.GetDescription(image!));
 
-        Assert.Collection(
-            view.Items.Children,
-            image =>
-            {
-                Assert.IsType<Image>(image);
-                Assert.Equal("photo.png", SemanticProperties.GetDescription((BindableObject)image));
-            },
-            pdf => Assert.Equal("report.pdf, PDF · 2 KB", SemanticProperties.GetDescription((BindableObject)pdf)),
-            audio => Assert.Equal("note.wav, WAV · 64 B", SemanticProperties.GetDescription((BindableObject)audio)));
+        var pdf = Render<MediaBlockView>(Blocks.Media(Blocks.Pdf("report.pdf", bytes: 2048))).MediaView;
+        Assert.Equal("report.pdf, PDF · 2 KB", SemanticProperties.GetDescription(pdf!));
+
+        var audio = Render<MediaBlockView>(Blocks.Media(FakeAudioRecorder.Wav(name: "note.wav"))).MediaView;
+        Assert.Equal("note.wav, WAV · 64 B", SemanticProperties.GetDescription(audio!));
+    }
+
+    [Fact]
+    public void Media_ShowsImageLinksInlineAndOtherLinksAsChips()
+    {
+        var image = Render<MediaBlockView>(Blocks.Media(new UriContent(new Uri("https://example.com/cat.png"), "image/png"))).MediaView;
+        var source = Assert.IsType<UriImageSource>(Assert.IsType<Image>(image).Source);
+        Assert.Equal(new Uri("https://example.com/cat.png"), source.Uri);
+
+        var link = Render<MediaBlockView>(Blocks.Media(new UriContent(new Uri("https://example.com/docs/q3%20report.pdf"), "application/pdf"))).MediaView;
+        var chip = Assert.IsType<Border>(link);
+        Assert.Equal("q3 report.pdf, PDF · example.com", SemanticProperties.GetDescription(chip));
+        Assert.Single(chip.GestureRecognizers.OfType<TapGestureRecognizer>());
+
+        // Only web links load as images; other schemes become a chip that does not open.
+        var unsafeLink = Render<MediaBlockView>(Blocks.Media(new UriContent(new Uri("file:///etc/cat.png"), "image/png"))).MediaView;
+        Assert.Empty(Assert.IsType<Border>(unsafeLink).GestureRecognizers);
+    }
+
+    [Fact]
+    public void Media_AReplacedImageUpdatesInPlace()
+    {
+        var block = Blocks.Media(Blocks.Png("partial.png"));
+        var view = Render<MediaBlockView>(block);
+        var image = Assert.IsType<Image>(view.MediaView);
+        var first = image.Source;
+
+        block.Content = Blocks.Png("final.png");
+        Refresh(view);
+
+        Assert.Same(image, view.MediaView);
+        Assert.NotSame(first, image.Source);
+
+        block.Content = Blocks.Pdf();
+        Refresh(view);
+        Assert.IsType<Border>(view.MediaView);
     }
 
     [Fact]

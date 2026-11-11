@@ -165,7 +165,7 @@ public class ComposerTests
     });
 
     [Fact]
-    public void StopAsync_CancelsTheResponseAndKeepsTheUserMessage() => UIThread.Run(async () =>
+    public void StopAsync_StopsTheResponseAndKeepsTheMessageAndPartialOutput() => UIThread.Run(async () =>
     {
         var gate = Waiters.Signal();
         var client = new ScriptedChatClient().ReplyAfter(gate.Task, "Partial", " never");
@@ -173,20 +173,23 @@ public class ComposerTests
 
         view.Text = "Long question";
         var send = view.SendAsync();
-        await UIThread.Until(() => view.IsBusy);
+        await UIThread.Until(() => view.Rows().OfType<BlockRow>().Any());
 
         view.StopCommand.Execute(null);
         await send;
-        await UIThread.Until(() => !view.IsBusy);
+        await UIThread.Until(() => view.Composer.LastAnnouncement is not null);
 
+        Assert.False(view.IsBusy);
         Assert.False(view.CanStop);
         Assert.Equal(string.Empty, view.Text);
         Assert.False(view.HasError);
         Assert.Equal("Response stopped.", view.Composer.LastAnnouncement);
-        Assert.IsType<UserMessageRow>(view.Rows()[0]);
-        Assert.DoesNotContain(view.Rows(), row => row is ThinkingRow or TurnErrorRow);
-        Assert.Empty(view.Session!.Turns[0].ResponseBlocks);
-        Assert.Single(view.Rows());
+        Assert.True(view.Session!.Turns[0].IsStopped);
+        Assert.Collection(
+            view.Rows(),
+            row => Assert.IsType<UserMessageRow>(row),
+            row => Assert.Equal("Partial", ((TextContentBlock)Assert.IsType<BlockRow>(row).Block).RawText),
+            row => Assert.IsType<TurnStoppedView>(view.Realize(Assert.IsType<TurnStoppedRow>(row))));
     });
 
     [Fact]

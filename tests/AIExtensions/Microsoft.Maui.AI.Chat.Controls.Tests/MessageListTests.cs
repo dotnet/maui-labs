@@ -205,8 +205,8 @@ public class MessageListTests
 
         var mediaRows = view.Rows().OfType<BlockRow>().Where(row => row.Block is MediaContentBlock).ToList();
         Assert.NotEmpty(mediaRows);
-        var views = mediaRows.Select(row => (MediaBlockView)((BlockHost)view.Realize(row)).HostedView!).ToList();
-        var items = views.SelectMany(media => media.Items.Children).ToList();
+        var items = mediaRows.Select(row => ((MediaBlockView)((BlockHost)view.Realize(row)).HostedView!).MediaView).ToList();
+        Assert.Equal(2, items.Count);
         Assert.Contains(items, item => item is Image);
         Assert.Contains(items, item => item is Border chip && chip.Descendants<Label>().Any(label => label.Text == "report.pdf"));
     });
@@ -504,6 +504,216 @@ public class MessageListTests
 
         stream.Complete();
         await send;
+    });
+
+    [Fact]
+    public void StoppingATurn_KeepsItsOutputAndMarksItsCallsStopped() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var view = ChatHost.Create(ChatHost.Session(client));
+
+        view.Text = "Search for it";
+        var send = view.SendAsync();
+        stream.Text("Looking");
+        stream.Content(new FunctionCallContent("c1", "search", new Dictionary<string, object?> { ["q"] = "maui" }));
+        await UIThread.Until(() => view.Rows().OfType<BlockRow>().Any(row => row.Block is FunctionInvocationContentBlock));
+
+        var toolRow = view.Rows().OfType<BlockRow>().Single(row => row.Block is FunctionInvocationContentBlock);
+        var card = Assert.IsType<ToolCallView>(((BlockHost)view.Realize(toolRow)).HostedView);
+        Assert.Equal("Running\u2026", card.StatusLabel.Text);
+
+        await view.StopAsync();
+        await send;
+
+        // The stop changed no block; the list refreshes the turn's rows when the status changes.
+        Assert.True(view.Session!.Turns[0].IsStopped);
+        Assert.Equal("Stopped", card.StatusLabel.Text);
+        Assert.IsType<TurnStoppedRow>(view.Rows()[^1]);
+        Assert.Contains(view.Rows(), row => row is BlockRow { Block: TextContentBlock { RawText: "Looking" } });
+    });
+
+    [Fact]
+    public void FailedTurn_KeepsItsPartialOutputUntilRetried() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        client.Reply("Second try");
+        var view = ChatHost.Create(ChatHost.Session(client));
+
+        view.Text = "Hi";
+        var send = view.SendAsync();
+        stream.Text("Partial");
+        await UIThread.Until(() => view.Rows().OfType<BlockRow>().Any());
+        stream.Complete(new InvalidOperationException("boom"));
+        await send;
+
+        Assert.Equal(ConversationStatus.Error, view.Session!.Status);
+        Assert.Collection(
+            view.Rows(),
+            row => Assert.IsType<UserMessageRow>(row),
+            row => Assert.Equal("Partial", ((TextContentBlock)Assert.IsType<BlockRow>(row).Block).RawText),
+            row => Assert.IsType<TurnErrorRow>(row));
+        Assert.False(view.HasError);
+
+        var error = Assert.IsType<TurnErrorView>(view.Realize(view.Rows()[^1]));
+        await error.RetryAsync();
+
+        Assert.Collection(
+            view.Rows(),
+            row => Assert.IsType<UserMessageRow>(row),
+            row => Assert.Equal("Second try", ((TextContentBlock)Assert.IsType<BlockRow>(row).Block).RawText));
+    });
+
+    [Fact]
+    public void RestoredConversation_RendersWithoutSendingAndContinues() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Reply("Cloudy tomorrow.");
+        var session = ChatHost.Session(client);
+        await session.RestoreAsync(
+        [
+            new ChatMessage(ChatRole.User, "Weather in Paris?"),
+            new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("c1", "get_weather", new Dictionary<string, object?> { ["city"] = "Paris" })]),
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("c1", "Sunny")]),
+            new ChatMessage(ChatRole.Assistant, "It is sunny in Paris."),
+        ]);
+
+        var view = ChatHost.Create(session);
+
+        Assert.Empty(client.Requests);
+        Assert.False(view.IsEmpty);
+        Assert.False(view.ShowSuggestions);
+        Assert.Collection(
+            view.Rows(),
+            row => Assert.Equal("Weather in Paris?", ((TextContentBlock)Assert.Single(Assert.IsType<UserMessageRow>(row).Blocks)).RawText),
+            row =>
+            {
+                var card = Assert.IsType<ToolCallView>(((BlockHost)view.Realize(row)).HostedView);
+                Assert.Equal("get_weather", card.TitleLabel.Text);
+                Assert.Equal("Completed", card.StatusLabel.Text);
+            },
+            row => Assert.Equal("It is sunny in Paris.", ((TextContentBlock)Assert.IsType<BlockRow>(row).Block).RawText));
+
+        await SendAsync(view, "And tomorrow?");
+
+        Assert.Equal(5, view.Rows().Count);
+        Assert.Equal("Cloudy tomorrow.", ((TextContentBlock)((BlockRow)view.Rows()[^1]).Block).RawText);
+        Assert.Contains(client.Requests[0], message => message.Text == "It is sunny in Paris.");
+    });
+
+    [Fact]
+    public void ApprovedCall_ShowsItsResultInTheApprovalCard() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient()
+            .Reply(new FunctionCallContent("c1", "delete_file", new Dictionary<string, object?> { ["path"] = "a.txt" }))
+            .Reply("Deleted.");
+        var view = ChatHost.Create(v =>
+        {
+            v.ChatClient = client;
+            v.Tools = [new ApprovalRequiredAIFunction(AIFunctionFactory.Create((string path) => $"removed {path}", "delete_file"))];
+        });
+
+        view.Text = "Delete a.txt";
+        var send = view.SendAsync();
+        await UIThread.Until(() => view.EffectiveSession!.Status == ConversationStatus.AwaitingInput);
+
+        var row = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is ToolApprovalBlock);
+        var approval = Assert.IsType<ToolApprovalView>(((BlockHost)view.Realize(row)).HostedView);
+        Assert.True(approval.Buttons.IsVisible);
+
+        approval.ApproveCommand.Execute(null);
+        await send;
+
+        // One card per call: the result lands in the approval, not in a second tool card.
+        Assert.DoesNotContain(view.Rows(), r => r is BlockRow { Block: FunctionInvocationContentBlock });
+        Assert.False(approval.Buttons.IsVisible);
+        Assert.Equal("Approved", approval.StatusLabel.Text);
+        Assert.Equal("removed a.txt", approval.ResultLabel.Text);
+        Assert.Equal("Deleted.", ((TextContentBlock)((BlockRow)view.Rows()[^1]).Block).RawText);
+    });
+
+    [Fact]
+    public void PartialImages_UpdateTheirRowInPlace() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var view = ChatHost.Create(ChatHost.Session(client));
+
+        view.Text = "Draw a cat";
+        var send = view.SendAsync();
+        stream.Content(new ImageGenerationToolResultContent("img-1") { Outputs = [Blocks.Png("partial.png")] });
+        await UIThread.Until(() => view.Rows().OfType<BlockRow>().Any());
+
+        var row = Assert.Single(view.Rows().OfType<BlockRow>());
+        var media = Assert.IsType<MediaBlockView>(((BlockHost)view.Realize(row)).HostedView);
+        var image = Assert.IsType<Image>(media.MediaView);
+        var partial = image.Source;
+
+        var final = Blocks.Png("final.png");
+        stream.Content(new ImageGenerationToolResultContent("img-1") { Outputs = [final] });
+        await UIThread.Until(() => ReferenceEquals(((MediaContentBlock)row.Block).Content, final) && !ReferenceEquals(image.Source, partial));
+        stream.Complete();
+        await send;
+
+        Assert.Same(row, Assert.Single(view.Rows().OfType<BlockRow>()));
+        Assert.Same(image, media.MediaView);
+    });
+
+    [Fact]
+    public void ResponseFooter_ShowsTheModelAndUsageOfACompletedTurn() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var view = ChatHost.Create(ChatHost.Session(client), v => v.ResponseFooterTemplate = new DataTemplate(() =>
+        {
+            var label = new Label();
+            label.SetBinding(Label.TextProperty, new MultiBinding
+            {
+                StringFormat = "{0} \u00B7 {1} tokens",
+                Bindings = { new Binding(nameof(ConversationTurn.ModelId)), new Binding("Usage.TotalTokenCount") },
+            });
+            return label;
+        }));
+
+        view.Text = "Hi";
+        var send = view.SendAsync();
+        stream.TryWrite(new ChatResponseUpdate(ChatRole.Assistant, "Hello") { ModelId = "model-a" });
+        await UIThread.Until(() => view.Rows().OfType<BlockRow>().Any());
+        Assert.DoesNotContain(view.Rows(), row => row is TurnFooterRow);
+
+        stream.TryWrite(new ChatResponseUpdate(ChatRole.Assistant, [new UsageContent(new UsageDetails { TotalTokenCount = 42 })]) { ModelId = "model-b" });
+        stream.Complete();
+        await send;
+
+        var footer = Assert.IsType<TurnFooterRow>(view.Rows()[^1]);
+        var label = Assert.Single(view.Realize(footer).Descendants<Label>());
+        Assert.Equal("model-b \u00B7 42 tokens", label.Text);
+    });
+
+    [Fact]
+    public void ReloadingTheView_KeepsItsRowsUnlessATemplateChanged() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Reply("One");
+        var template = new BlockTemplate { BlockType = typeof(TextContentBlock), Role = "assistant", ViewType = typeof(CountingBlockView) };
+        var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(template));
+        await SendAsync(view, "first");
+        var rows = view.Rows().ToArray();
+        Assert.IsType<UserMessageRow>(rows[0]);
+
+        ChatHost.Unload(view);
+        ChatHost.Load(view);
+        Assert.Equal(rows, view.Rows(), ReferenceEqualityComparer.Instance);
+
+        // A template edited while the view was unloaded is not observed, but its rows still rebuild.
+        ChatHost.Unload(view);
+        template.ViewType = typeof(ServiceBackedView);
+        template.ViewType = typeof(CountingBlockView);
+        ChatHost.Load(view);
+
+        Assert.Same(rows[0], view.Rows()[0]);
+        var row = Assert.IsType<BlockRow>(view.Rows()[1]);
+        Assert.NotSame(rows[1], row);
+        Assert.Equal(template.Version, row.TemplateVersion);
     });
 
     private static async Task SendAsync(AIChatView view, string text)

@@ -281,12 +281,11 @@ public partial class AIChatView
 
     private void UpdateOwnedOptions() => _ownedSession?.Update(Instructions, Tools);
 
-    private Task ClearSessionAsync()
+    private async Task ClearSessionAsync()
     {
-        // Isolated so the engine's upcoming ClearAsync() is a one-line change.
-        _effectiveSession?.Clear();
+        if (_effectiveSession is { } session)
+            await session.ClearAsync();
         UpdateState();
-        return Task.CompletedTask;
     }
 
     // ── Templates and collections ───────────────────────────────────────────────────────────────────────
