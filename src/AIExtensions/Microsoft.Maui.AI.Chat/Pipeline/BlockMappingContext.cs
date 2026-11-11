@@ -74,12 +74,21 @@ public class BlockMappingContext
 
     public ContentBlock? CreateInnerBlock(AIContent content)
     {
+        ArgumentNullException.ThrowIfNull(content);
+
         if (_inactiveHandlers is null)
         {
             return null;
         }
 
-        var tempUpdate = new ChatResponseUpdate { Contents = [content] };
+        var tempUpdate = new ChatResponseUpdate
+        {
+            Role = Update.Role,
+            AuthorName = Update.AuthorName,
+            CreatedAt = Update.CreatedAt,
+            MessageId = Update.MessageId,
+            Contents = [content],
+        };
         var tempContext = new BlockMappingContext(tempUpdate, _inactiveHandlers, _calls);
 
         for (var i = 0; i < _inactiveHandlers.Count; i++)
@@ -87,11 +96,17 @@ public class BlockMappingContext
             var activeEntry = _inactiveHandlers[i].TryHandle(tempContext);
             if (activeEntry is not null)
             {
+                var block = activeEntry.Block;
+                block.Role = tempUpdate.Role;
+                block.AuthorName = tempUpdate.AuthorName;
+                block.CreatedAt = tempUpdate.CreatedAt;
+                block.LifecycleState = BlockLifecycleState.Inactive;
+
                 // The wrapping block's call may get its result in a later round.
                 if (content is FunctionCallContent call)
-                    _calls?.Register(call, activeEntry.Block, activeEntry);
+                    _calls?.Register(call, block, activeEntry);
 
-                return activeEntry.Block;
+                return block;
             }
         }
 

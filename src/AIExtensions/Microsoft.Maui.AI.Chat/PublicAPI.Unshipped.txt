@@ -209,10 +209,9 @@ Microsoft.Maui.AI.Chat.ReferenceKind.Collapsed = 1 -> Microsoft.Maui.AI.Chat.Ref
 Microsoft.Maui.AI.Chat.ReferenceKind.Full = 2 -> Microsoft.Maui.AI.Chat.ReferenceKind
 Microsoft.Maui.AI.Chat.ReferenceKind.Shortcut = 0 -> Microsoft.Maui.AI.Chat.ReferenceKind
 Microsoft.Maui.AI.Chat.RichContentBlock
+Microsoft.Maui.AI.Chat.RichContentBlock.AppendText(string! text) -> void
 Microsoft.Maui.AI.Chat.RichContentBlock.Content.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.RichTextNode!>!
-Microsoft.Maui.AI.Chat.RichContentBlock.Content.set -> void
 Microsoft.Maui.AI.Chat.RichContentBlock.RawText.get -> string!
-Microsoft.Maui.AI.Chat.RichContentBlock.ReplaceContent(string! text, System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.RichTextNode!>! content) -> void
 Microsoft.Maui.AI.Chat.RichContentBlock.RichContentBlock() -> void
 Microsoft.Maui.AI.Chat.RichTextContent
 Microsoft.Maui.AI.Chat.RichTextContent.Nodes.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.RichTextNode!>!
@@ -223,19 +222,10 @@ Microsoft.Maui.AI.Chat.RichTextNode.AddChild(Microsoft.Maui.AI.Chat.RichTextNode
 Microsoft.Maui.AI.Chat.RichTextNode.Children.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.RichTextNode!>!
 Microsoft.Maui.AI.Chat.RichTextNode.RichTextNode() -> void
 Microsoft.Maui.AI.Chat.StateMapperContext
-Microsoft.Maui.AI.Chat.StateMapperContext.IsPredictiveState.get -> bool
 Microsoft.Maui.AI.Chat.StateMapperContext.MarkHandled(Microsoft.Extensions.AI.AIContent! content) -> void
 Microsoft.Maui.AI.Chat.StateMapperContext.SetPredictiveState(object! value) -> void
 Microsoft.Maui.AI.Chat.StateMapperContext.SetState(object! value) -> void
-Microsoft.Maui.AI.Chat.StateMapperContext.StateValue.get -> object?
-Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContents.get -> Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContentsEnumerable
-Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContentsEnumerable
-Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContentsEnumerable.GetEnumerator() -> Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContentsEnumerator
-Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContentsEnumerable.UnhandledContentsEnumerable() -> void
-Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContentsEnumerator
-Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContentsEnumerator.Current.get -> Microsoft.Extensions.AI.AIContent!
-Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContentsEnumerator.MoveNext() -> bool
-Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContentsEnumerator.UnhandledContentsEnumerator() -> void
+Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContents.get -> System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.AIContent!>!
 Microsoft.Maui.AI.Chat.StateMapperContext.Update.get -> Microsoft.Extensions.AI.ChatResponseUpdate!
 Microsoft.Maui.AI.Chat.StrikethroughNode
 Microsoft.Maui.AI.Chat.StrikethroughNode.StrikethroughNode() -> void
@@ -303,8 +293,8 @@ Microsoft.Maui.AI.Chat.UIAgent<TState>
 Microsoft.Maui.AI.Chat.UIAgent<TState>.State.get -> Microsoft.Maui.AI.Chat.AgentState<TState!>!
 Microsoft.Maui.AI.Chat.UIAgent<TState>.UIAgent(Microsoft.Extensions.AI.IChatClient! chatClient, Microsoft.Extensions.AI.ChatOptions! chatOptions, Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory, TState? initialState = null) -> void
 Microsoft.Maui.AI.Chat.UIAgent<TState>.UIAgent(Microsoft.Extensions.AI.IChatClient! chatClient, Microsoft.Extensions.AI.ChatOptions! chatOptions, TState? initialState = null) -> void
-Microsoft.Maui.AI.Chat.UIAgent<TState>.UIAgent(Microsoft.Extensions.AI.IChatClient! chatClient, System.Action<Microsoft.Maui.AI.Chat.UIAgentOptions!>? configure, Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory, TState? initialState = null) -> void
-Microsoft.Maui.AI.Chat.UIAgent<TState>.UIAgent(Microsoft.Extensions.AI.IChatClient! chatClient, System.Action<Microsoft.Maui.AI.Chat.UIAgentOptions!>? configure, TState? initialState = null) -> void
+Microsoft.Maui.AI.Chat.UIAgent<TState>.UIAgent(Microsoft.Extensions.AI.IChatClient! chatClient, System.Action<Microsoft.Maui.AI.Chat.UIAgentOptions<TState!>!>? configure, Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory, TState? initialState = null) -> void
+Microsoft.Maui.AI.Chat.UIAgent<TState>.UIAgent(Microsoft.Extensions.AI.IChatClient! chatClient, System.Action<Microsoft.Maui.AI.Chat.UIAgentOptions<TState!>!>? configure, TState? initialState = null) -> void
 Microsoft.Maui.AI.Chat.UIAgent<TState>.UIAgent(Microsoft.Extensions.AI.IChatClient! chatClient, TState? initialState = null) -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions
 Microsoft.Maui.AI.Chat.UIAgentOptions.AddBlockHandler<TState>(Microsoft.Maui.AI.Chat.ContentBlockHandler<TState>! handler) -> void
@@ -319,6 +309,8 @@ Microsoft.Maui.AI.Chat.UIAgentOptions.Thread.get -> Microsoft.Maui.AI.Chat.IConv
 Microsoft.Maui.AI.Chat.UIAgentOptions.Thread.set -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions.UIAgentOptions() -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions.RegisterUIAction(Microsoft.Extensions.AI.AIFunction! function, Microsoft.Maui.AI.Chat.UIActionInvocationMode mode) -> void
+Microsoft.Maui.AI.Chat.UIAgentOptions<TState>
+Microsoft.Maui.AI.Chat.UIAgentOptions<TState>.State.get -> Microsoft.Maui.AI.Chat.AgentState<TState!>!
 Microsoft.Maui.AI.Chat.ActivityContentBlock
 Microsoft.Maui.AI.Chat.ActivityContentBlock.ActivityContentBlock() -> void
 Microsoft.Maui.AI.Chat.ActivityContentBlock.ActivityType.get -> string!
@@ -335,4 +327,3 @@ static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Complete() -> Microsoft
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Emit(Microsoft.Maui.AI.Chat.ContentBlock! block, TState state) -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Pass() -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Update(TState state) -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
-virtual Microsoft.Maui.AI.Chat.RichContentBlock.AppendText(string! text) -> void

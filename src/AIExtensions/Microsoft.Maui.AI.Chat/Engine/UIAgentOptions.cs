@@ -109,3 +109,19 @@ public class UIAgentOptions
         public IHandlerEntry CreateEntry() => new HandlerEntry<TState>(_handler);
     }
 }
+
+/// <summary>Configures a <see cref="UIAgent{TState}"/>.</summary>
+/// <typeparam name="TState">The type of the agent's state.</typeparam>
+public sealed class UIAgentOptions<TState> : UIAgentOptions where TState : class, new()
+{
+    internal UIAgentOptions(TState? initialState)
+    {
+        State = new AgentState<TState>(initialState);
+    }
+
+    /// <summary>
+    /// Gets the agent's observable state, the same instance as <see cref="UIAgent{TState}.State"/>, so a
+    /// <see cref="UIAgentOptions.StateMapper"/> can read the current state and merge into it.
+    /// </summary>
+    public AgentState<TState> State { get; }
+}

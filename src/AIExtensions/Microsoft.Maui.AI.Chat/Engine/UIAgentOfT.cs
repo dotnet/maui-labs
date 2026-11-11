@@ -14,15 +14,13 @@ namespace Microsoft.Maui.AI.Chat;
 public class UIAgent<TState> : UIAgent where TState : class, new()
 {
     public UIAgent(IChatClient chatClient, TState? initialState = null)
-        : base(chatClient)
+        : this(chatClient, new UIAgentOptions<TState>(initialState), configure: null, loggerFactory: null)
     {
-        State = new AgentState<TState>(initialState);
     }
 
     public UIAgent(IChatClient chatClient, ChatOptions chatOptions, TState? initialState = null)
-        : base(chatClient, chatOptions)
+        : this(chatClient, chatOptions, loggerFactory: null, initialState)
     {
-        State = new AgentState<TState>(initialState);
     }
 
     public UIAgent(
@@ -30,28 +28,53 @@ public class UIAgent<TState> : UIAgent where TState : class, new()
         ChatOptions chatOptions,
         ILoggerFactory? loggerFactory,
         TState? initialState = null)
-        : base(chatClient, chatOptions, loggerFactory)
+        : this(
+            chatClient,
+            new UIAgentOptions<TState>(initialState),
+            options => options.ChatOptions = chatOptions,
+            loggerFactory)
     {
-        State = new AgentState<TState>(initialState);
     }
 
+    /// <param name="chatClient">The chat client that produces model responses.</param>
+    /// <param name="configure">
+    /// Configures the agent. It runs after <see cref="UIAgentOptions{TState}.State"/> exists, so a state
+    /// mapper can read the current state. A callback for the base <see cref="UIAgentOptions"/> works too.
+    /// </param>
+    /// <param name="initialState">The initial state value.</param>
     public UIAgent(
         IChatClient chatClient,
-        Action<UIAgentOptions>? configure,
+        Action<UIAgentOptions<TState>>? configure,
         TState? initialState = null)
-        : base(chatClient, configure)
+        : this(chatClient, configure, loggerFactory: null, initialState)
     {
-        State = new AgentState<TState>(initialState);
     }
 
+    /// <param name="chatClient">The chat client that produces model responses.</param>
+    /// <param name="configure">
+    /// Configures the agent. It runs after <see cref="UIAgentOptions{TState}.State"/> exists, so a state
+    /// mapper can read the current state. A callback for the base <see cref="UIAgentOptions"/> works too.
+    /// </param>
+    /// <param name="loggerFactory">The logger factory used to trace block mapping.</param>
+    /// <param name="initialState">The initial state value.</param>
     public UIAgent(
         IChatClient chatClient,
-        Action<UIAgentOptions>? configure,
+        Action<UIAgentOptions<TState>>? configure,
         ILoggerFactory? loggerFactory,
         TState? initialState = null)
-        : base(chatClient, configure, loggerFactory)
+        : this(chatClient, new UIAgentOptions<TState>(initialState), configure, loggerFactory)
     {
-        State = new AgentState<TState>(initialState);
+    }
+
+    private UIAgent(
+        IChatClient chatClient,
+        UIAgentOptions<TState> options,
+        Action<UIAgentOptions<TState>>? configure,
+        ILoggerFactory? loggerFactory)
+        : base(chatClient, options, loggerFactory)
+    {
+        State = options.State;
+        configure?.Invoke(options);
     }
 
     /// <summary>Gets the current typed application state.</summary>

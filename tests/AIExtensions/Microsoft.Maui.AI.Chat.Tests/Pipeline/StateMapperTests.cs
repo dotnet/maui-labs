@@ -378,6 +378,67 @@ public class StateMapperTests
         Assert.Same(initial, agent.State.Value);
     }
 
+    [Fact]
+    public void TypedOptionsExposeAgentState()
+    {
+        var initialState = new RecipeState { Title = "Initial state" };
+        UIAgentOptions<RecipeState>? configuredOptions = null;
+
+        var agent = new UIAgent<RecipeState>(
+            new DelegatingStreamingChatClient(),
+            options => configuredOptions = options,
+            initialState);
+
+        Assert.NotNull(configuredOptions);
+        Assert.Same(agent.State, configuredOptions.State);
+        Assert.Same(initialState, configuredOptions.State.Value);
+
+        var updatedState = new RecipeState { Title = "Updated state" };
+        agent.State.Value = updatedState;
+
+        Assert.Same(updatedState, configuredOptions.State.Value);
+    }
+
+    [Fact]
+    public void TypedAgentAcceptsBaseOptionsConfiguration()
+    {
+        UIAgentOptions? configuredOptions = null;
+        Action<UIAgentOptions> configure = options => configuredOptions = options;
+
+        var agent = new UIAgent<RecipeState>(
+            new DelegatingStreamingChatClient(),
+            configure);
+
+        Assert.IsType<UIAgentOptions<RecipeState>>(configuredOptions);
+        Assert.Same(agent.State, ((UIAgentOptions<RecipeState>)configuredOptions).State);
+    }
+
+    [Fact]
+    public async Task StateMapper_MergesAPatchIntoTheCurrentState()
+    {
+        var client = CreateClient(EmitStatePatch());
+        var agent = new UIAgent<RecipeState>(
+            client,
+            options => options.StateMapper = context =>
+            {
+                var patch = context.UnhandledContents
+                    .OfType<TextContent>()
+                    .FirstOrDefault(text => text.Text.StartsWith('{'));
+                if (patch is null)
+                    return;
+
+                context.MarkHandled(patch);
+                var title = JsonSerializer.Deserialize<RecipeState>(patch.Text)!.Title;
+                context.SetState(new RecipeState { Title = title, Cuisine = options.State.Value.Cuisine });
+            },
+            new RecipeState { Title = "Soup", Cuisine = "French" });
+
+        await EnumerateAsync(agent.SendMessageAsync(new ChatMessage(ChatRole.User, "Rename it")));
+
+        Assert.Equal("Pasta", agent.State.Value.Title);
+        Assert.Equal("French", agent.State.Value.Cuisine);
+    }
+
     private static UIAgent<RecipeState> CreateRecipeAgent(
         IChatClient client,
         IConversationThread? thread = null)
@@ -478,6 +539,19 @@ public class StateMapperTests
                 new TextContent("""{"Title":"Pasta","Cuisine":"Italian"}"""),
                 new TextContent("Enjoy this recipe!"),
             ],
+        };
+        await Task.CompletedTask;
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> EmitStatePatch(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "assistant-state",
+            Contents = [new TextContent("""{"Title":"Pasta"}""")],
         };
         await Task.CompletedTask;
     }

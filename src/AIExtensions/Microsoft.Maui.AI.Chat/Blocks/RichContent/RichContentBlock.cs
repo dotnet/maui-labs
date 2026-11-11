@@ -20,11 +20,11 @@ public class RichContentBlock : ContentBlock
     public string RawText => _cachedText ??= string.Concat(_segments);
 
     /// <summary>Gets the current structured projection of <see cref="RawText"/>.</summary>
-    public IReadOnlyList<RichTextNode> Content { get; protected internal set; } =
+    public IReadOnlyList<RichTextNode> Content { get; internal set; } =
         Array.Empty<RichTextNode>();
 
     /// <summary>Appends one streaming text segment.</summary>
-    public virtual void AppendText(string text)
+    public void AppendText(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
         _segments.Add(text);
@@ -32,7 +32,7 @@ public class RichContentBlock : ContentBlock
     }
 
     /// <summary>Replaces the complete text and structured projection with one provider snapshot.</summary>
-    public void ReplaceContent(string text, IReadOnlyList<RichTextNode> content)
+    internal void ReplaceContent(string text, IReadOnlyList<RichTextNode> content)
     {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(content);
