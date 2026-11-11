@@ -90,7 +90,12 @@ public class UIAgentOptions
         }
     }
 
-    internal sealed record UIActionRegistration(AIFunction Function, UIActionInvocationMode Mode);
+    internal sealed record UIActionRegistration(AIFunction Function, UIActionInvocationMode Mode)
+    {
+        /// <summary>Gets whether the action is an <see cref="ApprovalRequiredAIFunction"/>.</summary>
+        internal bool RequiresApproval { get; } =
+            Function.GetService<ApprovalRequiredAIFunction>() is not null;
+    }
 
     internal interface IHandlerRegistration
     {
