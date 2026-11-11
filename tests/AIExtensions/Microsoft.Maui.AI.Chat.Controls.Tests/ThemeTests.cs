@@ -213,6 +213,36 @@ public sealed class ThemeTests : IDisposable
         Assert.False(view.FocusInput());
     });
 
+    [Fact]
+    public void Composer_ButtonsAndMessageBoxShareTheBottom()
+    {
+        // One line of text is no taller than the buttons and sits on their centre; as it grows, its last line stays level
+        // with them. The platform margin does the centring (measured on the devices, see GetInputMargin).
+        var view = Load(new AIChatView { AllowAttachments = true });
+        var input = view.ByAutomationId<Editor>("AIChatInput");
+        var buttons = new[] { "AIChatAttachButton", "AIChatSendButton" }.Select(id => view.ByAutomationId<Button>(id)).ToList();
+
+        Assert.Equal(LayoutOptions.End, input.VerticalOptions);
+        Assert.True(input.MinimumHeightRequest <= 36, $"A one-line message box is {input.MinimumHeightRequest} high.");
+        Assert.Equal(AIChatTheme.GetInputMargin(AIChatTheme.GetPlatform()), input.Margin);
+        Assert.All(buttons, button =>
+        {
+            Assert.Equal(36, button.HeightRequest);
+            var stack = Assert.IsAssignableFrom<HorizontalStackLayout>(button.Parent);
+            Assert.Equal(LayoutOptions.End, stack.VerticalOptions);
+            Assert.Equal(default, stack.Margin);
+        });
+    }
+
+    [Fact]
+    public void InputMargin_CentresALineOnTheButtonsOnEachPlatform()
+    {
+        Assert.Equal(new Thickness(0, 0, 0, 1), AIChatTheme.GetInputMargin(DevicePlatform.iOS));
+        Assert.Equal(new Thickness(0, 0, 0, 1), AIChatTheme.GetInputMargin(DevicePlatform.MacCatalyst));
+        Assert.Equal(new Thickness(0, -3.5, 0, -1.8), AIChatTheme.GetInputMargin(DevicePlatform.Android));
+        Assert.Equal(default, AIChatTheme.GetInputMargin(DevicePlatform.WinUI));
+    }
+
     private static Application CreateApplication()
     {
         var app = new Application();

@@ -248,9 +248,14 @@
         <Setter Property="StrokeShape">
             <RoundRectangle CornerRadius="22" StrokeThickness="1" />
         </Setter>
-        <Setter Property="Padding" Value="6,4" />
+        <Setter Property="Padding" Value="6" />
     </Style>
 
+    <!--
+        The composer's buttons sit at its bottom, and so does the message box: with one line of text it is no taller than
+        the buttons, and the line is on their centre; as the text grows, its last line stays level with them. Each
+        platform insets the text differently, so the Margin that does this is set per platform in code (AIChatTheme.xaml.cs).
+    -->
     <Style x:Key="AIChat.Style.Input" TargetType="Editor">
         <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Text}" />
         <Setter Property="PlaceholderColor" Value="{DynamicResource AIChat.Color.SecondaryText}" />
@@ -258,9 +263,8 @@
         <Setter Property="FontFamily" Value="{DynamicResource AIChat.FontFamily}" />
         <Setter Property="BackgroundColor" Value="Transparent" />
         <Setter Property="AutoSize" Value="TextChanges" />
-        <Setter Property="MinimumHeightRequest" Value="40" />
         <Setter Property="MaximumHeightRequest" Value="140" />
-        <Setter Property="VerticalOptions" Value="Center" />
+        <Setter Property="VerticalOptions" Value="End" />
     </Style>
 
     <Style x:Key="AIChat.Style.IconButton" TargetType="Button">
@@ -367,8 +371,7 @@
                 <chat:ChatBorder Style="{DynamicResource AIChat.Style.Composer}">
                     <chat:ChatGrid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="2">
 
-                        <!-- Raised 2 so the buttons line up with a single line of text; they stay at the bottom as it grows. -->
-                        <chat:ChatHorizontalStackLayout VerticalOptions="End" Spacing="2" Margin="0,0,0,2">
+                        <chat:ChatHorizontalStackLayout VerticalOptions="End" Spacing="2">
                             <chat:ChatContentView Content="{Binding Source={RelativeSource TemplatedParent}, Path=InputLeadingContent}" />
                             <chat:ChatButton Text="{DynamicResource AIChat.Icon.Attach}"
                                              Style="{DynamicResource AIChat.Style.IconButton}"
@@ -400,7 +403,7 @@
                             </chat:ChatEditor.Triggers>
                         </chat:ChatEditor>
 
-                        <chat:ChatHorizontalStackLayout Grid.Column="2" VerticalOptions="End" Spacing="2" Margin="0,0,0,2">
+                        <chat:ChatHorizontalStackLayout Grid.Column="2" VerticalOptions="End" Spacing="2">
                             <chat:ChatContentView Content="{Binding Source={RelativeSource TemplatedParent}, Path=InputTrailingContent}" />
 
                             <chat:ChatButton Text="{DynamicResource AIChat.Icon.Microphone}"

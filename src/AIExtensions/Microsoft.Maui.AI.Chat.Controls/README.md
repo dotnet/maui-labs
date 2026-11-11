@@ -228,6 +228,11 @@ font unless you set `AIChat.FontFamily`.
 </Application.Resources>
 ```
 
+The message box sits at the bottom of the composer with its buttons: one line of text is centred on them, and as
+the text grows, its last line stays level with them. A margin on `AIChat.Style.Input`, measured for each platform
+with the default `AIChat.FontSize.Body`, does this; if you change the body size, base your own input style on the
+default and adjust its `Margin`.
+
 ### Icons
 
 The built-in icons are glyphs of `AIChatIcons`, a subset of the
