@@ -55,16 +55,24 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
     public UIActionInvocationMode Mode { get; }
 
     /// <summary>
-    /// Executes the registered action once and returns its function result. The cancellation token
-    /// controls the initial invocation; later callers can cancel their wait through
-    /// <see cref="GetResultAsync"/>.
+    /// Executes the registered action once and returns its function result. Calls made while it runs, or
+    /// after it finished, return the same result.
     /// </summary>
+    /// <param name="cancellationToken">
+    /// Cancels the action this call starts. When the action stops because of it, the returned task is
+    /// canceled and the action can be invoked again; the turn keeps waiting for its result. Later callers
+    /// can cancel their wait through <see cref="GetResultAsync"/>.
+    /// </param>
+    /// <returns>
+    /// The action's result. The task is canceled when the turn ended before the action could return a
+    /// result, for example after a stop or a failure, or for an action shown by a restore.
+    /// </returns>
     public Task<AIContent> InvokeAsync(CancellationToken cancellationToken = default)
     {
         if (!_invocationStarted && !IsComplete && !_resultSource.Task.IsCompleted)
         {
             _invocationStarted = true;
-            _ = InvokeCoreAsync(cancellationToken);
+            return InvokeCoreAsync(cancellationToken);
         }
 
         return _resultSource.Task;
@@ -74,7 +82,7 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
         => _resultSource.Task.WaitAsync(cancellationToken);
 
     /// <summary>Stops waiting for a result because the turn ended; a later invocation does nothing.</summary>
-    internal void Abandon() => _resultSource.TrySetCanceled();
+    internal override void Abandon() => _resultSource.TrySetCanceled();
 
     internal void SetResult(FunctionResultContent result)
     {
@@ -96,7 +104,7 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
         }
     }
 
-    private async Task InvokeCoreAsync(CancellationToken cancellationToken)
+    private async Task<AIContent> InvokeCoreAsync(CancellationToken cancellationToken)
     {
         FunctionResultContent result;
         try
@@ -112,8 +120,10 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            _resultSource.TrySetCanceled(cancellationToken);
-            return;
+            // Only this invocation was canceled. The turn still waits for a result, so allow another one;
+            // a turn that ended has abandoned the block, which stops a later invocation.
+            _invocationStarted = false;
+            throw;
         }
         catch (Exception exception)
         {
@@ -133,5 +143,8 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
             // The result still reaches the model; only the block that shows it failed.
             UIAgentLog.UIActionResultNotShown(_logger, _function.Name, Call.CallId, exception);
         }
+
+        // Canceled when the turn ended before the result arrived, as for every other caller.
+        return await _resultSource.Task;
     }
 }

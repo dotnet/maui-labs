@@ -63,7 +63,11 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
     }
 
     /// <summary>Stops waiting for a decision because the turn ended; later decisions are ignored.</summary>
-    internal void Abandon() => _tcs.TrySetCanceled();
+    internal override void Abandon()
+    {
+        _tcs.TrySetCanceled();
+        UIAction?.Abandon();
+    }
 
     private void Resolve(ApprovalStatus status, bool approved, string? reason)
     {

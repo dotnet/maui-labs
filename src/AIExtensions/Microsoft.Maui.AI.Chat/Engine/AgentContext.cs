@@ -480,6 +480,7 @@ public sealed class AgentContext : IDisposable
         }
         catch (Exception ex)
         {
+            AbandonPendingInteractions(interactiveBlocks);
             Fail(attempt, message, ex);
             return AttemptOutcome.Failed;
         }
@@ -596,20 +597,11 @@ public sealed class AgentContext : IDisposable
             _attempt = null;
     }
 
+    /// <summary>Stops the turn's approvals and UI actions from accepting what can no longer be sent.</summary>
     private static void AbandonPendingInteractions(List<IInteractiveBlock> interactiveBlocks)
     {
         foreach (var interactive in interactiveBlocks)
-        {
-            switch (interactive)
-            {
-                case ToolApprovalBlock approval:
-                    approval.Abandon();
-                    break;
-                case UIActionBlock uiAction:
-                    uiAction.Abandon();
-                    break;
-            }
-        }
+            (interactive as InteractiveFunctionBlock)?.Abandon();
     }
 
     private static ChatMessage EnsureMessageId(ChatMessage message)

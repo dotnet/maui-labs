@@ -158,6 +158,13 @@ These match upstream so that upstream fixes apply directly:
   rejected UI action is answered by the approval response alone, and `FunctionInvokingChatClient`
   returns the rejection. Upstream nests the UI action's block in the approval and answers only with
   the approval response, which `FunctionInvokingChatClient` cannot carry out for a declaration.
+- **Pending approvals and UI actions end with their turn.** Once a turn stops or fails, and for
+  approvals and UI actions shown by a restore, `Approve()` and `Reject()` do nothing and
+  `InvokeAsync()` and `GetResultAsync()` return canceled tasks, because nothing could send the
+  decision or the result. Upstream leaves them responsive and drops what they produce.
+- **Canceling one invocation.** Canceling the token passed to `UIActionBlock.InvokeAsync` cancels only
+  that invocation: its task is canceled, the action can be invoked again, and the turn keeps waiting
+  for the result. Upstream cancels the block's result, which fails the turn.
 - **Typed blocks for UI actions.** Registered UI actions claim their calls before the app's handlers.
   Upstream runs the app's handlers first, so a typed block or `[ToolBlock]` for a UI action's name
   takes the call and the action never runs. Here such a handler builds the action's inner block: it

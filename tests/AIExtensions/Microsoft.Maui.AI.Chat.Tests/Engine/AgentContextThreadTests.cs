@@ -230,7 +230,9 @@ public class AgentContextThreadTests
         approval.Approve();
         await Task.Yield();
 
-        Assert.Equal(ApprovalStatus.Approved, approval.Status);
+        // A restored approval is history: nothing could send a decision, so it accepts none.
+        Assert.Equal(ApprovalStatus.Pending, approval.Status);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => approval.GetResultAsync());
         Assert.Equal(0, clientCallCount);
         Assert.Equal(ConversationStatus.Idle, context.Status);
     }

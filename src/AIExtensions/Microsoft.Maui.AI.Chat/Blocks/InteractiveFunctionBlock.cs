@@ -23,4 +23,12 @@ public abstract class InteractiveFunctionBlock(FunctionInvocationContentBlock in
     public IDictionary<string, object?>? Arguments => InnerBlock.Arguments;
 
     public bool HasResult => InnerBlock.HasResult;
+
+    /// <summary>
+    /// Stops accepting a decision or an invocation once nothing can send it: the turn stopped or failed, or
+    /// the block was restored.
+    /// </summary>
+    internal virtual void Abandon()
+    {
+    }
 }
