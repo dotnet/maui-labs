@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+
 namespace Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
 
 /// <summary>Builds engine blocks directly, for view and template tests that need no session.</summary>
@@ -78,6 +80,61 @@ public sealed class CountingBlockView : BlockView
         ChangeCount++;
         LastBlock = Block;
     }
+}
+
+/// <summary>
+/// A custom block whose handler collects the words of the response into lists it changes in place, so the block
+/// reports that everything changed.
+/// </summary>
+public sealed class WordListBlock : ContentBlock
+{
+    public List<string> Words { get; } = [];
+
+    public ObservableCollection<string> ObservableWords { get; } = [];
+}
+
+/// <summary>Folds every assistant text of a response into one <see cref="WordListBlock"/>.</summary>
+public sealed class WordListHandler : ContentBlockHandler<WordListBlock>
+{
+    public override BlockMappingResult<WordListBlock> Handle(BlockMappingContext context, WordListBlock block)
+    {
+        if (context.Update.Role != ChatRole.Assistant)
+            return BlockMappingResult<WordListBlock>.Pass();
+
+        var added = false;
+        foreach (var content in context.UnhandledContents)
+        {
+            if (content is TextContent text)
+            {
+                context.MarkHandled(text);
+                block.Words.Add(text.Text);
+                block.ObservableWords.Add(text.Text);
+                added = true;
+            }
+        }
+
+        if (!added)
+            return BlockMappingResult<WordListBlock>.Pass();
+
+        if (string.IsNullOrEmpty(block.Id))
+        {
+            block.Id = "words-" + Guid.NewGuid().ToString("N");
+            return BlockMappingResult<WordListBlock>.Emit(block, block);
+        }
+
+        return BlockMappingResult<WordListBlock>.Update(block);
+    }
+}
+
+/// <summary>Shows how many words a <see cref="WordListBlock"/> holds, read again whenever the block changes.</summary>
+public sealed class WordCountView : BlockView
+{
+    public WordCountView() => Content = Label;
+
+    public Label Label { get; } = new();
+
+    protected override void OnBlockChanged() =>
+        Label.Text = Block is WordListBlock block ? $"{block.Words.Count} words" : string.Empty;
 }
 
 public sealed class GreetingService

@@ -1553,6 +1553,78 @@ public class MessageListTests
     });
 
     [Fact]
+    public void BlockView_RunsOnBlockChangedWhenACustomBlockReportsThatEverythingChanged() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var session = ChatHost.Session(client, options => options.AddBlockHandler(new WordListHandler()));
+        var view = ChatHost.Create(session, v => v.ContentTemplates.Add(
+            new BlockTemplate { BlockType = typeof(WordListBlock), ViewType = typeof(WordCountView) }));
+
+        view.Text = "Hi";
+        var send = view.SendAsync();
+        stream.Text("one");
+        await UIThread.Until(() => view.Rows().OfType<BlockRow>().Any(row => row.Block is WordListBlock));
+        var row = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is WordListBlock);
+        var words = Assert.IsType<WordCountView>(((BlockHost)view.Realize(row)).HostedView);
+        Assert.Equal("1 words", words.Label.Text);
+        var names = new List<string?>();
+        row.Block.PropertyChanged += (_, e) => names.Add(e.PropertyName);
+
+        stream.Text("two");
+        await UIThread.Until(() => words.Label.Text == "2 words");
+        stream.Complete();
+        await send;
+
+        // The handler changed the list in place, which no binding can see: the block reports that everything changed
+        // and the view reads the list again.
+        Assert.Contains(string.Empty, names);
+        Assert.Equal("2 words", words.Label.Text);
+    });
+
+    [Fact]
+    public void AppTemplate_FollowsAnObservableListTheBlockChangesInPlace() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var session = ChatHost.Session(client, options => options.AddBlockHandler(new WordListHandler()));
+        var template = new BlockTemplate
+        {
+            BlockType = typeof(WordListBlock),
+            Template = new DataTemplate(() =>
+            {
+                var list = new VerticalStackLayout();
+                BindableLayout.SetItemTemplate(list, new DataTemplate(() =>
+                {
+                    var word = new Label();
+                    word.SetBinding(Label.TextProperty, Binding.SelfPath);
+                    return word;
+                }));
+                list.SetBinding(BindableLayout.ItemsSourceProperty, nameof(WordListBlock.ObservableWords));
+                return list;
+            }),
+        };
+        var view = ChatHost.Create(session, v => v.ContentTemplates.Add(template));
+
+        view.Text = "Hi";
+        var send = view.SendAsync();
+        stream.Text("one");
+        await UIThread.Until(() => view.Rows().OfType<BlockRow>().Any(row => row.Block is WordListBlock));
+        var row = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is WordListBlock);
+        var list = Assert.IsType<VerticalStackLayout>(((BlockHost)view.Realize(row)).HostedView);
+        Assert.Equal(["one"], list.Children.OfType<Label>().Select(word => word.Text));
+
+        stream.Text("two");
+        await UIThread.Until(() => list.Children.Count == 2);
+        stream.Complete();
+        await send;
+
+        // The collection reports the item added in place, so the binding follows it with the same binding context.
+        Assert.Equal(["one", "two"], list.Children.OfType<Label>().Select(word => word.Text));
+        Assert.Same(row.Block, list.BindingContext);
+    });
+
+    [Fact]
     public void PartialImages_UpdateTheirRowInPlace() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient();
