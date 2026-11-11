@@ -399,7 +399,11 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: wpf-resource-acceptance
-          path: artifacts/resource-acceptance/**
+          path: |
+            artifacts/resource-acceptance/**
+            !artifacts/resource-acceptance/**/restore/**
+            !artifacts/resource-acceptance/**/http-cache/**
+            !artifacts/resource-acceptance/**/dotnet-home/**
           if-no-files-found: error
 
   template-smoke:
