@@ -1,17 +1,24 @@
 # Shared AppKit runtime tests
 
 This is the renamed/generalized `LayoutRegressionTests` application, not a second
-test app. Portable `MacOS.Tests` remains a separate `net10.0` xUnit project.
+test app. Portable `MacOS.Tests` multi-targets `net10.0` and `net11.0`.
 Native scenarios share one executable, project, process bootstrap and CI runner.
 Every launch selects exactly one registered scenario in a fresh process.
 
 The dialog scenarios replace the standalone `AlertRegistrationProbe` app:
-`dialog-registration` checks the actual MAUI-consumed subscription, AppKit proxy
-and singleton registration across MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110.
+`dialog-registration` checks the public typed subscription on MAUI 11 plus the
+isolated AppKit compatibility proxy and singleton registration on MAUI 10.
 `dialogs` runs at 10.0.70, first restoring only the legacy registration logic to
 prove the missing service in a real window, then verifying fixed native action
 sheets, prompts and alerts with visible-sheet captures and typed task results.
 A timeout is a failure, not accepted baseline evidence.
+
+The `shell-sections` baseline keeps `ShellHandler` and `ShellItemHandler` pinned
+to `23ea45e98b84bfbf9dd00f4859fd4cf30d44120d`. Its `ShellSectionHandler` overlay
+restores that revision's no-op `MapCurrentItem` with an exact replacement while
+retaining the equivalent explicit parent traversal needed by MAUI 11, where the
+old `FindParentOfType` extension is unavailable. The same concrete regression
+sentinel and all 59 fixed assertions remain required.
 
 | Scenario | Cases | Before/fixed behavior |
 |---|---|---|
@@ -19,11 +26,12 @@ A timeout is a failure, not accepted baseline evidence.
 | `contentview-clipping` | 19 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, Entry replacement, redraw cost, scale-only visibility and extent, native owner relayout, scaled collections, composite scroll cost and layout changes, Auto Layout toolbar geometry, autoresizing, scale/anchor resets, nonuniform scale, combined rotation/mirroring with translation, and zero/collapsed transitions (198 assertions) |
 | `collection-view-grid` | 4 | Incorrect composed-card measurements and grid rows / tall cards, live Span changes, resize remeasurement, and spanning headers (8 assertions) |
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
-| `dialog-registration` | 1 | Fixed subscription, proxy and singleton registration across four MAUI versions |
+| `dialog-registration` | 1 | Typed MAUI 11 subscription or isolated MAUI 10 proxy, with singleton registration |
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
 | `picker` | 19 | Unselected null-title Picker displays January / selection, title, items and native activation transitions |
 | `tap-buttons` | 3 | Left click routed to secondary recognizer / primary, secondary and dynamic `Buttons` changes |
-| `bundle-resources` | 4 | Linked image missing / assets included and loaded from the built app bundle |
+| `bundle-resources` | 4 | Linked image missing / processed resources, embedded fonts, view capture, and assets loaded from the app bundle |
+| `media-capture` | 1 | Camera-equipped, pre-authorized runner records and verifies a non-empty native `.mov` before deleting it |
 | `menu-localization` | 5 per launch | English defaults in a German app / native bundle localization, app overrides, localized app names, responder actions, custom-menu replacement and option resets |
 
 The `picker` scenario covers the native state transitions of the AppKit Picker
@@ -32,19 +40,46 @@ handler; `bundle-resources` verifies MAUI resources in the packaged application.
 processes with `-AppleLanguages` for German, French, Dutch, English and an unsupported
 language, then verifies an English-only host under German preferences and a partial
 host strings override, followed by default menus again to check resource isolation.
+Custom English and localized Window menus must take over AppKit's native Window
+role, not merely suppress the default menu's visible title; both replacements are
+checked by native menu identity.
 Set `RUNTIME_TEST_PACKAGES` to a directory containing the
 backend and Essentials `.nupkg` files (default: `artifacts/runtime-packages`).
 
+`media-capture` is not part of the hosted matrix because hosted macOS runners
+have no camera. The conditional `camera-runtime` job requires a self-hosted
+runner labeled `macOS` and `camera`, Xcode 27 selected, a connected camera, and
+camera access already granted to `com.microsoft.maui.appkit.runtimetests`.
+Enable it with the repository variable `MAUI_APPKIT_CAMERA_TESTS=1`. The
+scenario clicks the native Stop button, verifies a non-empty movie, records
+evidence, and deletes the captured file.
+
 ## Run on macOS
 
-Use the repository SDK, macOS workload 10.0.203 and Xcode 26.3:
+Use the repository .NET 11 SDK, its pinned macOS workload, and Xcode 27.0:
 
 ```sh
 export NUGET_PACKAGES="$PWD/.packages"
-./eng/common/dotnet.sh workload install macos --version 10.0.203
+./eng/common/dotnet.sh workload install macos --from-rollback-file eng/workloads/dotnet11-rc2.json
 python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
   --scenario layout --evidence "$PWD/artifacts/layout-run"
 ```
+
+The default run targets `net11.0-macos`. Passing a MAUI 10 version with
+`--maui-version` selects `net10.0-macos`, keeping the release compatibility lane
+without enabling any MAUI 10 private workaround in the .NET 11 build.
+Select Xcode 26.0.x for that compatibility lane. Hosted CI uses `macos-26` with
+Xcode 26.0.1 for MAUI 10 scenarios and `xcode-27` with Xcode 27.0 for MAUI 11
+scenarios. Both use `eng/workloads/dotnet11-rc2.json`. The runner explicitly
+enables Xcode validation, which matches the workload's required major/minor
+version; a different major/minor is not accepted as a native pass.
+
+The bundle-resource driver also checks real raw-asset processing separately
+from synthetic processed-item metadata: explicit logical names win over source
+links, default names remain filenames, and linked image paths are normalized
+before resizing. These targets can be exercised without native linking, but
+only the full driver verifies the packaged app, runtime fonts, screenshots,
+incremental bundles and publish output.
 
 Use a new evidence directory for each run. CI uses the `native-runtime` matrix in
 `ci-macos-appkit.yml`. Python contract tests need no native SDK:

@@ -1,7 +1,9 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+#if !NET11_0_OR_GREATER
+using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
+#endif
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.ApplicationModel.Communication;
 using Microsoft.Maui.ApplicationModel.DataTransfer;
@@ -54,12 +56,14 @@ public static class EssentialsExtensions
         builder.Services.TryAddSingleton<IBarometer, BarometerImplementation>();
         builder.Services.TryAddSingleton<IMagnetometer, MagnetometerImplementation>();
 
+#if !NET11_0_OR_GREATER
         SetEssentialsDefaults();
-
+#endif
         return builder;
     }
 
-    private static void SetEssentialsDefaults()
+#if !NET11_0_OR_GREATER
+    static void SetEssentialsDefaults()
     {
         SetStaticField(typeof(AppInfo), "currentImplementation", new AppInfoImplementation());
         SetStaticField(typeof(DeviceInfo), "currentImplementation", new DeviceInfoImplementation());
@@ -80,13 +84,9 @@ public static class EssentialsExtensions
         SetStaticField(typeof(Vibration), "defaultImplementation", new VibrationImplementation());
         SetStaticField(typeof(SemanticScreenReader), "defaultImplementation", new SemanticScreenReaderImplementation());
         SetStaticField(typeof(Geolocation), "defaultImplementation", new GeolocationImplementation());
-
-        // New implementations
         SetStaticField(typeof(Email), "defaultImplementation", new EmailImplementation());
         SetStaticField(typeof(HapticFeedback), "defaultImplementation", new HapticFeedbackImplementation());
         SetStaticField(typeof(Screenshot), "defaultImplementation", new ScreenshotImplementation());
-
-        // Stubs for APIs not available on macOS desktop
         SetStaticField(typeof(PhoneDialer), "currentImplementation", new PhoneDialerImplementation());
         SetStaticField(typeof(Sms), "defaultImplementation", new SmsImplementation());
         SetStaticField(typeof(Flashlight), "defaultImplementation", new FlashlightImplementation());
@@ -95,9 +95,6 @@ public static class EssentialsExtensions
         SetStaticField(typeof(Compass), "defaultImplementation", new CompassImplementation());
         SetStaticField(typeof(Barometer), "defaultImplementation", new BarometerImplementation());
         SetStaticField(typeof(Magnetometer), "defaultImplementation", new MagnetometerImplementation());
-
-        // VersionTracking uses shared implementation from MAUI (depends on IPreferences + IAppInfo).
-        // The implementation class is internal, so we trigger initialization via the static API.
         SetStaticField(typeof(VersionTracking), "defaultImplementation", null);
         VersionTracking.Track();
     }
@@ -110,4 +107,5 @@ public static class EssentialsExtensions
         var field = type.GetField(fieldName, BindingFlags.Static | BindingFlags.NonPublic);
         field?.SetValue(null, value);
     }
+#endif
 }

@@ -52,7 +52,7 @@ public sealed class GtkBlazorWebView : IDisposable
 	private readonly IServiceProvider _serviceProvider;
 	private GtkWebViewManager? _webViewManager;
 	private UserContentManager? _userContentManager;
-	private readonly RootComponentReconciler _rootComponentReconciler = new();
+	private readonly Microsoft.Maui.Platforms.Shared.RootComponentReconciler<RootComponent> _rootComponentReconciler = new();
 	private RootComponent[] _desiredRootComponents = [];
 	private bool _disposed;
 	private string? _hostPage;

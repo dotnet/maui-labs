@@ -1,5 +1,6 @@
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
 using AppKit;
 using CoreGraphics;
 using Foundation;

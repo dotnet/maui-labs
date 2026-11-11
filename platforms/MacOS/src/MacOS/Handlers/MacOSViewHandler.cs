@@ -17,7 +17,7 @@ internal interface IMacOSViewTransformHandler
 
 /// <summary>
 /// Base view handler for macOS that provides PlatformArrange and GetDesiredSize implementations.
-/// The net10.0 (platform-agnostic) ViewHandler has no-op PlatformArrange and returns Size.Zero from
+/// The platform-agnostic ViewHandler has no-op PlatformArrange and returns Size.Zero from
 /// GetDesiredSize, which means NSView frames are never set and all views measure as zero.
 /// This base class bridges MAUI's layout system to AppKit by setting NSView Frame in
 /// PlatformArrange and using IntrinsicContentSize/FittingSize/SizeThatFits in GetDesiredSize.
@@ -96,6 +96,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         _lastTransformedFrame = null;
         base.ConnectHandler(platformView);
         MacOSViewGeometry.Register(platformView, this);
+#if !NET11_0_OR_GREATER
         SetupGestures(platformView);
 
         if (VirtualView is Microsoft.Maui.Controls.View mauiView)
@@ -103,19 +104,23 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
             ((System.Collections.Specialized.INotifyCollectionChanged)mauiView.GestureRecognizers)
                 .CollectionChanged += OnGestureRecognizersChanged;
         }
+#endif
     }
 
     protected override void DisconnectHandler(TPlatformView platformView)
     {
         MacOSViewGeometry.Unregister(platformView, this);
+#if !NET11_0_OR_GREATER
         if (VirtualView is Microsoft.Maui.Controls.View mauiView)
         {
             ((System.Collections.Specialized.INotifyCollectionChanged)mauiView.GestureRecognizers)
                 .CollectionChanged -= OnGestureRecognizersChanged;
         }
+#endif
         base.DisconnectHandler(platformView);
     }
 
+#if !NET11_0_OR_GREATER
     void OnGestureRecognizersChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
         if (PlatformView != null)
@@ -124,9 +129,10 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
 
     void SetupGestures(NSView platformView)
     {
-        if (VirtualView is IView view)
+        if (VirtualView is Microsoft.Maui.Controls.View view)
             GestureManager.SetupGestures(platformView, view);
     }
+#endif
 
     public static new void MapShadow(IViewHandler handler, IView view)
     {

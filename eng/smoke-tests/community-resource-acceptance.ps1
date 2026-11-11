@@ -29,14 +29,25 @@ $env:NUGET_HTTP_CACHE_PATH = (New-Item -ItemType Directory -Path (Join-Path $wor
 function Invoke-DotNet {
     param(
         [string[]] $Arguments,
-        [switch] $ExpectFailure
+        [switch] $ExpectFailure,
+        [string] $ExpectedErrorCode = ''
     )
 
-    & $DotNet @Arguments
+    if ($ExpectedErrorCode) {
+        if (-not $ExpectFailure) { throw 'ExpectedErrorCode requires ExpectFailure.' }
+        & $DotNet @Arguments 2>&1 | Tee-Object -Variable commandOutput
+    }
+    else {
+        & $DotNet @Arguments
+    }
     $exitCode = $LASTEXITCODE
     if ($ExpectFailure) {
         if ($exitCode -eq 0) {
             throw "dotnet $($Arguments -join ' ') unexpectedly succeeded"
+        }
+        if ($ExpectedErrorCode -and
+            ($commandOutput -join "`n") -notmatch "\berror $([regex]::Escape($ExpectedErrorCode)):") {
+            throw "dotnet failed without the expected error $ExpectedErrorCode (exit $exitCode)."
         }
         # A rejected collision passes the assertion, including for PowerShell CI's exit-code wrapper.
         $global:LASTEXITCODE = 0
@@ -78,9 +89,9 @@ function Assert-SingleFile {
         [byte[]] $ExpectedBytes
     )
 
-    $normalized = $RelativePath.Replace('\', [System.IO.Path]::DirectorySeparatorChar).Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+    $normalized = $RelativePath.Replace('\', [System.IO.Path]::DirectorySeparatorChar).Replace('/', [System.IO.Path]::DirectorySeparatorChar).Normalize()
     $matches = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Where-Object {
-        $_.FullName.EndsWith($normalized, [StringComparison]::Ordinal)
+        $_.FullName.Normalize().EndsWith($normalized, [StringComparison]::Ordinal)
     })
     if ($matches.Count -ne 1) {
         throw "Expected exactly one '$RelativePath' below '$Root'; found $($matches.Count)."
@@ -98,9 +109,9 @@ function Assert-NoFile {
         [string] $RelativePath
     )
 
-    $normalized = $RelativePath.Replace('\', [System.IO.Path]::DirectorySeparatorChar).Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+    $normalized = $RelativePath.Replace('\', [System.IO.Path]::DirectorySeparatorChar).Replace('/', [System.IO.Path]::DirectorySeparatorChar).Normalize()
     $matches = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Where-Object {
-        $_.FullName.EndsWith($normalized, [StringComparison]::Ordinal)
+        $_.FullName.Normalize().EndsWith($normalized, [StringComparison]::Ordinal)
     })
     if ($matches.Count -ne 0) {
         throw "Expected '$RelativePath' to be absent below '$Root'; found $($matches.Count)."
@@ -125,6 +136,20 @@ function Copy-Fixture {
     New-Item -ItemType Directory -Path $Destination | Out-Null
     Copy-Item (Join-Path $fixture 'ReferencedAssets') $Destination -Recurse
     Copy-Item (Join-Path $fixture 'Consumer') $Destination -Recurse
+}
+
+function Get-ResourcePublishArguments {
+    param(
+        [string] $BackendName,
+        [string] $Project,
+        [string] $Destination
+    )
+
+    $arguments = @('publish', $Project, '--no-restore', "-p:PublishDir=$Destination")
+    if ($BackendName -ne 'appkit') {
+        $arguments += '--no-build'
+    }
+    return $arguments
 }
 
 function Invoke-BackendAcceptance {
@@ -209,12 +234,25 @@ function Invoke-BackendAcceptance {
     Assert-NoFile $output 'Shared/zero.bin'
 
     $publish = Join-Path $root 'publish'
-    Invoke-DotNet (@('publish', $consumerProject, '--no-build', '--no-restore', "-p:PublishDir=$publish") + $buildArguments)
-    Assert-SingleFile $publish 'Shared/Renamed/payload.bin' $payloadV2 | Out-Null
-    Assert-SingleFile $publish 'Shared/Unicode/café.txt' $unicode | Out-Null
-    Assert-SingleFile $publish 'App/local.txt' $local | Out-Null
-    Assert-NoFile $publish 'Shared/Nested/payload.bin'
-    Assert-NoFile $publish 'Shared/zero.bin'
+    Invoke-DotNet ((Get-ResourcePublishArguments $Name $consumerProject $publish) + $buildArguments +
+        @("-flp:logfile=$root/publish.log;verbosity=diagnostic"))
+    $publishedResources = $publish
+    if ($Name -eq 'appkit') {
+        $installers = @(Get-ChildItem -LiteralPath $publish -File -Recurse -Filter '*.pkg')
+        if ($installers.Count -ne 1) {
+            throw "Expected exactly one published AppKit installer; found $($installers.Count)."
+        }
+        $publishedResources = Join-Path $root 'installed-package'
+        & pkgutil --expand-full $installers[0].FullName $publishedResources
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not expand the published AppKit installer (exit $LASTEXITCODE)."
+        }
+    }
+    Assert-SingleFile $publishedResources 'Shared/Renamed/payload.bin' $payloadV2 | Out-Null
+    Assert-SingleFile $publishedResources 'Shared/Unicode/café.txt' $unicode | Out-Null
+    Assert-SingleFile $publishedResources 'App/local.txt' $local | Out-Null
+    Assert-NoFile $publishedResources 'Shared/Nested/payload.bin'
+    Assert-NoFile $publishedResources 'Shared/zero.bin'
 
     $collision = Join-Path $root 'Consumer\Resources\Raw\collision.bin'
     [System.IO.File]::WriteAllText($collision, "collision`n")
@@ -224,9 +262,12 @@ function Invoke-BackendAcceptance {
         "    <MauiAsset Include=`"Resources/Raw/local.txt`" LogicalName=`"App/local.txt`" />$([Environment]::NewLine)    <MauiAsset Include=`"Resources/Raw/collision.bin`" LogicalName=`"Shared/Renamed/payload.bin`" />")
     [System.IO.File]::WriteAllText($consumerProject, $consumerText)
     $collisionPublish = Join-Path $root 'collision-publish'
-    Invoke-DotNet (@('publish', $consumerProject, '--no-restore', "-p:PublishDir=$collisionPublish") + $buildArguments) -ExpectFailure
+    $collisionCode = if ($Name -eq 'appkit') { 'MAUIAPPKIT001' } else { 'NETSDK1152' }
+    Invoke-DotNet (@('publish', $consumerProject, '--no-restore', "-p:PublishDir=$collisionPublish") + $buildArguments) `
+        -ExpectFailure -ExpectedErrorCode $collisionCode
 
-    Write-Host "PASS ${Name}: referenced-library bytes/names, incremental mutation, stale removal, no-build publish, and collision failure."
+    $publishMode = if ($Name -eq 'appkit') { 'supported publish and installer payload' } else { 'no-build publish' }
+    Write-Host "PASS ${Name}: referenced-library bytes/names, incremental mutation, stale removal, $publishMode, and collision failure."
 }
 
 function Invoke-BackendSwitchAcceptance {
@@ -364,7 +405,7 @@ try {
             -PackageId 'Microsoft.Maui.Platforms.MacOS' `
             -Project (Join-Path $repo 'platforms\MacOS\src\MacOS\MacOS.csproj') `
             -TargetFramework 'net11.0-macos' `
-            -PlatformProperties '<RuntimeIdentifier>osx-arm64</RuntimeIdentifier><ValidateXcodeVersion>false</ValidateXcodeVersion><ApplicationId>com.microsoft.maui.resourceacceptance</ApplicationId><ApplicationTitle>Resource Acceptance</ApplicationTitle><ApplicationVersion>1</ApplicationVersion><ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>' `
+            -PlatformProperties '<UseMaui>true</UseMaui><RuntimeIdentifier>osx-arm64</RuntimeIdentifier><ApplicationId>com.microsoft.maui.resourceacceptance</ApplicationId><ApplicationTitle>Resource Acceptance</ApplicationTitle><ApplicationVersion>1</ApplicationVersion><ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>' `
             -ExpectedBackendIdentity 'macos' `
             -RuntimeIdentifier 'osx-arm64'
     }

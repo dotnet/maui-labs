@@ -37,6 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../../../Shared/Blazor/RootComponentReconciler.cs" Link="RootComponentReconciler.cs" />
     <InternalsVisibleTo Include="Microsoft.Maui.Platforms.Linux.Gtk4.Tests" />
   </ItemGroup>
 

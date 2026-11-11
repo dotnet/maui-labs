@@ -1,9 +1,14 @@
-using Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView;
+using RootComponentReconciler = Microsoft.Maui.Platforms.Shared.RootComponentReconciler<Microsoft.Maui.Platforms.Shared.Tests.RootComponentReconcilerTests.RootComponent>;
 
-namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
+namespace Microsoft.Maui.Platforms.Shared.Tests;
 
 public class RootComponentReconcilerTests
 {
+	public sealed class RootComponent
+	{
+		public string? Selector { get; init; }
+	}
+
 	[Fact]
 	public async Task Replacements_WaitForPendingAdd_AndRemoveBeforeReusingSelector()
 	{

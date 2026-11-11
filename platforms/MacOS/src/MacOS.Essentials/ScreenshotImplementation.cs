@@ -6,7 +6,11 @@ using ObjCRuntime;
 
 namespace Microsoft.Maui.Platforms.MacOS.Essentials;
 
-class ScreenshotImplementation : IScreenshot
+#if NET11_0_OR_GREATER
+public class ScreenshotImplementation : IScreenshot, IViewScreenshot
+#else
+public class ScreenshotImplementation : IScreenshot
+#endif
 {
 	public bool IsCaptureSupported => true;
 
@@ -47,6 +51,15 @@ class ScreenshotImplementation : IScreenshot
 	/// Captures a screenshot of a specific NSView.
 	/// Uses CacheDisplay to render the view hierarchy into a bitmap.
 	/// </summary>
+#if NET11_0_OR_GREATER
+	public Task<IScreenshotResult?> CaptureViewAsync(object platformView)
+	{
+		if (platformView is not NSView view)
+			return Task.FromResult<IScreenshotResult?>(null);
+		return CaptureAsync(view);
+	}
+#endif
+
 	public Task<IScreenshotResult?> CaptureAsync(NSView view)
 	{
 		ArgumentNullException.ThrowIfNull(view);

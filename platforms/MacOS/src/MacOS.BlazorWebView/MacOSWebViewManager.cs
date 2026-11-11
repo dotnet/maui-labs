@@ -51,4 +51,7 @@ internal class MacOSWebViewManager : WebViewManager
     {
         return TryGetResponseContent(uri, allowFallbackOnHostPage, out statusCode, out statusMessage, out content, out headers);
     }
+
+    internal Task<bool> TryDispatchAsyncInternal(Action<IServiceProvider> workItem)
+        => TryDispatchAsync(workItem);
 }

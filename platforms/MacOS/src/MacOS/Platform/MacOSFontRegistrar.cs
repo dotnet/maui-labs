@@ -15,7 +15,7 @@ namespace Microsoft.Maui.Platforms.MacOS.Platform;
 /// </summary>
 public class MacOSFontRegistrar : IFontRegistrar
 {
-    readonly Dictionary<string, string> _aliases = new(StringComparer.OrdinalIgnoreCase);
+    readonly Dictionary<string, RegisteredFont> _registeredFonts = new(StringComparer.OrdinalIgnoreCase);
     readonly Dictionary<string, string> _resolvedFonts = new(StringComparer.OrdinalIgnoreCase);
     readonly IEmbeddedFontLoader _fontLoader;
     bool _bundleFontsLoaded;
@@ -27,19 +27,39 @@ public class MacOSFontRegistrar : IFontRegistrar
 
     public void Register(string filename, string? alias)
     {
-        _aliases[filename] = filename;
-        if (!string.IsNullOrEmpty(alias))
-            _aliases[alias] = filename;
+        RegisterCore(filename, alias, assembly: null);
     }
 
     public void Register(string filename, string? alias, Assembly assembly)
-        => Register(filename, alias);
+    {
+        ArgumentNullException.ThrowIfNull(assembly);
+        RegisterCore(filename, alias, assembly);
+    }
+
+    void RegisterCore(string filename, string? alias, Assembly? assembly)
+    {
+        var registration = new RegisteredFont(filename, assembly);
+        _registeredFonts[filename] = registration;
+        if (!string.IsNullOrEmpty(alias))
+            _registeredFonts[alias] = registration;
+    }
 
     public string? GetFont(string font)
     {
         // Check already-resolved cache
         if (_resolvedFonts.TryGetValue(font, out var cached))
             return cached;
+
+        if (_registeredFonts.TryGetValue(font, out var registeredFont) &&
+            registeredFont.Assembly is Assembly assembly)
+        {
+            var embedded = LoadEmbeddedFont(registeredFont.Filename, assembly);
+            if (embedded is not null)
+            {
+                CacheRegistration(registeredFont, embedded);
+                return embedded;
+            }
+        }
 
         // Ensure bundle fonts are loaded
         if (!_bundleFontsLoaded)
@@ -58,6 +78,35 @@ public class MacOSFontRegistrar : IFontRegistrar
         }
 
         return null;
+    }
+
+    string? LoadEmbeddedFont(string filename, Assembly assembly)
+    {
+        var resourceName = EmbeddedFontResourceResolver.FindResource(filename, assembly.GetManifestResourceNames());
+        if (resourceName is null)
+            return null;
+
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream is null)
+            return null;
+        return _fontLoader.LoadFont(new EmbeddedFont
+        {
+            FontName = System.IO.Path.GetFileName(filename.Replace('\\', '/')),
+            ResourceStream = stream
+        });
+    }
+
+    void CacheRegistration(RegisteredFont registration, string postScriptName)
+    {
+        _resolvedFonts[registration.Filename] = postScriptName;
+        _resolvedFonts[System.IO.Path.GetFileName(registration.Filename)] = postScriptName;
+        _resolvedFonts[System.IO.Path.GetFileNameWithoutExtension(registration.Filename)] = postScriptName;
+
+        foreach (var (key, registered) in _registeredFonts)
+        {
+            if (registered == registration)
+                _resolvedFonts[key] = postScriptName;
+        }
     }
 
     void LoadBundleFonts()
@@ -96,12 +145,13 @@ public class MacOSFontRegistrar : IFontRegistrar
                 _resolvedFonts.TryAdd(fileBaseName, postScriptName);
 
                 // Map any registered alias that points to this filename → PostScript name
-                foreach (var kvp in _aliases)
+                foreach (var (key, registration) in _registeredFonts)
                 {
-                    if (string.Equals(kvp.Value, fileName, StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(kvp.Value, fileBaseName, StringComparison.OrdinalIgnoreCase))
+                    if (registration.Assembly is null &&
+                        (string.Equals(registration.Filename, fileName, StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(registration.Filename, fileBaseName, StringComparison.OrdinalIgnoreCase)))
                     {
-                        _resolvedFonts.TryAdd(kvp.Key, postScriptName);
+                        _resolvedFonts.TryAdd(key, postScriptName);
                     }
                 }
             }
@@ -111,4 +161,6 @@ public class MacOSFontRegistrar : IFontRegistrar
             }
         }
     }
+
+    readonly record struct RegisteredFont(string Filename, Assembly? Assembly);
 }
