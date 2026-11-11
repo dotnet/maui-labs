@@ -41,8 +41,8 @@ internal static class DiagnosticDescriptors
 
     internal static readonly DiagnosticDescriptor PropertySetterUnavailable = Create(
         "MAUIAI107",
-        "ToolBlock property must have an accessible setter",
-        "Property '{0}' must have a public or internal setter so generated code can populate it");
+        "ToolBlock property must have an accessible, non-init setter",
+        "Property '{0}' must have a public or internal setter that is not init-only so generated code can populate it");
 
     internal static readonly DiagnosticDescriptor DuplicateToolName = Create(
         "MAUIAI108",

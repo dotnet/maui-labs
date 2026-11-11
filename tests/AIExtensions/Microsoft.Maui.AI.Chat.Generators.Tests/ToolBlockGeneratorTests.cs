@@ -195,6 +195,125 @@ public class ToolBlockGeneratorTests
     }
 
     [Fact]
+    public void InitOnlySetter_ReportsDiagnostic()
+    {
+        const string source = """
+            using Microsoft.Maui.AI.Chat;
+            [ToolBlock("x")]
+            public partial class Invalid : FunctionInvocationContentBlock {
+                [ToolParameter] public string Value { get; init; } = "";
+                [ToolResult] public string Result { get; init; } = "";
+            }
+            """;
+
+        var driver = GeneratorTestHarness.Run(source, out var compilation, out _);
+
+        Assert.Equal(
+            2,
+            driver.GetRunResult().Diagnostics.Count(diagnostic => diagnostic.Id == "MAUIAI107"));
+        Assert.Empty(compilation.GetDiagnostics().Where(IsError));
+    }
+
+    [Fact]
+    public void PrimitiveProperties_UseConversionsThatAvoidReflection()
+    {
+        const string source = """
+            using Microsoft.Maui.AI.Chat;
+            [ToolBlock("configure")]
+            public partial class ConfigureBlock : FunctionInvocationContentBlock {
+                [ToolParameter] public int Count { get; set; }
+                [ToolParameter] public long Total { get; set; }
+                [ToolParameter] public double Ratio { get; set; }
+                [ToolParameter] public float Scale { get; set; }
+                [ToolParameter] public decimal? Price { get; set; }
+                [ToolParameter] public bool Enabled { get; set; }
+                [ToolParameter] public string Label { get; set; } = "";
+                [ToolResult] public int Answer { get; set; }
+            }
+            """;
+
+        var driver = GeneratorTestHarness.Run(source, out var compilation, out var diagnostics);
+
+        Assert.Empty(diagnostics);
+        Assert.Empty(compilation.GetDiagnostics().Where(IsError));
+        var generated = GetGenerated(driver);
+        Assert.Contains("element.GetInt32()", generated);
+        Assert.Contains("element.GetInt64()", generated);
+        Assert.Contains("element.GetDouble()", generated);
+        Assert.Contains("element.GetSingle()", generated);
+        Assert.Contains("element.GetDecimal()", generated);
+        Assert.Contains("element.GetBoolean()", generated);
+        Assert.Contains("element.GetString()", generated);
+        Assert.Contains("CultureInfo.InvariantCulture", generated);
+        Assert.DoesNotContain("JsonSerializer", generated);
+        Assert.DoesNotContain("ConvertValue", generated);
+    }
+
+    [Fact]
+    public void MultipleResultProperties_HandleJsonStringsAndClrObjects()
+    {
+        const string source = """
+            using Microsoft.Maui.AI.Chat;
+            [ToolBlock("get_weather")]
+            public partial class WeatherBlock : FunctionInvocationContentBlock {
+                [ToolResult] public int Temperature { get; set; }
+                [ToolResult] public string? Conditions { get; set; }
+            }
+            """;
+
+        var driver = GeneratorTestHarness.Run(source, out var compilation, out var diagnostics);
+
+        Assert.Empty(diagnostics);
+        Assert.Empty(compilation.GetDiagnostics().Where(IsError));
+        var generated = GetGenerated(driver);
+        Assert.Contains("JsonDocument.Parse(json)", generated);
+        Assert.Contains("JsonSerializer.SerializeToElement(value, JsonOptions)", generated);
+        Assert.DoesNotContain("ConvertValue", generated);
+    }
+
+    [Fact]
+    public void BlocksWithSameNameInDifferentNamespaces_GetUniqueCompilableHandlers()
+    {
+        const string source = """
+            namespace First
+            {
+                [Microsoft.Maui.AI.Chat.ToolBlock("first")]
+                public partial class StatusBlock : Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock { }
+            }
+
+            namespace Second
+            {
+                [Microsoft.Maui.AI.Chat.ToolBlock("second")]
+                public partial class StatusBlock : Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock { }
+            }
+            """;
+
+        var driver = GeneratorTestHarness.Run(source, out var compilation, out var diagnostics);
+
+        Assert.Empty(diagnostics);
+        Assert.Empty(compilation.GetDiagnostics().Where(IsError));
+        var handlerHintNames = driver.GetRunResult().GeneratedTrees
+            .Select(tree => Path.GetFileName(tree.FilePath))
+            .Where(name => name.EndsWith("StatusBlockGeneratedHandler.g.cs", StringComparison.Ordinal))
+            .ToList();
+        Assert.Equal(2, handlerHintNames.Count);
+        Assert.Equal(2, handlerHintNames.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void SourceWithoutToolBlocks_DoesNotGenerateRegistration()
+    {
+        var driver = GeneratorTestHarness.Run(
+            "public sealed class OtherType { }",
+            out var compilation,
+            out var diagnostics);
+
+        Assert.Empty(diagnostics);
+        Assert.Empty(driver.GetRunResult().GeneratedTrees);
+        Assert.Empty(compilation.GetDiagnostics().Where(IsError));
+    }
+
+    [Fact]
     public void DuplicateToolNames_ReportDiagnostic()
     {
         const string source = """
@@ -253,4 +372,9 @@ public class ToolBlockGeneratorTests
 
     private static bool IsError(Diagnostic diagnostic) =>
         diagnostic.Severity == DiagnosticSeverity.Error;
+
+    private static string GetGenerated(GeneratorDriver driver) =>
+        string.Join(
+            "\n",
+            driver.GetRunResult().GeneratedTrees.Select(tree => tree.GetText().ToString()));
 }

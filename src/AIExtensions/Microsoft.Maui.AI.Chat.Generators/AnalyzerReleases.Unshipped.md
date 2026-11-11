@@ -8,7 +8,7 @@ MAUIAI103 | MauiAIChat | Error | ToolBlock class must not be abstract
 MAUIAI104 | MauiAIChat | Error | ToolBlock class must not be generic
 MAUIAI105 | MauiAIChat | Error | ToolBlock tool name must not be empty
 MAUIAI106 | MauiAIChat | Error | ToolParameter keys must be unique
-MAUIAI107 | MauiAIChat | Error | ToolBlock properties need accessible setters
+MAUIAI107 | MauiAIChat | Error | ToolBlock properties need accessible, non-init setters
 MAUIAI108 | MauiAIChat | Error | ToolBlock tool names must be unique
 MAUIAI109 | MauiAIChat | Error | ToolBlock class must be top-level
 MAUIAI110 | MauiAIChat | Error | ToolBlock class needs a public parameterless constructor
