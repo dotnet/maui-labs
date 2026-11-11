@@ -313,7 +313,12 @@ Use `LogicalName` to preserve nested raw-asset paths.
 The standalone package-resource acceptance gate uses supported `dotnet publish`,
 expands the resulting `.pkg` with `pkgutil --expand-full` without installing it,
 and verifies the installed payload's resource bytes and stale-file removal before
-checking collision rejection. Apple SDK `27.0.12212-net11-rc.2` does not support
+checking collision rejection. Logical names use macOS's decomposed Unicode form:
+`productbuild` normalizes its BOM names, and mismatched physical filenames can be
+omitted from the installer payload on case-sensitive filesystems. Canonically
+equivalent names are compared without changing resource bytes. Distinct resource
+files targeting the same bundle path fail with `MAUIAPPKIT001` rather than allowing
+the native SDK to silently select one. Apple SDK `27.0.12212-net11-rc.2` does not support
 `publish --no-build`: it invokes `Build` through `GetApplicationArtifactsDependsOn`
 and fails with `NETSDK1085` ([upstream explanation](https://github.com/dotnet/macios/issues/19132)).
 That unsupported operation is not an AppKit acceptance requirement; GTK and WPF

@@ -91,7 +91,7 @@
         <LogicalName Condition="'%(MauiProcessedAsset.Link)' == '' and '%(MauiProcessedAsset.TargetPath)' == '' and '%(MauiProcessedAsset.LogicalName)' == ''">%(MauiProcessedAsset.RecursiveDir)%(MauiProcessedAsset.Filename)%(MauiProcessedAsset.Extension)</LogicalName>
       </_MacOSProcessedMauiBundleResource>
       <_MacOSProcessedMauiBundleResource>
-        <LogicalName>$([System.String]::Copy('%(_MacOSProcessedMauiBundleResource.LogicalName)').Replace('\', '/'))</LogicalName>
+        <LogicalName>$([System.String]::Copy('%(_MacOSProcessedMauiBundleResource.LogicalName)').Replace('\', '/').Normalize(System.Text.NormalizationForm.FormD))</LogicalName>
       </_MacOSProcessedMauiBundleResource>
 
       <BundleResource Remove="@(MauiImage);@(MauiFont);@(MauiAsset)"
@@ -102,6 +102,25 @@
                       MatchOnMetadataOptions="PathLike" />
       <BundleResource Include="@(_MacOSProcessedMauiBundleResource)" />
     </ItemGroup>
+  </Target>
+
+  <Target Name="_MacOSValidateBundleResourceNames"
+          BeforeTargets="_ComputeBundleResourceOutputPaths"
+          DependsOnTargets="_CollectBundleResources;_UnpackLibraryResources"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(_CanOutputAppBundle)' == 'true'
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <_MacOSBundleResourceIdentity Include="@(_BundleResourceWithLogicalName -> '%(FullPath)|%(LogicalName)')"
+                                  KeepDuplicates="false" />
+    </ItemGroup>
+    <RemoveDuplicates Inputs="@(_BundleResourceWithLogicalName -> '%(LogicalName)')">
+      <Output TaskParameter="Filtered" ItemName="_MacOSUniqueBundleResourceNames" />
+    </RemoveDuplicates>
+    <Error Code="MAUIAPPKIT001"
+           Condition="'@(_MacOSBundleResourceIdentity -> Count())' != '@(_MacOSUniqueBundleResourceNames -> Count())'"
+           Text="Multiple bundle resources have the same logical path: @(_BundleResourceWithLogicalName -> '%(FullPath) [%(LogicalName)]', ', ')" />
   </Target>
 
   <!-- Apple copies bundle resources after CoreBuild, so register their outputs

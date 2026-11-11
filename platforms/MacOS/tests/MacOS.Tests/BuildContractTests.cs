@@ -32,6 +32,7 @@ public sealed class BuildContractTests
 		var collect = targets.Descendants().Single(element =>
 			element.Attribute("Name")?.Value == "_MacOSCollectProcessedMauiResources");
 		Assert.Contains("ResizetizeImages", collect.Attribute("DependsOnTargets")?.Value);
+		Assert.Contains("Normalize(System.Text.NormalizationForm.FormD)", collect.ToString());
 		Assert.Null(Element(targets, "ResizetizerAfterImageProcessingTargets"));
 		Assert.Contains(collect.Descendants(), element => element.Name.LocalName == "FileWrites" &&
 			element.Attribute("Include")?.Value == "@(MauiProcessedImage);@(MauiProcessedFont)");
