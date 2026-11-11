@@ -129,6 +129,7 @@ embedded in the source tree but are restored at build time.
 
 Package                             License     Project URL
 ---------------------------------   --------    -----------------------------------------
+CommunityToolkit.Maui.Core          MIT         https://github.com/CommunityToolkit/Maui
 Fizzler                             MIT         https://github.com/atifaziz/Fizzler
 Markdig                             BSD-2       https://github.com/xoofx/markdig
 SkiaSharp                           MIT         https://github.com/mono/SkiaSharp
@@ -140,6 +141,7 @@ ModelContextProtocol                MIT         https://github.com/modelcontextp
 Microsoft.Extensions.*              MIT         https://github.com/dotnet/runtime
 Microsoft.Maui.*                    MIT         https://github.com/dotnet/maui
 Platform.Maui.MacOS                 MIT         https://github.com/nickreynolds/macOS.Maui
+Plugin.Maui.Audio                   MIT         https://github.com/jfversluis/Plugin.Maui.Audio
 Platform.Maui.Linux.Gtk4            MIT         https://github.com/nickreynolds/MauiGtk
 
 
