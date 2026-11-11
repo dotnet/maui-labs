@@ -76,6 +76,7 @@ Microsoft.Maui.AI.Chat.ConversationStatus.Idle = 0 -> Microsoft.Maui.AI.Chat.Con
 Microsoft.Maui.AI.Chat.ConversationStatus.Streaming = 1 -> Microsoft.Maui.AI.Chat.ConversationStatus
 Microsoft.Maui.AI.Chat.ConversationTurn
 Microsoft.Maui.AI.Chat.ConversationTurn.ConversationTurn() -> void
+Microsoft.Maui.AI.Chat.ConversationTurn.Error.get -> System.Exception?
 Microsoft.Maui.AI.Chat.ConversationTurn.Id.get -> string!
 Microsoft.Maui.AI.Chat.ConversationTurn.IsFailed.get -> bool
 Microsoft.Maui.AI.Chat.ConversationTurn.IsStopped.get -> bool

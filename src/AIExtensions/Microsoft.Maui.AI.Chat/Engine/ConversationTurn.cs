@@ -23,6 +23,7 @@ public class ConversationTurn : INotifyPropertyChanged
 {
     private static readonly PropertyChangedEventArgs s_isStoppedChanged = new(nameof(IsStopped));
     private static readonly PropertyChangedEventArgs s_isFailedChanged = new(nameof(IsFailed));
+    private static readonly PropertyChangedEventArgs s_errorChanged = new(nameof(Error));
     private static readonly PropertyChangedEventArgs s_modelIdChanged = new(nameof(ModelId));
     private static readonly PropertyChangedEventArgs s_usageChanged = new(nameof(Usage));
 
@@ -30,7 +31,7 @@ public class ConversationTurn : INotifyPropertyChanged
     private readonly ObservableList<ContentBlock> _responseBlocks = new();
     private string _id = Guid.NewGuid().ToString("N");
     private bool _isStopped;
-    private bool _isFailed;
+    private Exception? _error;
     private string? _modelId;
     private UsageDetails? _usage;
 
@@ -96,26 +97,32 @@ public class ConversationTurn : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Gets whether the turn's last attempt failed. A failed turn committed nothing to the history.
+    /// Gets whether the turn's last attempt failed: <see langword="true"/> while <see cref="Error"/> is set.
+    /// A failed turn committed nothing to the history.
     /// </summary>
     /// <remarks>
     /// Set before the <see cref="ConversationStatus.Error"/> status change that reports the failure is
     /// raised, and cleared when <see cref="AgentContext.RetryAsync"/> runs the turn again, before the
     /// <see cref="ConversationStatus.Streaming"/> status change is raised. Its change is raised once the
-    /// context's status and error are in place, before their own changes. The failed attempt's calls
-    /// without a result are <see cref="FunctionInvocationContentBlock.IsAbandoned"/>; a retry replaces
-    /// its response blocks. A failed turn that is not the last turn can no longer be retried: another
-    /// message was sent after it.
+    /// context's status and error are in place, after the change of <see cref="Error"/> and before the
+    /// context's own changes. The failed attempt's calls without a result are
+    /// <see cref="FunctionInvocationContentBlock.IsAbandoned"/>; a retry replaces its response blocks. A
+    /// failed turn that is not the last turn can no longer be retried: another message was sent after it.
     /// </remarks>
-    public bool IsFailed
-    {
-        get => _isFailed;
-        internal set
-        {
-            if (SetIsFailedSilently(value))
-                OnPropertyChanged(s_isFailedChanged);
-        }
-    }
+    public bool IsFailed => _error is not null;
+
+    /// <summary>
+    /// Gets the exception that failed the turn's last attempt, or <see langword="null"/> when it did not
+    /// fail.
+    /// </summary>
+    /// <remarks>
+    /// Set and cleared together with <see cref="IsFailed"/>. <see cref="AgentContext.Error"/> only reports
+    /// the last attempt and the next send clears it, but the turn keeps its error until
+    /// <see cref="AgentContext.RetryAsync"/> runs it again, so a view can show why each failed turn failed.
+    /// A retry that fails again replaces it. Its change is raised once the context's status and error are
+    /// in place, before the change of <see cref="IsFailed"/>.
+    /// </remarks>
+    public Exception? Error => _error;
 
     /// <summary>
     /// Gets the identifier of the model that answered, as reported by
@@ -205,20 +212,40 @@ public class ConversationTurn : INotifyPropertyChanged
         return true;
     }
 
-    /// <summary>Sets <see cref="IsFailed"/>; the caller raises the change once the context's state is final.</summary>
-    /// <returns>Whether the value changed.</returns>
-    internal bool SetIsFailedSilently(bool value)
+    /// <summary>
+    /// Sets <see cref="Error"/>, and with it <see cref="IsFailed"/>; the caller raises the changes with
+    /// <see cref="RaiseFailureChanged"/> once the context's state is final.
+    /// </summary>
+    /// <returns>Which of the two values changed.</returns>
+    internal FailureChange SetErrorSilently(Exception? error)
     {
-        if (_isFailed == value)
-            return false;
+        if (ReferenceEquals(_error, error))
+            return default;
 
-        _isFailed = value;
-        return true;
+        var wasFailed = IsFailed;
+        _error = error;
+        return new FailureChange(ErrorChanged: true, IsFailedChanged: wasFailed != IsFailed);
     }
 
     internal void RaiseIsStoppedChanged() => OnPropertyChanged(s_isStoppedChanged);
 
-    internal void RaiseIsFailedChanged() => OnPropertyChanged(s_isFailedChanged);
+    /// <summary>Raises the change of <see cref="Error"/> and then of <see cref="IsFailed"/>, as far as they changed.</summary>
+    internal void RaiseFailureChanged(FailureChange change)
+    {
+        try
+        {
+            if (change.ErrorChanged)
+                OnPropertyChanged(s_errorChanged);
+        }
+        finally
+        {
+            if (change.IsFailedChanged)
+                OnPropertyChanged(s_isFailedChanged);
+        }
+    }
 
     private void OnPropertyChanged(PropertyChangedEventArgs e) => PropertyChanged?.Invoke(this, e);
+
+    /// <summary>Which of <see cref="Error"/> and <see cref="IsFailed"/> a change of the turn's error changed.</summary>
+    internal readonly record struct FailureChange(bool ErrorChanged, bool IsFailedChanged);
 }

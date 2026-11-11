@@ -109,7 +109,8 @@ and receives the action's result, and the action still runs. The block must deri
   (token usage summed over the turn's requests), live and restored.
 - Turn transactions: `CancelAsync` stops a response and keeps its partial output
   (`ConversationTurn.IsStopped`), failed turns commit nothing, are marked `ConversationTurn.IsFailed`
-  and can be retried, and `ClearAsync` discards the active response before clearing.
+  with the exception in `ConversationTurn.Error` and can be retried, and `ClearAsync` discards the
+  active response before clearing.
 - A bindable model: the session, its turns, their blocks and the typed state implement
   `INotifyPropertyChanged`, and `Turns`, `RequestBlocks` and `ResponseBlocks` are observable collections.
 
@@ -122,9 +123,11 @@ third-party list.
 - `AgentContext` raises `PropertyChanged` for `Status` and `Error`. `Turns` raises `CollectionChanged`:
   an `Add` when a send adds a turn, and one `Reset` once a restore loaded every turn or `ClearAsync`
   removed them.
-- `ConversationTurn` raises `PropertyChanged` for `IsStopped`, `IsFailed`, `ModelId` and `Usage`. Its
-  `RequestBlocks` and `ResponseBlocks` raise an `Add` per block, and `ResponseBlocks` a `Reset` when
-  `RetryAsync` removes the blocks of the failed attempt.
+- `ConversationTurn` raises `PropertyChanged` for `IsStopped`, `Error` and `IsFailed`, `ModelId` and
+  `Usage`. A failed turn keeps its `Error` until a retry runs it again, while `AgentContext.Error` only
+  reports the last attempt, so every failed turn can show why it failed. Its `RequestBlocks` and
+  `ResponseBlocks` raise an `Add` per block, and `ResponseBlocks` a `Reset` when `RetryAsync` removes
+  the blocks of the failed attempt.
 - Blocks raise `PropertyChanged` for the properties that changed, such as `RawText` and `Content` while
   text streams, a reasoning block's `Text`, a tool call's `Result` and `HasResult`, an approval's
   `Status`, a UI action's `IsComplete`, and `IsAwaitingInput`. A block of your own type, including a
@@ -202,9 +205,9 @@ place; the engine has no dispatcher. Drive the session from the UI thread: send,
 there, and the response streams on the UI thread through its synchronization context, so bindings update
 there too. Handlers may call back into the session, for example to send the next message when `Status`
 becomes `Idle`. A handler that runs after such a send reads the new send's `Status`, as `PropertyChanged`
-reports the current value; the turn that ended keeps `IsFailed` and `IsStopped`, which say how it ended,
-and a status that changed back before it was raised (a retry started from the failed turn's `IsFailed`) is
-not raised at all. A handler of a turn's addition, of a retry's removal of blocks or of the `Turns` reset
+reports the current value; the turn that ended keeps `IsFailed`, `Error` and `IsStopped`, which say how
+it ended, and a status that changed back before it was raised (a retry started from the failed turn's
+`IsFailed`) is not raised at all. A handler of a turn's addition, of a retry's removal of blocks or of the `Turns` reset
 cannot start a send or retry (the returned task fails with `InvalidOperationException`), and nothing can
 send while a restore runs, including a handler of a state change the restore replays; send from a status
 change instead. `ClearAsync` resets the typed state last, so a handler of that change can send the first

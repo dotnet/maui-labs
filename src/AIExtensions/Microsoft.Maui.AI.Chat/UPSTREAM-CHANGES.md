@@ -108,7 +108,7 @@ These match upstream so that upstream fixes apply directly:
   - Events are raised synchronously on the thread that makes the change, once the state they report is
     in place; the engine has no dispatcher. `PropertyChanged` for `Status` reports the current value once
     it changed, as upstream passes each callback the current `Status`, so a handler that runs after one
-    that sent the next message reads the new status. The turn that ended keeps `IsFailed` and
+    that sent the next message reads the new status. The turn that ended keeps `IsFailed`, `Error` and
     `IsStopped`, which say how it ended.
   - Handlers may re-enter. The attempt starts before a send reports its turn and before a retry removes
     its response blocks, so handlers of those changes cannot start another send or retry (upstream
@@ -148,9 +148,12 @@ These match upstream so that upstream fixes apply directly:
   `Reset`, which tells a list to drop them) and sends the whole turn again. #68672
   instead retries only the failed round and truncates that round's blocks; that would resend an
   approval and run its tool again without asking.
-- **`ConversationTurn.IsFailed`.** Not in upstream. A turn whose attempt failed is marked until
-  `RetryAsync` runs it again, so a view can tell the failed turn (and an earlier one that was never
-  retried because another message was sent) without catching the status change that reported it.
+- **`ConversationTurn.IsFailed` and `ConversationTurn.Error`.** Not in upstream. A turn whose attempt
+  failed is marked, and keeps the exception that failed it, until `RetryAsync` runs it again, so a view
+  can tell the failed turn (and an earlier one that was never retried because another message was sent)
+  and show why it failed, without catching the status change that reported it. `AgentContext.Error`
+  only reports the last attempt, and the next send clears it. The turn raises `Error` before
+  `IsFailed`, both before the context's `Error` and `Status`.
 - **`ClearAsync`.** Not in upstream. It waits for the active response to stop, and for a restore in
   progress to finish, then clears the turns, the history, the thread and the typed state, so a response
   that was still running cannot change the cleared conversation.

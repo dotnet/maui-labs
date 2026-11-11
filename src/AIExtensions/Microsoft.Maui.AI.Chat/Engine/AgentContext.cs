@@ -24,7 +24,8 @@ namespace Microsoft.Maui.AI.Chat;
 /// stopped turn (<see cref="CancelAsync()"/> or the caller's cancellation token) keeps its request
 /// and partial output, is committed without calls that never received a result, and is marked
 /// <see cref="ConversationTurn.IsStopped"/>. A failed turn commits nothing, is marked
-/// <see cref="ConversationTurn.IsFailed"/>, and can be retried with <see cref="RetryAsync"/>.
+/// <see cref="ConversationTurn.IsFailed"/> with the exception in <see cref="ConversationTurn.Error"/>, and can
+/// be retried with <see cref="RetryAsync"/>.
 /// </para>
 /// <para>
 /// Event handlers run inline. An exception thrown by one before the turn is committed fails the turn; one
@@ -32,8 +33,8 @@ namespace Microsoft.Maui.AI.Chat;
 /// turn stays committed. The status change that reports the end of a turn (<see cref="ConversationStatus.Idle"/>
 /// or <see cref="ConversationStatus.Error"/>) is raised once the turn is no longer active, so its
 /// handler can already send the next message, retry, or clear. A handler that runs after one that sent
-/// reads the status of the next send; the turn that ended keeps <see cref="ConversationTurn.IsFailed"/> and
-/// <see cref="ConversationTurn.IsStopped"/>, which say how it ended.
+/// reads the status of the next send; the turn that ended keeps <see cref="ConversationTurn.IsFailed"/>,
+/// <see cref="ConversationTurn.Error"/> and <see cref="ConversationTurn.IsStopped"/>, which say how it ended.
 /// </para>
 /// <para>
 /// The context, its turns and their blocks are bindable: the context raises <see cref="PropertyChanged"/>
@@ -86,8 +87,9 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
     /// <remarks>
     /// A handler reads the current values. One that runs earlier may already have started the next send, so
     /// a later handler reads the status that send reports; the turn that ended keeps
-    /// <see cref="ConversationTurn.IsFailed"/> and <see cref="ConversationTurn.IsStopped"/>. A value that
-    /// changed and changed back before it was raised is not raised.
+    /// <see cref="ConversationTurn.IsFailed"/>, <see cref="ConversationTurn.Error"/> and
+    /// <see cref="ConversationTurn.IsStopped"/>. A value that changed and changed back before it was raised is
+    /// not raised.
     /// </remarks>
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -106,6 +108,10 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
     public ConversationStatus Status { get; private set; }
 
     /// <summary>Gets the exception that failed the last turn, while <see cref="Status"/> is <see cref="ConversationStatus.Error"/>.</summary>
+    /// <remarks>
+    /// The next send, retry or clear resets it. The failed turn keeps the exception in
+    /// <see cref="ConversationTurn.Error"/>.
+    /// </remarks>
     public Exception? Error { get; private set; }
 
     /// <summary>
@@ -490,11 +496,10 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
         var interactiveBlocks = new List<IInteractiveBlock>();
         try
         {
-            var wasFailed = turn.SetIsFailedSilently(false);
+            var retried = turn.SetErrorSilently(null);
             Status = ConversationStatus.Streaming;
             Error = null;
-            if (wasFailed)
-                turn.RaiseIsFailedChanged();
+            turn.RaiseFailureChanged(retried);
             RaiseStatusChanged();
 
             IReadOnlyList<ChatMessage> currentMessages = [message];
@@ -735,7 +740,7 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
 
     private void Fail(Attempt attempt, ConversationTurn turn, ChatMessage? message, Exception exception)
     {
-        var failed = turn.SetIsFailedSilently(true);
+        var failure = turn.SetErrorSilently(exception);
         _retryMessage = message;
         Error = exception;
         Status = ConversationStatus.Error;
@@ -749,8 +754,7 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
             _agent.LogProcessingError(exception);
             try
             {
-                if (failed)
-                    turn.RaiseIsFailedChanged();
+                turn.RaiseFailureChanged(failure);
             }
             finally
             {
