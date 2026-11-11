@@ -13,7 +13,6 @@ internal sealed class ToolCallView : BlockView
     private readonly Label _resultHeader = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle, "Result");
     private readonly Label _result = ChatVisuals.Label(AIChatThemeKeys.CodeTextStyle);
     private readonly Border _resultBlock;
-    private bool _expanded;
 
     public ToolCallView()
     {
@@ -56,7 +55,7 @@ internal sealed class ToolCallView : BlockView
 
     internal void Toggle()
     {
-        _expanded = !_expanded;
+        ViewState.IsExpanded = !ViewState.IsExpanded;
         Update();
     }
 
@@ -81,8 +80,9 @@ internal sealed class ToolCallView : BlockView
         _result.Text = result is null ? string.Empty : ChatVisuals.FormatResult(result);
         _resultHeader.IsVisible = _resultBlock.IsVisible = result is not null;
 
-        _details.IsVisible = _expanded;
-        ChatVisuals.SetExpanded(_toggle, _expanded, name);
+        var expanded = ViewState.IsExpanded;
+        _details.IsVisible = expanded;
+        ChatVisuals.SetExpanded(_toggle, expanded, name);
         SemanticProperties.SetDescription(_title, _status.Text.Length > 0 ? $"Tool {name}, {_status.Text}" : $"Tool {name}");
     }
 }
@@ -107,7 +107,6 @@ internal sealed class ToolApprovalView : BlockView
     private readonly HorizontalStackLayout _buttons;
     private BlockTemplate? _innerTemplate;
     private View? _innerView;
-    private bool _expanded;
 
     public ToolApprovalView()
     {
@@ -174,7 +173,7 @@ internal sealed class ToolApprovalView : BlockView
 
     internal void Toggle()
     {
-        _expanded = !_expanded;
+        ViewState.IsExpanded = !ViewState.IsExpanded;
         OnBlockChanged();
     }
 
@@ -202,7 +201,7 @@ internal sealed class ToolApprovalView : BlockView
         // Pending, the arguments are the question; once decided they are details, labeled like a tool call's.
         var foldable = !canDecide && _innerView is null && (_call.Content is not null || hasResult);
         _argumentsHeader.IsVisible = foldable && _call.Content is not null;
-        var open = !foldable || _expanded;
+        var open = !foldable || ViewState.IsExpanded;
         _details.IsVisible = open && (_call.Content is not null || hasResult);
         _toggle.IsVisible = foldable;
         ChatVisuals.SetExpanded(_toggle, open, name);
@@ -283,7 +282,6 @@ internal sealed class UIActionView : BlockView
     private readonly Label _title = ChatVisuals.Label(AIChatThemeKeys.CardTitleStyle);
     private readonly Label _status = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle);
     private readonly Button _run;
-    private bool _isRunning;
 
     public UIActionView()
     {
@@ -318,7 +316,7 @@ internal sealed class UIActionView : BlockView
     internal Button RunButton => _run;
 
     private bool CanRun =>
-        Block is UIActionBlock { Mode: UIActionInvocationMode.Manual, IsComplete: false } && !_isRunning && IsTurnActive;
+        Block is UIActionBlock { Mode: UIActionInvocationMode.Manual, IsComplete: false } && !ViewState.IsRunning && IsTurnActive;
 
     protected override void OnBlockChanged()
     {
@@ -328,7 +326,7 @@ internal sealed class UIActionView : BlockView
         _status.Text = action switch
         {
             { IsComplete: true } => "Done",
-            _ when _isRunning => "Running\u2026",
+            _ when ViewState.IsRunning => "Running\u2026",
             _ when !IsTurnActive => Turn?.IsStopped == true ? "Stopped" : "Not run",
             { Mode: UIActionInvocationMode.Manual } => "Waiting for you to run it",
             _ => "Running\u2026",
@@ -343,7 +341,9 @@ internal sealed class UIActionView : BlockView
         if (!CanRun || Block is not UIActionBlock action)
             return;
 
-        _isRunning = true;
+        // The view may show another block by the time the action finishes.
+        var state = ViewState;
+        state.IsRunning = true;
         OnBlockChanged();
         try
         {
@@ -355,7 +355,7 @@ internal sealed class UIActionView : BlockView
         }
         finally
         {
-            _isRunning = false;
+            state.IsRunning = false;
             OnBlockChanged();
         }
     }
@@ -367,7 +367,6 @@ internal sealed class ReasoningView : BlockView
     private readonly Button _header;
     private readonly Label _chevron = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle, ChatVisuals.Chevron);
     private readonly Label _text = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle);
-    private bool _expanded;
 
     public ReasoningView()
     {
@@ -409,7 +408,7 @@ internal sealed class ReasoningView : BlockView
         if (Block is not ReasoningContentBlock { IsEncrypted: false } reasoning || reasoning.Text.Length == 0)
             return;
 
-        _expanded = !_expanded;
+        ViewState.IsExpanded = !ViewState.IsExpanded;
         OnBlockChanged();
     }
 
@@ -426,13 +425,14 @@ internal sealed class ReasoningView : BlockView
             return;
         }
 
+        var expanded = ViewState.IsExpanded;
         _header.IsEnabled = true;
         _header.Text = "Reasoning";
         _chevron.IsVisible = true;
-        _chevron.Rotation = _expanded ? 90 : 0;
-        SemanticProperties.SetDescription(_header, _expanded ? "Hide reasoning" : "Show reasoning");
+        _chevron.Rotation = expanded ? 90 : 0;
+        SemanticProperties.SetDescription(_header, expanded ? "Hide reasoning" : "Show reasoning");
         _text.Text = reasoning.Text;
-        _text.IsVisible = _expanded && reasoning.Text.Length > 0;
+        _text.IsVisible = expanded && reasoning.Text.Length > 0;
     }
 }
 

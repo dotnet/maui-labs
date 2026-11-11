@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
@@ -11,6 +13,8 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </remarks>
 public class BlockView : ContentView
 {
+    private static readonly ConditionalWeakTable<ContentBlock, BlockViewState> ViewStates = new();
+
     /// <summary>Backing property for <see cref="Block"/>.</summary>
     public static readonly BindableProperty BlockProperty =
         BindableProperty.Create(
@@ -52,6 +56,12 @@ public class BlockView : ContentView
     internal ConversationTurn? Turn { get; set; }
 
     /// <summary>
+    /// Gets the view state of <see cref="Block"/> (expanded, running). It belongs to the block rather than to this
+    /// view, so a list that recycles the view for another block doesn't carry it over, and the block keeps it.
+    /// </summary>
+    internal BlockViewState ViewState => Block is { } block ? ViewStates.GetOrCreateValue(block) : new BlockViewState();
+
+    /// <summary>
     /// Gets whether the block's turn is still running, so a call without a result may still get one and an
     /// approval or UI action can still be answered. Without a session nothing says the turn ended.
     /// </summary>
@@ -83,4 +93,12 @@ public class BlockView : ContentView
         else
             blockView.Block = block;
     }
+}
+
+/// <summary>The state built-in block views keep for a block.</summary>
+internal sealed class BlockViewState
+{
+    public bool IsExpanded { get; set; }
+
+    public bool IsRunning { get; set; }
 }

@@ -320,6 +320,68 @@ public class BuiltInViewTests
     });
 
     [Fact]
+    public void RecycledViews_ShowEachBlocksOwnExpandedState()
+    {
+        // A list recycles a view for another block of the same template, and later for the first one again.
+        var search = Blocks.ToolCall("search");
+        var toolCall = Render<ToolCallView>(search);
+        toolCall.Toggle();
+        Rebind(toolCall, Blocks.ToolCall("fetch"));
+        Assert.False(toolCall.Details.IsVisible);
+        Rebind(toolCall, search);
+        Assert.True(toolCall.Details.IsVisible);
+
+        var thought = Blocks.Reasoning("First thought.");
+        var reasoning = Render<ReasoningView>(thought);
+        reasoning.Toggle();
+        Rebind(reasoning, Blocks.Reasoning("Second thought."));
+        Assert.False(reasoning.TextLabel.IsVisible);
+        Assert.Equal(0, reasoning.Chevron.Rotation);
+        Rebind(reasoning, thought);
+        Assert.True(reasoning.TextLabel.IsVisible);
+
+        var arguments = new Dictionary<string, object?> { ["path"] = "/tmp/a" };
+        var deleted = Blocks.Approval("delete_file", arguments);
+        deleted.Approve();
+        var moved = Blocks.Approval("move_file", arguments);
+        moved.Approve();
+        var approval = Render<ToolApprovalView>(deleted);
+        approval.Toggle();
+        Rebind(approval, moved);
+        Assert.False(approval.Details.IsVisible);
+        Rebind(approval, deleted);
+        Assert.True(approval.Details.IsVisible);
+    }
+
+    [Fact]
+    public void RecycledView_ShowsOnlyTheRunningActionAsRunning() => UIThread.Run(async () =>
+    {
+        var gate = Waiters.Signal();
+        var slow = new UIActionBlock(
+            AIFunctionFactory.Create(async () => { await gate.Task; return "done"; }, "slow_action"),
+            UIActionInvocationMode.Manual,
+            Blocks.ToolCall("slow_action"),
+            services: null) { Role = ChatRole.Assistant };
+        var view = Render<UIActionView>(slow);
+
+        var run = view.RunAsync();
+        Assert.Equal("Running\u2026", view.StatusLabel.Text);
+
+        Rebind(view, Blocks.UIAction("open_map", UIActionInvocationMode.Manual));
+        Assert.Equal("Waiting for you to run it", view.StatusLabel.Text);
+        Assert.True(view.RunCommand.CanExecute(null));
+
+        Rebind(view, slow);
+        Assert.Equal("Running\u2026", view.StatusLabel.Text);
+        Assert.False(view.RunCommand.CanExecute(null));
+
+        gate.SetResult();
+        await run;
+        Refresh(view);
+        Assert.Equal("Done", view.StatusLabel.Text);
+    });
+
+    [Fact]
     public void UIAction_AutomaticActionShowsItsProgress()
     {
         var block = Blocks.UIAction("refresh", UIActionInvocationMode.Automatic);
@@ -491,4 +553,6 @@ public class BuiltInViewTests
     }
 
     private static void Refresh(BlockView view) => BlockView.Bind(view, view.Block!, owner: null, session: null);
+
+    private static void Rebind(BlockView view, ContentBlock block) => BlockView.Bind(view, block, owner: null, session: null);
 }
