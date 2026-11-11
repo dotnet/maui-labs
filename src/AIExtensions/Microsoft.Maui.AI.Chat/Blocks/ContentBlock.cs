@@ -27,6 +27,12 @@ namespace Microsoft.Maui.AI.Chat;
 /// <see cref="SetProperty{T}(ref T, T, string)"/>. Events are raised synchronously on the thread that
 /// changes the block, which is the thread that drives the <see cref="AgentContext"/>.
 /// </para>
+/// <para>
+/// A binding refreshes when the property it reads raises <see cref="PropertyChanged"/>, so a binding that
+/// hands a view a list the block changes in place keeps its first value: expose such a list as an
+/// <see cref="System.Collections.ObjectModel.ObservableCollection{T}"/>, or react to
+/// <see cref="OnChanged(Action)"/>.
+/// </para>
 /// </remarks>
 public abstract class ContentBlock : INotifyPropertyChanged
 {

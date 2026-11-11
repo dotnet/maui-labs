@@ -18,10 +18,18 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// <para>
 /// The view is created from <see cref="ViewType"/> (through dependency injection when the app's service
 /// provider is available, otherwise its public parameterless constructor) or from the inline
-/// <see cref="Template"/>. Its <see cref="BindableObject.BindingContext"/> is the block itself, which raises
-/// <see cref="System.ComponentModel.INotifyPropertyChanged.PropertyChanged"/> as it changes, so bindings such as
-/// <c>{Binding Result.Result}</c> stay live while a response streams. Derive the view from
-/// <see cref="BlockView"/> to also get the session and a change callback.
+/// <see cref="Template"/>. Its <see cref="BindableObject.BindingContext"/> is the block itself and stays the block
+/// while the response streams. A binding refreshes when the property it reads raises
+/// <see cref="System.ComponentModel.INotifyPropertyChanged.PropertyChanged"/>, so bindings such as
+/// <c>{Binding RawText}</c> and <c>{Binding Result.Result}</c> stay live. A binding to the block itself
+/// (<c>{Binding .}</c>, or <c>{Binding Converter=…}</c> over the whole block) keeps its first value, and so does a
+/// binding that hands a view an object or list the block changes in place (<c>ItemsSource="{Binding Rows}"</c>),
+/// because reading the property again returns the same instance.
+/// </para>
+/// <para>
+/// Put logic over the whole block in a property of the block, or derive the view from <see cref="BlockView"/>,
+/// which also gets the session, and update it in <see cref="BlockView.OnBlockChanged"/>. Make a list that the
+/// block changes in place an <see cref="System.Collections.ObjectModel.ObservableCollection{T}"/>.
 /// </para>
 /// <para>
 /// Request blocks (what the user sent) render as the built-in user message unless a template whose

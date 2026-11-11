@@ -53,7 +53,8 @@ public sealed class AgentState<T> : INotifyPropertyChanged where T : class, new(
     /// <remarks>
     /// Assigning a value commits it: a pending prediction is dropped. The assignment raises
     /// <see cref="PropertyChanged"/> for this property even when it is the current instance, so assigning
-    /// the value again after changing it in place refreshes bindings to its properties.
+    /// the value again after changing it in place refreshes bindings to its properties. A binding that hands
+    /// a view the value itself sees the same instance and keeps its first value.
     /// </remarks>
     public T Value
     {

@@ -127,7 +127,16 @@ third-party list.
   updates it; raise specific names with `SetProperty` or `OnPropertyChanged`.
 - `UIAgent<TState>.State` raises `PropertyChanged` for `Value` and `HasPendingPredictiveState`, so a view
   can bind to `State.Value` and show a pending prediction. Assigning `Value` raises it even for the current
-  instance, so assign the value again after changing it in place.
+  instance, so after changing the value in place, assign it again to refresh bindings to its properties
+  (`State.Value.Count`).
+
+Bindings follow the standard .NET contract: a binding refreshes when the property it reads raises
+`PropertyChanged`. Two kinds of binding keep their first value: a binding to a block itself (`{Binding .}`, or
+`{Binding Converter=…}` over the whole block), which no property change refreshes, and a binding that hands a
+view an object or list that a block changes in place (`ItemsSource="{Binding Rows}"`), because reading the
+property again returns the same instance. Put logic over the whole block in a property of the block, or react
+to the block's `OnChanged` callbacks from code, as the MAUI controls' `BlockView.OnBlockChanged` does; make a
+list that a block of your own changes in place an `ObservableCollection<T>`.
 
 `Turns`, `RequestBlocks` and `ResponseBlocks` are `ReadOnlyObservableCollection<T>`; cast one to
 `INotifyCollectionChanged` to subscribe from code. A page whose `BindingContext` is the session can list

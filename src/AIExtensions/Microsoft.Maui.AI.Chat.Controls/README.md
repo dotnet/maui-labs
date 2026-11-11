@@ -129,7 +129,7 @@ Add `BlockTemplate`s as the view's content. A template matches when every filter
     <!-- A view for one tool, created through dependency injection when available. -->
     <chat:BlockTemplate ToolName="get_weather" ViewType="{x:Type views:WeatherCard}" />
 
-    <!-- An inline template. The binding context is the block, refreshed as it streams. -->
+    <!-- An inline template. The binding context is the block; a binding refreshes when the property it reads changes. -->
     <chat:BlockTemplate BlockType="{x:Type chat:FunctionInvocationContentBlock}">
         <DataTemplate x:DataType="chat:FunctionInvocationContentBlock">
             <Label Text="{Binding ToolName, StringFormat='Used {0}'}" />
@@ -146,8 +146,17 @@ Add `BlockTemplate`s as the view's content. A template matches when every filter
   they are still tied, the last one declared wins.
 - `Role="user"` templates can take over the user's own blocks, which otherwise render as the built-in user message.
 - Override `When(ContentBlock)` for anything else, and call the base method to keep the filters.
-- Derive a view from `BlockView` to get `Block`, `Session`, and `OnBlockChanged()`. That method runs once per
-  batch of streaming updates, not once per token.
+- The binding context is the block and stays the block while the response streams. Bindings follow the standard
+  .NET contract: a binding refreshes when the property it reads raises `PropertyChanged`, so `{Binding ToolName}`
+  and `{Binding Result.Result}` stay live. Two kinds of binding keep their first value: a binding to the block
+  itself (`{Binding .}`, or `{Binding Converter=…}` over the whole block), and a binding that hands a view an object
+  or list the block changes in place (`ItemsSource="{Binding Rows}"`), because reading the property again returns
+  the same instance. Put logic over the whole block in a `BlockView` or in a property of the block, and make a
+  list that changes in place an `ObservableCollection<T>`.
+- Derive a view from `BlockView` to get `Block`, `Session`, and `OnBlockChanged()`. That method runs when the
+  block is assigned and after each change the block reports, at most once per batch of streaming updates, not once
+  per token. A block of your own reports a change when its handler updates it or when it calls `NotifyChanged()`;
+  raising `PropertyChanged` alone refreshes bindings but doesn't call `OnBlockChanged()`.
 - In a template for a `ToolApprovalBlock` or `UIActionBlock`, bind the buttons to `IsAwaitingInput`
   (`IsVisible="{Binding IsAwaitingInput}"`): it turns false once the block is answered, while the action runs,
   and when the turn stops, fails or is restored, after which answers are ignored.
@@ -240,12 +249,14 @@ var agent = new UIAgent(chatClient, options => options.AddBlockHandler(new Weath
 </chat:AIChatView>
 ```
 
-`WeatherComparisonView` derives from `BlockView` and redraws in `OnBlockChanged`, which runs on every update of its
-block. Mark the results handled as well as the calls: a custom block is not one of the engine's function blocks, so
-an unclaimed result is dropped. With `ChatOptions.AllowMultipleToolCalls = false` the card fills in one row at a
-time; with parallel calls, a batch's results arrive together. The ChatPlayground sample's Agentic tab shows it
-("Combined tool calls"), next to activities that update in place, shared and predictive state, and a conversation
-that survives restarting the app.
+`WeatherComparisonView` derives from `BlockView` and redraws the rows in `OnBlockChanged`, which runs after the
+handler updates the block, at most once per batch. `Rows` is a plain `List<T>` that the handler changes in place,
+which no binding can see; to bind the rows instead (`BindableLayout.ItemsSource="{Binding Rows}"`), make `Rows` an
+`ObservableCollection<T>`, which raises `CollectionChanged` for each row added or replaced. Mark the results handled
+as well as the calls: a custom block is not one of the engine's function blocks, so an unclaimed result is dropped.
+With `ChatOptions.AllowMultipleToolCalls = false` the card fills in one row at a time; with parallel calls, a
+batch's results arrive together. The ChatPlayground sample's Agentic tab shows it ("Combined tool calls"), next to
+activities that update in place, shared and predictive state, and a conversation that survives restarting the app.
 
 ## Layout slots
 

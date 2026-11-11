@@ -6,10 +6,23 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// Optional base class for views created by a <see cref="BlockTemplate"/>.
 /// </summary>
 /// <remarks>
+/// <para>
 /// <see cref="AIChatView"/> sets <see cref="Session"/>, <see cref="Block"/>, and the
-/// <see cref="BindableObject.BindingContext"/> (the block) when it renders a row, and calls
-/// <see cref="OnBlockChanged"/> when the block is assigned and after each batch of streaming updates.
-/// Changes are coalesced, so a view refreshes at most once per batch however many tokens arrived.
+/// <see cref="BindableObject.BindingContext"/> (the block) when it renders a row. The binding context stays the
+/// block while it streams, so bindings follow the standard .NET contract: a binding refreshes when the property it
+/// reads raises <see cref="System.ComponentModel.INotifyPropertyChanged.PropertyChanged"/>. Two kinds of binding keep
+/// their first value: a binding to the block itself (<c>{Binding .}</c>, or <c>{Binding Converter=…}</c> over the
+/// whole block), which no property change refreshes, and a binding that hands a view an object or list the block
+/// changes in place (<c>ItemsSource="{Binding Rows}"</c>), because reading the property again returns the same
+/// instance.
+/// </para>
+/// <para>
+/// <see cref="OnBlockChanged"/> runs when the block is assigned and after the block reports a change, at most once
+/// per batch of streaming updates however many tokens arrived. Put logic over the whole block there, and read the
+/// state a binding can't follow, such as a <see cref="List{T}"/> the block changes in place. To bind such state
+/// instead, expose it as a property of the block that raises its change, and a list as an
+/// <see cref="System.Collections.ObjectModel.ObservableCollection{T}"/>.
+/// </para>
 /// </remarks>
 public class BlockView : ContentView
 {
@@ -44,9 +57,16 @@ public class BlockView : ContentView
     }
 
     /// <summary>
-    /// Called when <see cref="Block"/> is assigned and after the block changes. Update the view from
-    /// <see cref="Block"/> here.
+    /// Called when <see cref="Block"/> is assigned and after the block reports a change, at most once per batch of
+    /// streaming updates. Update the view from <see cref="Block"/> here.
     /// </summary>
+    /// <remarks>
+    /// A block reports a change through its <see cref="ContentBlock.OnChanged(System.Action)"/> callbacks. The
+    /// engine's blocks report each of their changes; a block of your own reports one when its handler updates or
+    /// completes it, or when it calls <see cref="ContentBlock.NotifyChanged"/>. Raising
+    /// <see cref="System.ComponentModel.INotifyPropertyChanged.PropertyChanged"/> alone refreshes bindings but
+    /// doesn't call this method.
+    /// </remarks>
     protected virtual void OnBlockChanged()
     {
     }
