@@ -441,9 +441,33 @@ public class MarkdownViewTests
         var mixed = Assert.IsAssignableFrom<VerticalStackLayout>(view.BlockViews[2]);
         Assert.Collection(
             mixed.Children,
-            child => Assert.Equal("Text ", ((Label)child).Text),
+            child => Assert.Equal("Text", ((Label)child).Text),
             child => Assert.Equal("inline", SemanticProperties.GetDescription(((LinkedImageView)child).Image)),
-            child => Assert.Equal(" after", ((Label)child).Text));
+            child => Assert.Equal("after", ((Label)child).Text));
+    }
+
+    [Fact]
+    public void TextBesideAnImage_DropsTheLineBreaksAndSpacesNextToIt()
+    {
+        // An image on its own line splits the paragraph; the line breaks around it would be blank lines.
+        var view = new MarkdownView();
+        view.SetMarkdown(
+            "Here is the chart:\n![chart](https://example.com/c.png)\nAs you can see, it **works**.\n\n" +
+            "- Second ![pic](https://example.com/p.png)\n  continued\n\n" +
+            "Text ![a](https://example.com/a.png)  ![b](https://example.com/b.png) after");
+
+        Assert.Equal(["Here is the chart:", "chart", "As you can see, it works."], Parts(view.BlockViews[0]!));
+        var item = Assert.IsAssignableFrom<Grid>(view.BlockViews[1]).Children.OfType<VerticalStackLayout>().Single();
+        Assert.Equal(["Second", "pic", "continued"], Parts(item));
+        Assert.Equal(["Text", "a", "b", "after"], Parts(view.BlockViews[2]!));
+
+        static IEnumerable<string?> Parts(IView parts) =>
+            ((VerticalStackLayout)parts).Children.Select(part => part switch
+            {
+                Label { FormattedText: { } formatted } => string.Concat(formatted.Spans.Select(span => span.Text)),
+                Label label => label.Text,
+                _ => SemanticProperties.GetDescription((BindableObject)part)?.Split(',')[0],
+            });
     }
 
     [Fact]

@@ -224,25 +224,68 @@ internal sealed partial class MarkdownRenderer
         private List<(RichTextNode Node, BlockContext Context)> SplitParagraph(IReadOnlyList<RichTextNode> inlines)
         {
             var parts = new List<(RichTextNode, BlockContext)>();
-            var run = new ParagraphNode();
-            foreach (var inline in inlines)
+            var start = 0;
+            for (var i = 0; i <= inlines.Count; i++)
             {
-                if (inline is not (ImageNode or ImageReferenceNode))
-                {
-                    run.AddChild(inline);
+                if (i < inlines.Count && inlines[i] is not (ImageNode or ImageReferenceNode))
                     continue;
-                }
 
-                if (IsVisible(run.Children))
+                if (CreateRun(inlines, start, i, besideImageBefore: start > 0, besideImageAfter: i < inlines.Count) is { } run)
                     parts.Add((run, Context));
-                run = new ParagraphNode();
-                parts.Add((inline, Context));
+                if (i < inlines.Count)
+                    parts.Add((inlines[i], Context));
+                start = i + 1;
             }
 
-            if (IsVisible(run.Children))
-                parts.Add((run, Context));
             return parts;
         }
+
+        // The text between images (or an image and the paragraph's start or end). An image shows on a line of its
+        // own, so line breaks and spaces beside it would only add blank lines or indent the text next to it.
+        private static ParagraphNode? CreateRun(
+            IReadOnlyList<RichTextNode> inlines,
+            int start,
+            int end,
+            bool besideImageBefore,
+            bool besideImageAfter)
+        {
+            if (besideImageBefore)
+            {
+                while (start < end && IsBlank(inlines[start]))
+                    start++;
+            }
+
+            if (besideImageAfter)
+            {
+                while (end > start && IsBlank(inlines[end - 1]))
+                    end--;
+            }
+
+            if (start == end)
+                return null;
+
+            var run = new ParagraphNode();
+            for (var i = start; i < end; i++)
+            {
+                var node = inlines[i];
+                if (node is TextNode text && ((besideImageBefore && i == start) || (besideImageAfter && i == end - 1)))
+                {
+                    var trimmed = text.Text;
+                    if (besideImageBefore && i == start)
+                        trimmed = trimmed.TrimStart();
+                    if (besideImageAfter && i == end - 1)
+                        trimmed = trimmed.TrimEnd();
+                    node = new TextNode(trimmed);
+                }
+
+                run.AddChild(node);
+            }
+
+            return IsVisible(run.Children) ? run : null;
+        }
+
+        private static bool IsBlank(RichTextNode node) =>
+            node is LineBreakNode || (node is TextNode text && string.IsNullOrWhiteSpace(text.Text));
 
         // Line breaks and spaces between images do not need a label of their own.
         private static bool IsVisible(IReadOnlyList<RichTextNode> run)
