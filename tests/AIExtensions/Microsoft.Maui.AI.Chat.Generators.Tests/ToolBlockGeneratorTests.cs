@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Microsoft.Maui.AI.Chat.Generators.Tests;
 
@@ -250,7 +251,7 @@ public class ToolBlockGeneratorTests
     }
 
     [Fact]
-    public void MultipleResultProperties_HandleJsonStringsAndClrObjects()
+    public void MultipleResultProperties_ReadJsonObjectsAndJsonStringsWithoutReflection()
     {
         const string source = """
             using Microsoft.Maui.AI.Chat;
@@ -267,8 +268,70 @@ public class ToolBlockGeneratorTests
         Assert.Empty(compilation.GetDiagnostics().Where(IsError));
         var generated = GetGenerated(driver);
         Assert.Contains("JsonDocument.Parse(json)", generated);
-        Assert.Contains("JsonSerializer.SerializeToElement(value, JsonOptions)", generated);
+        Assert.DoesNotContain("JsonSerializer", generated);
+        Assert.DoesNotContain("JsonOptions", generated);
         Assert.DoesNotContain("ConvertValue", generated);
+    }
+
+    [Theory]
+    [InlineData("""
+        [ToolResult] public int Temperature { get; set; }
+        [ToolResult] public string? Conditions { get; set; }
+        """)]
+    [InlineData("""
+        [ToolResult(Name = "title")] public string Title { get; set; } = "";
+        """)]
+    [InlineData("""
+        [ToolParameter] public bool Metric { get; set; }
+        [ToolResult(Name = "high")] public double High { get; set; }
+        [ToolResult(Name = "low")] public decimal? Low { get; set; }
+        """)]
+    public void PrimitiveResultObjects_CallNothingThatTrimmingOrNativeAotCanBreak(string members)
+    {
+        var source = $$"""
+            using Microsoft.Maui.AI.Chat;
+            [ToolBlock("get_weather")]
+            public partial class WeatherBlock : FunctionInvocationContentBlock {
+                {{members}}
+            }
+            """;
+
+        var driver = GeneratorTestHarness.Run(source, out var compilation, out var diagnostics);
+
+        Assert.Empty(diagnostics);
+        Assert.Empty(compilation.GetDiagnostics().Where(IsError));
+        Assert.Contains("GetResultObject", GetGenerated(driver));
+        Assert.Empty(GetCallsThatRequireUnreferencedOrDynamicCode(driver, compilation));
+        var generatedPaths = driver.GetRunResult().GeneratedTrees
+            .Select(tree => tree.FilePath)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.Empty(compilation.GetDiagnostics().Where(diagnostic =>
+            diagnostic.Severity >= DiagnosticSeverity.Warning
+            && diagnostic.Location.SourceTree is { } tree
+            && generatedPaths.Contains(tree.FilePath)));
+    }
+
+    [Fact]
+    public void ComplexResultProperty_ReadsClrResultObjectsWithReflection()
+    {
+        const string source = """
+            using Microsoft.Maui.AI.Chat;
+            [ToolBlock("get_weather")]
+            public partial class WeatherBlock : FunctionInvocationContentBlock {
+                [ToolResult] public int Temperature { get; set; }
+                [ToolResult] public Forecast? Forecast { get; set; }
+            }
+            public sealed class Forecast { public string? Summary { get; set; } }
+            """;
+
+        var driver = GeneratorTestHarness.Run(source, out var compilation, out var diagnostics);
+
+        Assert.Empty(diagnostics);
+        Assert.Empty(compilation.GetDiagnostics().Where(IsError));
+        Assert.Contains("JsonSerializer.SerializeToElement(value, JsonOptions)", GetGenerated(driver));
+        Assert.Contains(
+            GetCallsThatRequireUnreferencedOrDynamicCode(driver, compilation),
+            call => call.Contains("SerializeToElement", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -372,6 +435,38 @@ public class ToolBlockGeneratorTests
 
     private static bool IsError(Diagnostic diagnostic) =>
         diagnostic.Severity == DiagnosticSeverity.Error;
+
+    /// <summary>
+    /// Gets the generated calls to members that trimming or NativeAOT can break, which the trim and AOT
+    /// analyzers report as IL2026 and IL3050 in the consuming app.
+    /// </summary>
+    private static List<string> GetCallsThatRequireUnreferencedOrDynamicCode(
+        GeneratorDriver driver,
+        Compilation compilation)
+    {
+        var generatedPaths = driver.GetRunResult().GeneratedTrees
+            .Select(tree => tree.FilePath)
+            .ToHashSet(StringComparer.Ordinal);
+        var calls = new List<string>();
+        foreach (var tree in compilation.SyntaxTrees.Where(tree => generatedPaths.Contains(tree.FilePath)))
+        {
+            var model = compilation.GetSemanticModel(tree);
+            foreach (var node in tree.GetRoot().DescendantNodes())
+            {
+                if (node is not (InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax))
+                    continue;
+
+                if (model.GetSymbolInfo(node).Symbol is IMethodSymbol method
+                    && method.GetAttributes().Any(attribute => attribute.AttributeClass?.Name
+                        is "RequiresUnreferencedCodeAttribute" or "RequiresDynamicCodeAttribute"))
+                {
+                    calls.Add(method.ToDisplayString());
+                }
+            }
+        }
+
+        return calls;
+    }
 
     private static string GetGenerated(GeneratorDriver driver) =>
         string.Join(
