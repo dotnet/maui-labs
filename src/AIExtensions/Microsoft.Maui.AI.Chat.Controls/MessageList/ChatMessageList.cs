@@ -70,6 +70,7 @@ internal sealed class ChatMessageList : CollectionView
         ItemsSource = _rows;
         Footer = new BoxView { HeightRequest = 8, Color = Colors.Transparent };
         Scrolled += OnScrolled;
+        SizeChanged += OnSizeChanged;
     }
 
     /// <summary>Gets or sets how long engine notifications are batched before the rows refresh.</summary>
@@ -533,6 +534,18 @@ internal sealed class ChatMessageList : CollectionView
     {
         if (_rows.Count > 0)
             ScrollTo(_rows.Count - 1, position: ScrollToPosition.End, animate: false);
+    }
+
+    // The space for the list changes with the composer (staged attachments, a long draft) and the window: keep the
+    // newest row in view while following. The list reports the offset it clamps as scrolls; those are not the user's.
+    private void OnSizeChanged(object? sender, EventArgs e)
+    {
+        if (!_isPinned || _rows.Count == 0)
+            return;
+
+        _settleUntil = Clock() + SettleMilliseconds;
+        _followRequested = true;
+        Invalidate();
     }
 
     private void OnScrolled(object? sender, ItemsViewScrolledEventArgs e)
