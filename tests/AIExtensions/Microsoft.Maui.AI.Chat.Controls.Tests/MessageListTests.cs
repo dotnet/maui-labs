@@ -850,6 +850,26 @@ public class MessageListTests
     });
 
     [Fact]
+    public void ResizingTheList_KeepsTheNewestRowInViewWhilePinned() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Reply("One");
+        var view = ChatHost.Create(ChatHost.Session(client));
+        var requests = new List<int>();
+        view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
+        await SendAsync(view, "first");
+
+        // The composer grew (staged attachments, a long draft), so the list got shorter.
+        requests.Clear();
+        ((IView)view.MessageList).Arrange(new Rect(0, 0, 400, 600));
+        Assert.Equal(view.Rows().Count - 1, Assert.Single(requests));
+
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
+        requests.Clear();
+        ((IView)view.MessageList).Arrange(new Rect(0, 0, 400, 500));
+        Assert.Empty(requests);
+    });
+
+    [Fact]
     public void SwappingSessions_ProjectsTheNewSession() => UIThread.Run(async () =>
     {
         var first = ChatHost.Session(new ScriptedChatClient().Reply("From first"));
