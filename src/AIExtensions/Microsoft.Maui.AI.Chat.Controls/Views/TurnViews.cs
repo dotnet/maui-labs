@@ -1,30 +1,58 @@
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>The user's message: media and text in one right-aligned bubble.</summary>
+/// <summary>
+/// The user's message: attachments as right-aligned thumbnails and chips, then the text in a right-aligned bubble
+/// sized to the text.
+/// </summary>
 internal sealed class UserMessageView : RowView<UserMessageRow>
 {
-    private readonly VerticalStackLayout _stack = new() { Spacing = 8 };
+    private readonly VerticalStackLayout _attachments = new() { Spacing = 6, HorizontalOptions = LayoutOptions.End, IsVisible = false };
+    private readonly Label _text = ChatVisuals.Label(AIChatThemeKeys.UserTextStyle);
+    private readonly Border _bubble;
+    private AIContent[] _media = [];
 
     public UserMessageView()
     {
         AutomationId = "AIChatUserMessage";
-        Content = new Border { Content = _stack }.Styled(AIChatThemeKeys.UserBubbleStyle);
+        _bubble = new Border { Content = _text, IsVisible = false }.Styled(AIChatThemeKeys.UserBubbleStyle);
+        _bubble.PropertyChanged += OnBubblePropertyChanged;
+        Content = new VerticalStackLayout { Children = { _attachments, _bubble } };
     }
 
-    internal VerticalStackLayout Stack => _stack;
+    internal VerticalStackLayout Attachments => _attachments;
+
+    internal Border Bubble => _bubble;
+
+    internal Label TextLabel => _text;
 
     protected override void Render(UserMessageRow row, bool isNewRow)
     {
-        _stack.Children.Clear();
-
-        foreach (var media in row.Blocks.OfType<MediaContentBlock>())
-            _stack.Children.Add(ChatVisuals.CreateMediaView(media.Content, alignEnd: true));
+        // Rows are refreshed when the conversation's status changes, too. Only touch the views when what they show
+        // changed: replacing them while the row is off screen leaves them unmeasured when it scrolls back.
+        var media = row.Blocks.OfType<MediaContentBlock>().Select(static block => block.Content).ToArray();
+        if (!media.SequenceEqual(_media, ReferenceEqualityComparer.Instance))
+        {
+            _media = media;
+            _attachments.Children.Clear();
+            foreach (var content in media)
+                _attachments.Children.Add(ChatVisuals.CreateMediaView(content, alignEnd: true));
+            _attachments.IsVisible = media.Length > 0;
+        }
 
         var text = string.Join(
             "\n",
             row.Blocks.OfType<RichContentBlock>().Select(static block => block.RawText).Where(static text => !string.IsNullOrWhiteSpace(text)));
-        if (text.Length > 0)
-            _stack.Children.Add(ChatVisuals.Label(AIChatThemeKeys.UserTextStyle, text));
+        if (_text.Text != text)
+            _text.Text = text;
+        _bubble.IsVisible = text.Length > 0;
+    }
+
+    // The attachments line up with the bubble: the same side insets, and the bubble's top margin above whichever
+    // comes first (between them, it spaces the bubble from the attachments).
+    private void OnBubblePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == MarginProperty.PropertyName)
+            _attachments.Margin = new Thickness(_bubble.Margin.Left, _bubble.Margin.Top, _bubble.Margin.Right, 0);
     }
 }
 

@@ -10,9 +10,10 @@ templates, restyle it with resource keys, or replace the whole layout.
 
 ## Features
 
-- **Chat layout:** the user's messages sit in a right-aligned bubble and assistant text is full width. There
-  are no avatars, names, or timestamps. A thinking row shows until content arrives, and the list
-  auto-scrolls while you are at the bottom.
+- **Chat layout:** the user's messages sit in a right-aligned bubble sized to the text, with attached images and
+  files as right-aligned thumbnails and chips above it, and assistant text is full width. There are no avatars,
+  names, or timestamps. A thinking row shows until content arrives. The list follows new content while you are
+  at the bottom, and again whenever a new turn starts.
 - **Markdown answers:** headings, emphasis, lists and task lists, tables, block quotes, code, links, and images
   render as native views while the answer streams. Your own messages stay plain text.
 - **Agent content:** tool calls are compact cards with expandable arguments and results. An approval is one
@@ -142,7 +143,7 @@ Add `BlockTemplate`s as the view's content. A template matches when every filter
 - Your templates always win over the built-in ones. Among yours, the highest `Priority` wins, then the most
   specific: a tool name beats a block type, a derived type beats its base type, and a type beats a role. If
   they are still tied, the last one declared wins.
-- `Role="user"` templates can take over the user's own blocks, which otherwise render in the user bubble.
+- `Role="user"` templates can take over the user's own blocks, which otherwise render as the built-in user message.
 - Override `When(ContentBlock)` for anything else, and call the base method to keep the filters.
 - Derive a view from `BlockView` to get `Block`, `Session`, and `OnBlockChanged()`. That method runs once per
   batch of streaming updates, not once per token.

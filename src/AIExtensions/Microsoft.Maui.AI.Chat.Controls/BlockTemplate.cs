@@ -23,7 +23,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// streams. Derive the view from <see cref="BlockView"/> to also get the session and a change callback.
 /// </para>
 /// <para>
-/// Request blocks (what the user sent) render in the built-in user bubble unless a template whose
+/// Request blocks (what the user sent) render as the built-in user message unless a template whose
 /// <see cref="Role"/> is <c>"user"</c> (or that otherwise matches them) claims them.
 /// </para>
 /// </remarks>

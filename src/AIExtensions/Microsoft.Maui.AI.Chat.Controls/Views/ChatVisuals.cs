@@ -54,7 +54,7 @@ internal static class ChatVisuals
         content switch
         {
             DataContent data when data.HasTopLevelMediaType("image") && !data.Data.IsEmpty =>
-                CreateImage(CreateImageSource(data)!, data.Name, alignEnd),
+                CreateImage(CreateImageSource(data)!, data.Name, alignEnd, ImageHeader.ReadSize(data.Data.Span)),
             UriContent link when link.HasTopLevelMediaType("image") && IsWebUri(link.Uri) =>
                 new LinkedImageView(
                     CreateImage(CreateImageSource(link)!, GetLinkName(link.Uri), alignEnd),
@@ -70,8 +70,9 @@ internal static class ChatVisuals
     /// </summary>
     public static View UpdateMediaView(View? current, AIContent content, bool alignEnd = false)
     {
-        if (current is Image image && CreateImageSource(content) is { } source)
+        if (current is ChatImage image && CreateImageSource(content) is { } source)
         {
+            image.PixelSize = content is DataContent data ? ImageHeader.ReadSize(data.Data.Span) : null;
             image.Source = source;
             return image;
         }
@@ -89,10 +90,11 @@ internal static class ChatVisuals
             _ => null,
         };
 
-    internal static Image CreateImage(ImageSource source, string? name, bool alignEnd)
+    internal static ChatImage CreateImage(ImageSource source, string? name, bool alignEnd, Size? pixelSize = null)
     {
-        var image = new Image
+        var image = new ChatImage
         {
+            PixelSize = pixelSize,
             Source = source,
             Aspect = Aspect.AspectFit,
             MaximumHeightRequest = 240,
@@ -203,6 +205,8 @@ internal static class ChatVisuals
         };
         if (trailing is not null)
             row.Children.Add(trailing);
+        else
+            text.Margin = new Thickness(0, 0, 6, 0); // The chip's end padding is sized for a trailing button.
 
         var chip = new Border
         {

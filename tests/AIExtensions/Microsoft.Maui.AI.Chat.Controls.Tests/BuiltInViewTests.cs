@@ -528,7 +528,7 @@ public class BuiltInViewTests
     public void Media_ShowsImagesInlineAndFilesAsChips()
     {
         var image = Render<MediaBlockView>(Blocks.Media(Blocks.Png("photo.png"))).MediaView;
-        Assert.IsType<Image>(image);
+        Assert.IsType<ChatImage>(image);
         Assert.Equal("photo.png", SemanticProperties.GetDescription(image!));
 
         var pdf = Render<MediaBlockView>(Blocks.Media(Blocks.Pdf("report.pdf", bytes: 2048))).MediaView;
@@ -565,7 +565,7 @@ public class BuiltInViewTests
     {
         var block = Blocks.Media(Blocks.Png("partial.png"));
         var view = Render<MediaBlockView>(block);
-        var image = Assert.IsType<Image>(view.MediaView);
+        var image = Assert.IsType<ChatImage>(view.MediaView);
         var first = image.Source;
 
         block.Content = Blocks.Png("final.png");
@@ -582,7 +582,7 @@ public class BuiltInViewTests
     [Fact]
     public void Media_ImageSourceCanBeReadMoreThanOnce() => UIThread.Run(async () =>
     {
-        var image = Assert.IsType<Image>(ChatVisuals.CreateMediaView(Blocks.Png()));
+        var image = Assert.IsType<ChatImage>(ChatVisuals.CreateMediaView(Blocks.Png()));
         var source = Assert.IsType<StreamImageSource>(image.Source);
 
         for (var i = 0; i < 2; i++)
@@ -593,36 +593,77 @@ public class BuiltInViewTests
     });
 
     [Fact]
-    public void UserBubble_RendersTextAndMediaInOneRightAlignedBubble()
+    public void UserMessage_ShowsAttachmentsAboveABubbleHoldingOnlyTheText()
     {
-        var turn = new ConversationTurn();
-        var row = new UserMessageRow(turn);
-        row.SetBlocks([Blocks.Media(Blocks.Png()), Blocks.Text("Look", ChatRole.User)]);
-        var view = new UserMessageView();
-        view.Resources.MergedDictionaries.Add(new AIChatTheme());
-        view.BindingContext = row;
+        var view = RenderUserMessage(Blocks.Media(Blocks.Png()), Blocks.Text("Look", ChatRole.User));
 
-        var bubble = Assert.IsType<Border>(view.Content);
-        Assert.Equal(LayoutOptions.End, bubble.HorizontalOptions);
+        // The attachments sit outside the bubble, right-aligned, inset like the bubble.
         Assert.Collection(
-            view.Stack.Children,
-            media => Assert.IsType<Image>(media),
-            text => Assert.Equal("Look", Assert.IsType<Label>(text).Text));
+            Assert.IsType<VerticalStackLayout>(view.Content).Children,
+            attachments => Assert.Same(view.Attachments, attachments),
+            bubble => Assert.Same(view.Bubble, bubble));
+        Assert.True(view.Attachments.IsVisible);
+        Assert.Equal(LayoutOptions.End, view.Attachments.HorizontalOptions);
+        Assert.Equal(LayoutOptions.End, Assert.IsType<ChatImage>(Assert.Single(view.Attachments.Children)).HorizontalOptions);
+        Assert.Equal(new Thickness(view.Bubble.Margin.Left, view.Bubble.Margin.Top, view.Bubble.Margin.Right, 0), view.Attachments.Margin);
+        Assert.True(view.Bubble.Margin.Left > 0);
+
+        // So the bubble is sized to the text alone.
+        Assert.Equal(LayoutOptions.End, view.Bubble.HorizontalOptions);
+        Assert.Same(view.TextLabel, view.Bubble.Content);
+        Assert.Equal("Look", view.TextLabel.Text);
     }
 
     [Fact]
-    public void UserBubble_ShowsTheUsersMarkdownAsTyped()
+    public void UserMessage_ShowsOnlyWhatWasSent()
+    {
+        var textOnly = RenderUserMessage(Blocks.Text("Hi", ChatRole.User));
+        Assert.False(textOnly.Attachments.IsVisible);
+        Assert.True(textOnly.Bubble.IsVisible);
+
+        var attachmentOnly = RenderUserMessage(Blocks.Media(Blocks.Pdf("notes.pdf")));
+        Assert.True(attachmentOnly.Attachments.IsVisible);
+        Assert.False(attachmentOnly.Bubble.IsVisible);
+        Assert.Contains("notes.pdf", attachmentOnly.Attachments.Descendants<Label>().Select(label => label.Text));
+    }
+
+    [Fact]
+    public void UserMessage_RefreshingAnUnchangedRow_KeepsItsViews()
     {
         var row = new UserMessageRow(new ConversationTurn());
-        row.SetBlocks([Blocks.Text("Make **this** a `list`:\n- one", ChatRole.User)]);
+        row.SetBlocks([Blocks.Media(Blocks.Png()), Blocks.Text("Look", ChatRole.User)]);
+        var view = new UserMessageView { BindingContext = row };
+        var image = Assert.Single(view.Attachments.Children);
+        var text = view.TextLabel;
+
+        // The list refreshes the newest turn's rows whenever the conversation's status changes. Replacing the views
+        // of a row that is off screen left them unmeasured (an empty bubble) when it scrolled back on iOS.
+        row.NotifyChanged();
+        row.NotifyChanged();
+
+        Assert.Same(image, Assert.Single(view.Attachments.Children));
+        Assert.Same(text, view.Bubble.Content);
+        Assert.Equal("Look", text.Text);
+    }
+
+    [Fact]
+    public void UserMessage_ShowsTheUsersMarkdownAsTyped()
+    {
+        var view = RenderUserMessage(Blocks.Text("Make **this** a `list`:\n- one", ChatRole.User));
+
+        Assert.Equal("Make **this** a `list`:\n- one", view.TextLabel.Text);
+        Assert.Null(view.TextLabel.FormattedText);
+        Assert.Empty(view.Descendants<MarkdownView>());
+    }
+
+    private static UserMessageView RenderUserMessage(params ContentBlock[] blocks)
+    {
+        var row = new UserMessageRow(new ConversationTurn());
+        row.SetBlocks([.. blocks]);
         var view = new UserMessageView();
         view.Resources.MergedDictionaries.Add(new AIChatTheme());
         view.BindingContext = row;
-
-        var text = Assert.IsType<Label>(Assert.Single(view.Stack.Children));
-        Assert.Equal("Make **this** a `list`:\n- one", text.Text);
-        Assert.Null(text.FormattedText);
-        Assert.Empty(view.Descendants<MarkdownView>());
+        return view;
     }
 
     [Fact]

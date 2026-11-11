@@ -30,7 +30,7 @@ public class MessageListTests
     });
 
     [Fact]
-    public void UserBubble_ShowsTextAndAttachmentsTogether() => UIThread.Run(async () =>
+    public void UserMessage_ShowsTheAttachmentsAboveTheText() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient().Reply("Nice picture");
         var view = ChatHost.Create(ChatHost.Session(client));
@@ -44,13 +44,13 @@ public class MessageListTests
         Assert.Contains(user.Blocks, block => block is RichContentBlock { RawText: "What is this?" });
         Assert.Contains(user.Blocks, block => block is MediaContentBlock);
 
-        var bubble = Assert.IsType<UserMessageView>(view.Realize(user));
+        var message = Assert.IsType<UserMessageView>(view.Realize(user));
         Assert.Collection(
-            bubble.Stack.Children,
-            image => Assert.IsType<Image>(image),
-            chip => Assert.Contains("notes.pdf", Assert.IsType<Border>(chip).Descendants<Label>().Select(l => l.Text)),
-            text => Assert.Equal("What is this?", Assert.IsType<Label>(text).Text));
-        Assert.Equal(LayoutOptions.End, ((Border)bubble.Content).HorizontalOptions);
+            message.Attachments.Children,
+            image => Assert.IsType<ChatImage>(image),
+            chip => Assert.Contains("notes.pdf", Assert.IsType<Border>(chip).Descendants<Label>().Select(l => l.Text)));
+        Assert.Equal("What is this?", message.TextLabel.Text);
+        Assert.Equal(LayoutOptions.End, message.Bubble.HorizontalOptions);
     });
 
     [Fact]
@@ -1034,7 +1034,7 @@ public class MessageListTests
 
         var row = Assert.Single(view.Rows().OfType<BlockRow>());
         var media = Assert.IsType<MediaBlockView>(((BlockHost)view.Realize(row)).HostedView);
-        var image = Assert.IsType<Image>(media.MediaView);
+        var image = Assert.IsType<ChatImage>(media.MediaView);
         var partial = image.Source;
 
         var final = Blocks.Png("final.png");
