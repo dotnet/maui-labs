@@ -40,8 +40,8 @@ internal abstract class RowView<TRow> : ContentView
     }
 }
 
-/// <summary>Hosts the view a <see cref="BlockTemplate"/> creates and keeps it bound to the current block.</summary>
-internal sealed class BlockHost(BlockTemplate template) : RowView<BlockRow>
+/// <summary>Hosts the view a <see cref="BlockTemplate"/>'s template creates and keeps it bound to the current block.</summary>
+internal sealed class BlockHost(DataTemplate template) : RowView<BlockRow>
 {
     private View? _view;
     private DataTemplate? _selected;
@@ -51,25 +51,18 @@ internal sealed class BlockHost(BlockTemplate template) : RowView<BlockRow>
     protected override void Render(BlockRow row, bool isNewRow)
     {
         EnsureView(row);
-        BlockView.Bind(_view!, row.Block, row.Owner, row.Session, row.Turn);
+        ChatBlockView.Bind(_view!, row.Block, row.Owner, row.Session, row.Turn);
     }
 
     private void EnsureView(BlockRow row)
     {
-        if (template.Template is DataTemplateSelector selector)
-        {
-            // A selector may pick another template as the block changes (for example once a tool call completes).
-            var selected = selector.SelectTemplate(row.Block, this);
-            if (_view is not null && ReferenceEquals(selected, _selected))
-                return;
-            _selected = selected;
-        }
-        else if (_view is not null)
-        {
+        // A selector may pick another template as the block changes (for example once a tool call completes).
+        var selected = template is DataTemplateSelector selector ? selector.SelectTemplate(row.Block, this) : template;
+        if (_view is not null && ReferenceEquals(selected, _selected))
             return;
-        }
 
-        _view = template.CreateView(row.Block, this, row.Owner.Services);
+        _selected = selected;
+        _view = BuiltInBlockTemplates.CreateView(selected);
         Content = _view;
     }
 }

@@ -4,7 +4,7 @@ using Microsoft.Maui.AI.Chat.Controls;
 namespace AIExtensions.Sample.ChatPlayground;
 
 /// <summary>Shows a <c>calculate</c> tool call as arithmetic, while it runs and once it has a result.</summary>
-public partial class CalculatorCardView : BlockView
+public partial class CalculatorCardView : ChatBlockView
 {
     /// <summary>Initializes the card.</summary>
     public CalculatorCardView() => InitializeComponent();

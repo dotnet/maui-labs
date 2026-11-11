@@ -172,7 +172,7 @@ public sealed class ThemeTests : IDisposable
     {
         var app = CreateApplication();
         var view = Attach(app, ChatHost.Create());
-        var card = new ToolCallView { Block = Blocks.ToolCall("search") };
+        var card = new ToolCallView { BindingContext = Blocks.ToolCall("search") };
         view.InputLeadingContent = card;
 
         var theme = Assert.IsType<AIChatTheme>(app.Resources.MergedDictionaries.First());

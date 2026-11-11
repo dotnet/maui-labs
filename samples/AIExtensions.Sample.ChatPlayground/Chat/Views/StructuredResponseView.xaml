@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
-    Renders assistant text that is a JSON object, selected by StructuredResponseTemplate. A response that follows
+    Renders assistant text that is a JSON object, selected by StructuredResponseMatch. A response that follows
     the playground schema (PlaygroundResponse) is shown as a card; any other JSON is shown formatted. While the JSON
     streams in, the raw text is shown until it is complete.
 -->

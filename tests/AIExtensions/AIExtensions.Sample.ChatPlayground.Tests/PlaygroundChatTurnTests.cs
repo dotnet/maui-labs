@@ -75,16 +75,16 @@ public sealed class PlaygroundChatTurnTests
         using var harness = new PlaygroundChatHarness(model);
         harness.Settings.UseStreaming = streaming;
         harness.Settings.UseStructuredJson = true;
-        var template = new StructuredResponseTemplate();
+        var structured = new StructuredResponseMatch();
         var selectedWhenAdded = new List<bool>();
-        harness.Session.RegisterOnBlockAdded((_, block) => selectedWhenAdded.Add(template.When(block)));
+        harness.Session.RegisterOnBlockAdded((_, block) => selectedWhenAdded.Add(structured.Matches(block)));
 
         await harness.Session.SendMessageAsync("Respond with JSON");
 
         Assert.NotNull(Assert.Single(model.Requests).Options!.ResponseFormat);
         var block = Assert.IsType<TextContentBlock>(Assert.Single(harness.LastTurn.ResponseBlocks));
         Assert.Equal(json, block.RawText);
-        Assert.True(template.When(block));
+        Assert.True(structured.Matches(block));
 
         // The user's message is not selected; the answer is, as soon as it is added.
         Assert.Equal([false, true], selectedWhenAdded);
@@ -262,7 +262,7 @@ public sealed class PlaygroundChatTurnTests
         // Every provider output is part of the response: the text, the reasoning, the call with its result, and both
         // images.
         var text = Assert.Single(turn.ResponseBlocks.OfType<TextContentBlock>());
-        Assert.Equal(structuredJson, new StructuredResponseTemplate().When(text));
+        Assert.Equal(structuredJson, new StructuredResponseMatch().Matches(text));
         Assert.Equal("Calculated", Assert.Single(turn.ResponseBlocks.OfType<ReasoningContentBlock>()).Text);
         Assert.True(Assert.Single(turn.ResponseBlocks.OfType<FunctionInvocationContentBlock>()).HasResult);
         Assert.Equal(2, turn.ResponseBlocks.OfType<MediaContentBlock>().Count());

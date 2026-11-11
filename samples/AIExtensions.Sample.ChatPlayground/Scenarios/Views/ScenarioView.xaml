@@ -53,40 +53,61 @@
 
                 <!--
                     The scenarios' own cards. Each template matches a block type, and a tool name where the type is
-                    shared, so every other block keeps its built-in view.
+                    shared, so every other block keeps its built-in view. None of them overlap, so their order
+                    doesn't matter here; where templates overlap, the first that matches wins.
                 -->
 
                 <!-- Tool cards: the typed get_weather card ([ToolBlock] + options.AddGeneratedToolBlocks()). -->
-                <chat:BlockTemplate BlockType="{x:Type local:WeatherToolBlock}"
-                                    ViewType="{x:Type local:WeatherCardView}" />
+                <chat:BlockTemplate When="{chat:Is local:WeatherToolBlock}"
+                                    Template="{chat:ViewTemplate local:WeatherCardView}" />
 
                 <!-- Combined tool calls: every get_weather call of a response in one card. -->
-                <chat:BlockTemplate BlockType="{x:Type local:WeatherComparisonBlock}"
-                                    ViewType="{x:Type local:WeatherComparisonView}" />
+                <chat:BlockTemplate When="{chat:Is local:WeatherComparisonBlock}"
+                                    Template="{chat:ViewTemplate local:WeatherComparisonView}" />
 
                 <!-- Human in the loop: the meeting's own approval card; send_email keeps the built-in one. -->
-                <chat:BlockTemplate BlockType="{x:Type chat:ToolApprovalBlock}"
-                                    ToolName="book_meeting"
-                                    ViewType="{x:Type local:MeetingApprovalView}" />
+                <chat:BlockTemplate Template="{chat:ViewTemplate local:MeetingApprovalView}">
+                    <chat:BlockTemplate.When>
+                        <chat:AllMatch>
+                            <chat:BlockTypeMatch Type="chat:ToolApprovalBlock" />
+                            <chat:ToolMatch Name="book_meeting" />
+                        </chat:AllMatch>
+                    </chat:BlockTemplate.When>
+                </chat:BlockTemplate>
 
                 <!-- Frontend tools: the automatic action as a chip; reset_accent_color keeps the built-in Run card. -->
-                <chat:BlockTemplate BlockType="{x:Type chat:UIActionBlock}"
-                                    ToolName="set_accent_color"
-                                    ViewType="{x:Type local:AccentActionView}" />
+                <chat:BlockTemplate Template="{chat:ViewTemplate local:AccentActionView}">
+                    <chat:BlockTemplate.When>
+                        <chat:AllMatch>
+                            <chat:BlockTypeMatch Type="chat:UIActionBlock" />
+                            <chat:ToolMatch Name="set_accent_color" />
+                        </chat:AllMatch>
+                    </chat:BlockTemplate.When>
+                </chat:BlockTemplate>
 
                 <!-- Activity progress: the plan, updated in place. -->
-                <chat:BlockTemplate BlockType="{x:Type local:PlanActivityBlock}"
-                                    ViewType="{x:Type local:PlanActivityView}" />
+                <chat:BlockTemplate When="{chat:Is local:PlanActivityBlock}"
+                                    Template="{chat:ViewTemplate local:PlanActivityView}" />
 
                 <!-- Shared state: a compact note where the agent changed the recipe. -->
-                <chat:BlockTemplate BlockType="{x:Type chat:FunctionInvocationContentBlock}"
-                                    ToolName="update_recipe"
-                                    ViewType="{x:Type local:RecipeUpdateView}" />
+                <chat:BlockTemplate Template="{chat:ViewTemplate local:RecipeUpdateView}">
+                    <chat:BlockTemplate.When>
+                        <chat:AllMatch>
+                            <chat:BlockTypeMatch Type="chat:FunctionInvocationContentBlock" />
+                            <chat:ToolMatch Name="update_recipe" />
+                        </chat:AllMatch>
+                    </chat:BlockTemplate.When>
+                </chat:BlockTemplate>
 
                 <!-- Predictive state: accept or reject the proposed document. -->
-                <chat:BlockTemplate BlockType="{x:Type chat:UIActionBlock}"
-                                    ToolName="propose_document"
-                                    ViewType="{x:Type local:ProposalReviewView}" />
+                <chat:BlockTemplate Template="{chat:ViewTemplate local:ProposalReviewView}">
+                    <chat:BlockTemplate.When>
+                        <chat:AllMatch>
+                            <chat:BlockTypeMatch Type="chat:UIActionBlock" />
+                            <chat:ToolMatch Name="propose_document" />
+                        </chat:AllMatch>
+                    </chat:BlockTemplate.When>
+                </chat:BlockTemplate>
             </chat:AIChatView>
         </Border>
     </Grid>

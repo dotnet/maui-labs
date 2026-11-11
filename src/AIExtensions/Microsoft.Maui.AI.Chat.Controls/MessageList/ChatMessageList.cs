@@ -135,7 +135,7 @@ internal sealed class ChatMessageList : CollectionView
 
     /// <summary>
     /// Re-selects every block's template on the next flush (templates were added, removed, or edited). Rows whose
-    /// template and its <see cref="BlockTemplate.Version"/> are unchanged keep their views.
+    /// template and its <see cref="BlockTemplate.Template"/> are unchanged keep their views.
     /// </summary>
     public void InvalidateTemplates() => Invalidate();
 
@@ -321,7 +321,7 @@ internal sealed class ChatMessageList : CollectionView
                 {
                     Track(block, liveBlocks);
                     var template = BuiltInBlockTemplates.Select(block, templates, includeBuiltIns: true);
-                    if (template is { CanRender: true } && !IsEmptyBuiltInReasoning(block, template))
+                    if (template is { Template: not null } && !IsEmptyBuiltInReasoning(block, template))
                     {
                         desired.Add(GetBlockRow(block, template, session, turn));
                         lastVisible = block;
@@ -369,7 +369,7 @@ internal sealed class ChatMessageList : CollectionView
     /// encrypted reasoning some providers return in a block of its own. An app template still gets such blocks.
     /// </summary>
     private static bool IsEmptyBuiltInReasoning(ContentBlock block, BlockTemplate template) =>
-        block is ReasoningContentBlock reasoning && template.Factory is not null && string.IsNullOrWhiteSpace(reasoning.Text);
+        block is ReasoningContentBlock reasoning && BuiltInBlockTemplates.IsBuiltIn(template) && string.IsNullOrWhiteSpace(reasoning.Text);
 
     private void AddRequestRows(
         List<ChatRow> desired,
@@ -389,7 +389,7 @@ internal sealed class ChatMessageList : CollectionView
             // otherwise render twice).
             if (BuiltInBlockTemplates.Select(block, templates, includeBuiltIns: false) is { } template)
             {
-                if (template.CanRender)
+                if (template.Template is not null)
                     desired.Add(GetBlockRow(block, template, session, turn));
                 continue;
             }
@@ -432,7 +432,7 @@ internal sealed class ChatMessageList : CollectionView
     {
         if (_blockRows.TryGetValue(block, out var row) &&
             ReferenceEquals(row.Template, template) &&
-            row.TemplateVersion == template.Version &&
+            ReferenceEquals(row.Content, template.Template) &&
             ReferenceEquals(row.Session, session))
         {
             return row;
@@ -644,12 +644,13 @@ internal sealed class ChatMessageList : CollectionView
         private readonly DataTemplate _error = new(static () => new TurnErrorView());
         private readonly DataTemplate _notSent = new(static () => new TurnNotSentView());
         private readonly DataTemplate _stopped = new(static () => new TurnStoppedView());
+        private readonly Dictionary<DataTemplate, DataTemplate> _hosts = [];
         private readonly Dictionary<DataTemplate, DataTemplate> _footers = [];
 
         protected override DataTemplate OnSelectTemplate(object item, BindableObject container) =>
             item switch
             {
-                BlockRow row => row.Template.GetDataTemplate(),
+                BlockRow row => GetHost(row.Content),
                 UserMessageRow => _user,
                 ThinkingRow => _thinking,
                 TurnErrorRow => _error,
@@ -659,6 +660,18 @@ internal sealed class ChatMessageList : CollectionView
                 EndRow => End,
                 _ => Empty,
             };
+
+        // One host template per block template, so the list reuses a host only for views of the same template.
+        private DataTemplate GetHost(DataTemplate content)
+        {
+            if (!_hosts.TryGetValue(content, out var template))
+            {
+                template = new DataTemplate(() => new BlockHost(content));
+                _hosts[content] = template;
+            }
+
+            return template;
+        }
 
         // One host template per footer template, so changing the footer never reuses hosts built for the old one.
         private DataTemplate GetFooter(DataTemplate source)

@@ -309,22 +309,22 @@ public class BuiltInViewTests
         var view = new ToolApprovalView();
         view.Resources.MergedDictionaries.Add(new AIChatTheme());
 
-        BlockView.Bind(view, block, owner: null, session, new ConversationTurn { IsStopped = true });
+        ChatBlockView.Bind(view, block, owner: null, session, new ConversationTurn { IsStopped = true });
 
         Assert.False(view.Buttons.IsVisible);
         Assert.False(view.ApproveCommand.CanExecute(null));
         Assert.Equal("delete_file", view.TitleLabel.Text);
         Assert.Equal("Stopped", view.StatusLabel.Text);
 
-        BlockView.Bind(view, block, owner: null, session, new ConversationTurn());
+        ChatBlockView.Bind(view, block, owner: null, session, new ConversationTurn());
         Assert.Equal("Not answered", view.StatusLabel.Text);
 
         var approved = Blocks.Approval("delete_file");
         approved.Approve();
-        BlockView.Bind(view, approved, owner: null, session, new ConversationTurn { IsStopped = true });
+        ChatBlockView.Bind(view, approved, owner: null, session, new ConversationTurn { IsStopped = true });
         Assert.Equal("Approved \u00B7 Stopped", view.StatusLabel.Text);
 
-        BlockView.Bind(view, approved, owner: null, session, new ConversationTurn());
+        ChatBlockView.Bind(view, approved, owner: null, session, new ConversationTurn());
         Assert.Equal("Approved \u00B7 Not completed", view.StatusLabel.Text);
         Assert.False(view.ResultLabel.Parent is Border { IsVisible: true });
     }
@@ -341,7 +341,7 @@ public class BuiltInViewTests
         var view = new ToolCallView();
         view.Resources.MergedDictionaries.Add(new AIChatTheme());
 
-        BlockView.Bind(view, block, owner: null, session, new ConversationTurn { IsStopped = stopped });
+        ChatBlockView.Bind(view, block, owner: null, session, new ConversationTurn { IsStopped = stopped });
 
         Assert.Equal(expected, view.StatusLabel.Text);
         Assert.Equal(expected.Length > 0, view.StatusLabel.IsVisible);
@@ -377,7 +377,7 @@ public class BuiltInViewTests
     public void ToolApproval_RendersTheAppTemplateForTheTool() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient().RequestApproval("get_weather", new Dictionary<string, object?> { ["city"] = "Rome" }).Reply("ok");
-        var template = new BlockTemplate { ToolName = "get_weather", BlockType = typeof(FunctionInvocationContentBlock), ViewType = typeof(CountingBlockView) };
+        var template = new BlockTemplate { When = BlockMatch.All(BlockMatch.Is<FunctionInvocationContentBlock>(), BlockMatch.Tool("get_weather")), Template = new ViewTemplate(typeof(CountingBlockView)) };
         var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(template));
 
         view.Text = "Weather?";
@@ -746,7 +746,7 @@ public class BuiltInViewTests
         var view = new CountingBlockView();
         var block = Blocks.Text("hi");
 
-        view.Block = block;
+        view.BindingContext = block;
 
         Assert.Equal(1, view.ChangeCount);
         Assert.Same(block, view.LastBlock);
@@ -765,13 +765,13 @@ public class BuiltInViewTests
     {
         var view = new T();
         view.Resources.MergedDictionaries.Add(new AIChatTheme());
-        BlockView.Bind(view, block, owner: null, session: null);
+        ChatBlockView.Bind(view, block, owner: null, session: null);
         return view;
     }
 
-    private static void Refresh(BlockView view) => BlockView.Bind(view, view.Block!, owner: null, session: null);
+    private static void Refresh(BlockView view) => ChatBlockView.Bind(view, view.Block!, owner: null, session: null);
 
-    private static void Rebind(BlockView view, ContentBlock block) => BlockView.Bind(view, block, owner: null, session: null);
+    private static void Rebind(BlockView view, ContentBlock block) => ChatBlockView.Bind(view, block, owner: null, session: null);
 
     private static AIChatTheme Theme(VisualElement view) => view.Resources.MergedDictionaries.OfType<AIChatTheme>().Single();
 

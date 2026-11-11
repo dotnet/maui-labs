@@ -69,7 +69,7 @@ public sealed partial class WeatherBlock : FunctionInvocationContentBlock
 }
 
 /// <summary>A custom block view used by template tests.</summary>
-public sealed class CountingBlockView : BlockView
+public sealed class CountingBlockView : ChatBlockView
 {
     public int ChangeCount { get; private set; }
 

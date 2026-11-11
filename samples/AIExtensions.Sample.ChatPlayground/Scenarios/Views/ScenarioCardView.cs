@@ -7,7 +7,7 @@ namespace AIExtensions.Sample.ChatPlayground;
 /// Base class of the scenarios' cards. Besides refreshing when its block changes, a card refreshes when the session's
 /// status changes, so a card whose turn stopped stops showing that it is running.
 /// </summary>
-public abstract class ScenarioCardView : BlockView
+public abstract class ScenarioCardView : ChatBlockView
 {
     private AgentContext? _watched;
     private IDisposable? _registration;

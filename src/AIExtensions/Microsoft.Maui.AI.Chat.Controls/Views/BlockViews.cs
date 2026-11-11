@@ -1,7 +1,7 @@
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>A compact tool call card: name and status, with expandable arguments and result.</summary>
-internal sealed class ToolCallView : BlockView
+internal sealed class ToolCallView : ChatBlockView
 {
     private readonly Label _title = ChatVisuals.Label(AIChatThemeKeys.CardTitleStyle);
     private readonly Label _status = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle);
@@ -91,7 +91,7 @@ internal sealed class ToolCallView : BlockView
 /// Asks the user to approve or reject a tool call, then shows the decision and, once the call ran, its result —
 /// one card per call. Once decided, the arguments and result fold away like a tool call's details.
 /// </summary>
-internal sealed class ToolApprovalView : BlockView
+internal sealed class ToolApprovalView : ChatBlockView
 {
     private readonly Label _title = ChatVisuals.Label(AIChatThemeKeys.CardTitleStyle);
     private readonly Label _status = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle);
@@ -245,7 +245,7 @@ internal sealed class ToolApprovalView : BlockView
             if (!ReferenceEquals(template, _innerTemplate) || _innerView is null)
             {
                 _innerTemplate = template;
-                _innerView = template.CreateView(inner, this, Owner?.Services);
+                _innerView = BuiltInBlockTemplates.CreateView(template, inner, this);
             }
 
             Bind(_innerView, inner, Owner, Session, Turn);
@@ -281,7 +281,7 @@ internal sealed class ToolApprovalView : BlockView
 }
 
 /// <summary>A client-side UI action: status, and a Run button for manual actions.</summary>
-internal sealed class UIActionView : BlockView
+internal sealed class UIActionView : ChatBlockView
 {
     private readonly Label _title = ChatVisuals.Label(AIChatThemeKeys.CardTitleStyle);
     private readonly Label _status = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle);
@@ -366,7 +366,7 @@ internal sealed class UIActionView : BlockView
 }
 
 /// <summary>The model's reasoning, collapsed by default.</summary>
-internal sealed class ReasoningView : BlockView
+internal sealed class ReasoningView : ChatBlockView
 {
     private readonly Button _header;
     private readonly Label _chevron = ChatVisuals.Icon(AIChatThemeKeys.ExpandIcon, fontSize: 16);
@@ -436,7 +436,7 @@ internal sealed class ReasoningView : BlockView
 /// One media item the assistant returned: an image inline, a link as a link chip, anything else as a file chip.
 /// A streaming image (a partial image replaced by the next) updates in place.
 /// </summary>
-internal sealed class MediaBlockView : BlockView
+internal sealed class MediaBlockView : ChatBlockView
 {
     private AIContent? _shown;
 

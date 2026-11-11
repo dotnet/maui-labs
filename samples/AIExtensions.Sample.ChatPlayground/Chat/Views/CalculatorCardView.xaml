@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
-    A custom card for the playground's "calculate" tool, used through
-    <chat:BlockTemplate BlockType="{x:Type chat:FunctionInvocationContentBlock}" ToolName="calculate" ... />.
-    It reuses the chat theme's resources, so it follows light and dark mode with the built-in cards.
+    A custom card for the playground's "calculate" tool, used through a chat:BlockTemplate that matches the tool's
+    calls (see ChatPage.xaml). It reuses the chat theme's resources, so it follows light and dark mode with the
+    built-in cards. It reads the session (to find the call's approval), so it is a chat:ChatBlockView.
 -->
-<chat:BlockView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
-                xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-                xmlns:chat="http://schemas.microsoft.com/dotnet/2026/maui/ai/chat"
-                x:Class="AIExtensions.Sample.ChatPlayground.CalculatorCardView"
-                AutomationId="CalculatorCard">
+<chat:ChatBlockView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                    xmlns:chat="http://schemas.microsoft.com/dotnet/2026/maui/ai/chat"
+                    x:Class="AIExtensions.Sample.ChatPlayground.CalculatorCardView"
+                    AutomationId="CalculatorCard">
     <Border x:Name="Card"
             Style="{DynamicResource AIChat.Style.Card}"
             HorizontalOptions="Start"
@@ -56,4 +56,4 @@
             </VerticalStackLayout>
         </Grid>
     </Border>
-</chat:BlockView>
+</chat:ChatBlockView>
