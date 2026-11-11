@@ -450,6 +450,13 @@ public class MessageListTests
         await SendAsync(view, "third");
         Assert.True(view.MessageList.IsPinned);
         Assert.Equal(view.Rows().Count - 1, requests[^1]);
+
+        // A small correction while the newest row is visible keeps following; leaving that row unpins.
+        var last = view.Rows().Count - 1;
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -2, LastVisibleItemIndex = last });
+        Assert.True(view.MessageList.IsPinned);
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -8, LastVisibleItemIndex = last - 1 });
+        Assert.False(view.MessageList.IsPinned);
     });
 
     [Fact]
@@ -466,6 +473,37 @@ public class MessageListTests
         Assert.Equal("From second", ((TextContentBlock)((BlockRow)view.Rows()[1]).Block).RawText);
         await first.SendMessageAsync("ignored");
         Assert.Equal(2, view.Rows().Count);
+    });
+
+    [Fact]
+    public void ScrollsRaisedWhileRowsChange_DoNotUnpinTheList() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var view = ChatHost.Create(ChatHost.Session(client));
+        var requests = new List<int>();
+        view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
+
+        // A list scrolled to the end clamps its offset when a row is removed, and the platform reports that
+        // synchronously as a scroll back through the history.
+        ((INotifyCollectionChanged)view.MessageList.ItemsSource).CollectionChanged += (_, e) =>
+        {
+            if (e.Action == NotifyCollectionChangedAction.Remove)
+                view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -24, LastVisibleItemIndex = 0 });
+        };
+
+        view.Text = "Hi";
+        var send = view.SendAsync();
+        await UIThread.Until(() => view.Rows()[^1] is ThinkingRow);
+
+        stream.Text("Hello");
+        await UIThread.Until(() => view.Rows()[^1] is BlockRow);
+
+        Assert.True(view.MessageList.IsPinned);
+        Assert.Equal(view.Rows().Count - 1, requests[^1]);
+
+        stream.Complete();
+        await send;
     });
 
     private static async Task SendAsync(AIChatView view, string text)

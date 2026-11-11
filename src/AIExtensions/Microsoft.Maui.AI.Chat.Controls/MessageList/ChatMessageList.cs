@@ -15,6 +15,8 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </remarks>
 internal sealed class ChatMessageList : CollectionView
 {
+    private const double UnpinDistance = 32;
+
     private readonly AIChatView _owner;
     private readonly ObservableCollection<ChatRow> _rows = [];
     private readonly Dictionary<ContentBlock, BlockRow> _blockRows = new(ReferenceEqualityComparer.Instance);
@@ -30,6 +32,7 @@ internal sealed class ChatMessageList : CollectionView
     private bool _flushScheduled;
     private int _flushGeneration;
     private bool _isPinned = true;
+    private bool _isUpdatingRows;
 
     public ChatMessageList(AIChatView owner)
     {
@@ -105,26 +108,38 @@ internal sealed class ChatMessageList : CollectionView
     {
         _flushScheduled = false;
 
-        var desired = BuildRows();
-        var structureChanged = Apply(desired);
-
-        foreach (var block in _changedBlocks)
-        {
-            if (_blockRows.TryGetValue(block, out var row))
-                _dirtyRows.Add(row);
-        }
-        _changedBlocks.Clear();
-
+        bool structureChanged;
         var refreshed = false;
-        foreach (var row in _dirtyRows)
+
+        // Removing a row (the thinking row, a cleared response) shrinks the content, and a list scrolled to the end
+        // reports the clamped offset as a scroll back through the history. Those scrolls are ours, not the user's.
+        _isUpdatingRows = true;
+        try
         {
-            if (_rows.Contains(row))
+            var desired = BuildRows();
+            structureChanged = Apply(desired);
+
+            foreach (var block in _changedBlocks)
             {
-                row.NotifyChanged();
-                refreshed = true;
+                if (_blockRows.TryGetValue(block, out var row))
+                    _dirtyRows.Add(row);
             }
+            _changedBlocks.Clear();
+
+            foreach (var row in _dirtyRows)
+            {
+                if (_rows.Contains(row))
+                {
+                    row.NotifyChanged();
+                    refreshed = true;
+                }
+            }
+            _dirtyRows.Clear();
         }
-        _dirtyRows.Clear();
+        finally
+        {
+            _isUpdatingRows = false;
+        }
 
         if ((structureChanged || refreshed) && _isPinned)
             ScrollToEnd();
@@ -350,9 +365,15 @@ internal sealed class ChatMessageList : CollectionView
 
     private void OnScrolled(object? sender, ItemsViewScrolledEventArgs e)
     {
-        if (e.VerticalDelta < -1)
+        if (_isUpdatingRows)
+            return;
+
+        // While the newest row is on screen, a small backwards scroll is the platform correcting its layout (a row
+        // measured after the list scrolled to it), not the user reading back through the history.
+        var newestVisible = e.LastVisibleItemIndex >= _rows.Count - 1;
+        if (e.VerticalDelta < -UnpinDistance || (e.VerticalDelta < -1 && !newestVisible))
             _isPinned = false;
-        else if (e.LastVisibleItemIndex >= _rows.Count - 1)
+        else if (newestVisible)
             _isPinned = true;
     }
 
