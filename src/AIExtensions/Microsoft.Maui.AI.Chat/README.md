@@ -70,6 +70,8 @@ and receives the action's result, and the action still runs. The block must deri
 ## Features
 
 - Streaming text projected into `TextContentBlock : RichContentBlock`, one block per message.
+- Blocks follow the order of the contents that produced them, also when a complete (non-streaming)
+  response or a restore delivers a whole message at once.
 - Minimal paragraph/text rich-content AST plus an extensible rich-node vocabulary.
 - Function call/result correlation, including batched out-of-order results. Each call id is shown
   once per turn, even when `FunctionInvokingChatClient` replays an approved call; informational

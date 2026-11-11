@@ -187,6 +187,10 @@ These match upstream so that upstream fixes apply directly:
 
 ### Blocks
 
+- **Content order.** The blocks an update creates follow the order of the contents they show (by the
+  first content each block claims). Upstream emits them in handler order, so a complete response, which
+  delivers each message as one update, shows a message's tool call before its text, and with #68672's
+  media handler a user message with text and an image shows the image first.
 - **`ContentBlock.Id` has a public setter** so blocks defined outside the engine can be given ids, and
   **`ContentBlock.CreatedAt`** records when a block was created. Upstream's `Id` setter is internal.
 - **`TextContentBlock`** marks plain streamed text so a renderer can tell it from a provider's rich

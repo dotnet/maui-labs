@@ -85,7 +85,7 @@ internal sealed class MediaContentHandler : ContentBlockHandler<MediaContentHand
             if (blocks.Count == media.Count)
                 context.MarkHandled(result);
             else
-                context.ReportProgress();
+                context.ReportProgress(result);
 
             return BlockMappingResult<MediaHandlerState>.Emit(block, new MediaHandlerState { Block = block });
         }

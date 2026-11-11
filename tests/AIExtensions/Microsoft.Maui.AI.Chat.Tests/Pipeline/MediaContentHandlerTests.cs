@@ -242,9 +242,10 @@ public class MediaContentHandlerTests
 
         var blocks = await ProcessAsync(pipeline, update);
 
+        // The blocks follow the order of the contents; upstream emits them in handler order (media first).
         Assert.Equal(2, blocks.Count);
-        Assert.IsType<MediaContentBlock>(blocks[0]);
-        Assert.IsType<TextContentBlock>(blocks[1]);
+        Assert.IsType<TextContentBlock>(blocks[0]);
+        Assert.IsType<MediaContentBlock>(blocks[1]);
     }
 
     [Fact]

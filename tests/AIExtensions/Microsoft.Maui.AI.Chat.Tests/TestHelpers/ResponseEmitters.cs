@@ -39,6 +39,20 @@ internal static class ResponseEmitters
         await Task.CompletedTask;
     }
 
+    /// <summary>Streams the given updates, for example a complete response's <c>ToChatResponseUpdates()</c>.</summary>
+    internal static async IAsyncEnumerable<ChatResponseUpdate> EmitUpdates(
+        IEnumerable<ChatResponseUpdate> updates,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        foreach (var update in updates)
+        {
+            ct.ThrowIfCancellationRequested();
+            yield return update;
+        }
+
+        await Task.CompletedTask;
+    }
+
     internal static async IAsyncEnumerable<ChatResponseUpdate> EmitEmptyResponse(
         [EnumeratorCancellation] CancellationToken ct = default)
     {
