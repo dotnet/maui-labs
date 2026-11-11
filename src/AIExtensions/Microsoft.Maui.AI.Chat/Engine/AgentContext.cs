@@ -615,9 +615,9 @@ public sealed class AgentContext : IDisposable
 
     /// <summary>Stops the turn's approvals and UI actions from accepting what can no longer be sent.</summary>
     /// <returns>The blocks that stopped waiting for input.</returns>
-    private static List<ContentBlock> AbandonPendingInteractions(List<IInteractiveBlock> interactiveBlocks)
+    private static List<InteractiveFunctionBlock> AbandonPendingInteractions(List<IInteractiveBlock> interactiveBlocks)
     {
-        var abandoned = new List<ContentBlock>();
+        var abandoned = new List<InteractiveFunctionBlock>();
         foreach (var interactive in interactiveBlocks)
         {
             if (interactive is InteractiveFunctionBlock block && block.Abandon())
@@ -631,10 +631,13 @@ public sealed class AgentContext : IDisposable
     /// Raises the change notification of blocks that stopped waiting for input. Runs once the turn's outcome
     /// is final, so a change callback that throws cannot leave the turn running.
     /// </summary>
-    private static void ReportAbandoned(List<ContentBlock> abandoned)
+    private static void ReportAbandoned(List<InteractiveFunctionBlock> abandoned)
     {
         foreach (var block in abandoned)
+        {
+            block.ReportAwaitingInputChanged();
             block.InvokeNotifyChanged();
+        }
     }
 
     private static ChatMessage EnsureMessageId(ChatMessage message)

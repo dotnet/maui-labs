@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.ComponentModel;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,10 +14,15 @@ namespace Microsoft.Maui.AI.Chat;
 /// <remarks>
 /// If the action throws, the model receives a generic error <see cref="FunctionResultContent"/>
 /// (with <see cref="FunctionResultContent.Exception"/> set) instead of the turn failing, and the
-/// exception is logged.
+/// exception is logged. The block raises <see cref="ContentBlock.PropertyChanged"/> for
+/// <see cref="InteractiveFunctionBlock.IsAwaitingInput"/> when an invocation starts or is canceled, and for
+/// <see cref="InteractiveFunctionBlock.Result"/>, <see cref="InteractiveFunctionBlock.HasResult"/> and
+/// <see cref="IsComplete"/> when the result arrives.
 /// </remarks>
 public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
 {
+    private static readonly PropertyChangedEventArgs s_isCompleteChanged = new(nameof(IsComplete));
+
     private readonly AIFunction _function;
     private readonly IServiceProvider? _services;
     private readonly ILogger _logger;
@@ -47,6 +53,7 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
         _services = services;
         _logger = logger ?? NullLogger.Instance;
         _innerEntry = innerEntry;
+        CaptureAwaitingInput();
     }
 
     public bool IsComplete => Result is not null;
@@ -86,6 +93,7 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
             var invocation = InvokeCoreAsync(cancellationToken);
 
             // Reported once the invocation started, so a change callback that throws cannot block it.
+            ReportAwaitingInputChanged();
             if (wasAwaitingInput && !invocation.IsCompleted)
                 NotifyChanged();
 
@@ -129,10 +137,24 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
         }
         finally
         {
-            InnerBlock.Result ??= result;
+            // The turn gets the result before any view hears of it, so a handler that throws cannot keep the
+            // turn waiting.
+            var hadResult = InnerBlock.HasResult;
+            var resultChanged = !hadResult && InnerBlock.SetResultSilently(result);
             _resultSource.TrySetResult(result);
+            if (resultChanged)
+                InnerBlock.ReportResultChanged(hadResult);
+            ReportAwaitingInputChanged();
             NotifyChanged();
         }
+    }
+
+    private protected override void OnInnerBlockChanged(string? propertyName)
+    {
+        if (string.IsNullOrEmpty(propertyName) || propertyName == nameof(HasResult))
+            RaisePropertyChanged(s_isCompleteChanged);
+
+        base.OnInnerBlockChanged(propertyName);
     }
 
     private async Task<AIContent> InvokeCoreAsync(CancellationToken cancellationToken)
@@ -155,7 +177,10 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
             // a turn that ended has abandoned the block, which stops a later invocation.
             _invocationStarted = false;
             if (IsAwaitingInput)
+            {
+                ReportAwaitingInputChanged();
                 NotifyChanged();
+            }
 
             throw;
         }

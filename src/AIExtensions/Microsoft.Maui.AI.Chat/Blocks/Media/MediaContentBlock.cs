@@ -10,8 +10,8 @@ namespace Microsoft.Maui.AI.Chat;
 /// Emitted by <see cref="MediaContentHandler"/>, one block per item, for M.E.AI <see cref="DataContent"/>
 /// and <see cref="UriContent"/>, including the outputs of a hosted image generation tool
 /// (<see cref="ImageGenerationToolResultContent"/>). While an image generation call streams partial
-/// images, its block's <see cref="Content"/> is replaced by each newer image and the block notifies
-/// its change.
+/// images, its block's <see cref="Content"/> is replaced by each newer image and the block raises
+/// <see cref="ContentBlock.PropertyChanged"/> for it.
 /// </remarks>
 public class MediaContentBlock : ContentBlock
 {
@@ -32,7 +32,15 @@ public class MediaContentBlock : ContentBlock
     public AIContent Content
     {
         get => _content;
-        internal set => _content = ValidateContent(value);
+        internal set
+        {
+            ValidateContent(value);
+            if (ReferenceEquals(_content, value))
+                return;
+
+            _content = value;
+            OnPropertyChanged();
+        }
     }
 
     private static AIContent ValidateContent(AIContent content)

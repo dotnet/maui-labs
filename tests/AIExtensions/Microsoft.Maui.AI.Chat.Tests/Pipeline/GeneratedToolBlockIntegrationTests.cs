@@ -50,6 +50,34 @@ public class GeneratedToolBlockIntegrationTests
     }
 
     [Fact]
+    public async Task GeneratedBlock_RaisesAnEmptyPropertyNameOnceItsResultIsMapped()
+    {
+        var pipeline = CreatePipeline();
+        var block = Assert.IsType<GeneratedOrderBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents = [new FunctionCallContent("call-1", "find_order")],
+            })));
+        var order = new GeneratedOrder("ORD-123", 42.50m);
+        var seen = new List<string>();
+        block.PropertyChanged += (_, e) => seen.Add($"{e.PropertyName}:{block.Order?.Id}");
+
+        await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Tool,
+                Contents = [new FunctionResultContent("call-1", order)],
+            });
+
+        // The generated properties notify nothing themselves; the empty name raised once the handler completed
+        // the block refreshes a binding to them.
+        Assert.Equal(["Result:", "HasResult:", "LifecycleState:ORD-123", ":ORD-123"], seen);
+    }
+
+    [Fact]
     public async Task GeneratedHandler_MultipleResultProperties_MapJsonObject()
     {
         var pipeline = CreatePipeline();

@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.ComponentModel;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat;
@@ -13,12 +14,16 @@ namespace Microsoft.Maui.AI.Chat;
 /// Emitted by <see cref="ToolApprovalHandler"/> when M.E.AI surfaces a <see cref="ToolApprovalRequestContent"/>
 /// (produced by wrapping a tool in an <see cref="ApprovalRequiredAIFunction"/>). As an
 /// <see cref="IInteractiveBlock"/>, <see cref="AgentContext"/> awaits the user's decision and sends the
-/// corresponding response back to the chat client.
+/// corresponding response back to the chat client. A decision raises <see cref="ContentBlock.PropertyChanged"/>
+/// for <see cref="Status"/> and <see cref="IsAwaitingInput"/>.
 /// </remarks>
 public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
 {
+    private static readonly PropertyChangedEventArgs s_statusChanged = new(nameof(Status));
+
     private readonly TaskCompletionSource<AIContent> _tcs =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private ApprovalStatus _status;
 
     internal ToolApprovalBlock(
         FunctionInvocationContentBlock innerBlock,
@@ -26,10 +31,11 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
         : base(innerBlock)
     {
         ApprovalRequest = request;
-        Status = ApprovalStatus.Pending;
+        _status = ApprovalStatus.Pending;
+        CaptureAwaitingInput();
     }
 
-    public ApprovalStatus Status { get; private set; }
+    public ApprovalStatus Status => _status;
 
     public ToolApprovalRequestContent ApprovalRequest { get; }
 
@@ -62,10 +68,15 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
         if (response.RequestId != ApprovalRequest.RequestId)
             return;
 
-        Status = response.Approved
+        var status = response.Approved
             ? ApprovalStatus.Approved
             : ApprovalStatus.Rejected;
+        var changed = status != _status;
+        _status = status;
         _tcs.TrySetResult(response);
+        if (changed)
+            RaisePropertyChanged(s_statusChanged);
+        ReportAwaitingInputChanged();
     }
 
     /// <summary>Stops waiting for a decision because the turn ended; later decisions are ignored.</summary>
@@ -82,10 +93,12 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
         if (Status != ApprovalStatus.Pending || _tcs.Task.IsCompleted)
             return;
 
-        Status = status;
+        _status = status;
         var response = ApprovalRequest.CreateResponse(approved, reason);
         _tcs.TrySetResult(response);
 
+        RaisePropertyChanged(s_statusChanged);
+        ReportAwaitingInputChanged();
         NotifyChanged();
     }
 }
