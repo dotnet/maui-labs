@@ -35,6 +35,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
     <PackageReference Include="CommunityToolkit.Maui.Core" />
+    <PackageReference Include="Markdig" />
     <PackageReference Include="Microsoft.Maui.Controls" />
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <PackageReference Include="Plugin.Maui.Audio" />

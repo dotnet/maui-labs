@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                    x:Class="Microsoft.Maui.AI.Chat.Controls.MarkdownTheme"
+                    x:ClassModifier="internal">
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- Default look of rendered Markdown. Keys are listed in           -->
+    <!-- MarkdownThemeKeys. Light and dark values live in the styles     -->
+    <!-- through AppThemeBinding, so overriding a single style keeps the -->
+    <!-- rest of the theme (and its dark variant) intact.                 -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+
+    <x:Double x:Key="MauiAIChat.Markdown.FontSize">15</x:Double>
+    <x:Double x:Key="MauiAIChat.Markdown.BlockSpacing">10</x:Double>
+
+    <!-- Palette: light -->
+    <Color x:Key="MauiAIChat.Markdown.Light.Text">#16181C</Color>
+    <Color x:Key="MauiAIChat.Markdown.Light.Heading">#16181C</Color>
+    <Color x:Key="MauiAIChat.Markdown.Light.MutedText">#57606A</Color>
+    <Color x:Key="MauiAIChat.Markdown.Light.Link">#0969DA</Color>
+    <Color x:Key="MauiAIChat.Markdown.Light.CodeText">#1F2328</Color>
+    <Color x:Key="MauiAIChat.Markdown.Light.InlineCodeBackground">#14000000</Color>
+    <Color x:Key="MauiAIChat.Markdown.Light.CodeBlockBackground">#0D000000</Color>
+    <Color x:Key="MauiAIChat.Markdown.Light.CodeBlockBorder">#1A000000</Color>
+    <Color x:Key="MauiAIChat.Markdown.Light.CodeCaption">#6B7280</Color>
+    <Color x:Key="MauiAIChat.Markdown.Light.Rule">#D0D7DE</Color>
+    <Color x:Key="MauiAIChat.Markdown.Light.TableHeaderBackground">#0A000000</Color>
+
+    <!-- Palette: dark -->
+    <Color x:Key="MauiAIChat.Markdown.Dark.Text">#E9EAEE</Color>
+    <Color x:Key="MauiAIChat.Markdown.Dark.Heading">#F3F4F6</Color>
+    <Color x:Key="MauiAIChat.Markdown.Dark.MutedText">#9198A1</Color>
+    <Color x:Key="MauiAIChat.Markdown.Dark.Link">#4493F8</Color>
+    <Color x:Key="MauiAIChat.Markdown.Dark.CodeText">#E6EDF3</Color>
+    <Color x:Key="MauiAIChat.Markdown.Dark.InlineCodeBackground">#26FFFFFF</Color>
+    <Color x:Key="MauiAIChat.Markdown.Dark.CodeBlockBackground">#40000000</Color>
+    <Color x:Key="MauiAIChat.Markdown.Dark.CodeBlockBorder">#1FFFFFFF</Color>
+    <Color x:Key="MauiAIChat.Markdown.Dark.CodeCaption">#9BA3AF</Color>
+    <Color x:Key="MauiAIChat.Markdown.Dark.Rule">#3D444D</Color>
+    <Color x:Key="MauiAIChat.Markdown.Dark.TableHeaderBackground">#14FFFFFF</Color>
+
+    <!-- Text -->
+    <Style x:Key="MauiAIChat.Markdown.TextStyle" TargetType="Label">
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.Text},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.Text}}" />
+    </Style>
+
+    <Style x:Key="MauiAIChat.Markdown.HeadingStyle" TargetType="Label">
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.Heading},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.Heading}}" />
+    </Style>
+
+    <Style x:Key="MauiAIChat.Markdown.LinkStyle" TargetType="Span">
+        <Setter Property="TextDecorations" Value="Underline" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.Link},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.Link}}" />
+    </Style>
+
+    <Style x:Key="MauiAIChat.Markdown.InlineCodeStyle" TargetType="Span">
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.CodeText},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.CodeText}}" />
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.InlineCodeBackground},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.InlineCodeBackground}}" />
+    </Style>
+
+    <!-- Fenced code -->
+    <Style x:Key="MauiAIChat.Markdown.CodeBlockStyle" TargetType="Border">
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 8" />
+        <Setter Property="Stroke"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.CodeBlockBorder},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.CodeBlockBorder}}" />
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.CodeBlockBackground},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.CodeBlockBackground}}" />
+    </Style>
+
+    <Style x:Key="MauiAIChat.Markdown.CodeBlockTextStyle" TargetType="Label">
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.CodeText},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.CodeText}}" />
+    </Style>
+
+    <Style x:Key="MauiAIChat.Markdown.CodeBlockLanguageStyle" TargetType="Label">
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.CodeCaption},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.CodeCaption}}" />
+    </Style>
+
+    <!-- Block quotes and lists -->
+    <Style x:Key="MauiAIChat.Markdown.BlockQuoteBarStyle" TargetType="BoxView">
+        <Setter Property="CornerRadius" Value="2" />
+        <Setter Property="Color"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.Rule},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.Rule}}" />
+    </Style>
+
+    <Style x:Key="MauiAIChat.Markdown.BlockQuoteTextStyle" TargetType="Label">
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.MutedText},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.MutedText}}" />
+    </Style>
+
+    <Style x:Key="MauiAIChat.Markdown.ListMarkerStyle" TargetType="Label">
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.Text},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.Text}}" />
+    </Style>
+
+    <!-- Tables -->
+    <Style x:Key="MauiAIChat.Markdown.TableBorderStyle" TargetType="Border">
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 6" />
+        <Setter Property="Stroke"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.Rule},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.Rule}}" />
+    </Style>
+
+    <Style x:Key="MauiAIChat.Markdown.TableLineStyle" TargetType="BoxView">
+        <Setter Property="Color"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.Rule},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.Rule}}" />
+    </Style>
+
+    <Style x:Key="MauiAIChat.Markdown.TableHeaderCellStyle" TargetType="Label">
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.Text},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.Text}}" />
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.TableHeaderBackground},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.TableHeaderBackground}}" />
+    </Style>
+
+    <Style x:Key="MauiAIChat.Markdown.TableCellStyle" TargetType="Label">
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.Text},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.Text}}" />
+    </Style>
+
+    <!-- Thematic break -->
+    <Style x:Key="MauiAIChat.Markdown.ThematicBreakStyle" TargetType="BoxView">
+        <Setter Property="Color"
+                Value="{AppThemeBinding Light={StaticResource MauiAIChat.Markdown.Light.Rule},
+                                        Dark={StaticResource MauiAIChat.Markdown.Dark.Rule}}" />
+    </Style>
+
+</ResourceDictionary>
