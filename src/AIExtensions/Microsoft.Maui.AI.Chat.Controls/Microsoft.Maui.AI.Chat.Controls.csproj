@@ -1,35 +1,43 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A plain net10.0 class library that references Microsoft.Maui.Controls as a package, like
+    Microsoft.Maui.DevFlow.Agent.Core. UseMaui is deliberately not set: on net10.0 it imports the
+    Microsoft.Maui.Sdk workload SDK (NETSDK1147 without the maui workload), while the package's
+    buildTransitive targets already compile the XAML resources in this project.
+  -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Microsoft.Maui.AI.Chat.Controls</RootNamespace>
-    <UseMaui>true</UseMaui>
-    <SingleProject>true</SingleProject>
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <PackageId>Microsoft.Maui.AI.Chat.Controls</PackageId>
-    <Description>Drop-in MAUI chat control for AI agents. Priority-based template system for custom tool rendering, tool approval workflow, and theme customization.</Description>
+    <Description>Drop-in .NET MAUI chat control for AI agents built on Microsoft.Maui.AI.Chat: streaming responses, tool cards and approvals, attachments, audio notes, dictation, live speech, XAML block templates, and theming.</Description>
     <PackRepoRootReadme>false</PackRepoRootReadme>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <NoWarn>$(NoWarn);MEAI001;XC0022</NoWarn>
+    <NoWarn>$(NoWarn);MEAI001</NoWarn>
+    <!-- Compile the template's {Binding Source={RelativeSource TemplatedParent}} bindings (x:DataType is set). -->
+    <MauiEnableXamlCBindingWithSourceCompilation>true</MauiEnableXamlCBindingWithSourceCompilation>
   </PropertyGroup>
+
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
     <AdditionalFiles Include="PublicAPI.Shipped.txt" />
     <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
   </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Controls.Tests" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" />
-    <PackageReference Include="Microsoft.Maui.Controls" />
-    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
-  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
-    <ProjectReference Include="..\Microsoft.Maui.Chat\Microsoft.Maui.Chat.csproj" />
-    <ProjectReference Include="..\Microsoft.Maui.AI.Chat.Presentation\Microsoft.Maui.AI.Chat.Presentation.csproj" />
-    <ProjectReference Include="..\Microsoft.Maui.Chat.Controls\Microsoft.Maui.Chat.Controls.csproj" />
+    <PackageReference Include="CommunityToolkit.Maui.Core" />
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <PackageReference Include="Plugin.Maui.Audio" />
   </ItemGroup>
+
 </Project>
