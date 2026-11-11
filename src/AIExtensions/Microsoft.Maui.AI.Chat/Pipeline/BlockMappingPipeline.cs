@@ -145,12 +145,14 @@ internal class BlockMappingPipeline
                         ThrowIfIdMissing(emitBlock);
                         if (!alreadyComplete)
                             _activeStack.Add(activeEntry);
-                        RegisterCall(emitBlock, activeEntry);
                         (emitted ??= new()).Add((context.FirstClaimed, emitBlock));
+                        var madeProgress = context.HandledProgress != progressBefore;
+                        if (RegisterCall(emitBlock, activeEntry) is { } callId)
+                            AbsorbRepeats(context, callId);
 
                         // If the handler emitted without consuming any content, stop
                         // re-invoking it to prevent infinite loops.
-                        if (context.HandledProgress == progressBefore)
+                        if (!madeProgress)
                         {
                             break;
                         }
@@ -283,13 +285,15 @@ internal class BlockMappingPipeline
         context.MarkHandled(result);
     }
 
-    private void RegisterCall(ContentBlock block, IActiveEntry entry)
+    /// <summary>Records the call a new block shows, so later content for the call reaches the block.</summary>
+    /// <returns>The id of the registered call, if any.</returns>
+    private string? RegisterCall(ContentBlock block, IActiveEntry entry)
     {
         switch (block)
         {
             case UIActionBlock { Call: { } call }:
                 _calls.Register(call, block, entry);
-                break;
+                return call.CallId;
             case InteractiveFunctionBlock { Call: { } call } interactive:
                 // A wrapped call's result is claimed by the handler that created the inner block, or for
                 // an approval of a UI action by the action, which maps it into the inner block.
@@ -300,10 +304,36 @@ internal class BlockMappingPipeline
                         ? inner.ResultEntry
                         : null;
                 _calls.Register(call, block, resultEntry);
-                break;
+                return call.CallId;
             case FunctionInvocationContentBlock { Call: { } call }:
                 _calls.Register(call, block, entry);
-                break;
+                return call.CallId;
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Marks the repeats of a call that a block of this update just showed as handled. A complete response
+    /// can list a call, or its result, more than once in one message; the calls already known before the
+    /// update are absorbed by <see cref="ApplyKnownCalls"/>.
+    /// </summary>
+    private void AbsorbRepeats(BlockMappingContext context, string callId)
+    {
+        if (context.AllHandled || !_calls.TryGet(callId, out var known))
+            return;
+
+        foreach (var content in context.UnhandledContents)
+        {
+            switch (content)
+            {
+                case FunctionCallContent call when call.CallId == callId:
+                    context.MarkHandled(call);
+                    break;
+                case FunctionResultContent result when result.CallId == callId && known.HasResult:
+                    context.MarkHandled(result);
+                    break;
+            }
         }
     }
 
