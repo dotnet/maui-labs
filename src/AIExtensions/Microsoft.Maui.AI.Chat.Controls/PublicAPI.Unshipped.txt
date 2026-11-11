@@ -191,6 +191,7 @@ const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.UserTextStyle = "AIChat.St
 const Microsoft.Maui.AI.Chat.Controls.AIChatView.XmlNamespace = "http://schemas.microsoft.com/dotnet/2026/maui/ai/chat" -> string!
 override Microsoft.Maui.AI.Chat.Controls.AIChatView.OnApplyTemplate() -> void
 override Microsoft.Maui.AI.Chat.Controls.AIChatView.OnBindingContextChanged() -> void
+override Microsoft.Maui.AI.Chat.Controls.AIChatView.OnHandlerChanging(Microsoft.Maui.Controls.HandlerChangingEventArgs! args) -> void
 static Microsoft.Maui.AI.Chat.Controls.AppBuilderExtensions.UseAIChat(this Microsoft.Maui.Hosting.MauiAppBuilder! builder) -> Microsoft.Maui.Hosting.MauiAppBuilder!
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowAttachmentsProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowAudioCaptureProperty -> Microsoft.Maui.Controls.BindableProperty!

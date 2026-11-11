@@ -363,6 +363,70 @@ public class AIChatViewTests
     });
 
     [Fact]
+    public void DisconnectingTheHandler_StopsAndDisposesTheOwnedSession() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var view = ChatHost.Create(v => v.ChatClient = client);
+        view.Handler = new StubViewHandler();
+        var owned = view.EffectiveSession!;
+
+        view.Text = "Hi";
+        var send = view.SendAsync();
+        await stream.WriteAsync(new ChatResponseUpdate(ChatRole.Assistant, "Hel"));
+        await UIThread.Until(() => view.Rows().Any(row => row is BlockRow));
+
+        // MAUI disconnects the handlers of a page that is popped.
+        view.Handler = null;
+
+        // The response stops instead of streaming on (and keeping the page alive).
+        await send.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Null(view.OwnedChatSession);
+        Assert.Null(view.EffectiveSession);
+        Assert.False(view.IsBusy);
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => owned.SendMessageAsync("x"));
+        Assert.False(client.IsDisposed);
+    });
+
+    [Fact]
+    public void DisconnectingTheHandler_LeavesAnAppSessionAlone() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Reply("One").Reply("Two");
+        var session = ChatHost.Session(client);
+        var view = ChatHost.Create(session);
+        view.Handler = new StubViewHandler();
+
+        view.Handler = null;
+
+        Assert.Same(session, view.EffectiveSession);
+        await session.SendMessageAsync("Still usable?");
+        Assert.Equal(ConversationStatus.Idle, session.Status);
+    });
+
+    [Fact]
+    public void UnloadingAndReloading_KeepsTheOwnedSession() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Reply("One");
+        var view = ChatHost.Create(v => v.ChatClient = client);
+        view.Handler = new StubViewHandler();
+        view.Text = "Hi";
+        await view.SendAsync();
+        var owned = view.EffectiveSession!;
+
+        // Switching tabs unloads the view but keeps its handler (replacing the window's page would disconnect it).
+        var page = (ContentPage)view.Parent;
+        page.Content = null;
+        Assert.False(view.IsLoaded);
+        page.Content = view;
+        Assert.True(view.IsLoaded);
+
+        Assert.NotNull(view.Handler);
+        Assert.Same(owned, view.EffectiveSession);
+        Assert.Single(owned.Turns);
+        Assert.Contains(view.Rows(), row => row is BlockRow);
+    });
+
+    [Fact]
     public void ExplicitSession_WinsOverTheChatClient() => UIThread.Run(async () =>
     {
         var sessionClient = new ScriptedChatClient().Reply("From session");
@@ -523,5 +587,11 @@ public class AIChatViewTests
             page.Content = null;
 
         return new WeakReference(view);
+    }
+
+    /// <summary>A handler with no platform view, so the view can be connected and disconnected in tests.</summary>
+    private sealed class StubViewHandler() : Microsoft.Maui.Handlers.ViewHandler<IView, object>(new PropertyMapper<IView, StubViewHandler>())
+    {
+        protected override object CreatePlatformView() => new();
     }
 }

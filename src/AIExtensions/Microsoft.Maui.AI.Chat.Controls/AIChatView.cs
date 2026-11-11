@@ -354,6 +354,11 @@ public partial class AIChatView : TemplatedView
     /// <see langword="null"/>. The client is wrapped with <c>UseFunctionInvocation()</c> unless it already
     /// invokes functions, so <see cref="Tools"/> run automatically.
     /// </summary>
+    /// <remarks>
+    /// The view keeps its session while it is unloaded and loaded again (for example when switching tabs), and stops
+    /// and disposes it when its handler is disconnected (for example when its page is popped). The client itself
+    /// is the app's to dispose.
+    /// </remarks>
     public IChatClient? ChatClient
     {
         get => (IChatClient?)GetValue(ChatClientProperty);

@@ -98,7 +98,9 @@ var agent = new UIAgent(client.AsBuilder().UseFunctionInvocation().Build(), opti
 chat.Session = new AgentContext(agent);
 ```
 
-`Session` wins over `ChatClient`, and the view never disposes a session it did not create.
+`Session` wins over `ChatClient`, and the view never disposes a session it did not create. The session it
+creates for `ChatClient` lasts until the view's handler is disconnected (for example when its page is popped),
+which stops a response in progress.
 
 To continue a saved conversation, restore it into the session, before or after you assign it: `RestoreAsync()`
 loads the turns of the agent's conversation thread, and `RestoreAsync(messages)` loads recorded `ChatMessage`s.
