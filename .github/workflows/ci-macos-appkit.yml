@@ -53,7 +53,7 @@ jobs:
     with:
       project-path: platforms/MacOS/MacOS-libs.slnf
       project-name: macos-appkit
-      os: '["macos-latest"]'
+      os: '["xcode-27"]'
       install-workloads: true
       workloads: 'macos maui'
       android-project: ''
@@ -66,7 +66,7 @@ jobs:
     with:
       project-path: platforms/MacOS/samples/MacOS.Sample/MacOS.Sample.csproj
       project-name: macos-appkit-sample
-      os: '["macos-latest"]'
+      os: '["xcode-27"]'
       build-target-framework: net11.0-macos
       run-tests: false
       pack: false
@@ -77,7 +77,7 @@ jobs:
 
   resource-acceptance:
     name: Package-only AppKit resource acceptance
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 30
     permissions:
       contents: read
@@ -109,7 +109,7 @@ jobs:
   native-runtime:
     name: AppKit runtime (${{ matrix.scenario }}, ${{ matrix.maui-version || 'default' }})
     needs: build
-    runs-on: macos-latest
+    runs-on: ${{ startsWith(matrix.maui-version, '10.') && 'macos-26' || 'xcode-27' }}
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -150,7 +150,7 @@ jobs:
             packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages
-      APPKIT_XCODE_VERSION: ${{ startsWith(matrix.maui-version, '10.') && '26.0' || '27.0' }}
+      APPKIT_XCODE_VERSION: ${{ startsWith(matrix.maui-version, '10.') && '26.0.1' || '27.0' }}
     steps:
       - uses: actions/checkout@v6
       - name: Select Xcode
@@ -168,7 +168,7 @@ jobs:
         if: matrix.packages == true
         uses: actions/download-artifact@v8
         with:
-          name: packages-macos-appkit-macos-latest
+          name: packages-macos-appkit-xcode-27
           path: artifacts/runtime-packages
       - name: Verify shared runner contracts
         run: python3 -B -m unittest discover -s platforms/MacOS/tests/MacOS.RuntimeTests -p 'test_*.py'

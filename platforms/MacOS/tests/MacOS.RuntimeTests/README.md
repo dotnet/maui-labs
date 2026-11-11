@@ -58,9 +58,11 @@ python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
 The default run targets `net11.0-macos`. Passing a MAUI 10 version with
 `--maui-version` selects `net10.0-macos`, keeping the release compatibility lane
 without enabling any MAUI 10 private workaround in the .NET 11 build.
-Select Xcode 26.0 for that compatibility lane. The runner explicitly enables
-Xcode validation; newer installed Xcode versions are not accepted as a native
-pass for a differently pinned pack.
+Select Xcode 26.0.x for that compatibility lane. Hosted CI uses `macos-26` with
+Xcode 26.0.1 for MAUI 10 scenarios and `xcode-27` with Xcode 27.0 for MAUI 11
+scenarios. Both use `eng/workloads/dotnet11-rc2.json`. The runner explicitly
+enables Xcode validation, which matches the workload's required major/minor
+version; a different major/minor is not accepted as a native pass.
 
 The bundle-resource driver also checks real raw-asset processing separately
 from synthetic processed-item metadata: explicit logical names win over source

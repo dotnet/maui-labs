@@ -77,9 +77,9 @@ assertions as `appkit-runtime-shell-sections-default`. See the
 - Xcode command line tools (`sips` / `iconutil` are used by the icon build target)
 
 The packages include both `net10.0-macos` (MAUI 10.0.110 by default) and
-`net11.0-macos` (MAUI 11 RC2). Native application validation requires the exact
-Xcode supported by each pinned workload: Xcode 26.0 for the .NET 10 pack and
-Xcode 27.0 for the .NET 11 pack. A successful library build is not a native
+`net11.0-macos` (MAUI 11 RC2). Native application validation requires the matching
+Xcode major/minor supported by each pinned workload: Xcode 26.0.x for the .NET 10
+pack and Xcode 27.0.x for the .NET 11 pack. A successful library build is not a native
 application or resource-bundle pass.
 
 On .NET 11, AppKit uses public platform contracts for dialogs, gesture lifecycle,
@@ -97,8 +97,14 @@ after a renderer failure. They do not prove native WebKit behavior.
 
 The AppKit workflow accepts pull requests targeting `main` or the GTK stack branch,
 `redth-maui-net11-gtk`. Portable contracts run independently of native build jobs;
-native and package-consumer jobs retain Xcode validation. Camera validation is
-opt-in on a camera-equipped self-hosted runner (`MAUI_APPKIT_CAMERA_TESTS=1`).
+native and package-consumer jobs retain Xcode validation. .NET 11 jobs use the
+hosted [`xcode-27` image](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
+with Xcode 27.0 explicitly selected; `macos-latest` does not provide that Xcode.
+.NET 10 native scenarios use the hosted
+[`macos-26` image](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)
+with Xcode 26.0.1 selected. Both lanes retain the repository workload rollback.
+Camera validation is opt-in on a camera-equipped self-hosted runner
+(`MAUI_APPKIT_CAMERA_TESTS=1`).
 
 ## Quick start
 
