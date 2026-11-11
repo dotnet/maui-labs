@@ -164,6 +164,13 @@ internal sealed class ChatMessageList : CollectionView
 
     private void Invalidate()
     {
+        // The engine notifies on the thread that called it; the rows belong to the list's thread.
+        if (this.GetDispatcherIfRequired() is { } owner)
+        {
+            owner.Dispatch(Invalidate);
+            return;
+        }
+
         if (_flushScheduled || !_isAttached)
             return;
 
@@ -171,7 +178,7 @@ internal sealed class ChatMessageList : CollectionView
         var dispatcher = Microsoft.Maui.Dispatching.Dispatcher.GetForCurrentThread();
         if (dispatcher is null)
         {
-            // No dispatcher (unit tests, or a background thread): apply synchronously.
+            // No dispatcher at all (unit tests): apply synchronously.
             Flush();
             return;
         }
@@ -186,12 +193,24 @@ internal sealed class ChatMessageList : CollectionView
 
     private void OnStatusChanged()
     {
+        if (this.GetDispatcherIfRequired() is { } owner)
+        {
+            owner.Dispatch(OnStatusChanged);
+            return;
+        }
+
         _statusChanged = true;
         Invalidate();
     }
 
     private void OnBlockChanged(ContentBlock block)
     {
+        if (this.GetDispatcherIfRequired() is { } owner)
+        {
+            owner.Dispatch(() => OnBlockChanged(block));
+            return;
+        }
+
         _changedBlocks.Add(block);
         Invalidate();
     }

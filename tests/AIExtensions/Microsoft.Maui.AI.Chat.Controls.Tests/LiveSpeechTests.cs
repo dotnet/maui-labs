@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.Globalization;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
@@ -39,6 +40,34 @@ public class LiveSpeechTests
         Assert.False(view.IsListening);
         Assert.Equal(0, recognizer.HandlerCount);
         Assert.Equal("Live voice stopped.", view.Composer.LastAnnouncement);
+    });
+
+    [Fact]
+    public void ResultsRaisedOnAnotherThread_AreHandledOnTheUIThread() => UIThread.Run(async () =>
+    {
+        using var dispatcher = UIThreadDispatcher.Install();
+        var recognizer = new FakeSpeechRecognizer();
+        var client = new ScriptedChatClient().Reply("Hi!");
+        var view = CreateView(recognizer, client);
+        var threads = new HashSet<int>();
+        view.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(AIChatView.Text) or nameof(AIChatView.IsBusy))
+                threads.Add(Environment.CurrentManagedThreadId);
+        };
+        ((INotifyCollectionChanged)view.MessageList.ItemsSource).CollectionChanged += (_, _) => threads.Add(Environment.CurrentManagedThreadId);
+
+        // Platform recognizers (Windows, cloud SDKs) raise results on background threads.
+        await view.Composer.StartLiveSpeechAsync();
+        await Task.Run(() => recognizer.Emit("hello", isFinal: false));
+        await UIThread.Until(() => view.Text == "hello");
+        await Task.Run(() => recognizer.Emit("hello world", isFinal: true));
+        await UIThread.Until(() => client.Requests.Count == 1 && !view.IsBusy && recognizer.StartCount == 2);
+
+        Assert.Equal("hello world", client.LastUserText);
+        Assert.Equal([dispatcher.ThreadId], threads);
+        Assert.All(recognizer.StartThreadIds, id => Assert.Equal(dispatcher.ThreadId, id));
+        await view.Composer.StopLiveSpeechAsync();
     });
 
     [Fact]

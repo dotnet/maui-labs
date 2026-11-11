@@ -70,12 +70,18 @@ public sealed class ChatSpeechRecognitionEventArgs : EventArgs
 
 /// <summary>Streams live speech recognition results into the message box.</summary>
 /// <remarks>
+/// <para>
 /// <see cref="AppBuilderExtensions.UseAIChat"/> registers a default recognizer built on the
 /// .NET MAUI Community Toolkit speech-to-text service.
+/// </para>
+/// <para>
+/// The chat view calls the recognizer on its UI thread. <see cref="RecognitionChanged"/> may be raised on any
+/// thread; the view handles each result on its UI thread.
+/// </para>
 /// </remarks>
 public interface IChatSpeechRecognizer
 {
-    /// <summary>Raised for each interim result and once when a pass ends.</summary>
+    /// <summary>Raised for each interim result and once when a pass ends, on any thread.</summary>
     event EventHandler<ChatSpeechRecognitionEventArgs>? RecognitionChanged;
 
     /// <summary>Gets whether this device supports speech recognition.</summary>

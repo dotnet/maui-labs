@@ -226,8 +226,8 @@ public partial class AIChatView
     {
         if (_effectiveSession is { } session)
         {
-            _sessionSubscriptions.Add(session.RegisterOnStatusChanged(_ => UpdateState()));
-            _sessionSubscriptions.Add(session.RegisterOnTurnAdded(_ => UpdateState()));
+            _sessionSubscriptions.Add(session.RegisterOnStatusChanged(_ => this.RunOnOwnerThread(UpdateState)));
+            _sessionSubscriptions.Add(session.RegisterOnTurnAdded(_ => this.RunOnOwnerThread(UpdateState)));
         }
 
         _messageList.Attach(_effectiveSession);

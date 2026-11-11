@@ -4,7 +4,8 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// <remarks>
 /// <see cref="AppBuilderExtensions.UseAIChat"/> registers a default WAV recorder. Throw
 /// <see cref="PermissionException"/> from <see cref="StartAsync"/> when microphone access is denied so the
-/// chat view can tell the user why recording did not start.
+/// chat view can tell the user why recording did not start. The chat view calls the recorder on its UI thread;
+/// the returned tasks may complete on any thread.
 /// </remarks>
 public interface IChatAudioRecorder
 {
@@ -37,7 +38,8 @@ public interface IChatAudioRecorder
 /// <summary>Turns a recorded audio note into text for dictation.</summary>
 /// <remarks>
 /// When <see cref="AIChatView.AudioTranscriber"/> is set, the audio button dictates: the recording is
-/// transcribed into the message box instead of being attached.
+/// transcribed into the message box instead of being attached. The chat view calls the transcriber on its UI
+/// thread; the returned task may complete on any thread.
 /// </remarks>
 public interface IChatAudioTranscriber
 {

@@ -304,6 +304,31 @@ public class AudioTests
     });
 
     [Fact]
+    public void InterimTranscript_RaisedOnAnotherThread_IsShownOnTheUIThread() => UIThread.Run(async () =>
+    {
+        using var dispatcher = UIThreadDispatcher.Install();
+        var recognizer = new FakeSpeechRecognizer();
+        var view = CreateView(new FakeAudioRecorder(FakeAudioRecorder.Wav()), v =>
+        {
+            v.SpeechRecognizer = recognizer;
+            v.ShowInterimAudioTranscript = true;
+        });
+        var threads = new HashSet<int>();
+        view.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AIChatView.Text))
+                threads.Add(Environment.CurrentManagedThreadId);
+        };
+
+        await view.Composer.StartAudioCaptureAsync();
+        await Task.Run(() => recognizer.Emit("hello", isFinal: false));
+        await UIThread.Until(() => view.Text == "hello");
+
+        Assert.Equal([dispatcher.ThreadId], threads);
+        await view.Composer.StopAudioCaptureAsync();
+    });
+
+    [Fact]
     public void InterimTranscript_SessionSwapReleasesTheRecognizer() => UIThread.Run(async () =>
     {
         var recognizer = new FakeSpeechRecognizer();
