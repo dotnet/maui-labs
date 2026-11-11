@@ -25,10 +25,12 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
     const double ItemHeight = 64;
     const double ItemWidth = 120;
     const int ItemCount = 12;
+    const double CappedHeight = 100;
 
     ScrollView _horizontal = null!;
     ScrollView _capped = null!;
     ScrollView _fill = null!;
+    Grid _grid = null!;
     View _horizontalContent = null!;
     ScrollView _wrapping = null!;
     Label _wrappingLabel = null!;
@@ -52,7 +54,7 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
         {
             horizontal = new { _horizontal.Width, _horizontal.Height, native = native.Frame.Height },
             capped = new { _capped.Width, _capped.Height },
-            fill = new { _fill.Width, _fill.Height },
+            fill = new { _fill.Width, _fill.Height, _fill.Y, grid = _grid.Height },
             wrapping = new { _wrapping.Width, _wrapping.Height, label = new { _wrappingLabel.Width, _wrappingLabel.Height } },
             overMaximum = new { _overMaximum.Width, _overMaximum.Height, label = new { _overMaximumLabel.Width, _overMaximumLabel.Height } },
             padded = new { _padded.Height, content = new { _paddedContent.X, _paddedContent.Y, _paddedContent.Height } }
@@ -77,7 +79,7 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
             "scrollview-measure.horizontal-content-width");
         evidence.Pass("horizontal-auto-row");
 
-        evidence.Assert(Math.Abs(_capped.Height - 150) < 1,
+        evidence.Assert(Math.Abs(_capped.Height - CappedHeight) < 1,
             $"MaximumHeightRequest clamps a ScrollView measured from its content; actual {_capped.Height}.",
             "scrollview-measure.maximum-height");
         evidence.Assert(_capped.ContentSize.Height >= 399,
@@ -85,8 +87,10 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
             "scrollview-measure.maximum-height-content");
         evidence.Pass("maximum-height");
 
-        var available = window.Height - _fill.Y;
-        evidence.Assert(_fill.Height > 100 && _fill.Height <= available + 1,
+        // measured against the grid, not Window.Height: AppKit clamps a window taller than the screen
+        // (hosted runners have small displays) while the MAUI Window keeps the requested height
+        var available = _grid.Height - _fill.Y;
+        evidence.Assert(available > 50 && Math.Abs(_fill.Height - available) < 1,
             $"A ScrollView in a star row fills the row and stays within it; actual {_fill.Height}, available {available}.",
             "scrollview-measure.fill-row");
         evidence.Assert(_fill.ContentSize.Height >= 1999,
@@ -147,7 +151,7 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
         _capped = new ScrollView
         {
             AutomationId = "CappedScroll",
-            MaximumHeightRequest = 150,
+            MaximumHeightRequest = CappedHeight,
             Content = new BoxView { HeightRequest = 400, Color = Colors.Orange }
         };
 
@@ -159,7 +163,7 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
 
         _wrappingLabel = new Label
         {
-            Text = string.Join(" ", Enumerable.Repeat("Wrapping text measured at the scroller's own width.", 6)),
+            Text = string.Join(" ", Enumerable.Repeat("Wrapping text measured at the scroller's own width.", 3)),
             LineBreakMode = LineBreakMode.WordWrap
         };
         _wrapping = new ScrollView
@@ -172,7 +176,7 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
 
         _overMaximumLabel = new Label
         {
-            Text = string.Join(" ", Enumerable.Repeat("Wrapping text measured at the maximum, not the request.", 6)),
+            Text = string.Join(" ", Enumerable.Repeat("Wrapping text measured at the maximum, not the request.", 3)),
             LineBreakMode = LineBreakMode.WordWrap
         };
         _overMaximum = new ScrollView
@@ -193,7 +197,7 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
             Content = _paddedContent
         };
 
-        var grid = new Grid
+        var grid = _grid = new Grid
         {
             RowDefinitions =
             {
@@ -217,7 +221,8 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
         {
             Title = "AppKit ScrollView measure regression",
             Width = 600,
-            Height = 900
+            // small enough for a hosted runner's display, so the star row keeps real space
+            Height = 640
         };
     }
 }
