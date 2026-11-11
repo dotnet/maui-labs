@@ -20,7 +20,7 @@ public static class MauiProgram
         builder.Configuration.GetSection(AISettings.SectionName).Bind(aiSettings);
         aiSettings.Validate();
 
-        builder.Services.AddSingleton<ImageInputService>();
+        builder.Services.AddSingleton<FileInputService>();
         builder.Services.AddSingleton<ChatDiagnostics>();
         builder.Services.AddTransient<DiagnosticsViewModel>();
         builder.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<ChatDiagnostics>());

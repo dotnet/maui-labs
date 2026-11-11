@@ -8,15 +8,15 @@ namespace AIExtensions.Sample.ChatPlayground;
 public sealed partial class ImagePlaygroundViewModel : ObservableObject
 {
     private readonly ImageGenerationService _generation;
-    private readonly ImageInputService _imageInput;
-    private ImageAttachment? _original;
+    private readonly FileInputService _fileInput;
+    private InputFile? _original;
 
     public ImagePlaygroundViewModel(
-        ImageGenerationService generation, ImageInputService imageInput, ImageSettingsViewModel settings,
+        ImageGenerationService generation, FileInputService fileInput, ImageSettingsViewModel settings,
         DiagnosticsViewModel diagnostics)
     {
         _generation = generation;
-        _imageInput = imageInput;
+        _fileInput = fileInput;
         Settings = settings;
         Diagnostics = diagnostics;
         Settings.PropertyChanged += SettingsPropertyChanged;
@@ -90,7 +90,11 @@ public sealed partial class ImagePlaygroundViewModel : ObservableObject
     {
         try
         {
-            if (await _imageInput.PickImageAsync() is { } image)
+            if (await _fileInput.PickAsync(new PickOptions
+            {
+                PickerTitle = "Select an image",
+                FileTypes = FileInputService.ImageFiles,
+            }) is { } image)
                 SetOriginalImage(image);
         }
         catch (Exception exception)
@@ -104,7 +108,7 @@ public sealed partial class ImagePlaygroundViewModel : ObservableObject
     {
         try
         {
-            SetOriginalImage(await _imageInput.LoadSampleImageAsync());
+            SetOriginalImage(await _fileInput.LoadSampleAsync("playground_sample.png"));
         }
         catch (Exception exception)
         {
@@ -117,8 +121,10 @@ public sealed partial class ImagePlaygroundViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRemoveImage))]
     private void RemoveImage() => ClearImage();
 
-    private void SetOriginalImage(ImageAttachment image)
+    private void SetOriginalImage(InputFile image)
     {
+        if (image.MediaType is not ("image/jpeg" or "image/png" or "image/gif" or "image/webp"))
+            throw new NotSupportedException("The selected file is not a supported image type.");
         _original = image;
         OriginalImageName = image.FileName;
         OriginalImagePreview = ImageSource.FromStream(() => new MemoryStream(image.Bytes, writable: false));
