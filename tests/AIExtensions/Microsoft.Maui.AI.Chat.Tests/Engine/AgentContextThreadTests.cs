@@ -514,6 +514,105 @@ public class AgentContextThreadTests
         Assert.Equal(2, context.Turns.Select(turn => turn.Id).Distinct().Count());
     }
 
+    [Fact]
+    public async Task RestoreAsync_RecreatesTurnsWithoutFiringCallbacks()
+    {
+        var thread = new InMemoryConversationThread("thread-1");
+        var callCount = 0;
+        var firstContext = CreateContext(thread, (messages, options, cancellationToken) =>
+            ResponseEmitters.EmitTextResponse($"Response {++callCount}", cancellationToken));
+        await firstContext.SendMessageAsync("First");
+        await firstContext.SendMessageAsync("Second");
+
+        var restoredContext = CreateContext(thread, (messages, options, cancellationToken) =>
+            ResponseEmitters.EmitTextResponse("unused", cancellationToken));
+        var turnAddedCount = 0;
+        var blockAddedCount = 0;
+        var statusChangedCount = 0;
+        using var turnRegistration = restoredContext.RegisterOnTurnAdded(_ => turnAddedCount++);
+        using var blockRegistration = restoredContext.RegisterOnBlockAdded((_, _) => blockAddedCount++);
+        using var statusRegistration = restoredContext.RegisterOnStatusChanged(_ => statusChangedCount++);
+
+        await restoredContext.RestoreAsync();
+
+        Assert.Equal(2, restoredContext.Turns.Count);
+        Assert.Equal("First", GetRequestText(restoredContext.Turns[0]));
+        Assert.Equal("Response 1", GetResponseText(restoredContext.Turns[0]));
+        Assert.Equal("Second", GetRequestText(restoredContext.Turns[1]));
+        Assert.Equal("Response 2", GetResponseText(restoredContext.Turns[1]));
+        Assert.Equal(0, turnAddedCount);
+        Assert.Equal(0, blockAddedCount);
+        Assert.Equal(0, statusChangedCount);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_EmptyThread_RemainsIdle()
+    {
+        var context = CreateContext(
+            new InMemoryConversationThread("thread-1"),
+            (messages, options, cancellationToken) =>
+                ResponseEmitters.EmitTextResponse("unused", cancellationToken));
+
+        await context.RestoreAsync();
+
+        Assert.Empty(context.Turns);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_UserMessageWithoutBlocks_PreservesResponseBoundary()
+    {
+        var thread = new InMemoryConversationThread("thread-1");
+        var callCount = 0;
+        var firstContext = CreateContext(thread, (messages, options, cancellationToken) =>
+            ResponseEmitters.EmitTextResponse($"Response {++callCount}", cancellationToken));
+        await firstContext.SendMessageAsync("First");
+        await firstContext.SendMessageAsync(new ChatMessage(ChatRole.User, Array.Empty<AIContent>()));
+
+        var restoredContext = CreateContext(thread, (messages, options, cancellationToken) =>
+            ResponseEmitters.EmitTextResponse("unused", cancellationToken));
+        await restoredContext.RestoreAsync();
+
+        Assert.Equal(2, restoredContext.Turns.Count);
+        Assert.Equal("First", GetRequestText(restoredContext.Turns[0]));
+        Assert.Equal("Response 1", GetResponseText(restoredContext.Turns[0]));
+        Assert.Empty(restoredContext.Turns[1].RequestBlocks);
+        Assert.Equal("Response 2", GetResponseText(restoredContext.Turns[1]));
+    }
+
+    [Fact]
+    public async Task RestoreAsync_ConsecutiveUserMessagesRemainSeparateTurns()
+    {
+        var thread = new InMemoryConversationThread("thread-1");
+        thread.AppendUserMessage(new ChatMessage(
+            ChatRole.User,
+            [new TextContent("First"), new DataContent(new byte[] { 1 }, "image/png")]));
+        thread.CompleteTurn();
+        thread.AppendUserMessage(new ChatMessage(
+            ChatRole.User,
+            [new TextContent("Second"), new DataContent(new byte[] { 2 }, "image/png")]));
+        thread.CompleteTurn();
+        var context = CreateContext(thread, (messages, options, cancellationToken) =>
+            ResponseEmitters.EmitTextResponse("unused", cancellationToken));
+
+        await context.RestoreAsync();
+
+        Assert.Equal(2, context.Turns.Count);
+        Assert.All(context.Turns, turn =>
+        {
+            Assert.Equal(2, turn.RequestBlocks.Count);
+            Assert.Empty(turn.ResponseBlocks);
+        });
+        Assert.Equal("First", Assert.Single(context.Turns[0].RequestBlocks.OfType<RichContentBlock>()).RawText);
+        Assert.Equal("Second", Assert.Single(context.Turns[1].RequestBlocks.OfType<RichContentBlock>()).RawText);
+    }
+
+    private static string GetRequestText(ConversationTurn turn)
+        => Assert.IsType<TextContentBlock>(Assert.Single(turn.RequestBlocks)).RawText;
+
+    private static string GetResponseText(ConversationTurn turn)
+        => Assert.IsType<TextContentBlock>(Assert.Single(turn.ResponseBlocks)).RawText;
+
     private static AgentContext CreateContext(
         InMemoryConversationThread thread,
         Func<IEnumerable<ChatMessage>, ChatOptions?, CancellationToken,

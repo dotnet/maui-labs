@@ -55,6 +55,25 @@ public class ActivityHandlerTests
         Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("message-1")]
+    public async Task ActivityHandler_HandlerDoesNotAssignId_AssignsFallbackId(string? messageId)
+    {
+        var options = new UIAgentOptions();
+        options.AddBlockHandler(new TestActivityHandler(assignId: false));
+        var pipeline = new BlockMappingPipeline(options);
+        var update = Update("activity-1", "started");
+        update.MessageId = messageId;
+
+        var block = Assert.IsType<TestActivityBlock>(
+            Assert.Single(await ToListAsync(pipeline.Process(update))));
+
+        Assert.False(string.IsNullOrEmpty(block.Id));
+        if (messageId is not null)
+            Assert.Equal(messageId, block.Id);
+    }
+
     private static ChatResponseUpdate Update(string id, string value) => new()
     {
         MessageId = id,
@@ -74,7 +93,7 @@ public class ActivityHandlerTests
         public string Value { get; set; } = string.Empty;
     }
 
-    private sealed class TestActivityHandler : ActivityHandler<TestActivityBlock>
+    private sealed class TestActivityHandler(bool assignId = true) : ActivityHandler<TestActivityBlock>
     {
         internal List<string> UpdatedValues { get; } = [];
 
@@ -83,7 +102,8 @@ public class ActivityHandlerTests
             if (!TryRead(context, out var id, out var value) || value != "started")
                 return false;
 
-            state.Id = id;
+            if (assignId)
+                state.Id = id;
             state.Value = value;
             return true;
         }

@@ -44,4 +44,26 @@ public class UIAgentBaselineTests
         Assert.False(string.IsNullOrEmpty(text2.RawText));
         Assert.Equal(BlockLifecycleState.Inactive, text2.LifecycleState);
     }
+
+    [Fact]
+    public async Task MultiTurnRecording_TurnsHaveDistinctBlockIds()
+    {
+        var client = RecordedChatClient.Load("TextStreaming_MultiTurn.recording.json");
+        var agent = new UIAgent(client);
+
+        var firstTurn = await CollectAsync(agent, "Hello");
+        var secondTurn = await CollectAsync(agent, "Goodbye");
+
+        var firstId = firstTurn.Single(block => block.Role == ChatRole.Assistant).Id;
+        var secondId = secondTurn.Single(block => block.Role == ChatRole.Assistant).Id;
+        Assert.NotEqual(firstId, secondId);
+    }
+
+    private static async Task<List<ContentBlock>> CollectAsync(UIAgent agent, string text)
+    {
+        var blocks = new List<ContentBlock>();
+        await foreach (var block in agent.SendMessageAsync(new ChatMessage(ChatRole.User, text)))
+            blocks.Add(block);
+        return blocks;
+    }
 }

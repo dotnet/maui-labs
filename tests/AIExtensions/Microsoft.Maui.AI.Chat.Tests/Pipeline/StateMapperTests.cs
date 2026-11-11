@@ -379,6 +379,36 @@ public class StateMapperTests
     }
 
     [Fact]
+    public async Task StateMapper_FullyHandledUpdatePreservesMessageIdentityForLaterText()
+    {
+        List<ChatMessage>? secondRequest = null;
+        var callCount = 0;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            callCount++;
+            if (callCount == 2)
+                secondRequest = messages.ToList();
+
+            return callCount == 1
+                ? EmitHandledStateThenUnidentifiedText(cancellationToken)
+                : EmitStateOnly(cancellationToken);
+        });
+        var agent = CreateRecipeAgent(client);
+
+        await EnumerateAsync(agent.SendMessageAsync(new ChatMessage(ChatRole.User, "Recipe?")));
+        await EnumerateAsync(agent.SendMessageAsync(new ChatMessage(ChatRole.User, "Another?")));
+
+        Assert.NotNull(secondRequest);
+        var assistantMessage = Assert.Single(
+            secondRequest,
+            message => message.Role == ChatRole.Assistant);
+        var textContent = Assert.IsType<TextContent>(Assert.Single(assistantMessage.Contents));
+        Assert.Equal("Enjoy this recipe!", textContent.Text);
+        Assert.Equal("message-1", assistantMessage.MessageId);
+    }
+
+    [Fact]
     public void TypedOptionsExposeAgentState()
     {
         var initialState = new RecipeState { Title = "Initial state" };
@@ -539,6 +569,24 @@ public class StateMapperTests
                 new TextContent("""{"Title":"Pasta","Cuisine":"Italian"}"""),
                 new TextContent("Enjoy this recipe!"),
             ],
+        };
+        await Task.CompletedTask;
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> EmitHandledStateThenUnidentifiedText(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "message-1",
+            ResponseId = "response-1",
+            Contents = [new TextContent("""{"Title":"Pasta","Cuisine":"Italian"}""")],
+        };
+        yield return new ChatResponseUpdate
+        {
+            Contents = [new TextContent("Enjoy this recipe!")],
         };
         await Task.CompletedTask;
     }
