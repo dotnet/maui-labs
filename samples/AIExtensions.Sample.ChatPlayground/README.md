@@ -113,18 +113,37 @@ text may leave the device and incur charges.
 
 ## Shared file input
 
-Chat attachments, image edits and document extraction share root-level `FileInputService` and `InputFile`.
-Callers supply their picker options and use the shared `FileInputService.ImageFiles` or `FileInputService.DocumentFiles`
-presets rather than defining private file-type lists. Packaged sample names are also supplied by the caller.
+Chat attachments and image edits share root-level `FileInputService` and `InputFile`.
+Callers supply their picker options and use the shared `FileInputService.ImageFiles`
+(JPEG, PNG, GIF, WebP) or `FileInputService.DocumentFiles` (PDF, JPEG, PNG, HEIC, TIFF)
+presets rather than defining private file-type lists. Document extraction uses the document preset.
+Packaged sample names are also supplied by the caller.
 
 ```csharp
 var file = await files.PickAsync(new PickOptions
+{
+    PickerTitle = "Select an image",
+    FileTypes = FileInputService.ImageFiles,
+}, cancellationToken);
+
+var sample = await files.LoadSampleAsync("playground_sample.png", cancellationToken);
+```
+
+For already-opened input, `InputFile.ReadAsync(stream, fileName, contentType, cancellationToken)`
+copies from the current stream position, enforces the shared 20 MB limit, and leaves
+the caller's stream open. Feature-specific format support is still respected:
+image chat/edit callers continue to accept only JPEG, PNG, GIF, and WebP.
+
+Both composers use the shared `AttachmentPreview` view for the thumbnail, file name,
+and removal command, retaining their existing automation IDs and accessible removal
+descriptions. Future callers can reuse the same bindings and customize the preview aspect.
+
+The document composer also reuses `AttachmentPreview` and the shared input service:
+
+```csharp
+var document = await files.PickAsync(new PickOptions
 {
     PickerTitle = "Choose a document",
     FileTypes = FileInputService.DocumentFiles,
 }, cancellationToken);
 ```
-
-For already-opened input, `InputFile.ReadAsync(stream, fileName, contentType, cancellationToken)` copies from the current stream position,
-enforces the shared 20 MB limit, and leaves the caller's stream open. The common value replaces separate image/document byte records.
-Feature-specific format support is still respected: image chat/edit filters do not offer HEIC/TIFF just because document OCR supports them.
