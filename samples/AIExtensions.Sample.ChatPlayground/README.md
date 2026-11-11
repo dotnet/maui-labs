@@ -6,7 +6,7 @@ iOS, Mac Catalyst, and Windows (not native macOS); providers vary by platform.
 
 ## What you can try
 
-Chat, Agentic, Embeddings, and Images have separate providers and capabilities.
+Chat, Embeddings, and Images have separate providers and capabilities.
 
 ### Chat
 
@@ -74,198 +74,6 @@ recorded response, without contacting a model.
   turn, that conversation is restored before its message is sent again.
 - While a replay is part-way through, sending stays disabled until it finishes or
   you start a new chat. The auto-saved chat replays when the app starts.
-
-### Agentic
-
-The Agentic tab shows the agentic UI of ASP.NET Core's
-[AI components](https://learn.microsoft.com/aspnet/core/blazor/components/ai-components)
-and of the [AgenticUI](https://github.com/danroth27/AgenticUI) sample natively, on
-`AIChatView` and the engine, with any `IChatClient`. There is no server and no
-AG-UI: tools that run on a server there are local tools here, and its state events
-become a `StateMapper` that reads the tool calls as they stream.
-
-Pick a scenario from the sidebar (**Scenarios** on a narrow screen). Each keeps its
-own conversation while you switch, and each comes with a recorded run: **Example**
-replays it through the same engine path as a live chat, without contacting a model,
-so every scenario works offline. **New** starts over. A scenario with state shows it
-in a panel beside the chat, or above the chat on a narrow screen, where it collapses
-to its title.
-
-The scenarios send to a live client chosen in the sidebar, Azure OpenAI when it is
-configured. Every scenario except Reasoning needs a model that calls tools;
-Reasoning shows a summary only from a reasoning model, such as one behind the Azure
-OpenAI Responses API.
-
-| Scenario | What it shows | Built with |
-|----------|---------------|------------|
-| Tool cards | Cards that show the call while a tool runs and fill in with its result | The built-in tool card, and a typed `[ToolBlock]` card registered with `options.AddGeneratedToolBlocks()` |
-| Combined tool calls | Several calls of one response in one card that fills in row by row | `ContentBlockHandler<TState>` with `options.AddBlockHandler`, and a `BlockTemplate` for its block |
-| Human in the loop | Approve or reject a tool call before it runs | `ApprovalRequiredAIFunction`, the built-in approval card, and a custom approval template |
-| Frontend tools | Tools that run in the app: one at once, one when you press **Run** | `options.RegisterUIAction`, automatic and `UIActionInvocationMode.Manual` |
-| Activity progress | A plan that updates in place in the chat and in a panel | `ActivityHandler<TBlock>`, `UIAgent<TState>`, and a `StateMapper` |
-| Shared state | A recipe that you and the agent both edit | `UIAgent<TState>`, `AgentState<T>.Value`, and a `StateMapper` that calls `SetState` |
-| Predictive state | A proposed document, previewed with its changes, that you accept or reject | A manual UI action, `SetPredictiveState`, and `AcceptPredictiveState` / `RejectPredictiveState` |
-| Reasoning | The model's reasoning summary above its answer | `ChatOptions.Reasoning` and the built-in reasoning view |
-| Persistence | A conversation that survives quitting the app | `options.Thread` (a file-backed `IConversationThread`) and `RestoreAsync()` |
-
-#### Tool cards
-
-`get_weather` and `get_local_time` run locally with a short delay, so each card
-first shows the call ("Checking the weather in Seattle…") and then fills in.
-`get_local_time` uses the built-in tool card. `get_weather` uses `WeatherToolBlock`,
-a `[ToolBlock("get_weather")]` class whose `[ToolParameter]` and `[ToolResult]`
-properties the source generator fills from the call and its result;
-`options.AddGeneratedToolBlocks()` registers its handler, and a `BlockTemplate`
-shows it as a weather card.
-
-#### Combined tool calls
-
-Ask for several cities and every `get_weather` call of the response lands in one
-card, a row per city, each filled in as its result arrives, with the warmest city
-as the headline. The scenario asks for one call at a time
-(`AllowMultipleToolCalls = false`) so the card visibly grows; with parallel calls
-the results of a batch arrive together and the card fills in at once.
-
-To combine tool calls into one card:
-
-1. Define a block that holds every call: a `ContentBlock` subclass.
-2. Write a handler that claims the calls and their results and folds them into the
-   block. The first call emits it; later calls and results update it. Mark the
-   results handled too: a custom block is not one of the engine's function blocks,
-   so nothing else shows them.
-3. Register the handler, and give the block a template.
-
-```csharp
-public sealed class WeatherComparisonBlock : ContentBlock
-{
-    public List<(FunctionCallContent Call, FunctionResultContent? Result)> Rows { get; } = [];
-}
-
-public sealed class WeatherComparisonHandler : ContentBlockHandler<WeatherComparisonBlock>
-{
-    public override BlockMappingResult<WeatherComparisonBlock> Handle(
-        BlockMappingContext context, WeatherComparisonBlock block)
-    {
-        var changed = false;
-        foreach (var content in context.UnhandledContents)
-        {
-            if (content is FunctionCallContent { Name: "get_weather" } call)
-            {
-                context.MarkHandled(call);
-                block.Rows.Add((call, null));
-                changed = true;
-            }
-            else if (content is FunctionResultContent result &&
-                block.Rows.FindIndex(row => row.Call.CallId == result.CallId) is >= 0 and var index)
-            {
-                context.MarkHandled(result);
-                block.Rows[index] = (block.Rows[index].Call, result);
-                changed = true;
-            }
-        }
-
-        if (!changed)
-            return BlockMappingResult<WeatherComparisonBlock>.Pass();
-        if (string.IsNullOrEmpty(block.Id))
-        {
-            block.Id = "weather-" + context.Update.MessageId;
-            return BlockMappingResult<WeatherComparisonBlock>.Emit(block, block); // the first call shows the card
-        }
-
-        return BlockMappingResult<WeatherComparisonBlock>.Update(block); // later calls and results update it
-    }
-}
-
-var agent = new UIAgent(chatClient, options => options.AddBlockHandler(new WeatherComparisonHandler()));
-```
-
-```xml
-<chat:AIChatView Session="{Binding Session}">
-    <chat:BlockTemplate BlockType="{x:Type local:WeatherComparisonBlock}"
-                        ViewType="{x:Type local:WeatherComparisonView}" />
-</chat:AIChatView>
-```
-
-The view derives from `BlockView` and redraws in `OnBlockChanged`, which runs for
-every update of its block. The playground's version is `WeatherComparisonHandler`,
-`WeatherComparisonBlock`, and `WeatherComparisonView`.
-
-#### Human in the loop
-
-`book_meeting` and `send_email` are wrapped in `ApprovalRequiredAIFunction`, so the
-model's call waits for you and the tool runs only once you approve it. `send_email`
-uses the built-in approval card. `book_meeting` uses a custom approval template
-(`BlockTemplate BlockType="ToolApprovalBlock" ToolName="book_meeting"`) that shows
-the meeting as a calendar card and then its booking; its **Book it** and
-**Don't book** buttons call the block's `Approve()` and `Reject()`.
-
-#### Frontend tools
-
-UI actions are tools that run in the app rather than in the model's client.
-`set_accent_color` is registered with `options.RegisterUIAction` and runs as soon as
-the model calls it: it sets `AIChat.Color.Accent` in this scenario's resources, so
-the send button, buttons, and progress recolor live, and a custom template shows it
-as a chip. `reset_accent_color` is registered with `UIActionInvocationMode.Manual`:
-its built-in card waits until you press **Run**.
-
-#### Activity progress
-
-`PlanActivityHandler`, an `ActivityHandler<PlanActivityBlock>`, maps the
-`create_plan` and `update_plan_step` calls into one activity block that updates in
-place: completed steps get a check, the step running shows a spinner, and the
-headline shows the step in progress. It claims those calls and their results, so no
-tool cards appear. A `StateMapper` keeps the same plan as the agent's typed state
-(`UIAgent<PlanState>`), which the **Plan** panel shows.
-
-#### Shared state
-
-The recipe is the agent's typed state (`UIAgent<RecipeState>`). Edit it in the
-**Recipe** panel and the edit becomes `agent.State.Value` at once. Each request
-carries the current recipe as a JSON message just before your message (as the
-AgenticUI sample does), so the model sees your edits. The model changes the recipe
-by calling `update_recipe` with the whole recipe; the `StateMapper` turns that call
-into the new state with `SetState`, and the panel follows `AgentState<T>.OnChanged`.
-**New** starts again from the original recipe.
-
-#### Predictive state
-
-Ask for a document and the agent calls `propose_document`, a manual UI action. As
-the call streams, the `StateMapper` shows the proposal at once with
-`SetPredictiveState`, and the **Document** panel marks what it adds and removes
-compared with the document before it. The proposal's custom template sets
-`Arguments["accepted"]` and calls `InvokeAsync()`; the action then calls
-`AcceptPredictiveState` or `RejectPredictiveState`. If the turn stops or fails
-before you decide, the engine rejects the prediction and the document rolls back.
-The document also travels with each request as a JSON message, so your own edits
-count.
-
-#### Reasoning
-
-Requests ask for a reasoning summary (`ChatOptions.Reasoning`). With a reasoning
-model the built-in reasoning view shows the summary, collapsed, above the answer.
-Reasoning that arrives without visible text, such as encrypted reasoning, gets no
-row.
-
-#### Persistence
-
-`options.Thread` is `FileConversationThread`, an `IConversationThread` that saves
-each committed turn's raw `ChatResponseUpdate`s as JSON with an atomic write.
-Opening the scenario calls `RestoreAsync()`, so the conversation, its cards
-included, comes back after you quit the app; **Reload from disk** reads it again
-into a new agent, as launching does. **New** clears the file. **Example** replays the
-recorded run, which then becomes the saved conversation.
-
-#### How the scenarios are wired
-
-Each scenario is a `PlaygroundScenario` (in `Scenarios/Core`, free of MAUI so the
-tests share it) that creates its `UIAgent`, with its handlers, UI actions, state
-mapper, and thread. The engine sends through a `PlaygroundChatClient` built for the
-scenario: each request gets the scenario's instructions and tools as `ChatOptions`,
-built again for every request round, and its state as a message added to that
-request only. Recordings mark those messages, so a replay leaves them out of the
-conversation it shows. Each scenario records the live exchanges of the current run
-in its own recording (fresh each launch); its bundled example is in
-`Resources/Raw/scenarios`.
 
 ### Embeddings
 
@@ -390,8 +198,8 @@ them before sharing.
 ## Tests
 
 The playground's tests run without MAUI workloads. They cover the router, the
-replay driver, the custom cards, and the agentic scenarios, and replay every
-recording in `TestData`, including each scenario's example, through the engine:
+replay driver, and the custom cards, and replay every recording in `TestData`
+through the engine:
 
 ```sh
 dotnet test tests/AIExtensions/AIExtensions.Sample.ChatPlayground.Tests

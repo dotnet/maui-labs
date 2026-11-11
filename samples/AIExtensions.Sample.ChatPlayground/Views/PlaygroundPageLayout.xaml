@@ -13,15 +13,14 @@
             <Grid x:Name="MainPanel" Grid.Column="1" Grid.ColumnSpan="2" RowDefinitions="Auto,*,Auto" RowSpacing="12"
                   AutomationId="PlaygroundMainPanel">
                 <Border x:Name="HeaderPanel" Style="{StaticResource PlaygroundPanel}" Padding="16">
-                    <Grid x:Name="HeaderGrid" ColumnDefinitions="Auto,*,Auto"
+                    <Grid ColumnDefinitions="Auto,*,Auto"
                           RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="6">
-                        <ImageButton x:Name="OpenSettingsButton"
-                                     Source="{Binding SidebarIcon, Source={x:Reference PlaygroundLayout}}"
+                        <ImageButton x:Name="OpenSettingsButton" Source="settings.png"
                                      IsVisible="False" Clicked="OpenSettingsClicked"
                                      Style="{StaticResource AttachmentButton}" VerticalOptions="Start"
-                                     SemanticProperties.Description="{Binding SidebarTitle, Source={x:Reference PlaygroundLayout}, StringFormat='Open {0}'}"
+                                     SemanticProperties.Description="Open settings"
                                      AutomationId="OpenSettingsButton" />
-                        <Grid x:Name="TitleGroup" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="6"
+                        <Grid Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="6"
                               VerticalOptions="Start" HorizontalOptions="Start">
                             <Label Text="{Binding HeaderTitle, Source={x:Reference PlaygroundLayout}}"
                                    FontSize="20" FontAttributes="Bold" VerticalOptions="Center"
@@ -41,7 +40,7 @@
                                 <Label Text="Logs" Style="{StaticResource ChatActionLabel}" />
                             </VerticalStackLayout>
                         </HorizontalStackLayout>
-                        <Label x:Name="StatusLabel" Grid.Row="1" Grid.ColumnSpan="3"
+                        <Label Grid.Row="1" Grid.ColumnSpan="3"
                                Text="{Binding HeaderStatus, Source={x:Reference PlaygroundLayout}}"
                                Style="{StaticResource MutedLabel}" FontSize="12" MaxLines="2"
                                LineBreakMode="TailTruncation"
