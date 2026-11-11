@@ -16,6 +16,11 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </remarks>
 internal sealed class ChatMessageList : CollectionView
 {
+    // How long the platform may keep moving the list after rows changed or content resized on its own (see Settle),
+    // and how far back that moves it at most: further is the reader scrolling back.
+    private static readonly TimeSpan SettleTime = TimeSpan.FromMilliseconds(500);
+    private const double SettleDrift = 64;
+
     // Turns that failed. The engine commits nothing for a failed turn and forgets the failure once another message
     // is sent, so the view keeps it, for as long as the turn lives.
     private static readonly ConditionalWeakTable<ConversationTurn, object> FailedTurns = new();
@@ -42,6 +47,10 @@ internal sealed class ChatMessageList : CollectionView
     private bool _isPinned = true;
     private bool _isUpdatingRows;
     private bool _statusChanged;
+    private bool _settling;
+    private int _settleGeneration;
+    private bool _movedOffEndWhileSettling;
+    private double _driftWhileSettling;
     private ConversationTurn? _lastTurn;
     private bool _followRequested;
 
@@ -103,6 +112,8 @@ internal sealed class ChatMessageList : CollectionView
         _session = null;
         _flushGeneration++;
         _flushScheduled = false;
+        _settleGeneration++;
+        _settling = false;
 
         foreach (var subscription in _sessionSubscriptions)
             subscription.Dispose();
@@ -182,9 +193,15 @@ internal sealed class ChatMessageList : CollectionView
             Pin();
         _lastTurn = lastTurn;
 
-        if ((structureChanged || refreshed || _followRequested) && _isPinned)
-            ScrollToEnd();
+        var follow = _followRequested;
         _followRequested = false;
+        if ((structureChanged || refreshed || follow) && _isPinned)
+        {
+            // Settle first: the platform reports the scroll at once, and it can land short of the end.
+            if (structureChanged || follow)
+                Settle(correct: true);
+            ScrollToEnd();
+        }
     }
 
     /// <summary>
@@ -515,6 +532,35 @@ internal sealed class ChatMessageList : CollectionView
             ScrollTo(_rows.Count - 1, position: ScrollToPosition.End, animate: false);
     }
 
+    // Rows added or removed, and content that changed size on its own, keep moving the list for a while after the
+    // scroll to its new end: the platform animates the change, re-measures rows and corrects its offset, on iOS and
+    // Mac Catalyst in small steps that can take the end row off screen. Those scrolls are not the reader's: until the
+    // list settles they don't unpin it (unless they take it far back), and a list they left off its end goes back to
+    // it then. That scroll can move the list again, so it settles once more after it.
+    private void Settle(bool correct)
+    {
+        if (Microsoft.Maui.Dispatching.Dispatcher.GetForCurrentThread() is not { } dispatcher)
+            return;
+
+        _settling = true;
+        _movedOffEndWhileSettling = false;
+        _driftWhileSettling = 0;
+        var generation = ++_settleGeneration;
+        dispatcher.DispatchDelayed(SettleTime, () =>
+        {
+            if (generation != _settleGeneration)
+                return;
+
+            _settling = false;
+            if (!_isAttached || !_isPinned || !_movedOffEndWhileSettling)
+                return;
+
+            if (correct)
+                Settle(correct: false);
+            ScrollToEnd();
+        });
+    }
+
     // The space for the list changes with the composer (staged attachments, a long draft) and the window: keep the
     // newest row in view while following.
     private void OnSizeChanged(object? sender, EventArgs e)
@@ -535,12 +581,30 @@ internal sealed class ChatMessageList : CollectionView
         // there: a list at the end clamping its offset after a row got shorter (an approval collapsing to its
         // decision, Markdown settling while it streams), rows re-measured, a bounce at the end. The reader scrolling
         // back moves it off screen within a few points, however slowly they drag, and scrolling down to it again
-        // follows the conversation again.
+        // follows the conversation again. Only while the list settles (see Settle) does the platform take it off
+        // screen too, by a few points.
         var atEnd = e.LastVisibleItemIndex >= _rows.Count - 1;
-        if (e.VerticalDelta < 0 && !atEnd)
-            _isPinned = false;
-        else if (e.VerticalDelta > 0 && atEnd)
+        if (e.VerticalDelta > 0 && atEnd)
+        {
             _isPinned = true;
+        }
+        else if (e.VerticalDelta < 0 && !atEnd)
+        {
+            if (_isPinned && e.VerticalOffset <= 0 && -e.VerticalDelta > Height && Height > 0)
+            {
+                // A jump to the top, further than the list is tall in one step, is not the reader dragging: it is
+                // iOS re-estimating rows it has not measured, which can drop a long conversation to its top.
+                _followRequested = true;
+                Invalidate();
+            }
+            else if (!_settling || (_driftWhileSettling -= e.VerticalDelta) > SettleDrift)
+            {
+                _isPinned = false;
+            }
+        }
+
+        if (_settling)
+            _movedOffEndWhileSettling = !atEnd;
     }
 
     private sealed class RowTemplateSelector : DataTemplateSelector
