@@ -93,7 +93,7 @@ public partial class AIChatView
 
     /// <summary>Selects an app template (never a built-in) that can render <paramref name="block"/>.</summary>
     internal BlockTemplate? SelectAppTemplate(ContentBlock block) =>
-        BuiltInBlockTemplates.Select(block, ContentTemplates, includeBuiltIns: false) is { CanRender: true } template
+        BuiltInBlockTemplates.Select(block, ContentTemplates, includeBuiltIns: false) is { Template: not null } template
             ? template
             : null;
 

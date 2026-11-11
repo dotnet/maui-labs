@@ -574,7 +574,7 @@ public class AIChatViewTests
     {
         var view = ChatHost.Create(session, v =>
         {
-            v.ContentTemplates.Add(new BlockTemplate { BlockType = typeof(TextContentBlock), ViewType = typeof(CountingBlockView) });
+            v.ContentTemplates.Add(new BlockTemplate { When = BlockMatch.Is<TextContentBlock>(), Template = new ViewTemplate(typeof(CountingBlockView)) });
             v.Suggestions.Add("Hello");
         });
         view.Text = "Hi";

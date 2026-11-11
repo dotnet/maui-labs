@@ -388,7 +388,12 @@ public partial class AIChatView : TemplatedView
         set => SetValue(ToolsProperty, value);
     }
 
-    /// <summary>Gets or sets the templates that render content blocks. App templates win over the built-ins.</summary>
+    /// <summary>
+    /// Gets or sets the templates that render content blocks. The first that matches a block wins, and every app
+    /// template wins over the built-in ones. A matching template without a <see cref="BlockTemplate.Template"/> hides
+    /// the block. The view selects a block's template again whenever the block changes, so a template may match on
+    /// content that streams in.
+    /// </summary>
     public IList<BlockTemplate> ContentTemplates
     {
         get => (IList<BlockTemplate>)GetValue(ContentTemplatesProperty);

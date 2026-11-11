@@ -360,7 +360,7 @@ public class MessageListTests
             options.ChatOptions = new ChatOptions { Tools = [function] };
             options.AddGeneratedToolBlocks();
         }));
-        var template = new BlockTemplate { BlockType = typeof(WeatherBlock), ViewType = typeof(CountingBlockView) };
+        var template = new BlockTemplate { When = BlockMatch.Is<WeatherBlock>(), Template = new ViewTemplate(typeof(CountingBlockView)) };
         var view = ChatHost.Create(session, v => v.ContentTemplates.Add(template));
 
         await SendAsync(view, "Weather in Oslo?");
@@ -402,7 +402,7 @@ public class MessageListTests
     public void AppTemplates_CanClaimRequestBlocks() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient().Reply("Hello");
-        var template = new BlockTemplate { Role = "user", BlockType = typeof(RichContentBlock), ViewType = typeof(CountingBlockView) };
+        var template = new BlockTemplate { When = BlockMatch.All(BlockMatch.Is<RichContentBlock>(), BlockMatch.Role(ChatRole.User)), Template = new ViewTemplate(typeof(CountingBlockView)) };
         var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(template));
 
         await SendAsync(view, "Hi");
@@ -415,7 +415,7 @@ public class MessageListTests
     public void TemplateWithoutAView_HidesMatchingBlocks() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient().Reply(new TextReasoningContent("pondering"), new TextContent("Answer"));
-        var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(new BlockTemplate { BlockType = typeof(ReasoningContentBlock) }));
+        var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(new BlockTemplate { When = BlockMatch.Is<ReasoningContentBlock>() }));
 
         await SendAsync(view, "Why?");
 
@@ -470,7 +470,7 @@ public class MessageListTests
     public void AppTemplates_StillGetEncryptedReasoning() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient().Reply(new TextReasoningContent(null) { ProtectedData = "opaque" }, new TextContent("Sunny."));
-        var template = new BlockTemplate { BlockType = typeof(ReasoningContentBlock), ViewType = typeof(CountingBlockView) };
+        var template = new BlockTemplate { When = BlockMatch.Is<ReasoningContentBlock>(), Template = new ViewTemplate(typeof(CountingBlockView)) };
         var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(template));
 
         await SendAsync(view, "Weather?");
@@ -486,18 +486,18 @@ public class MessageListTests
         await SendAsync(view, "Hi");
         var before = (BlockRow)view.Rows()[1];
 
-        var template = new BlockTemplate { BlockType = typeof(TextContentBlock), ViewType = typeof(CountingBlockView) };
+        var template = new BlockTemplate { When = BlockMatch.Is<TextContentBlock>(), Template = new ViewTemplate(typeof(CountingBlockView)) };
         view.ContentTemplates.Add(template);
 
         var after = (BlockRow)view.Rows()[1];
         Assert.NotSame(before, after);
         Assert.Same(template, after.Template);
 
-        template.ViewType = null;
+        template.Template = null;
         Assert.DoesNotContain(view.Rows(), row => row is BlockRow);
 
         view.ContentTemplates.Clear();
-        Assert.Contains(view.Rows(), row => row is BlockRow { Template.CanRender: true });
+        Assert.Contains(view.Rows(), row => row is BlockRow { Template.Template: not null });
     });
 
     [Fact]
@@ -549,7 +549,7 @@ public class MessageListTests
         var client = new ScriptedChatClient();
         var stream = client.ReplyLive();
         var view = ChatHost.Create(ChatHost.Session(client), v =>
-            v.ContentTemplates.Add(new BlockTemplate { BlockType = typeof(TextContentBlock), ViewType = typeof(CountingBlockView) }));
+            v.ContentTemplates.Add(new BlockTemplate { When = BlockMatch.Is<TextContentBlock>(), Template = new ViewTemplate(typeof(CountingBlockView)) }));
         using var dispatcher = TestDispatcher.Install();
 
         view.Text = "Hi";
@@ -604,7 +604,7 @@ public class MessageListTests
         var client = new ScriptedChatClient();
         var stream = client.ReplyLive();
         var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(
-            new BlockTemplate { BlockType = typeof(TextContentBlock), Role = "assistant", ViewType = typeof(CountingBlockView) }));
+            new BlockTemplate { When = BlockMatch.All(BlockMatch.Is<TextContentBlock>(), BlockMatch.Role(ChatRole.Assistant)), Template = new ViewTemplate(typeof(CountingBlockView)) }));
 
         view.Text = "Weather?";
         var send = view.SendAsync();
@@ -641,7 +641,7 @@ public class MessageListTests
         ChatHost.Unload(view);
 
         view.ResponseFooterTemplate = new DataTemplate(() => new Label());
-        view.ContentTemplates = [new BlockTemplate { BlockType = typeof(TextContentBlock), Role = "assistant", ViewType = typeof(CountingBlockView) }];
+        view.ContentTemplates = [new BlockTemplate { When = BlockMatch.All(BlockMatch.Is<TextContentBlock>(), BlockMatch.Role(ChatRole.Assistant)), Template = new ViewTemplate(typeof(CountingBlockView)) }];
 
         Assert.Equal(0, view.MessageList.SubscriptionCount);
 
@@ -1488,7 +1488,7 @@ public class MessageListTests
         var client = new ScriptedChatClient().RequestApproval("delete_file");
         var template = new BlockTemplate
         {
-            BlockType = typeof(ToolApprovalBlock),
+            When = BlockMatch.Is<ToolApprovalBlock>(),
             Template = new DataTemplate(() =>
             {
                 var approve = new Button { Text = "Approve" };
@@ -1518,8 +1518,7 @@ public class MessageListTests
         var stream = client.ReplyLive();
         var template = new BlockTemplate
         {
-            BlockType = typeof(TextContentBlock),
-            Role = "assistant",
+            When = BlockMatch.All(BlockMatch.Is<TextContentBlock>(), BlockMatch.Role(ChatRole.Assistant)),
             Template = new DataTemplate(() =>
             {
                 var label = new Label();
@@ -1559,7 +1558,7 @@ public class MessageListTests
         var stream = client.ReplyLive();
         var session = ChatHost.Session(client, options => options.AddBlockHandler(new WordListHandler()));
         var view = ChatHost.Create(session, v => v.ContentTemplates.Add(
-            new BlockTemplate { BlockType = typeof(WordListBlock), ViewType = typeof(WordCountView) }));
+            new BlockTemplate { When = BlockMatch.Is<WordListBlock>(), Template = new ViewTemplate(typeof(WordCountView)) }));
 
         view.Text = "Hi";
         var send = view.SendAsync();
@@ -1590,7 +1589,7 @@ public class MessageListTests
         var session = ChatHost.Session(client, options => options.AddBlockHandler(new WordListHandler()));
         var template = new BlockTemplate
         {
-            BlockType = typeof(WordListBlock),
+            When = BlockMatch.Is<WordListBlock>(),
             Template = new DataTemplate(() =>
             {
                 var list = new VerticalStackLayout();
@@ -1686,7 +1685,7 @@ public class MessageListTests
     public void ReloadingTheView_KeepsItsRowsUnlessATemplateChanged() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient().Reply("One");
-        var template = new BlockTemplate { BlockType = typeof(TextContentBlock), Role = "assistant", ViewType = typeof(CountingBlockView) };
+        var template = new BlockTemplate { When = BlockMatch.All(BlockMatch.Is<TextContentBlock>(), BlockMatch.Role(ChatRole.Assistant)), Template = new ViewTemplate(typeof(CountingBlockView)) };
         var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(template));
         await SendAsync(view, "first");
         var rows = view.Rows().ToArray();
@@ -1698,14 +1697,14 @@ public class MessageListTests
 
         // A template edited while the view was unloaded is not observed, but its rows still rebuild.
         ChatHost.Unload(view);
-        template.ViewType = typeof(ServiceBackedView);
-        template.ViewType = typeof(CountingBlockView);
+        template.Template = new ViewTemplate(typeof(ServiceBackedView));
+        template.Template = new ViewTemplate(typeof(CountingBlockView));
         ChatHost.Load(view);
 
         Assert.Same(rows[0], view.Rows()[0]);
         var row = Assert.IsType<BlockRow>(view.Rows()[1]);
         Assert.NotSame(rows[1], row);
-        Assert.Equal(template.Version, row.TemplateVersion);
+        Assert.Same(template.Template, row.Content);
     });
 
     // A bounce at the end as iOS and Mac Catalyst report it, a frame apart: out past the end and back.

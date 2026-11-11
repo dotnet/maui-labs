@@ -86,8 +86,8 @@
              Link="Chat\Services\ReplayChatClient.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\StructuredResponseFormatter.cs"
              Link="Chat\Services\StructuredResponseFormatter.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\StructuredResponseTemplate.cs"
-             Link="Chat\Views\StructuredResponseTemplate.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\StructuredResponseMatch.cs"
+             Link="Chat\Views\StructuredResponseMatch.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\TurnFooterConverter.cs"
              Link="Chat\Views\TurnFooterConverter.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentModels.cs"

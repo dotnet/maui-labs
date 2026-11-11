@@ -143,11 +143,23 @@
                                 </DataTemplate>
                             </chat:AIChatView.ResponseFooterTemplate>
 
-                            <!-- Custom cards: the calculator tool, and assistant text that is a JSON object. -->
-                            <chat:BlockTemplate BlockType="{x:Type chat:FunctionInvocationContentBlock}"
-                                                ToolName="calculate"
-                                                ViewType="{x:Type local:CalculatorCardView}" />
-                            <local:StructuredResponseTemplate ViewType="{x:Type local:StructuredResponseView}" />
+                            <!--
+                                Custom cards: the calculator tool's calls (its approvals keep the built-in card, which
+                                shows this card inside), and assistant text that is a JSON object.
+                            -->
+                            <chat:BlockTemplate Template="{chat:ViewTemplate local:CalculatorCardView}">
+                                <chat:BlockTemplate.When>
+                                    <chat:AllMatch>
+                                        <chat:BlockTypeMatch Type="chat:FunctionInvocationContentBlock" />
+                                        <chat:ToolMatch Name="calculate" />
+                                    </chat:AllMatch>
+                                </chat:BlockTemplate.When>
+                            </chat:BlockTemplate>
+                            <chat:BlockTemplate Template="{chat:ViewTemplate local:StructuredResponseView}">
+                                <chat:BlockTemplate.When>
+                                    <local:StructuredResponseMatch />
+                                </chat:BlockTemplate.When>
+                            </chat:BlockTemplate>
                         </chat:AIChatView>
 
                         <!-- Replay is read-only: its controls take the composer's place. -->

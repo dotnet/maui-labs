@@ -1,78 +1,25 @@
-using Microsoft.Extensions.DependencyInjection;
-
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
+/// <summary>
+/// How the chat view picks a block's template: the app's <see cref="AIChatView.ContentTemplates"/> first, in order,
+/// then the built-in views. Matching itself is covered by <see cref="BlockMatchTests"/>.
+/// </summary>
 public class BlockTemplateTests
 {
     [Fact]
-    public void When_WithNoFilters_MatchesEveryBlock()
+    public void Select_ATemplateWithoutWhen_MatchesEveryBlock()
     {
-        var template = new BlockTemplate();
+        var mine = new BlockTemplate { Template = new DataTemplate(() => new Label()) };
 
-        Assert.True(template.When(Blocks.Text("hi")));
-        Assert.True(template.When(Blocks.ToolCall("search")));
-        Assert.True(template.When(Blocks.Reasoning("why")));
+        Assert.Same(mine, BuiltInBlockTemplates.Select(Blocks.Text("hi"), [mine], includeBuiltIns: true));
+        Assert.Same(mine, BuiltInBlockTemplates.Select(Blocks.ToolCall("search"), [mine], includeBuiltIns: true));
+        Assert.Same(mine, BuiltInBlockTemplates.Select(Blocks.Reasoning("why"), [mine], includeBuiltIns: true));
     }
-
-    [Fact]
-    public void When_BlockType_MatchesDerivedTypes()
-    {
-        var template = new BlockTemplate { BlockType = typeof(RichContentBlock) };
-
-        Assert.True(template.When(Blocks.Text("hi")));
-        Assert.False(template.When(Blocks.ToolCall("search")));
-    }
-
-    [Fact]
-    public void When_ToolName_MatchesCallsApprovalsAndActionsCaseInsensitively()
-    {
-        var template = new BlockTemplate { ToolName = "GET_WEATHER" };
-
-        Assert.True(template.When(Blocks.ToolCall("get_weather")));
-        Assert.True(template.When(Blocks.ToolCall("get_weather", result: "sunny")));
-        Assert.True(template.When(Blocks.Approval("get_weather")));
-        Assert.True(template.When(Blocks.UIAction("get_weather", UIActionInvocationMode.Manual)));
-        Assert.False(template.When(Blocks.ToolCall("search")));
-        Assert.False(template.When(Blocks.Text("get_weather")));
-    }
-
-    [Fact]
-    public void When_Role_MatchesTheBlockRole()
-    {
-        var template = new BlockTemplate { Role = "User" };
-
-        Assert.True(template.When(Blocks.Text("hi", ChatRole.User)));
-        Assert.False(template.When(Blocks.Text("hi", ChatRole.Assistant)));
-    }
-
-    [Fact]
-    public void When_FiltersCombineWithAnd()
-    {
-        var template = new BlockTemplate { BlockType = typeof(FunctionInvocationContentBlock), ToolName = "search", Role = "assistant" };
-
-        Assert.True(template.When(Blocks.ToolCall("search")));
-        Assert.False(template.When(Blocks.ToolCall("other")));
-        Assert.False(template.When(Blocks.Approval("search")));
-    }
-
-    [Fact]
-    public void When_CanBeOverridden()
-    {
-        var template = new FailedToolTemplate();
-
-        Assert.True(template.When(Blocks.ToolCall("search", exception: new InvalidOperationException("boom"))));
-        Assert.False(template.When(Blocks.ToolCall("search", result: "ok")));
-        Assert.False(template.When(Blocks.Text("hi")));
-    }
-
-    [Fact]
-    public void When_WithNullBlock_Throws() =>
-        Assert.Throws<ArgumentNullException>(() => new BlockTemplate().When(null!));
 
     [Fact]
     public void Select_AppTemplatesAlwaysBeatBuiltIns()
     {
-        var mine = new BlockTemplate { BlockType = typeof(ContentBlock), Priority = -100, ViewType = typeof(Label) };
+        var mine = new BlockTemplate { When = BlockMatch.Is<ContentBlock>(), Template = new DataTemplate(() => new Label()) };
 
         Assert.Same(mine, BuiltInBlockTemplates.Select(Blocks.Text("hi"), [mine], includeBuiltIns: true));
     }
@@ -98,47 +45,33 @@ public class BlockTemplateTests
             Blocks.Media(Blocks.Png()),
         ];
 
-        Assert.All(blocks, block => Assert.True(BuiltInBlockTemplates.Select(block, null, includeBuiltIns: true)?.CanRender));
+        Assert.All(blocks, block => Assert.NotNull(BuiltInBlockTemplates.Select(block, null, includeBuiltIns: true)?.Template));
     }
 
     [Fact]
-    public void Select_HighestPriorityWins()
+    public void Select_TheBuiltInsAreAFallbackSelector()
     {
-        var low = new BlockTemplate { ToolName = "search", ViewType = typeof(Label) };
-        var high = new BlockTemplate { BlockType = typeof(ContentBlock), Priority = 1, ViewType = typeof(Label) };
+        var text = BuiltInBlockTemplates.Selector.SelectTemplate(Blocks.Text("hi"), new ContentView());
+        var rich = BuiltInBlockTemplates.Selector.SelectTemplate(new RichContentBlock(), new ContentView());
 
-        Assert.Same(high, BuiltInBlockTemplates.Select(Blocks.ToolCall("search"), [low, high], includeBuiltIns: true));
+        Assert.IsType<TextBlockView>(text.CreateContent());
+        Assert.IsType<RichTextBlockView>(rich.CreateContent());
     }
 
     [Fact]
-    public void Select_AtEqualPriority_TheMostSpecificWins()
+    public void Select_TheFirstMatchingAppTemplateWins()
     {
-        var any = new BlockTemplate { ViewType = typeof(Label) };
-        var role = new BlockTemplate { Role = "assistant", ViewType = typeof(Label) };
-        var baseType = new BlockTemplate { BlockType = typeof(ContentBlock), ViewType = typeof(Label) };
-        var derived = new BlockTemplate { BlockType = typeof(FunctionInvocationContentBlock), ViewType = typeof(Label) };
-        var tool = new BlockTemplate { ToolName = "search", ViewType = typeof(Label) };
-        var block = Blocks.ToolCall("search");
+        var tool = new BlockTemplate { When = BlockMatch.Tool("search"), Template = new DataTemplate(() => new Label()) };
+        var any = new BlockTemplate { When = BlockMatch.Is<ContentBlock>(), Template = new DataTemplate(() => new Label()) };
 
-        Assert.Same(tool, BuiltInBlockTemplates.Select(block, [tool, derived, baseType, role, any], includeBuiltIns: true));
-        Assert.Same(derived, BuiltInBlockTemplates.Select(block, [derived, baseType, role, any], includeBuiltIns: true));
-        Assert.Same(baseType, BuiltInBlockTemplates.Select(block, [baseType, role, any], includeBuiltIns: true));
-        Assert.Same(role, BuiltInBlockTemplates.Select(block, [role, any], includeBuiltIns: true));
-    }
-
-    [Fact]
-    public void Select_WithEqualRank_TheLastDeclaredWins()
-    {
-        var first = new BlockTemplate { BlockType = typeof(TextContentBlock), ViewType = typeof(Label) };
-        var second = new BlockTemplate { BlockType = typeof(TextContentBlock), ViewType = typeof(Label) };
-
-        Assert.Same(second, BuiltInBlockTemplates.Select(Blocks.Text("hi"), [first, second], includeBuiltIns: true));
+        Assert.Same(tool, BuiltInBlockTemplates.Select(Blocks.ToolCall("search"), [tool, any], includeBuiltIns: true));
+        Assert.Same(any, BuiltInBlockTemplates.Select(Blocks.ToolCall("search"), [any, tool], includeBuiltIns: true));
     }
 
     [Fact]
     public void Select_IgnoresNullEntries()
     {
-        var mine = new BlockTemplate { ViewType = typeof(Label) };
+        var mine = new BlockTemplate { Template = new DataTemplate(() => new Label()) };
 
         Assert.Same(mine, BuiltInBlockTemplates.Select(Blocks.Text("hi"), [null!, mine, null!], includeBuiltIns: true));
     }
@@ -146,8 +79,8 @@ public class BlockTemplateTests
     [Fact]
     public void Select_GeneratedToolBlockType_MatchesItsTypedTemplate()
     {
-        var generic = new BlockTemplate { BlockType = typeof(FunctionInvocationContentBlock), ViewType = typeof(Label) };
-        var typed = new BlockTemplate { BlockType = typeof(WeatherBlock), ViewType = typeof(Label) };
+        var typed = new BlockTemplate { When = BlockMatch.Is<WeatherBlock>(), Template = new DataTemplate(() => new Label()) };
+        var generic = new BlockTemplate { When = BlockMatch.Is<FunctionInvocationContentBlock>(), Template = new DataTemplate(() => new Label()) };
         var weather = new WeatherBlock { Call = new FunctionCallContent("1", "get_weather") };
 
         Assert.Same(typed, BuiltInBlockTemplates.Select(weather, [typed, generic], includeBuiltIns: true));
@@ -157,12 +90,12 @@ public class BlockTemplateTests
     [Fact]
     public void Template_WithoutAView_HidesTheBlocksItMatches()
     {
-        var hide = new BlockTemplate { BlockType = typeof(ReasoningContentBlock) };
+        var hide = new BlockTemplate { When = BlockMatch.Is<ReasoningContentBlock>() };
 
         var selected = BuiltInBlockTemplates.Select(Blocks.Reasoning("why"), [hide], includeBuiltIns: true);
 
         Assert.Same(hide, selected);
-        Assert.False(selected!.CanRender);
+        Assert.Null(selected!.Template);
     }
 
     [Fact]
@@ -170,9 +103,17 @@ public class BlockTemplateTests
     {
         var template = new BlockTemplate { Template = new DataTemplate(() => new Label { Text = "inline" }) };
 
-        var view = Assert.IsType<Label>(template.CreateView(Blocks.Text("hi"), new ContentView(), services: null));
+        var view = Assert.IsType<Label>(BuiltInBlockTemplates.CreateView(template, Blocks.Text("hi"), new ContentView()));
 
         Assert.Equal("inline", view.Text);
+    }
+
+    [Fact]
+    public void CreateView_FromAViewTemplate()
+    {
+        var template = new BlockTemplate { Template = new ViewTemplate(typeof(CountingBlockView)) };
+
+        Assert.IsType<CountingBlockView>(BuiltInBlockTemplates.CreateView(template, Blocks.Text("hi"), new ContentView()));
     }
 
     [Fact]
@@ -180,19 +121,11 @@ public class BlockTemplateTests
     {
         var template = new BlockTemplate { Template = new FailedSelector() };
 
-        var failed = template.CreateView(Blocks.ToolCall("x", exception: new InvalidOperationException()), new ContentView(), null);
-        var ok = template.CreateView(Blocks.ToolCall("x", result: "ok"), new ContentView(), null);
+        var failed = BuiltInBlockTemplates.CreateView(template, Blocks.ToolCall("x", exception: new InvalidOperationException()), new ContentView());
+        var ok = BuiltInBlockTemplates.CreateView(template, Blocks.ToolCall("x", result: "ok"), new ContentView());
 
         Assert.Equal("failed", Assert.IsType<Label>(failed).Text);
         Assert.Equal("ok", Assert.IsType<Label>(ok).Text);
-    }
-
-    [Fact]
-    public void CreateView_ViewTypeWinsOverTheInlineTemplate()
-    {
-        var template = new BlockTemplate { ViewType = typeof(Button), Template = new DataTemplate(() => new Label()) };
-
-        Assert.IsType<Button>(template.CreateView(Blocks.Text("hi"), new ContentView(), null));
     }
 
     [Fact]
@@ -200,81 +133,33 @@ public class BlockTemplateTests
     {
         var template = new BlockTemplate { Template = new DataTemplate(() => new Span()) };
 
-        var error = Assert.Throws<InvalidOperationException>(() => template.CreateView(Blocks.Text("hi"), new ContentView(), null));
+        var error = Assert.Throws<InvalidOperationException>(() => BuiltInBlockTemplates.CreateView(template, Blocks.Text("hi"), new ContentView()));
         Assert.Contains("must create a View", error.Message);
     }
 
     [Fact]
-    public void CreateView_WithServices_ResolvesConstructorDependencies()
+    public void RowTemplate_IsSharedUntilTheTemplateShowsAnotherView() => UIThread.Run(async () =>
     {
-        var services = new ServiceCollection().AddSingleton<GreetingService>().BuildServiceProvider();
-        var template = new BlockTemplate { ViewType = typeof(ServiceBackedView) };
+        var client = new ScriptedChatClient().Reply("One").Reply("Two");
+        var template = new BlockTemplate { When = BlockMatch.Role(ChatRole.Assistant), Template = new DataTemplate(() => new Label()) };
+        var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(template));
+        await view.Session!.SendMessageAsync("first");
+        await view.Session.SendMessageAsync("second");
 
-        var view = Assert.IsType<ServiceBackedView>(template.CreateView(Blocks.Text("hi"), new ContentView(), services));
+        var rows = view.Rows().OfType<BlockRow>().ToArray();
+        Assert.Equal(2, rows.Length);
+        var first = RowTemplate(view, rows[0]);
+        Assert.Same(first, RowTemplate(view, rows[1]));
 
-        Assert.Same(services.GetRequiredService<GreetingService>(), view.Service);
-    }
+        template.Template = new DataTemplate(() => new Button());
+        var edited = view.Rows().OfType<BlockRow>().ToArray();
+        Assert.NotSame(rows[0], edited[0]);
+        Assert.NotSame(first, RowTemplate(view, edited[0]));
+        Assert.Same(RowTemplate(view, edited[0]), RowTemplate(view, edited[1]));
+    });
 
-    [Fact]
-    public void CreateView_WithServicesMissingADependency_ExplainsWhy()
-    {
-        var services = new ServiceCollection().BuildServiceProvider();
-
-        var error = Assert.Throws<InvalidOperationException>(() => BlockTemplate.CreateView(typeof(ServiceBackedView), services));
-
-        Assert.Contains("Register the view", error.Message);
-    }
-
-    [Fact]
-    public void CreateView_WithoutServicesOrAParameterlessConstructor_ExplainsWhy()
-    {
-        var error = Assert.Throws<InvalidOperationException>(() => BlockTemplate.CreateView(typeof(ServiceBackedView)));
-
-        Assert.Contains("no public parameterless constructor", error.Message);
-    }
-
-    [Fact]
-    public void CreateView_WithANonViewType_Throws() =>
-        Assert.Throws<InvalidOperationException>(() => BlockTemplate.CreateView(typeof(string)));
-
-    [Fact]
-    public void CreateView_WithNullType_Throws() =>
-        Assert.Throws<ArgumentNullException>(() => BlockTemplate.CreateView(null!));
-
-    [Fact]
-    public void RowTemplate_IsCachedUntilTheViewChanges()
-    {
-        var template = new BlockTemplate { ViewType = typeof(Label) };
-
-        var first = template.GetDataTemplate();
-        Assert.Same(first, template.GetDataTemplate());
-
-        template.ViewType = typeof(Button);
-        var second = template.GetDataTemplate();
-        Assert.NotSame(first, second);
-        Assert.Same(second, template.GetDataTemplate());
-
-        template.Template = new DataTemplate(() => new Label());
-        Assert.NotSame(second, template.GetDataTemplate());
-    }
-
-    [Fact]
-    public void Template_IsTheContentProperty()
-    {
-        var attribute = typeof(BlockTemplate).GetCustomAttributes(typeof(ContentPropertyAttribute), inherit: true)
-            .Cast<ContentPropertyAttribute>()
-            .Single();
-
-        Assert.Equal(nameof(BlockTemplate.Template), attribute.Name);
-    }
-
-    private sealed class FailedToolTemplate : BlockTemplate
-    {
-        public FailedToolTemplate() => BlockType = typeof(FunctionInvocationContentBlock);
-
-        public override bool When(ContentBlock block) =>
-            base.When(block) && block is FunctionInvocationContentBlock { Result.Exception: not null };
-    }
+    private static DataTemplate RowTemplate(AIChatView view, ChatRow row) =>
+        ((DataTemplateSelector)view.MessageList.ItemTemplate!).SelectTemplate(row, view.MessageList);
 
     private sealed class FailedSelector : DataTemplateSelector
     {

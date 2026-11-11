@@ -244,9 +244,9 @@ public sealed class RecordedChatReplayTests
             instructions);
         Assert.Equal(3, result.Turns);
         Assert.Equal(3, turnsAdded);
-        var template = new StructuredResponseTemplate();
+        var structured = new StructuredResponseMatch();
         Assert.Equal([true, true, false], harness.Session.Turns.Select(turn =>
-            template.When(Assert.Single(turn.ResponseBlocks.OfType<TextContentBlock>()))));
+            structured.Matches(Assert.Single(turn.ResponseBlocks.OfType<TextContentBlock>()))));
         Assert.Equal(3, harness.Recording.ReplayPosition);
     }
 
@@ -471,7 +471,7 @@ public sealed class RecordedChatReplayTests
         {
             case TextContentBlock text:
                 Assert.False(string.IsNullOrWhiteSpace(text.RawText));
-                return new StructuredResponseTemplate().When(text) ? "structured" : "text";
+                return new StructuredResponseMatch().Matches(text) ? "structured" : "text";
             case ReasoningContentBlock reasoning:
                 Assert.False(string.IsNullOrWhiteSpace(reasoning.Text));
                 return "reasoning";

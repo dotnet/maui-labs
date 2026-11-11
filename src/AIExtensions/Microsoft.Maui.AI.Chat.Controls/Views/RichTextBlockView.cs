@@ -4,7 +4,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// Structured rich text from a provider (a <see cref="RichContentBlock"/> that is not plain model text), drawn by the
 /// same renderer as Markdown answers.
 /// </summary>
-internal sealed class RichTextBlockView : BlockView
+internal sealed class RichTextBlockView : ChatBlockView
 {
     private readonly MarkdownView _markdown = new();
 

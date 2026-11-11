@@ -103,11 +103,10 @@ public sealed class StyleIsolationTests : IDisposable
             v.InputHeaderContent = AppPart("input header");
             v.InputLeadingContent = AppPart("leading");
             v.InputTrailingContent = AppPart("trailing");
-            v.ContentTemplates.Add(new BlockTemplate { BlockType = typeof(TextContentBlock), Template = new DataTemplate(() => AppPart("text")) });
+            v.ContentTemplates.Add(new BlockTemplate { When = BlockMatch.Is<TextContentBlock>(), Template = new DataTemplate(() => AppPart("text")) });
             v.ContentTemplates.Add(new BlockTemplate
             {
-                ToolName = "get_weather",
-                BlockType = typeof(FunctionInvocationContentBlock),
+                When = BlockMatch.All(BlockMatch.Is<FunctionInvocationContentBlock>(), BlockMatch.Tool("get_weather")),
                 Template = new DataTemplate(() => AppPart("weather")),
             });
         });
@@ -256,7 +255,7 @@ public sealed class StyleIsolationTests : IDisposable
 
         static Element Create(Type type, AIChatView owner) =>
             type == typeof(ChatMessageList) ? new ChatMessageList(owner) :
-            type == typeof(BlockHost) ? new BlockHost(new BlockTemplate()) :
+            type == typeof(BlockHost) ? new BlockHost(new DataTemplate(static () => new ContentView())) :
             // Standard controls as arguments: they don't load the theme, so the view under test has to.
             type == typeof(LinkedImageView) ? new LinkedImageView(new Image(), static () => new ContentView()) :
             (Element)Activator.CreateInstance(type, nonPublic: true)!;
@@ -270,7 +269,7 @@ public sealed class StyleIsolationTests : IDisposable
         view.Window!.Parent = app;
         var reasoning = new ReasoningView();
         view.InputHeaderContent = reasoning;
-        BlockView.Bind(reasoning, Blocks.Reasoning("Because."), owner: null, session: null);
+        ChatBlockView.Bind(reasoning, Blocks.Reasoning("Because."), owner: null, session: null);
 
         Assert.Same(app.Resources[AIChatThemeKeys.ReasoningHeaderStyle], reasoning.Header.Style);
     }
@@ -608,7 +607,7 @@ public sealed class StyleIsolationTests : IDisposable
 
         var rich = new RichTextBlockView();
         var view = ChatHost.Create(ChatHost.Session(new ScriptedChatClient()), v => v.InputHeaderContent = rich);
-        BlockView.Bind(rich, block, owner: null, session: null);
+        ChatBlockView.Bind(rich, block, owner: null, session: null);
         return Task.FromResult<(AIChatView, Func<Task>)>((view, static () => Task.CompletedTask));
 
         static RichTextNode Wrap(RichTextNode node, string text)

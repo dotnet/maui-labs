@@ -5,7 +5,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// Each coalesced streaming update re-parses the text, and <see cref="MarkdownView"/> updates only the views of what
 /// changed (usually the end of the last block) in place, so the rest of the answer keeps its views while it grows.
 /// </remarks>
-internal sealed class TextBlockView : BlockView
+internal sealed class TextBlockView : ChatBlockView
 {
     private readonly MarkdownView _markdown = new();
 

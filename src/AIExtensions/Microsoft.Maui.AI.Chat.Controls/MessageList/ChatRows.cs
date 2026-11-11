@@ -34,8 +34,11 @@ internal sealed class BlockRow(ContentBlock block, BlockTemplate template, Agent
 
     public BlockTemplate Template { get; } = template;
 
-    /// <summary>Gets the <see cref="BlockTemplate.Version"/> the row was created with; an edited template recreates its views.</summary>
-    public int TemplateVersion { get; } = template.Version;
+    /// <summary>
+    /// Gets the template's <see cref="BlockTemplate.Template"/> when the row was created: a template edited to show
+    /// another view gets a new row, and so new views.
+    /// </summary>
+    public DataTemplate Content { get; } = template.Template!;
 
     public AgentContext Session { get; } = session;
 
