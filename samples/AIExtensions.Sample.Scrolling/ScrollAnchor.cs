@@ -21,7 +21,8 @@ namespace AIExtensions.Sample.Scrolling;
 /// </para>
 /// <para>
 /// It works on Android, iOS, and Mac Catalyst. Elsewhere, and on views it doesn't support (a horizontal list, a
-/// <see cref="CarouselView"/>), setting it has no effect.
+/// <see cref="CarouselView"/>), setting it has no effect and <see cref="IsAnchoredProperty"/> stays
+/// <see langword="false"/>.
 /// </para>
 /// </remarks>
 public static class ScrollAnchor
@@ -59,7 +60,8 @@ public static class ScrollAnchor
 
     /// <summary>
     /// Gets whether <paramref name="view"/> follows the end of its content: <see langword="false"/> while the user has
-    /// scrolled away from it, for example to show a "jump to latest" button.
+    /// scrolled away from it, for example to show a "jump to latest" button, and wherever the view can't follow it
+    /// (before it has a handler, while it scrolls horizontally, or on a platform the anchor doesn't support).
     /// </summary>
     /// <param name="view">The <see cref="CollectionView"/> or <see cref="ScrollView"/>.</param>
     /// <returns><see langword="true"/> while the view follows the end of its content.</returns>

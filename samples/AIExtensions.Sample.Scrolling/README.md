@@ -36,7 +36,7 @@ vertical `ScrollView`.
 | --- | --- |
 | `ScrollAnchorMode` | `None = 0` (the default) or `End = 2`. A `[Flags]` enum with Blazor's values, leaving `Start = 1` for feeds that prepend. |
 | `ScrollAnchor.ModeProperty`, `GetMode`, `SetMode` | Attached: which edge of the content to keep in view. |
-| `ScrollAnchor.IsAnchoredProperty`, `GetIsAnchored` | Read-only attached: whether the view follows its end right now. |
+| `ScrollAnchor.IsAnchoredProperty`, `GetIsAnchored` | Read-only attached: whether the view follows its end right now. `false` wherever it can't: before the view has a handler, while it scrolls horizontally, and on platforms without an adapter. |
 | `ScrollAnchor.ScrollToEnd(view, animate = true)` | Scrolls to the end, and follows it again. |
 
 Why this shape:
@@ -87,7 +87,7 @@ It adds nothing to the app's items, header, or footer, uses no timers or delays,
 leaves the native views' delegates and listeners to MAUI's handlers: it observes through key-value observing, a gesture
 recognizer target, and the view tree observer.
 
-Everywhere else (Windows, and the `net10.0` build), setting the mode has no effect.
+Everywhere else (Windows, and the `net10.0` build), setting the mode has no effect and `IsAnchored` stays `false`.
 
 ## Limitations
 

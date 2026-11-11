@@ -163,9 +163,11 @@ internal sealed class ScrollAnchorController : IDisposable
         adapter.Invalidate();
     }
 
+    // Only a platform adapter follows the end: without one (no handler yet, a horizontal view, a platform with no
+    // adapter such as Windows), the view isn't anchored, whatever the tracker would decide.
     private void Publish()
     {
         if (!_disposed)
-            ScrollAnchor.SetIsAnchored(_view, _tracker.IsAnchored);
+            ScrollAnchor.SetIsAnchored(_view, _adapter is not null && _tracker.IsAnchored);
     }
 }

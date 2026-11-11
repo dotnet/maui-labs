@@ -125,6 +125,34 @@ public sealed class ScrollAnchorTests : IDisposable
     }
 
     [Fact]
+    public void IsAnchoredIsFalseWhileThereIsNoPlatformViewToFollowTheEndWith()
+    {
+        var list = new CollectionView();
+        ScrollAnchor.SetMode(list, ScrollAnchorMode.End);
+        Assert.False(ScrollAnchor.GetIsAnchored(list));
+
+        list.Handler = new FakeHandler();
+        Assert.True(ScrollAnchor.GetIsAnchored(list));
+
+        list.Handler = null;
+        Assert.False(ScrollAnchor.GetIsAnchored(list));
+    }
+
+    [Fact]
+    public void IsAnchoredStaysFalseOnAPlatformWithoutAnAdapter()
+    {
+        // Such as Windows: the view doesn't follow its end, so a "jump to latest" button stays available.
+        ScrollAnchor.AdapterFactory = (_, _, _) => null;
+        var list = new CollectionView { Handler = new FakeHandler() };
+
+        ScrollAnchor.SetMode(list, ScrollAnchorMode.End);
+        Assert.False(ScrollAnchor.GetIsAnchored(list));
+
+        ScrollAnchor.ScrollToEnd(list, animate: false);
+        Assert.False(ScrollAnchor.GetIsAnchored(list));
+    }
+
+    [Fact]
     public void ScrollToEndFollowsTheEndAgain()
     {
         var list = new CollectionView { Handler = new FakeHandler() };
@@ -196,6 +224,8 @@ public sealed class ScrollAnchorTests : IDisposable
         ScrollAnchor.SetMode(scrollView, ScrollAnchorMode.End);
 
         Assert.Empty(_adapters);
+        Assert.False(ScrollAnchor.GetIsAnchored(list));
+        Assert.False(ScrollAnchor.GetIsAnchored(scrollView));
     }
 
     [Fact]
