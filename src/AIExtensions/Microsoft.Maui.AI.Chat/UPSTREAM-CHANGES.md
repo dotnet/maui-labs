@@ -143,8 +143,9 @@ These match upstream so that upstream fixes apply directly:
   continuation that leaves a call without a result.
 - **One block per call id.** Each turn keeps a registry of its function calls. When
   `FunctionInvokingChatClient` sends an approved call again, a rejected call comes back as
-  informational, or a replayed conversation repeats a call, the existing block (for an approval, its
-  inner block) is updated and receives the result. Upstream shows such repeats as extra blocks. A call
+  informational, a replayed conversation repeats a call, or a complete response lists a call or its
+  result more than once in one message, the existing block (for an approval, its inner block) is
+  updated and receives the result. Upstream shows such repeats as extra blocks. A call
   id reused after its result is a new call with its own block; both blocks have the call id as their
   `Id`, so key views by block instance.
 - **UI actions run in the engine.** An `Automatic` UI action is invoked by the engine on the caller's

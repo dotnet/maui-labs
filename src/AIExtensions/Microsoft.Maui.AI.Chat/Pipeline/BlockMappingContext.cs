@@ -48,6 +48,8 @@ public class BlockMappingContext
 
     public UnhandledContentsEnumerable UnhandledContents => new(Update.Contents, _handled);
 
+    /// <summary>Claims a content item of the update so no other handler shows it.</summary>
+    /// <param name="content">The item. When the update lists the same instance more than once, each call claims one.</param>
     public void MarkHandled(AIContent content)
     {
         var index = IndexOf(content);
@@ -114,16 +116,27 @@ public class BlockMappingContext
             _firstClaimed = index;
     }
 
+    /// <summary>
+    /// Gets the position of the first unhandled occurrence of the item, or of its first occurrence when all
+    /// are handled, or -1.
+    /// </summary>
     private int IndexOf(AIContent content)
     {
         var contents = Update.Contents;
+        var first = -1;
         for (var i = 0; i < contents.Count; i++)
         {
-            if (ReferenceEquals(contents[i], content))
+            if (!ReferenceEquals(contents[i], content))
+                continue;
+
+            if (!_handled[i])
                 return i;
+
+            if (first < 0)
+                first = i;
         }
 
-        return -1;
+        return first;
     }
 
     public ContentBlock? CreateInnerBlock(AIContent content)
