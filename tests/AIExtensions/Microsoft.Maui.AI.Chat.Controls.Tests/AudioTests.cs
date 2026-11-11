@@ -3,13 +3,14 @@ namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 public class AudioTests
 {
     [Fact]
-    public void AudioNote_IsStagedAndReplacesAnEarlierRecording() => UIThread.Run(async () =>
+    public void AudioNote_IsStagedAndReplacesOnlyTheEarlierRecording() => UIThread.Run(async () =>
     {
-        var recording = FakeAudioRecorder.Wav(name: "new.wav");
-        var recorder = new FakeAudioRecorder(recording);
+        var first = FakeAudioRecorder.Wav(name: "first.wav");
+        var recorder = new FakeAudioRecorder(first);
         var view = CreateView(recorder);
+        var picked = FakeAudioRecorder.Wav(name: "picked.wav");
         var document = Blocks.Pdf();
-        view.AddAttachment(FakeAudioRecorder.Wav(name: "old.wav"));
+        view.AddAttachment(picked);
         view.AddAttachment(document);
 
         await view.Composer.ToggleAudioCaptureAsync();
@@ -22,12 +23,58 @@ public class AudioTests
 
         Assert.False(view.IsRecordingAudio);
         Assert.False(view.IsTranscribingAudio);
-        Assert.Equal([document, recording], view.Attachments);
+        Assert.Equal([picked, document, first], view.Attachments);
         Assert.Equal("Audio recording attached.", view.Composer.LastAnnouncement);
         Assert.Equal(1, recorder.StartCount);
         Assert.Equal(1, recorder.StopCount);
         Assert.Equal(view.MaximumAttachmentBytes, recorder.SeenMaximumBytes);
         Assert.False(view.HasError);
+
+        // Recording again replaces the earlier recording, not audio the user attached.
+        var second = FakeAudioRecorder.Wav(name: "second.wav");
+        recorder.Recording = second;
+        await view.Composer.ToggleAudioCaptureAsync();
+        await view.Composer.ToggleAudioCaptureAsync();
+
+        Assert.Equal([picked, document, second], view.Attachments);
+    });
+
+    [Fact]
+    public void RejectedRecording_KeepsTheAttachedAudio() => UIThread.Run(async () =>
+    {
+        var recorder = new FakeAudioRecorder(FakeAudioRecorder.Wav(name: "new.wav"));
+        var view = CreateView(recorder, v => v.MaximumAttachmentCount = 2);
+        var picked = FakeAudioRecorder.Wav(name: "picked.wav");
+        var document = Blocks.Pdf();
+        view.AddAttachment(picked);
+        view.AddAttachment(document);
+
+        await view.Composer.ToggleAudioCaptureAsync();
+        await view.Composer.ToggleAudioCaptureAsync();
+
+        Assert.Equal(["picked.wav", "report.pdf"], view.Attachments.Select(static a => a.Name));
+        Assert.True(view.HasError);
+    });
+
+    [Fact]
+    public void RejectedRecording_KeepsTheEarlierRecording() => UIThread.Run(async () =>
+    {
+        const int Megabyte = 1024 * 1024;
+        var first = FakeAudioRecorder.Wav(bytes: 10 * Megabyte, name: "first.wav");
+        var recorder = new FakeAudioRecorder(first);
+        var view = CreateView(recorder, v => v.MaximumAttachmentBytes = 30 * Megabyte);
+        view.AddAttachment(Blocks.Pdf(bytes: 30 * Megabyte));
+        await view.Composer.ToggleAudioCaptureAsync();
+        await view.Composer.ToggleAudioCaptureAsync();
+        Assert.Equal(["report.pdf", "first.wav"], view.Attachments.Select(static a => a.Name));
+
+        // Together with the document, the new recording is over the total limit.
+        recorder.Recording = FakeAudioRecorder.Wav(bytes: 25 * Megabyte, name: "second.wav");
+        await view.Composer.ToggleAudioCaptureAsync();
+        await view.Composer.ToggleAudioCaptureAsync();
+
+        Assert.Equal(["report.pdf", "first.wav"], view.Attachments.Select(static a => a.Name));
+        Assert.True(view.HasError);
     });
 
     [Fact]

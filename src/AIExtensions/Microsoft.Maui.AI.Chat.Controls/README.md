@@ -225,7 +225,7 @@ are optional.
 |---|---|
 | `AllowAttachments`, `AttachmentFileTypes` | Show the attach button and filter the picker |
 | `MaximumAttachmentBytes`, `MaximumAttachmentCount` | Per-file (10 MB) and per-message (10) limits. Audio recordings use the same per-file limit |
-| `AllowAudioCapture` | Record an audio note and attach it as WAV. With an `IChatAudioTranscriber`, the recording is dictated into the message box instead |
+| `AllowAudioCapture` | Record an audio note and attach it as WAV; a new recording replaces the previous one. With an `IChatAudioTranscriber`, the recording is dictated into the message box instead |
 | `ShowInterimAudioTranscript` | Show words while recording, using the speech recognizer |
 | `AllowLiveSpeech` | Continuous live voice. `LiveSpeechAutoSubmit` sends each finished utterance, and `ShowInterimSpeechText` and `SpeechRecognitionCulture` tune it |
 
