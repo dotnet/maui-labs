@@ -144,67 +144,55 @@ Bindings follow the standard .NET contract: a binding refreshes when the propert
 `PropertyChanged`. Two kinds of binding keep their first value: a binding to a block itself (`{Binding .}`, or
 `{Binding Converter=…}` over the whole block), which no property change refreshes, and a binding that hands a
 view an object or list that a block changes in place (`ItemsSource="{Binding Rows}"`), because reading the
-property again returns the same instance. Put logic over the whole block in a property of the block, or react
-to the block's `OnChanged` callbacks from code, as the MAUI controls' `BlockView.OnBlockChanged` does; make a
-list that a block of your own changes in place an `ObservableCollection<T>`.
+property again returns the same instance. Put logic over the whole block in a property of the block, or handle
+the block's `PropertyChanged` in code, as `BlockView.OnBlockChanged` in `Microsoft.Maui.AI.Chat.Controls` does;
+make a list that a block of your own changes in place an `ObservableCollection<T>`.
 
 `Turns`, `RequestBlocks` and `ResponseBlocks` are `ReadOnlyObservableCollection<T>`; cast one to
 `INotifyCollectionChanged` to subscribe from code. A page whose `BindingContext` is the session can list
-its turns, each showing its response blocks with a template per block type (`chat` maps
-`clr-namespace:Microsoft.Maui.AI.Chat;assembly=Microsoft.Maui.AI.Chat`):
+its turns, each laying out its blocks with a template per kind of block. `Microsoft.Maui.AI.Chat.Controls`
+provides the template selector, and its `chat` XAML namespace
+(`http://schemas.microsoft.com/dotnet/2026/maui/ai/chat`) maps the types of both packages:
 
 ```xml
-<CollectionView ItemsSource="{Binding Turns}">
+<CollectionView ItemsSource="{Binding Turns}" ItemsUpdatingScrollMode="KeepLastItemInView">
     <CollectionView.ItemTemplate>
         <DataTemplate x:DataType="chat:ConversationTurn">
-            <VerticalStackLayout BindableLayout.ItemsSource="{Binding ResponseBlocks}"
-                                 BindableLayout.ItemTemplateSelector="{StaticResource BlockTemplates}" />
+            <VerticalStackLayout>
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding RequestBlocks}"
+                                     BindableLayout.ItemTemplateSelector="{StaticResource BlockTemplates}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ResponseBlocks}"
+                                     BindableLayout.ItemTemplateSelector="{StaticResource BlockTemplates}" />
+                <Label Text="Stopped" IsVisible="{Binding IsStopped}" />
+            </VerticalStackLayout>
         </DataTemplate>
     </CollectionView.ItemTemplate>
 </CollectionView>
 ```
 
-The selector, in the page's resources:
+The selector, in the page's resources, uses the first template whose `When` matches a block; a block that no
+template matches shows nothing:
 
 ```xml
-<local:BlockTemplateSelector x:Key="BlockTemplates">
-    <local:BlockTemplateSelector.Text>
+<chat:BlockTemplateSelector x:Key="BlockTemplates">
+    <chat:BlockTemplate When="{chat:Is chat:RichContentBlock}">
         <DataTemplate x:DataType="chat:RichContentBlock">
             <Label Text="{Binding RawText}" />
         </DataTemplate>
-    </local:BlockTemplateSelector.Text>
-    <local:BlockTemplateSelector.ToolCall>
+    </chat:BlockTemplate>
+    <chat:BlockTemplate When="{chat:Is chat:FunctionInvocationContentBlock}">
         <DataTemplate x:DataType="chat:FunctionInvocationContentBlock">
             <VerticalStackLayout>
                 <Label Text="{Binding ToolName, StringFormat='Called {0}'}" />
                 <Label Text="{Binding Result.Result}" IsVisible="{Binding HasResult}" />
-                <Label Text="Not run" IsVisible="{Binding IsAbandoned}" />
+                <Label Text="No result" IsVisible="{Binding IsAbandoned}" />
             </VerticalStackLayout>
         </DataTemplate>
-    </local:BlockTemplateSelector.ToolCall>
-    <local:BlockTemplateSelector.Other>
-        <DataTemplate>
-            <ContentView />
-        </DataTemplate>
-    </local:BlockTemplateSelector.Other>
-</local:BlockTemplateSelector>
+    </chat:BlockTemplate>
+</chat:BlockTemplateSelector>
 ```
 
-```csharp
-public class BlockTemplateSelector : DataTemplateSelector
-{
-    public DataTemplate Text { get; set; } = null!;
-    public DataTemplate ToolCall { get; set; } = null!;
-    public DataTemplate Other { get; set; } = null!;
-
-    protected override DataTemplate OnSelectTemplate(object item, BindableObject container) => item switch
-    {
-        RichContentBlock => Text,
-        FunctionInvocationContentBlock => ToolCall,
-        _ => Other,
-    };
-}
-```
+The ChatPlayground sample (`samples/AIExtensions.Sample.ChatPlayground`) builds its whole chat this way.
 
 Events are raised synchronously on the thread that makes the change, once the state they report is in
 place; the engine has no dispatcher. Drive the session from the UI thread: send, retry, cancel and clear
@@ -330,7 +318,7 @@ full Markdown parser.
 
 | Package | Purpose |
 |---|---|
-| `Microsoft.Maui.AI.Chat.Controls` | Native MAUI chat controls and XAML templates |
+| `Microsoft.Maui.AI.Chat.Controls` | XAML block templates that show the engine's blocks with your own views |
 | `Microsoft.Maui.AI.Attributes` | AOT-friendly source-generated `AIFunction` tools |
 
 ## Requirements
