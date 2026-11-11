@@ -1,23 +1,44 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Globalization;
 using System.Text;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>Builds native MAUI views for rich-text blocks. Used by <see cref="MarkdownView"/>.</summary>
+/// <summary>Builds native MAUI views for rich-text blocks and keeps them up to date. Used by <see cref="MarkdownView"/>.</summary>
 /// <remarks>
+/// <para>
 /// Colors and fonts never come from code: every element takes a chat theme style (see <see cref="AIChatThemeKeys"/>)
 /// as a dynamic resource. Only sizes are set here, from <see cref="FontSize"/> and <see cref="CodeFontSize"/>, so
 /// headings and inline code scale with the text around them.
+/// </para>
+/// <para>
+/// A block renders to a <see cref="Rendering"/>, which holds its views and updates them for a new version of the
+/// block. A streaming answer grows at its end, so an update keeps what did not change, refills the text of the
+/// paragraph, heading or code that grew, and inside lists, quotes and tables touches only the items, rows and cells
+/// that changed: the work follows the change, not the size of the block. An updated rendering shows exactly what a
+/// fresh one would.
+/// </para>
 /// </remarks>
-internal sealed class MarkdownRenderer
+internal sealed partial class MarkdownRenderer
 {
     private const double ContainerSpacing = 6;
     private const double MaximumImageHeight = 320;
     private const double MaximumImageWidth = 480;
     private const int MaxRenderDepth = 32;
+
+    /// <summary>The most columns a table has and still gets a view per cell.</summary>
+    /// <remarks>
+    /// Laying out a view per cell takes seconds for thousands of columns, so a wider table, or one with more than
+    /// <see cref="MaxTableCells"/> cells, shows as text instead: one row per line, cells separated by bars, in a block
+    /// that scrolls sideways like code. No real answer comes near either limit.
+    /// </remarks>
+    internal const int MaxTableColumns = 64;
+
+    /// <summary>The most cells a table has and still gets a view per cell (see <see cref="MaxTableColumns"/>).</summary>
+    internal const int MaxTableCells = 2000;
+
+    private static readonly BlockContext s_rootContext = new(AIChatThemeKeys.AssistantTextStyle, ListDepth: 0, Depth: 0);
 
     // Heading sizes relative to the body font size (h1 … h6).
     private static readonly double[] s_headingScales = [1.5, 1.3, 1.15, 1.05, 1.0, 0.95];
@@ -44,8 +65,8 @@ internal sealed class MarkdownRenderer
     /// <summary>The font size of code in body text; inline code in a heading keeps the same ratio.</summary>
     internal double CodeFontSize { get; set; } = 13;
 
-    internal View? RenderBlock(RichTextNode node) =>
-        RenderBlock(node, new BlockContext(AIChatThemeKeys.AssistantTextStyle, ListDepth: 0, Depth: 0));
+    /// <summary>Renders a top-level block.</summary>
+    internal Rendering Render(RichTextNode node) => Render(node, s_rootContext);
 
     // ── Theme ───────────────────────────────────────────────────────────
 
@@ -111,122 +132,95 @@ internal sealed class MarkdownRenderer
 
     // ── Blocks ──────────────────────────────────────────────────────────
 
-    private readonly record struct BlockContext(string TextStyleKey, int ListDepth, int Depth)
+    internal readonly record struct BlockContext(string TextStyleKey, int ListDepth, int Depth)
     {
         public BlockContext Nested() => this with { Depth = Depth + 1 };
     }
 
-    private View? RenderBlock(RichTextNode node, BlockContext context)
+    /// <summary>What a node renders as; a rendering only updates in place for a node of the same kind.</summary>
+    internal enum BlockKind
+    {
+        Plain,
+        Paragraph,
+        ParagraphWithImages,
+        Heading,
+        Code,
+        Quote,
+        List,
+        Table,
+        TableText,
+        Rule,
+        Image,
+        ImageReference,
+        Literal,
+        Definition,
+        Footnote,
+        Inline,
+        Container,
+    }
+
+    private static BlockKind Classify(RichTextNode node, BlockContext context)
     {
         if (context.Depth > MaxRenderDepth)
-            return CreateTextLabel(GetPlainText(node), context.TextStyleKey);
+            return BlockKind.Plain;
 
         return node switch
         {
-            ParagraphNode => RenderParagraph(node.Children, context),
-            HeadingNode heading => RenderHeading(heading),
-            CodeBlockNode code => RenderCodeBlock(code.Code, code.Language),
-            BlockQuoteNode quote => RenderBlockQuote(quote, context),
-            ListNode list => RenderList(list, context),
-            TableNode table => RenderTable(table),
-            ThematicBreakNode => RenderThematicBreak(),
-            ImageNode image => RenderImage(image.Url, image.Alt, image.Title),
-            ImageReferenceNode reference => RenderImageReference(reference, context),
-            HtmlNode html => RenderLiteral(html.Value),
-            DefinitionNode => null,
-            FootnoteDefinitionNode footnote => RenderFootnoteDefinition(footnote, context),
-            _ when IsInline(node) => CreateInlineLabel([node], context.TextStyleKey, FontSize, FontAttributes.None),
-            _ => RenderContainer(node.Children, context),
+            ParagraphNode => HasImages(node.Children) ? BlockKind.ParagraphWithImages : BlockKind.Paragraph,
+            HeadingNode => BlockKind.Heading,
+            CodeBlockNode => BlockKind.Code,
+            BlockQuoteNode => BlockKind.Quote,
+            ListNode => BlockKind.List,
+            TableNode table => IsTooBigForCells(table) ? BlockKind.TableText : BlockKind.Table,
+            ThematicBreakNode => BlockKind.Rule,
+            ImageNode => BlockKind.Image,
+            ImageReferenceNode => BlockKind.ImageReference,
+            HtmlNode => BlockKind.Literal,
+            DefinitionNode => BlockKind.Definition,
+            FootnoteDefinitionNode => BlockKind.Footnote,
+            _ when IsInline(node) => BlockKind.Inline,
+            _ => BlockKind.Container,
         };
     }
 
-    // Children of a container (quote, list item, footnote): runs of inline nodes share a label.
-    private View? RenderContainer(IReadOnlyList<RichTextNode> children, BlockContext context)
+    private Rendering Render(RichTextNode node, BlockContext context)
     {
-        var views = new List<View>();
-        var inlineRun = new List<RichTextNode>();
-        foreach (var child in children)
+        var kind = Classify(node, context);
+        return kind switch
         {
-            if (IsInline(child))
-            {
-                inlineRun.Add(child);
-                continue;
-            }
-
-            FlushInlineRun();
-            if (RenderBlock(child, context.Nested()) is { } view)
-                views.Add(view);
-        }
-
-        FlushInlineRun();
-        return Stack(views, ContainerSpacing);
-
-        void FlushInlineRun()
-        {
-            if (inlineRun.Count == 0)
-                return;
-            if (RenderParagraph(inlineRun.ToArray(), context) is { } view)
-                views.Add(view);
-            inlineRun.Clear();
-        }
-    }
-
-    private View? RenderParagraph(IReadOnlyList<RichTextNode> inlines, BlockContext context)
-    {
-        if (!inlines.Any(static node => node is ImageNode or ImageReferenceNode))
-            return CreateInlineLabel(inlines, context.TextStyleKey, FontSize, FontAttributes.None);
-
-        // Images cannot live inside formatted text, so the paragraph splits around them.
-        var views = new List<View>();
-        var run = new List<RichTextNode>();
-        foreach (var inline in inlines)
-        {
-            if (inline is not (ImageNode or ImageReferenceNode))
-            {
-                run.Add(inline);
-                continue;
-            }
-
-            FlushRun();
-            views.Add(inline is ImageNode node
-                ? RenderImage(node.Url, node.Alt, node.Title)
-                : RenderImageReference((ImageReferenceNode)inline, context));
-        }
-
-        FlushRun();
-        return Stack(views, ContainerSpacing);
-
-        void FlushRun()
-        {
-            var visible = run.Exists(static node => node switch
-            {
-                LineBreakNode => false,
-                TextNode text => !string.IsNullOrWhiteSpace(text.Text),
-                _ => true,
-            });
-            if (visible)
-                views.Add(CreateInlineLabel(run.ToArray(), context.TextStyleKey, FontSize, FontAttributes.None));
-            run.Clear();
-        }
+            BlockKind.Plain or BlockKind.Paragraph or BlockKind.Heading or BlockKind.Literal or BlockKind.Inline
+                => new TextRendering(this, node, context, kind),
+            BlockKind.ParagraphWithImages or BlockKind.Container => new PartsRendering(this, node, context, kind),
+            BlockKind.Code or BlockKind.TableText => new CodeRendering(this, node, context, kind),
+            BlockKind.Quote or BlockKind.Footnote => new FramedRendering(this, node, context, kind),
+            BlockKind.List => new ListRendering(this, (ListNode)node, context),
+            BlockKind.Table => TableRendering.Create(this, (TableNode)node, context),
+            BlockKind.Rule => new StaticRendering(this, node, context, kind, RenderThematicBreak()),
+            BlockKind.Image when node is ImageNode image
+                => new StaticRendering(this, node, context, kind, RenderImage(image.Url, image.Alt, image.Title)),
+            BlockKind.ImageReference
+                => new StaticRendering(this, node, context, kind, RenderImageReference((ImageReferenceNode)node, context)),
+            _ => new StaticRendering(this, node, context, kind, view: null),
+        };
     }
 
     private Label RenderHeading(HeadingNode heading)
     {
-        var level = Math.Clamp(heading.Level, 1, 6);
-        var label = CreateInlineLabel(
-            heading.Children,
-            AIChatThemeKeys.MarkdownHeadingStyle,
-            FontSize * s_headingScales[level - 1],
-            FontAttributes.Bold);
+        var level = GetHeadingLevel(heading);
+        var label = CreateInlineLabel(heading.Children, AIChatThemeKeys.MarkdownHeadingStyle, GetHeadingFontSize(level), FontAttributes.Bold);
         label.Margin = new Thickness(0, level <= 2 ? 4 : 2, 0, 0);
         SemanticProperties.SetHeadingLevel(label, (SemanticHeadingLevel)level);
         return label;
     }
 
-    private static Border RenderCodeBlock(string code, string? language)
+    private static int GetHeadingLevel(HeadingNode heading) => Math.Clamp(heading.Level, 1, 6);
+
+    private double GetHeadingFontSize(int level) => FontSize * s_headingScales[level - 1];
+
+    private static Border RenderCodeBlock(string code, string? language, out Label text, out Label? caption)
     {
         // The chat's code styles, so code looks the same in answers and in tool cards.
-        var text = Styled(new ChatLabel { Text = code }, AIChatThemeKeys.CodeTextStyle);
+        text = Styled(new ChatLabel { Text = code }, AIChatThemeKeys.CodeTextStyle);
         text.LineBreakMode = LineBreakMode.NoWrap;
 
         // Code keeps its line structure; long lines scroll sideways instead of wrapping.
@@ -235,143 +229,51 @@ internal sealed class MarkdownRenderer
         var border = Styled(new ChatBorder(), AIChatThemeKeys.CodeBlockStyle);
         if (string.IsNullOrWhiteSpace(language))
         {
+            caption = null;
             border.Content = scroller;
             return border;
         }
 
-        var caption = Styled(new ChatLabel { Text = language }, AIChatThemeKeys.MarkdownCodeBlockLanguageStyle);
+        caption = Styled(new ChatLabel { Text = language }, AIChatThemeKeys.MarkdownCodeBlockLanguageStyle);
         border.Content = new ChatVerticalStackLayout { Spacing = 4, Children = { caption, scroller } };
         return border;
     }
 
-    private Grid RenderBlockQuote(BlockQuoteNode quote, BlockContext context)
+    private static bool IsTooBigForCells(TableNode table)
     {
-        // The style sets the bar's width; the bar stretches to the height of the quote.
-        var bar = Styled(new LineView(), AIChatThemeKeys.MarkdownBlockQuoteBarStyle);
-
-        var content = RenderContainer(
-                quote.Children,
-                context.Nested() with { TextStyleKey = AIChatThemeKeys.MarkdownBlockQuoteTextStyle })
-            ?? CreateTextLabel(string.Empty, AIChatThemeKeys.MarkdownBlockQuoteTextStyle);
-
-        var grid = new ChatGrid
+        var rows = 0;
+        var columns = table.Alignment.Count;
+        foreach (var child in table.Children)
         {
-            ColumnSpacing = 10,
-            ColumnDefinitions =
+            if (child is TableRowNode row)
             {
-                new ColumnDefinition(GridLength.Auto),
-                new ColumnDefinition(GridLength.Star),
-            },
-        };
-        grid.Add(bar, 0, 0);
-        grid.Add(content, 1, 0);
-        return grid;
-    }
-
-    private Grid RenderList(ListNode list, BlockContext context)
-    {
-        // One grid per list keeps every item's content aligned after the widest marker.
-        var grid = new ChatGrid
-        {
-            ColumnSpacing = 8,
-            RowSpacing = 4,
-            ColumnDefinitions =
-            {
-                new ColumnDefinition(GridLength.Auto),
-                new ColumnDefinition(GridLength.Star),
-            },
-        };
-
-        var itemContext = context.Nested() with { ListDepth = context.ListDepth + 1 };
-        var number = list.Start ?? 1;
-        var row = 0;
-        foreach (var child in list.Children)
-        {
-            var item = child as ListItemNode;
-            var markerText = item?.Checked switch
-            {
-                true => CheckedBox,
-                false => UncheckedBox,
-                null when list.Ordered => number.ToString(CultureInfo.CurrentCulture) + ".",
-                _ => s_bullets[context.ListDepth % s_bullets.Length],
-            };
-
-            var marker = Styled(
-                new ChatLabel { Text = markerText, FontSize = FontSize, HorizontalTextAlignment = TextAlignment.End },
-                AIChatThemeKeys.MarkdownListMarkerStyle);
-
-            var content = (item is null ? RenderBlock(child, itemContext) : RenderContainer(item.Children, itemContext))
-                ?? CreateTextLabel(string.Empty, context.TextStyleKey);
-
-            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-            grid.Add(marker, 0, row);
-            grid.Add(content, 1, row);
-            row++;
-            number++;
-        }
-
-        return grid;
-    }
-
-    private ScrollView? RenderTable(TableNode table)
-    {
-        var rows = table.Children.OfType<TableRowNode>().ToList();
-        if (rows.Count == 0)
-            return null;
-
-        var columns = Math.Max(1, Math.Max(rows.Max(static row => row.Children.Count), table.Alignment.Count));
-
-        // Cells sit in even grid tracks; the odd tracks hold one-pixel lines, so cells stay
-        // transparent and the table blends with any bubble color.
-        var grid = new ChatGrid { RowSpacing = 0, ColumnSpacing = 0 };
-        for (var column = 0; column < columns; column++)
-        {
-            if (column > 0)
-                grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1)));
-            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
-        }
-
-        for (var row = 0; row < rows.Count; row++)
-        {
-            if (row > 0)
-                grid.RowDefinitions.Add(new RowDefinition(new GridLength(1)));
-            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-        }
-
-        for (var row = 1; row < rows.Count; row++)
-        {
-            var line = CreateTableLine(horizontal: true);
-            grid.Add(line, 0, (2 * row) - 1);
-            Grid.SetColumnSpan(line, (2 * columns) - 1);
-        }
-
-        for (var column = 1; column < columns; column++)
-        {
-            var line = CreateTableLine(horizontal: false);
-            grid.Add(line, (2 * column) - 1, 0);
-            Grid.SetRowSpan(line, (2 * rows.Count) - 1);
-        }
-
-        for (var row = 0; row < rows.Count; row++)
-        {
-            var cells = rows[row].Children;
-            var isHeader = row == 0;
-            for (var column = 0; column < columns; column++)
-            {
-                var label = CreateInlineLabel(
-                    column < cells.Count ? cells[column].Children : [],
-                    isHeader ? AIChatThemeKeys.MarkdownTableHeaderCellStyle : AIChatThemeKeys.MarkdownTableCellStyle,
-                    FontSize,
-                    isHeader ? FontAttributes.Bold : FontAttributes.None);
-                label.Padding = new Thickness(10, 6);
-                label.MaximumWidthRequest = FontSize * 20;
-                label.HorizontalTextAlignment = GetAlignment(table, column);
-                grid.Add(label, 2 * column, 2 * row);
+                rows++;
+                columns = Math.Max(columns, row.Children.Count);
             }
         }
 
-        var border = Styled(new ChatBorder { Content = grid, HorizontalOptions = LayoutOptions.Start }, AIChatThemeKeys.MarkdownTableBorderStyle);
-        return CreateSideScroller(border);
+        return columns > MaxTableColumns || (long)rows * columns > MaxTableCells;
+    }
+
+    // One row per line, cells separated by bars.
+    private static string GetTableText(TableNode table)
+    {
+        var builder = new StringBuilder();
+        var firstRow = true;
+        foreach (var row in table.Children.OfType<TableRowNode>())
+        {
+            if (!firstRow)
+                builder.Append('\n');
+            firstRow = false;
+            for (var column = 0; column < row.Children.Count; column++)
+            {
+                if (column > 0)
+                    builder.Append(" | ");
+                builder.Append(GetPlainText(row.Children[column]).ReplaceLineEndings(" "));
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static ScrollView CreateSideScroller(View content) => new ChatScrollView
@@ -436,34 +338,15 @@ internal sealed class MarkdownRenderer
     private static Label RenderLiteral(string text) =>
         Styled(new ChatLabel { Text = text }, AIChatThemeKeys.CodeTextStyle);
 
-    private Grid RenderFootnoteDefinition(FootnoteDefinitionNode footnote, BlockContext context)
+    private static bool HasImages(IReadOnlyList<RichTextNode> inlines)
     {
-        var marker = CreateTextLabel("[" + footnote.Label + "]", AIChatThemeKeys.MarkdownListMarkerStyle);
-        var content = RenderContainer(footnote.Children, context.Nested())
-            ?? CreateTextLabel(string.Empty, context.TextStyleKey);
-        var grid = new ChatGrid
+        foreach (var inline in inlines)
         {
-            ColumnSpacing = 6,
-            ColumnDefinitions =
-            {
-                new ColumnDefinition(GridLength.Auto),
-                new ColumnDefinition(GridLength.Star),
-            },
-        };
-        grid.Add(marker, 0, 0);
-        grid.Add(content, 1, 0);
-        return grid;
-    }
+            if (inline is ImageNode or ImageReferenceNode)
+                return true;
+        }
 
-    private static View? Stack(List<View> views, double spacing)
-    {
-        if (views.Count <= 1)
-            return views.Count == 0 ? null : views[0];
-
-        var stack = new ChatVerticalStackLayout { Spacing = spacing };
-        foreach (var view in views)
-            stack.Children.Add(view);
-        return stack;
+        return false;
     }
 
     // ── Inlines ─────────────────────────────────────────────────────────
@@ -484,7 +367,13 @@ internal sealed class MarkdownRenderer
         FontAttributes baseAttributes)
     {
         var label = Styled(new ChatLabel { FontSize = fontSize, LineBreakMode = LineBreakMode.WordWrap }, styleKey);
+        FillInlineLabel(label, nodes, fontSize, baseAttributes);
+        return label;
+    }
 
+    // Text and FormattedText replace each other, so a label can switch between plain and formatted in place.
+    private void FillInlineLabel(Label label, IReadOnlyList<RichTextNode> nodes, double fontSize, FontAttributes baseAttributes)
+    {
         if (nodes.Count == 0)
         {
             label.Text = string.Empty;
@@ -501,8 +390,6 @@ internal sealed class MarkdownRenderer
                 AppendInline(formatted, node, state, depth: 0);
             label.FormattedText = formatted;
         }
-
-        return label;
     }
 
     private void AppendInline(FormattedString formatted, RichTextNode node, InlineState state, int depth)

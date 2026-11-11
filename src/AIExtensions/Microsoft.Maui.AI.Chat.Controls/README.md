@@ -238,8 +238,11 @@ standard controls instead.
 ### Markdown
 
 Assistant text, and rich text from a provider (`RichContentBlock`), render as Markdown parsed with
-[Markdig](https://github.com/xoofx/markdig). While an answer streams, only the block that is still growing is
-rebuilt, so the text above it does not flicker. Raw HTML shows as text and is never rendered.
+[Markdig](https://github.com/xoofx/markdig). While an answer streams, the views of what changed update in place (the
+growing paragraph, list item, table row, or code block), so the text above it does not flicker or jump. Raw HTML
+shows as text and is never rendered. Input far beyond any real answer is shown more simply, so it cannot stall the
+chat: a paragraph or heading with more than 1,000 emphasis or link markers shows its text unformatted, and a table
+with more than 64 columns or 2,000 cells shows as text, one row per line.
 
 Markdown uses the chat's keys: `AIChat.Style.AssistantText` for paragraphs and list items,
 `AIChat.Style.LinkSpan` for links, `AIChat.Style.CodeBlock` and `AIChat.Style.CodeText` for code blocks (the same

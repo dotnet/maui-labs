@@ -76,7 +76,7 @@ public class MarkdownViewTests
     }
 
     [Fact]
-    public void IncrementalUpdate_KeepsUnchangedLeadingBlocksAndReplacesChangedOnes()
+    public void IncrementalUpdate_KeepsUnchangedBlocksAndUpdatesChangedOnesInPlace()
     {
         var view = new MarkdownView();
         view.SetMarkdown("# Title\n\nFirst paragraph.\n\nSecond");
@@ -84,25 +84,26 @@ public class MarkdownViewTests
 
         view.SetMarkdown("# Title\n\nFirst paragraph.\n\nSecond paragraph grows");
 
-        Assert.Same(first[0], view.BlockViews[0]);
-        Assert.Same(first[1], view.BlockViews[1]);
-        Assert.NotSame(first[2], view.BlockViews[2]);
+        Assert.Equal(first, view.BlockViews);
         Assert.Equal("Second paragraph grows", ((Label)view.BlockViews[2]!).Text);
         AssertLayoutMatchesBlocks(view);
 
-        var second = view.BlockViews.ToArray();
         view.SetMarkdown("# Title\n\nFirst paragraph.\n\nSecond paragraph grows\n\n- new block");
 
         Assert.Equal(4, view.BlockViews.Count);
-        Assert.Equal(second, view.BlockViews.Take(3));
+        Assert.Equal(first, view.BlockViews.Take(3));
         Assert.IsAssignableFrom<Grid>(view.BlockViews[3]);
         AssertLayoutMatchesBlocks(view);
 
+        // A paragraph changed anywhere keeps its label; a block that becomes another kind of block gets new views.
         var third = view.BlockViews.ToArray();
-        view.SetMarkdown("# Title\n\nChanged paragraph.\n\nSecond paragraph grows\n\n- new block");
+        view.SetMarkdown("# Title\n\nChanged paragraph.\n\n## Second paragraph grows\n\n- new block");
 
         Assert.Same(third[0], view.BlockViews[0]);
-        Assert.All(Enumerable.Range(1, 3), i => Assert.NotSame(third[i], view.BlockViews[i]));
+        Assert.Same(third[1], view.BlockViews[1]);
+        Assert.Equal("Changed paragraph.", ((Label)view.BlockViews[1]!).Text);
+        Assert.NotSame(third[2], view.BlockViews[2]);
+        Assert.Same(third[3], view.BlockViews[3]);
         AssertLayoutMatchesBlocks(view);
 
         var fourth = view.BlockViews.ToArray();
@@ -139,7 +140,7 @@ public class MarkdownViewTests
     }
 
     [Fact]
-    public void SetDocument_StructurallyEqualNodes_KeepTheirViews()
+    public void SetDocument_EqualNodesKeepTheirViews_AndChangedOnesUpdateInPlace()
     {
         var view = new MarkdownView();
         view.SetDocument([Paragraph("one"), new CodeBlockNode("x", "cs"), Paragraph("three")]);
@@ -147,15 +148,23 @@ public class MarkdownViewTests
 
         view.SetDocument([Paragraph("one"), new CodeBlockNode("x", "cs"), Paragraph("three!")]);
 
-        Assert.Same(first[0], view.BlockViews[0]);
-        Assert.Same(first[1], view.BlockViews[1]);
-        Assert.NotSame(first[2], view.BlockViews[2]);
+        Assert.Equal(first, view.BlockViews);
+        Assert.Equal("three!", ((Label)view.BlockViews[2]!).Text);
         Assert.Null(view.Markdown);
 
-        view.SetDocument([Paragraph("one"), new CodeBlockNode("x", "js"), Paragraph("three!")]);
+        // The language caption follows the info string as it streams in.
+        view.SetDocument([Paragraph("one"), new CodeBlockNode("x", "csharp"), Paragraph("three!")]);
+
+        Assert.Equal(first, view.BlockViews);
+        Assert.Equal(["csharp", "x"], Descendants(view.BlockViews[1]!).OfType<Label>().Select(label => label.Text));
+
+        // A code block that gains or loses its caption, or a node of another kind, gets new views.
+        view.SetDocument([Paragraph("one"), new CodeBlockNode("x"), new CodeBlockNode("three!")]);
 
         Assert.Same(first[0], view.BlockViews[0]);
         Assert.NotSame(first[1], view.BlockViews[1]);
+        Assert.NotSame(first[2], view.BlockViews[2]);
+        AssertLayoutMatchesBlocks(view);
     }
 
     [Fact]
@@ -405,10 +414,10 @@ public class MarkdownViewTests
 
         // Grid lines fill their track across and do not widen the auto rows and columns they cross.
         var table = Assert.IsAssignableFrom<Border>(Assert.IsAssignableFrom<ScrollView>(view.BlockViews[2]).Content);
-        Assert.Collection(
-            Assert.IsAssignableFrom<Grid>(table.Content).Children.OfType<BoxView>(),
-            row => Assert.Equal(new Size(0, 1), ((IView)row).Measure(500, 500)),
-            column => Assert.Equal(new Size(1, 0), ((IView)column).Measure(500, 500)));
+        var lines = Assert.IsAssignableFrom<Grid>(table.Content).Children.OfType<BoxView>().ToArray();
+        Assert.Equal(2, lines.Length);
+        Assert.Equal(new Size(0, 1), ((IView)lines.Single(line => Grid.GetColumnSpan(line) > 1)).Measure(500, 500));
+        Assert.Equal(new Size(1, 0), ((IView)lines.Single(line => Grid.GetRowSpan(line) > 1)).Measure(500, 500));
     }
 
     [Fact]
