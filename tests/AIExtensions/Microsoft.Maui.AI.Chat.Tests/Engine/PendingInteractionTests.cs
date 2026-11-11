@@ -27,6 +27,8 @@ public class PendingInteractionTests
         var blocks = Assert.Single(context.Turns).ResponseBlocks;
         var approval = Assert.Single(blocks.OfType<ToolApprovalBlock>());
         var action = Assert.Single(blocks.OfType<UIActionBlock>());
+        Assert.False(approval.IsAwaitingInput);
+        Assert.False(action.IsAwaitingInput);
 
         approval.Approve();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => action.InvokeAsync());
@@ -52,6 +54,8 @@ public class PendingInteractionTests
         var blocks = Assert.Single(context.Turns).ResponseBlocks;
         var approval = Assert.Single(blocks.OfType<ToolApprovalBlock>());
         var action = Assert.Single(blocks.OfType<UIActionBlock>());
+        Assert.False(approval.IsAwaitingInput);
+        Assert.False(action.IsAwaitingInput);
 
         approval.Approve();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => action.InvokeAsync());
@@ -79,6 +83,135 @@ public class PendingInteractionTests
         var approval = Assert.Single(Assert.Single(context.Turns).ResponseBlocks.OfType<ToolApprovalBlock>());
         Assert.Equal(ApprovalStatus.Approved, approval.Status);
         Assert.IsType<ToolApprovalResponseContent>(await approval.GetResultAsync());
+    }
+
+    [Fact]
+    public async Task StoppingTheTurn_EndsTheWaitForInputAndReportsIt()
+    {
+        var model = new ScriptedChatClient();
+        model.Enqueue(ApprovalAndActionAsync);
+        using var context = new AgentContext(new UIAgent(model, options =>
+            options.RegisterUIAction(CreateShowMap([]), UIActionInvocationMode.Manual)));
+        var awaitingInput = WhenAwaitingInput(context);
+
+        var send = context.SendMessageAsync("Delete the file and show Paris");
+        await awaitingInput.WaitAsync(TimeSpan.FromSeconds(10));
+        var blocks = context.Turns[^1].ResponseBlocks;
+        var approval = Assert.Single(blocks.OfType<ToolApprovalBlock>());
+        var action = Assert.Single(blocks.OfType<UIActionBlock>());
+        Assert.True(approval.IsAwaitingInput);
+        Assert.True(action.IsAwaitingInput);
+        var approvalChanges = new List<bool>();
+        var actionChanges = new List<bool>();
+        using var approvalChanged = approval.OnChanged(() => approvalChanges.Add(approval.IsAwaitingInput));
+        using var actionChanged = action.OnChanged(() => actionChanges.Add(action.IsAwaitingInput));
+
+        await context.CancelAsync();
+        await send.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.False(approval.IsAwaitingInput);
+        Assert.False(action.IsAwaitingInput);
+        Assert.Equal([false], approvalChanges);
+        Assert.Equal([false], actionChanges);
+    }
+
+    [Fact]
+    public void DecidedApproval_NoLongerAwaitsInput()
+    {
+        var approved = CreateApproval();
+        Assert.True(approved.IsAwaitingInput);
+        approved.Approve();
+        Assert.False(approved.IsAwaitingInput);
+
+        var rejected = CreateApproval();
+        rejected.Reject();
+        Assert.False(rejected.IsAwaitingInput);
+
+        // A decision that can no longer be sent leaves nothing to answer either.
+        var abandoned = CreateApproval();
+        Assert.True(abandoned.Abandon());
+        Assert.False(abandoned.IsAwaitingInput);
+        Assert.False(abandoned.Abandon());
+        abandoned.Approve();
+        Assert.Equal(ApprovalStatus.Pending, abandoned.Status);
+        Assert.False(approved.Abandon());
+    }
+
+    [Fact]
+    public async Task ManualAction_AwaitsInputUntilItRuns()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocations = 0;
+        var showMap = AIFunctionFactory.Create(
+            async (string city, CancellationToken cancellationToken) =>
+            {
+                if (++invocations == 1)
+                    await Task.Delay(Timeout.Infinite, cancellationToken);
+                else
+                    await release.Task;
+                return $"Map of {city}";
+            },
+            "ShowMap",
+            "Shows a map.");
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ResponseEmitters.EmitMultipleToolCallResponse(ct, ShowMapCall()));
+        model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Done.", ct));
+        using var context = new AgentContext(new UIAgent(model, options =>
+            options.RegisterUIAction(showMap, UIActionInvocationMode.Manual)));
+        var awaitingInput = WhenAwaitingInput(context);
+
+        var send = context.SendMessageAsync("Show Paris");
+        await awaitingInput.WaitAsync(TimeSpan.FromSeconds(10));
+        var action = Assert.Single(context.Turns[^1].ResponseBlocks.OfType<UIActionBlock>());
+        var changes = new List<bool>();
+        using var changed = action.OnChanged(() => changes.Add(action.IsAwaitingInput));
+        Assert.True(action.IsAwaitingInput);
+
+        // Running, then canceled by the app: it waits for input again.
+        using var cancellation = new CancellationTokenSource();
+        var canceled = action.InvokeAsync(cancellation.Token);
+        Assert.False(action.IsAwaitingInput);
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => canceled);
+        Assert.True(action.IsAwaitingInput);
+
+        // Running, then complete.
+        var invocation = action.InvokeAsync();
+        Assert.False(action.IsAwaitingInput);
+        release.SetResult();
+        await invocation.WaitAsync(TimeSpan.FromSeconds(10));
+        await send.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.False(action.IsAwaitingInput);
+        Assert.True(action.IsComplete);
+        Assert.Equal([false, true, false], Collapse(changes));
+    }
+
+    [Fact]
+    public async Task AutomaticAction_NeverAwaitsInput()
+    {
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ResponseEmitters.EmitMultipleToolCallResponse(ct, ShowMapCall()));
+        model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Done.", ct));
+        using var context = new AgentContext(new UIAgent(model, options =>
+            options.RegisterUIAction(CreateShowMap([]), UIActionInvocationMode.Automatic)));
+        var awaitingInput = new List<bool>();
+        context.RegisterOnBlockAdded((_, block) =>
+        {
+            if (block is UIActionBlock action)
+                awaitingInput.Add(action.IsAwaitingInput);
+        });
+
+        await context.SendMessageAsync("Show Paris");
+
+        Assert.Equal([false], awaitingInput);
+        Assert.False(Assert.Single(context.Turns[0].ResponseBlocks.OfType<UIActionBlock>()).IsAwaitingInput);
+    }
+
+    [Fact]
+    public void AppInteractiveBlock_DoesNotAwaitInputUnlessItSaysSo()
+    {
+        Assert.False(new AppInteractiveBlock(new FunctionInvocationContentBlock()).IsAwaitingInput);
     }
 
     [Fact]
@@ -126,6 +259,50 @@ public class PendingInteractionTests
         Assert.Equal(ConversationStatus.Idle, context.Status);
         Assert.Equal("Map of Paris", ToolHistory.FindResult(model.Requests[1], "map-1"));
     }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> ApprovalAndActionAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "response-1",
+            Contents = [DeleteFileApproval(), ShowMapCall()],
+        };
+    }
+
+    private static Task WhenAwaitingInput(AgentContext context)
+    {
+        var awaitingInput = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        context.RegisterOnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.AwaitingInput)
+                awaitingInput.TrySetResult();
+        });
+        return awaitingInput.Task;
+    }
+
+    private static ToolApprovalBlock CreateApproval()
+    {
+        var call = new FunctionCallContent("delete-1", "DeleteFile");
+        return new ToolApprovalBlock(new FunctionInvocationContentBlock { Call = call }, new ToolApprovalRequestContent("approval-1", call));
+    }
+
+    /// <summary>Removes consecutive repeats, so a state reported twice in a row counts once.</summary>
+    private static List<bool> Collapse(List<bool> values)
+    {
+        var collapsed = new List<bool>();
+        foreach (var value in values)
+        {
+            if (collapsed.Count == 0 || collapsed[^1] != value)
+                collapsed.Add(value);
+        }
+
+        return collapsed;
+    }
+
+    private sealed class AppInteractiveBlock(FunctionInvocationContentBlock innerBlock) : InteractiveFunctionBlock(innerBlock);
 
     private static async IAsyncEnumerable<ChatResponseUpdate> ApprovalAndActionThenErrorAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)

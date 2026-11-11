@@ -135,6 +135,83 @@ public class AgentContextCallbackFailureTests
         Assert.Equal("Original", agent.State.Value.Document);
     }
 
+    [Fact]
+    public async Task ChangeCallbackThrowsWhenAStopEndsAPendingApproval_TurnStillStops()
+    {
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ResponseEmitters.EmitApprovalRequest("delete-1", "DeleteFile", ct: ct));
+        model.Enqueue(ct => ResponseEmitters.EmitTextResponse("reply 2", ct));
+        using var context = new AgentContext(new UIAgent(model));
+        var awaitingInput = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        context.RegisterOnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.AwaitingInput)
+                awaitingInput.TrySetResult();
+        });
+
+        var send = context.SendMessageAsync("first");
+        await awaitingInput.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var approval = Assert.Single(context.Turns[0].ResponseBlocks.OfType<ToolApprovalBlock>());
+        approval.OnChanged(() => throw new InvalidOperationException("change callback failed"));
+        await context.CancelAsync();
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => send);
+        Assert.Equal("change callback failed", error.Message);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.True(Assert.Single(context.Turns).IsStopped);
+        Assert.False(approval.IsAwaitingInput);
+
+        await context.SendMessageAsync("second");
+
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Equal(2, context.Turns.Count);
+    }
+
+    [Fact]
+    public async Task ChangeCallbackThrowsWhenAFailureEndsAPendingApproval_TurnFailsAndCanBeRetried()
+    {
+        var model = new ScriptedChatClient();
+        model.Enqueue(ApprovalThenError);
+        model.Enqueue(ct => ResponseEmitters.EmitTextResponse("reply 1", ct));
+        using var context = new AgentContext(new UIAgent(model));
+        context.RegisterOnBlockAdded((_, block) =>
+        {
+            if (block is ToolApprovalBlock approval)
+            {
+                approval.OnChanged(() =>
+                {
+                    if (!approval.IsAwaitingInput)
+                        throw new InvalidOperationException("change callback failed");
+                });
+            }
+        });
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SendMessageAsync("first"));
+
+        Assert.Equal("change callback failed", error.Message);
+        Assert.Equal(ConversationStatus.Error, context.Status);
+        Assert.Equal("The connection was lost.", context.Error?.Message);
+        Assert.False(Assert.Single(context.Turns[0].ResponseBlocks.OfType<ToolApprovalBlock>()).IsAwaitingInput);
+
+        await context.RetryAsync();
+
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Equal("reply 1", Assert.Single(Assert.Single(context.Turns).ResponseBlocks.OfType<TextContentBlock>()).RawText);
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> ApprovalThenError(
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "response-1",
+            Contents = [new ToolApprovalRequestContent("approval-1", new FunctionCallContent("delete-1", "DeleteFile"))],
+        };
+        await Task.Yield();
+        throw new InvalidOperationException("The connection was lost.");
+    }
+
     private static AgentContext CreateContext(List<IReadOnlyList<ChatMessage>> requests)
         => new(new UIAgent(CreateClient(requests, predict: false)));
 

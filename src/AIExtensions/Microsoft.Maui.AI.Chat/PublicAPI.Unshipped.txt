@@ -323,6 +323,9 @@ abstract Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.TryCreateBlock(Microsoft
 abstract Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.TryUpdateBlock(Microsoft.Maui.AI.Chat.BlockMappingContext! context, TBlock! state, out bool isCompleted) -> bool
 override sealed Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.Handle(Microsoft.Maui.AI.Chat.BlockMappingContext! context, TBlock! state) -> Microsoft.Maui.AI.Chat.BlockMappingResult<TBlock!>
 virtual Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.OnContentUpdated(TBlock! block) -> void
+override Microsoft.Maui.AI.Chat.ToolApprovalBlock.IsAwaitingInput.get -> bool
+override Microsoft.Maui.AI.Chat.UIActionBlock.IsAwaitingInput.get -> bool
+virtual Microsoft.Maui.AI.Chat.InteractiveFunctionBlock.IsAwaitingInput.get -> bool
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Complete() -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Emit(Microsoft.Maui.AI.Chat.ContentBlock! block, TState state) -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Pass() -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>

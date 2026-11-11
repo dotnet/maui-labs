@@ -34,6 +34,12 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
     public ToolApprovalRequestContent ApprovalRequest { get; }
 
     /// <summary>
+    /// Gets whether the approval is <see cref="ApprovalStatus.Pending"/> and its turn can still send a
+    /// decision.
+    /// </summary>
+    public override bool IsAwaitingInput => Status == ApprovalStatus.Pending && !_tcs.Task.IsCompleted;
+
+    /// <summary>
     /// Gets the registered UI action the approval is for, which the client runs once the call is approved.
     /// </summary>
     internal UIActionBlock? UIAction { get; init; }
@@ -63,10 +69,12 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
     }
 
     /// <summary>Stops waiting for a decision because the turn ended; later decisions are ignored.</summary>
-    internal override void Abandon()
+    internal override bool Abandon()
     {
+        var wasAwaitingInput = IsAwaitingInput;
         _tcs.TrySetCanceled();
         UIAction?.Abandon();
+        return wasAwaitingInput;
     }
 
     private void Resolve(ApprovalStatus status, bool approved, string? reason)

@@ -55,6 +55,16 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
     public UIActionInvocationMode Mode { get; }
 
     /// <summary>
+    /// Gets whether the action is <see cref="UIActionInvocationMode.Manual"/>, has not run, is not running,
+    /// and its turn can still send its result. An invocation canceled through its token makes it true again.
+    /// </summary>
+    public override bool IsAwaitingInput =>
+        Mode == UIActionInvocationMode.Manual
+        && !IsComplete
+        && !_invocationStarted
+        && !_resultSource.Task.IsCompleted;
+
+    /// <summary>
     /// Executes the registered action once and returns its function result. Calls made while it runs, or
     /// after it finished, return the same result.
     /// </summary>
@@ -71,8 +81,15 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
     {
         if (!_invocationStarted && !IsComplete && !_resultSource.Task.IsCompleted)
         {
+            var wasAwaitingInput = IsAwaitingInput;
             _invocationStarted = true;
-            return InvokeCoreAsync(cancellationToken);
+            var invocation = InvokeCoreAsync(cancellationToken);
+
+            // Reported once the invocation started, so a change callback that throws cannot block it.
+            if (wasAwaitingInput && !invocation.IsCompleted)
+                NotifyChanged();
+
+            return invocation;
         }
 
         return _resultSource.Task;
@@ -82,7 +99,12 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
         => _resultSource.Task.WaitAsync(cancellationToken);
 
     /// <summary>Stops waiting for a result because the turn ended; a later invocation does nothing.</summary>
-    internal override void Abandon() => _resultSource.TrySetCanceled();
+    internal override bool Abandon()
+    {
+        var wasAwaitingInput = IsAwaitingInput;
+        _resultSource.TrySetCanceled();
+        return wasAwaitingInput;
+    }
 
     internal void SetResult(FunctionResultContent result)
     {
@@ -123,6 +145,9 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
             // Only this invocation was canceled. The turn still waits for a result, so allow another one;
             // a turn that ended has abandoned the block, which stops a later invocation.
             _invocationStarted = false;
+            if (IsAwaitingInput)
+                NotifyChanged();
+
             throw;
         }
         catch (Exception exception)
