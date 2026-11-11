@@ -40,8 +40,34 @@ public class MediaContentHandlerTests
 
         Assert.Single(blocks);
         var block = Assert.IsType<MediaContentBlock>(blocks[0]);
-        Assert.Single(block.Items);
-        Assert.Equal("image/png", block.Items[0].MediaType);
+        Assert.Same(update.Contents[0], block.Content);
+        Assert.Equal(ChatRole.User, block.Role);
+        Assert.Equal(BlockLifecycleState.Active, block.LifecycleState);
+    }
+
+    [Fact]
+    public async Task UriContent_EmitsMediaContentBlock()
+    {
+        var pipeline = CreatePipeline();
+        var image = new UriContent(new Uri("https://example.com/cat.png"), "image/png");
+
+        var block = Assert.IsType<MediaContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                MessageId = "msg-1",
+                Contents = [image],
+            })));
+
+        Assert.Same(image, block.Content);
+    }
+
+    [Fact]
+    public void MediaContentBlock_RequiresDataOrUriContent()
+    {
+        Assert.Throws<ArgumentNullException>(() => new MediaContentBlock(null!));
+        Assert.Throws<ArgumentException>(() => new MediaContentBlock(new TextContent("not media")));
     }
 
     [Fact]
@@ -63,12 +89,118 @@ public class MediaContentHandlerTests
         var blocks = await ProcessAsync(pipeline, update);
 
         var block = Assert.IsType<MediaContentBlock>(Assert.Single(blocks));
-        Assert.Single(block.Items);
-        Assert.Equal("image/png", block.Items[0].MediaType);
+        Assert.Same(result.Outputs[0], block.Content);
     }
 
     [Fact]
-    public async Task MultipleDataContents_SingleBlockAccumulates()
+    public async Task ImageGenerationToolResult_WithSeveralOutputs_EmitsOneBlockPerOutput()
+    {
+        var pipeline = CreatePipeline();
+        var result = new ImageGenerationToolResultContent("call-1")
+        {
+            Outputs =
+            [
+                new DataContent(new byte[] { 1 }, "image/png"),
+                new TextContent("caption"),
+                new UriContent(new Uri("https://example.com/2.png"), "image/png"),
+            ],
+        };
+
+        var blocks = await ProcessAsync(pipeline, new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [result],
+        });
+
+        Assert.Collection(
+            blocks,
+            block => Assert.Same(result.Outputs[0], Assert.IsType<MediaContentBlock>(block).Content),
+            block => Assert.Same(result.Outputs[2], Assert.IsType<MediaContentBlock>(block).Content));
+        Assert.NotEqual(blocks[0].Id, blocks[1].Id);
+    }
+
+    [Fact]
+    public async Task ImageGenerationToolResult_PartialImages_ReplaceTheCallsBlock()
+    {
+        var pipeline = CreatePipeline();
+        var block = Assert.IsType<MediaContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            CreateImageResultUpdate("call-1", 1))));
+        var changes = 0;
+        using var subscription = block.OnChanged(() => changes++);
+
+        var partial = await ProcessAsync(pipeline, CreateImageResultUpdate("call-1", 2));
+        var final = CreateImageResultUpdate("call-1", 3);
+        var completed = await ProcessAsync(pipeline, final);
+
+        Assert.Empty(partial);
+        Assert.Empty(completed);
+        Assert.Same(
+            ((ImageGenerationToolResultContent)final.Contents[0]).Outputs![0],
+            block.Content);
+        Assert.Equal(2, changes);
+        Assert.Equal(BlockLifecycleState.Active, block.LifecycleState);
+
+        pipeline.Finalize();
+        Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState);
+    }
+
+    [Fact]
+    public async Task ImageGenerationToolResult_AfterOtherContent_StillReplacesTheCallsBlock()
+    {
+        var pipeline = CreatePipeline();
+        var block = Assert.IsType<MediaContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            CreateImageResultUpdate("call-1", 1))));
+        await ProcessAsync(pipeline, new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new TextContent("Drawing...")],
+        });
+        var final = CreateImageResultUpdate("call-1", 2);
+
+        var blocks = await ProcessAsync(pipeline, final);
+
+        Assert.DoesNotContain(blocks, emitted => emitted is MediaContentBlock);
+        Assert.Same(((ImageGenerationToolResultContent)final.Contents[0]).Outputs![0], block.Content);
+    }
+
+    [Fact]
+    public async Task ImageGenerationToolResults_ForDifferentCalls_EmitSeparateBlocks()
+    {
+        var pipeline = CreatePipeline();
+
+        var first = Assert.Single(await ProcessAsync(pipeline, CreateImageResultUpdate("call-1", 1)));
+        var second = Assert.Single(await ProcessAsync(pipeline, CreateImageResultUpdate("call-2", 2)));
+
+        Assert.NotSame(first, second);
+        Assert.Equal(BlockLifecycleState.Inactive, first.LifecycleState);
+    }
+
+    [Fact]
+    public async Task MultipleDataContents_EmitBlocksWithUniqueIds()
+    {
+        var pipeline = CreatePipeline();
+        var update = new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "msg-1",
+            Contents =
+            [
+                new DataContent(new byte[] { 1 }, "image/png"),
+                new DataContent(new byte[] { 2 }, "image/png"),
+            ],
+        };
+
+        var blocks = await ProcessAsync(pipeline, update);
+
+        Assert.Equal(2, blocks.Count);
+        Assert.All(blocks, block => Assert.IsType<MediaContentBlock>(block));
+        Assert.NotEqual(blocks[0].Id, blocks[1].Id);
+    }
+
+    [Fact]
+    public async Task DataContentsInSeparateUpdates_EmitSeparateBlocks()
     {
         var pipeline = CreatePipeline();
         var update1 = new ChatResponseUpdate
@@ -84,12 +216,13 @@ public class MediaContentHandlerTests
             Contents = [new DataContent(new byte[] { 4, 5, 6 }, "image/jpeg")]
         };
 
-        var blocks1 = await ProcessAsync(pipeline, update1);
-        Assert.Single(blocks1);
-        await ProcessAsync(pipeline, update2);
+        var first = Assert.Single(await ProcessAsync(pipeline, update1));
+        var second = Assert.Single(await ProcessAsync(pipeline, update2));
 
-        var block = Assert.IsType<MediaContentBlock>(blocks1[0]);
-        Assert.Equal(2, block.Items.Count);
+        Assert.Same(update1.Contents[0], Assert.IsType<MediaContentBlock>(first).Content);
+        Assert.Same(update2.Contents[0], Assert.IsType<MediaContentBlock>(second).Content);
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(BlockLifecycleState.Inactive, first.LifecycleState);
     }
 
     [Fact]
@@ -157,11 +290,11 @@ public class MediaContentHandlerTests
 
         Assert.Single(blocks);
         var block = Assert.IsType<MediaContentBlock>(blocks[0]);
-        Assert.Equal("audio/mpeg", block.Items[0].MediaType);
+        Assert.Equal("audio/mpeg", Assert.IsType<DataContent>(block.Content).MediaType);
     }
 
     [Fact]
-    public async Task MediaBlock_SetsId_FromMessageId()
+    public async Task MediaBlock_HasAUniqueId_NotTheMessageId()
     {
         var pipeline = CreatePipeline();
         var update = new ChatResponseUpdate
@@ -174,6 +307,20 @@ public class MediaContentHandlerTests
         var blocks = await ProcessAsync(pipeline, update);
 
         var block = Assert.IsType<MediaContentBlock>(blocks[0]);
-        Assert.Equal("test-msg-id", block.Id);
+        Assert.False(string.IsNullOrEmpty(block.Id));
+        Assert.NotEqual("test-msg-id", block.Id);
     }
+
+    private static ChatResponseUpdate CreateImageResultUpdate(string callId, byte image) => new()
+    {
+        Role = ChatRole.Assistant,
+        MessageId = "msg-img",
+        Contents =
+        [
+            new ImageGenerationToolResultContent(callId)
+            {
+                Outputs = [new DataContent(new byte[] { image }, "image/png")],
+            },
+        ],
+    };
 }

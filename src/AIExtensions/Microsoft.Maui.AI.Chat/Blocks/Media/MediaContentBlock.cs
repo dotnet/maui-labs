@@ -5,20 +5,46 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat;
 
-/// <summary>One or more media items (typically images).</summary>
+/// <summary>One media item, such as an image, audio clip or file.</summary>
 /// <remarks>
-/// Emitted by <see cref="MediaContentHandler"/> from M.E.AI <see cref="DataContent"/>, including images
-/// produced by an image-generation tool (extracted from <see cref="ImageGenerationToolResultContent"/>).
-/// Items are append-only, and a published <see cref="DataContent"/> must not be mutated after it is added.
+/// Emitted by <see cref="MediaContentHandler"/>, one block per item, for M.E.AI <see cref="DataContent"/>
+/// and <see cref="UriContent"/>, including the outputs of a hosted image generation tool
+/// (<see cref="ImageGenerationToolResultContent"/>). While an image generation call streams partial
+/// images, its block's <see cref="Content"/> is replaced by each newer image and the block notifies
+/// its change.
 /// </remarks>
 public class MediaContentBlock : ContentBlock
 {
-    private readonly List<DataContent> _items = new();
+    private AIContent _content;
 
-    public IReadOnlyList<DataContent> Items => _items;
-
-    public void AddContent(DataContent content)
+    /// <summary>Initializes a new instance of the <see cref="MediaContentBlock"/> class.</summary>
+    /// <param name="content">The media item: a <see cref="DataContent"/> or a <see cref="UriContent"/>.</param>
+    /// <exception cref="ArgumentException"><paramref name="content"/> is neither kind of media content.</exception>
+    public MediaContentBlock(AIContent content)
     {
-        _items.Add(content);
+        _content = ValidateContent(content);
+    }
+
+    /// <summary>
+    /// Gets the media item: a <see cref="DataContent"/> with inline data, or a <see cref="UriContent"/>
+    /// that links to it. Use their <c>MediaType</c> to choose how to show it.
+    /// </summary>
+    public AIContent Content
+    {
+        get => _content;
+        internal set => _content = ValidateContent(value);
+    }
+
+    private static AIContent ValidateContent(AIContent content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        if (content is not (DataContent or UriContent))
+        {
+            throw new ArgumentException(
+                $"Media content must be a {nameof(DataContent)} or a {nameof(UriContent)}.",
+                nameof(content));
+        }
+
+        return content;
     }
 }

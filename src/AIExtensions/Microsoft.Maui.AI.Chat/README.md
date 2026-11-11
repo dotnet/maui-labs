@@ -48,7 +48,8 @@ foreach (var block in turn.ResponseBlocks)
 - Extensible `ActivityContentBlock`/`ActivityHandler<TBlock>` support for provider activity
   snapshots and deltas (handlers are opt-in).
 - Reasoning and protected-reasoning blocks.
-- Direct media plus hosted image-generation result extraction.
+- One `MediaContentBlock` per media item (`DataContent` or `UriContent`), including hosted
+  image-generation outputs; streamed partial images update their block in place.
 - Custom streaming handlers and many-to-one aggregate blocks.
 - `[ToolBlock]`, `[ToolParameter]`, and `[ToolResult]` source generation for simple 1:1 tool blocks.
 - `UIAgent<TState>` and `StateMapperContext` for typed inbound state.
