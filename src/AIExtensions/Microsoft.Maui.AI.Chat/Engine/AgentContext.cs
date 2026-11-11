@@ -130,7 +130,9 @@ public sealed class AgentContext : IDisposable
     /// <remarks>
     /// Restore requires an idle, empty context and may be called only once before
     /// <see cref="ClearAsync"/>. It reconstructs display/history blocks only: restored approvals,
-    /// tools, and other interactive blocks are not resumed or invoked.
+    /// tools, and other interactive blocks are not resumed or invoked. Once all turns are loaded, each
+    /// is announced through <see cref="RegisterOnTurnAdded"/> with its blocks already in place; no
+    /// block-added or status-changed notifications are raised.
     /// </remarks>
     public async Task RestoreAsync(CancellationToken cancellationToken = default)
     {
@@ -160,6 +162,11 @@ public sealed class AgentContext : IDisposable
     /// <see cref="ClearAsync"/>. It cannot be used with a configured <see cref="IConversationThread"/>,
     /// which is the source of truth for its conversation; restore from the thread instead.
     /// </para>
+    /// <para>
+    /// Once all turns are loaded, each is announced through <see cref="RegisterOnTurnAdded"/> with its
+    /// blocks already in place, so a view that already shows this context renders them. No block-added or
+    /// status-changed notifications are raised.
+    /// </para>
     /// </remarks>
     public async Task RestoreAsync(
         IEnumerable<ChatMessage> messages,
@@ -187,6 +194,7 @@ public sealed class AgentContext : IDisposable
 
     private void AddRestoredTurns(IReadOnlyList<RestoredTurn> restoredTurns)
     {
+        var firstRestored = _turns.Count;
         foreach (var restoredTurn in restoredTurns)
         {
             var turn = new ConversationTurn
@@ -204,6 +212,11 @@ public sealed class AgentContext : IDisposable
         }
 
         _restoreCompleted = true;
+
+        // Announce turns only once all of them are loaded, so a view that rebuilds from Turns on the first
+        // notification shows the whole conversation. Restored blocks are not announced individually.
+        for (var i = firstRestored; i < _turns.Count; i++)
+            NotifyTurnAdded(_turns[i]);
     }
 
     /// <summary>
@@ -533,6 +546,13 @@ public sealed class AgentContext : IDisposable
         return clone;
     }
 
+    /// <summary>
+    /// Registers a callback invoked when a turn is added to <see cref="Turns"/>: when a message is sent,
+    /// before its response streams, and for each turn loaded by <c>RestoreAsync</c>, with its blocks
+    /// already in place.
+    /// </summary>
+    /// <param name="callback">The callback, which receives the added turn.</param>
+    /// <returns>A registration that removes the callback when disposed.</returns>
     public IDisposable RegisterOnTurnAdded(Action<ConversationTurn> callback)
     {
         ArgumentNullException.ThrowIfNull(callback);

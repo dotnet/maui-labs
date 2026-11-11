@@ -338,11 +338,10 @@ public partial class AIChatView : TemplatedView
     /// The view never disposes a session it did not create.
     /// </summary>
     /// <remarks>
-    /// Restore saved history before assigning the session — from its thread with
+    /// To show saved history, restore it into the session from its thread with
     /// <see cref="AgentContext.RestoreAsync(CancellationToken)"/>, or from recorded messages with
-    /// <see cref="AgentContext.RestoreAsync(IEnumerable{ChatMessage}, CancellationToken)"/>. The engine does not
-    /// announce restored turns, so turns restored into a session that is already shown appear only with its next
-    /// change.
+    /// <see cref="AgentContext.RestoreAsync(IEnumerable{ChatMessage}, CancellationToken)"/>, before or after
+    /// assigning it. Restored turns render as soon as they are loaded.
     /// </remarks>
     public AgentContext? Session
     {

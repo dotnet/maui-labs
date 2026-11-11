@@ -515,8 +515,11 @@ public class AgentContextThreadTests
     }
 
     [Fact]
-    public async Task RestoreAsync_RecreatesTurnsWithoutFiringCallbacks()
+    public async Task RestoreAsync_RecreatesTurnsAndAnnouncesOnlyTheTurnsOnceAllAreLoaded()
     {
+        // Ported from upstream's RestoreAsync_RecreatesTurnsWithoutFiringCallbacks. Upstream restores silently;
+        // here each restored turn is announced so a view already showing the context renders it (see
+        // UPSTREAM-CHANGES.md). Blocks and status are still not announced.
         var thread = new InMemoryConversationThread("thread-1");
         var callCount = 0;
         var firstContext = CreateContext(thread, (messages, options, cancellationToken) =>
@@ -526,10 +529,11 @@ public class AgentContextThreadTests
 
         var restoredContext = CreateContext(thread, (messages, options, cancellationToken) =>
             ResponseEmitters.EmitTextResponse("unused", cancellationToken));
-        var turnAddedCount = 0;
+        var announced = new List<(string Request, string Response, int TurnCount)>();
         var blockAddedCount = 0;
         var statusChangedCount = 0;
-        using var turnRegistration = restoredContext.RegisterOnTurnAdded(_ => turnAddedCount++);
+        using var turnRegistration = restoredContext.RegisterOnTurnAdded(turn =>
+            announced.Add((GetRequestText(turn), GetResponseText(turn), restoredContext.Turns.Count)));
         using var blockRegistration = restoredContext.RegisterOnBlockAdded((_, _) => blockAddedCount++);
         using var statusRegistration = restoredContext.RegisterOnStatusChanged(_ => statusChangedCount++);
 
@@ -540,7 +544,7 @@ public class AgentContextThreadTests
         Assert.Equal("Response 1", GetResponseText(restoredContext.Turns[0]));
         Assert.Equal("Second", GetRequestText(restoredContext.Turns[1]));
         Assert.Equal("Response 2", GetResponseText(restoredContext.Turns[1]));
-        Assert.Equal(0, turnAddedCount);
+        Assert.Equal([("First", "Response 1", 2), ("Second", "Response 2", 2)], announced);
         Assert.Equal(0, blockAddedCount);
         Assert.Equal(0, statusChangedCount);
     }

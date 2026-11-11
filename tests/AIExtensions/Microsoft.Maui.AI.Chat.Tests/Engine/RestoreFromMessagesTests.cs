@@ -234,6 +234,30 @@ public class RestoreFromMessagesTests
     }
 
     [Fact]
+    public async Task RestoreAsync_Messages_AnnouncesEachTurnOnceAllAreLoaded()
+    {
+        var invocations = new List<string>();
+        using var context = CreateContext(new DelegatingStreamingChatClient(), invocations);
+        var announced = new List<(string Id, int RequestBlocks, int ResponseBlocks, int TurnCount)>();
+        var blockAddedCount = 0;
+        var statusChangedCount = 0;
+        using var turnRegistration = context.RegisterOnTurnAdded(turn =>
+            announced.Add((turn.Id, turn.RequestBlocks.Count, turn.ResponseBlocks.Count, context.Turns.Count)));
+        using var blockRegistration = context.RegisterOnBlockAdded((_, _) => blockAddedCount++);
+        using var statusRegistration = context.RegisterOnStatusChanged(_ => statusChangedCount++);
+
+        await context.RestoreAsync(CreateRecordedConversation());
+
+        Assert.Equal(
+            context.Turns.Select(turn => (turn.Id, turn.RequestBlocks.Count, turn.ResponseBlocks.Count, 2)),
+            announced);
+        Assert.Equal((2, 3), (announced[0].RequestBlocks, announced[0].ResponseBlocks));
+        Assert.Equal(0, blockAddedCount);
+        Assert.Equal(0, statusChangedCount);
+        Assert.Empty(invocations);
+    }
+
+    [Fact]
     public async Task RestoreAsync_Messages_RequiresAnEmptyContext()
     {
         var client = new DelegatingStreamingChatClient();
