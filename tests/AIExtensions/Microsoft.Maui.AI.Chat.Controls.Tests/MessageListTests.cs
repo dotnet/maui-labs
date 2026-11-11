@@ -471,6 +471,9 @@ public class MessageListTests
         var refreshes = 0;
         row.Changed += (_, _) => refreshes++;
 
+        // The list settles after the answer's row was added.
+        dispatcher.RunPending();
+
         foreach (var token in new[] { "b", "c", "d", "e" })
             stream.Text(token);
         await UIThread.Until(() => ((TextContentBlock)row.Block).RawText == "abcde");
@@ -846,6 +849,166 @@ public class MessageListTests
     });
 
     [Fact]
+    public void ScrollsWhileTheListSettlesAfterContentResized_DoNotUnpinIt() => UIThread.Run(async () =>
+    {
+        var (view, image, requests) = await ShowImageAnswerAsync();
+        using var dispatcher = TestDispatcher.Install();
+        var end = view.EndIndex();
+        void Scroll(double delta, bool atEnd) =>
+            view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = delta, LastVisibleItemIndex = atEnd ? end : end - 1 });
+
+        // The image took its size after its row was laid out, and the list follows it to the new end. A list the
+        // platform leaves at its end meanwhile is not scrolled again.
+        requests.Clear();
+        ((IView)image).Arrange(new Rect(0, 0, 320, 200));
+        dispatcher.RunPending();
+        Scroll(-0.5, atEnd: true);
+        dispatcher.RunPending();
+        Assert.Equal(end, Assert.Single(requests));
+
+        // While it settles, the platform can move it back in small steps that take the end row off screen (iOS and
+        // Mac Catalyst animate the change). That is not the reader: the list keeps following, and goes back to its end
+        // once settled.
+        ((IView)image).Arrange(new Rect(0, 0, 320, 240));
+        dispatcher.RunPending();
+        requests.Clear();
+        Scroll(-1.5, atEnd: false);
+        Scroll(-1, atEnd: false);
+        Assert.True(view.MessageList.IsPinned);
+        dispatcher.RunPending();
+        Assert.Equal(end, Assert.Single(requests));
+
+        // That scroll can move it again, once.
+        requests.Clear();
+        Scroll(-2, atEnd: false);
+        Assert.True(view.MessageList.IsPinned);
+        dispatcher.RunPending();
+        Assert.Equal(end, Assert.Single(requests));
+
+        // Once settled, a scroll back is the reader again.
+        Scroll(-1.5, atEnd: false);
+        Assert.False(view.MessageList.IsPinned);
+    });
+
+    [Fact]
+    public void AFollowThatLandsShortOfTheEnd_IsCorrectedOnceSettled() => UIThread.Run(async () =>
+    {
+        var (view, image, requests) = await ShowImageAnswerAsync();
+        using var dispatcher = TestDispatcher.Install();
+        var end = view.EndIndex();
+
+        // iOS reports the scroll at once, placed from the rows' estimated heights: short of the end.
+        var landShort = true;
+        view.MessageList.ScrollToRequested += (_, _) =>
+        {
+            if (landShort)
+                view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = 308, LastVisibleItemIndex = end - 2 });
+        };
+
+        requests.Clear();
+        ((IView)image).Arrange(new Rect(0, 0, 320, 200));
+        dispatcher.RunPending();
+        Assert.Equal(end, Assert.Single(requests));
+
+        landShort = false;
+        dispatcher.RunPending();
+        Assert.Equal([end, end], requests);
+        Assert.True(view.MessageList.IsPinned);
+    });
+
+    [Fact]
+    public void ADragBackWhileTheListSettles_UnpinsOnceItGoesFarBack() => UIThread.Run(async () =>
+    {
+        var (view, image, requests) = await ShowImageAnswerAsync();
+        using var dispatcher = TestDispatcher.Install();
+        var end = view.EndIndex();
+
+        ((IView)image).Arrange(new Rect(0, 0, 320, 200));
+        dispatcher.RunPending();
+
+        // The platform settling moves the list back a few points; the reader drags it much further.
+        for (var step = 0; step < 2; step++)
+            view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -30, LastVisibleItemIndex = end - 1 });
+        Assert.True(view.MessageList.IsPinned);
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -30, LastVisibleItemIndex = end - 1 });
+        Assert.False(view.MessageList.IsPinned);
+
+        // And stays where they took it once the list settled.
+        requests.Clear();
+        dispatcher.RunPending();
+        Assert.Empty(requests);
+    });
+
+    [Fact]
+    public void AJumpToTheTopWhileFollowing_GoesBackToTheEnd() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Reply("One").Reply("Two");
+        var view = ChatHost.Create(ChatHost.Session(client));
+        var requests = new List<int>();
+        view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
+        await SendAsync(view, "first");
+        await SendAsync(view, "second");
+        ((IView)view.MessageList).Arrange(new Rect(0, 0, 400, 600));
+
+        // iOS re-estimating rows it has not measured can drop a long conversation to its top in one step.
+        requests.Clear();
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -1480.7, VerticalOffset = 0, LastVisibleItemIndex = 1 });
+        Assert.True(view.MessageList.IsPinned);
+        Assert.Equal(view.EndIndex(), Assert.Single(requests));
+
+        // The reader takes many steps to get there, and the first unpins the list.
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -120, VerticalOffset = 1360, LastVisibleItemIndex = view.EndIndex() - 1 });
+        Assert.False(view.MessageList.IsPinned);
+        requests.Clear();
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -1360, VerticalOffset = 0, LastVisibleItemIndex = 1 });
+        Assert.Empty(requests);
+    });
+
+    [Fact]
+    public void ScrollsWhileTheListSettlesAfterRowsChanged_DoNotUnpinIt() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var view = ChatHost.Create(ChatHost.Session(client));
+        using var dispatcher = TestDispatcher.Install();
+        var requests = new List<int>();
+        view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
+
+        view.Text = "Hi";
+        var send = view.SendAsync();
+        stream.Text("An answer");
+        await UIThread.Until(() => view.Session!.Turns.Count == 1 && view.Session.Turns[0].ResponseBlocks.Count == 1);
+        dispatcher.RunPending();
+        var block = (TextContentBlock)Assert.IsType<BlockRow>(view.Rows()[^1]).Block;
+        var end = view.EndIndex();
+        void Scroll(double delta, bool atEnd) =>
+            view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = delta, LastVisibleItemIndex = atEnd ? end : end - 1 });
+
+        // The answer's row was added, and iOS animates that: the list moves back a few points, end row off screen.
+        Scroll(-2.7, atEnd: false);
+        Scroll(-3, atEnd: false);
+        Assert.True(view.MessageList.IsPinned);
+        requests.Clear();
+        dispatcher.RunPending();
+        Assert.Equal(end, Assert.Single(requests));
+        dispatcher.RunPending();
+
+        // Text streaming into the row adds no rows: a slow drag back is the reader at once.
+        requests.Clear();
+        stream.Text(" that grows");
+        await UIThread.Until(() => block.RawText == "An answer that grows");
+        dispatcher.RunPending();
+        Assert.Equal(end, Assert.Single(requests));
+        Scroll(-3, atEnd: false);
+        Assert.False(view.MessageList.IsPinned);
+
+        stream.Complete();
+        await UIThread.Until(() => dispatcher.PendingCount > 0 || !view.IsBusy);
+        dispatcher.RunPending();
+        await send;
+    });
+
+    [Fact]
     public void ResizingTheList_KeepsTheNewestRowInViewWhilePinned() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient().Reply("One");
@@ -1143,6 +1306,18 @@ public class MessageListTests
         Assert.NotSame(rows[1], row);
         Assert.Equal(template.Version, row.TemplateVersion);
     });
+
+    private static async Task<(AIChatView View, LinkedImageView Image, List<int> Requests)> ShowImageAnswerAsync()
+    {
+        var client = new ScriptedChatClient().Reply("Look: ![logo](https://example.com/logo.png)");
+        var view = ChatHost.Create(ChatHost.Session(client));
+        var requests = new List<int>();
+        view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
+        await SendAsync(view, "Show me the logo");
+
+        var answer = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is TextContentBlock);
+        return (view, Assert.Single(view.Realize(answer).Descendants<LinkedImageView>()), requests);
+    }
 
     private static async Task SendAsync(AIChatView view, string text)
     {
