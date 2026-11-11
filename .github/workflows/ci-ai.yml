@@ -34,16 +34,12 @@ jobs:
   build:
     uses: ./.github/workflows/_build.yml
     with:
-      project-path: src/AIExtensions/AIExtensions.slnf
+      project-path: src/AIExtensions/AIExtensions.Packages.slnf
       project-name: ai-extensions
       os: '["macos-latest", "windows-2025-vs2026"]'
       run-tests: true
       pack: true
-      install-workloads: true
-      # Garden (the MAUI showcase) builds/links maccatalyst + ios app bundles on macOS.
-      # The pinned MAUI workload (Apple SDK 26.2) requires Xcode 26.3+; the runner default
-      # (16.4) fails ILLink with MT0079/MT4162. Matches the EssentialsAI sample precedent.
-      xcode-version: '26.3'
+      install-workloads: false
 
   sample:
     uses: ./.github/workflows/_build.yml
