@@ -232,9 +232,9 @@ internal sealed partial class MarkdownRenderer
     {
         // The chat's code styles, so code looks the same in answers and in tool cards.
         text = Styled(new ChatLabel { Text = code }, AIChatThemeKeys.CodeTextStyle);
-        text.LineBreakMode = LineBreakMode.NoWrap;
 
-        // Code keeps its line structure; long lines scroll sideways instead of wrapping.
+        // Code keeps its line structure; long lines scroll sideways instead of wrapping. The scroller measures the
+        // label at its natural width, so it never wraps; NoWrap would also cut it to one line on iOS and Android.
         scroller = CreateSideScroller(text);
 
         var border = Styled(new ChatBorder(), AIChatThemeKeys.CodeBlockStyle);
