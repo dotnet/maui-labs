@@ -134,6 +134,44 @@ public sealed class AgentContext : IDisposable
     /// </remarks>
     public async Task RestoreAsync(CancellationToken cancellationToken = default)
     {
+        ThrowIfCannotRestore(cancellationToken);
+        AddRestoredTurns(await _agent.RestoreTurnsAsync(cancellationToken));
+    }
+
+    /// <summary>
+    /// Loads an existing conversation, such as a recorded or imported one, so it is shown as turns and
+    /// the next <see cref="SendMessageAsync(ChatMessage, CancellationToken)"/> continues it.
+    /// </summary>
+    /// <param name="messages">The conversation's messages in order.</param>
+    /// <param name="cancellationToken">Cancels the restore.</param>
+    /// <remarks>
+    /// <para>
+    /// Each user message starts a turn, except one that only answers approvals or tool calls. The
+    /// messages are rendered by the registered handlers but nothing is invoked: tool calls and UI
+    /// actions are shown with their recorded results, and approvals and UI actions are not resumed.
+    /// System messages are sent with the history but not shown.
+    /// </para>
+    /// <para>
+    /// The messages become the history sent with the next request, except tool calls without a
+    /// recorded result and their approvals, which a provider would reject or execute.
+    /// </para>
+    /// <para>
+    /// Restore requires an idle, empty context and may be called only once before
+    /// <see cref="ClearAsync"/>. It cannot be used with a configured <see cref="IConversationThread"/>,
+    /// which is the source of truth for its conversation; restore from the thread instead.
+    /// </para>
+    /// </remarks>
+    public async Task RestoreAsync(
+        IEnumerable<ChatMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        ThrowIfCannotRestore(cancellationToken);
+        AddRestoredTurns(await _agent.RestoreTurnsAsync(messages, cancellationToken));
+    }
+
+    private void ThrowIfCannotRestore(CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -145,8 +183,10 @@ public sealed class AgentContext : IDisposable
             throw new InvalidOperationException(
                 "RestoreAsync requires an empty context and may not be called twice. Call ClearAsync first.");
         }
+    }
 
-        var restoredTurns = await _agent.RestoreTurnsAsync(cancellationToken);
+    private void AddRestoredTurns(IReadOnlyList<RestoredTurn> restoredTurns)
+    {
         foreach (var restoredTurn in restoredTurns)
         {
             var turn = new ConversationTurn

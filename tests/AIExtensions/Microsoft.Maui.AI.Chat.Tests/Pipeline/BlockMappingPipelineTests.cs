@@ -76,6 +76,63 @@ public class BlockMappingPipelineTests
     }
 
     [Fact]
+    public async Task Process_TextFromANewMessage_StartsANewBlock()
+    {
+        var pipeline = CreatePipelineWithTextHandler();
+        var first = Assert.IsType<TextContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                MessageId = "msg-1",
+                Contents = [new TextContent("First")],
+            })));
+
+        var second = Assert.IsType<TextContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                MessageId = "msg-2",
+                Contents = [new TextContent("Second")],
+            })));
+
+        Assert.Equal("First", first.RawText);
+        Assert.Equal(BlockLifecycleState.Inactive, first.LifecycleState);
+        Assert.Equal("Second", second.RawText);
+        Assert.Equal("msg-2", second.Id);
+    }
+
+    [Theory]
+    [InlineData(null, "msg-1")]
+    [InlineData("msg-1", null)]
+    public async Task Process_TextWithoutAMessageId_ContinuesTheActiveBlock(
+        string? firstMessageId,
+        string? secondMessageId)
+    {
+        var pipeline = CreatePipelineWithTextHandler();
+        var block = Assert.IsType<TextContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                MessageId = firstMessageId,
+                Contents = [new TextContent("Hello")],
+            })));
+
+        Assert.Empty(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                MessageId = secondMessageId,
+                Contents = [new TextContent(" world")],
+            }));
+
+        Assert.Equal("Hello world", block.RawText);
+    }
+
+    [Fact]
     public async Task Process_SingleUpdate_TextAndToolCall_EmitsTwoBlocks()
     {
         // One assistant message that both says something AND calls a tool maps to two
