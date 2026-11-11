@@ -310,6 +310,8 @@ Microsoft.Maui.AI.Chat.UIAgentOptions
 Microsoft.Maui.AI.Chat.UIAgentOptions.AddBlockHandler<TState>(Microsoft.Maui.AI.Chat.ContentBlockHandler<TState>! handler) -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions.ChatOptions.get -> Microsoft.Extensions.AI.ChatOptions?
 Microsoft.Maui.AI.Chat.UIAgentOptions.ChatOptions.set -> void
+Microsoft.Maui.AI.Chat.UIAgentOptions.MaximumRoundsPerTurn.get -> int
+Microsoft.Maui.AI.Chat.UIAgentOptions.MaximumRoundsPerTurn.set -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions.RegisterUIAction(Microsoft.Extensions.AI.AIFunction! function) -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions.Services.get -> System.IServiceProvider?
 Microsoft.Maui.AI.Chat.UIAgentOptions.Services.set -> void
