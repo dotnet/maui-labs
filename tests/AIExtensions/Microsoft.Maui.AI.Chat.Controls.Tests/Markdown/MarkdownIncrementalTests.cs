@@ -168,6 +168,28 @@ public class MarkdownIncrementalTests
         Assert.Equal(["A", "B", "1", "2", "3", "4", "5", "6"], now.Select(label => label.Text));
     }
 
+    [Theory]
+    [InlineData("```csharp\nvar a = 1;", "```csharp\nvar a = 1;\nvar b = 2;")]
+    [InlineData("```\nvar a = 1;", "```\nvar a = 1;\nvar b = 2;")]
+    [InlineData("| A | B |\n|---|---|\n| 1 | 2 |", "| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |")]
+    [InlineData("| A | B |\n|---|---|\n| 1 | 2 |", "| A | B |\n|---|---|\n| 1 | 2 grows |")]
+    public void ContentThatChangesInsideASideScroller_ResizesTheScroller(string before, string after)
+    {
+        // iOS stops a child's measure invalidation at a scroll view, and a sideways scroller keeps its height, so a
+        // line or row added in place would stay clipped unless the scroller itself is invalidated.
+        var view = new MarkdownView();
+        view.SetMarkdown(before);
+        var scroller = Descendants(view).OfType<ScrollView>().Single();
+        var handler = new MeasureRecorder();
+        scroller.Handler = handler;
+        handler.Invalidations = 0;
+
+        view.SetMarkdown(after);
+
+        Assert.Same(scroller, Descendants(view).OfType<ScrollView>().Single());
+        Assert.True(handler.Invalidations > 0);
+    }
+
     [Fact]
     public void AViewThatMovesIntoAStack_GetsBackTheMarginTrimmedOffIt()
     {
@@ -350,4 +372,14 @@ public class MarkdownIncrementalTests
     }
 
     private static IEnumerable<Label> Labels(Element root) => Descendants(root).OfType<Label>();
+
+    /// <summary>Counts the measure invalidations that reach a view's platform side.</summary>
+    private sealed class MeasureRecorder() : Microsoft.Maui.Handlers.ViewHandler<IView, object>(
+        new PropertyMapper<IView, MeasureRecorder>(),
+        new CommandMapper<IView, MeasureRecorder> { [nameof(IView.InvalidateMeasure)] = (handler, _, _) => handler.Invalidations++ })
+    {
+        public int Invalidations;
+
+        protected override object CreatePlatformView() => new();
+    }
 }

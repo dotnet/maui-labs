@@ -228,14 +228,14 @@ internal sealed partial class MarkdownRenderer
 
     private double GetHeadingFontSize(int level) => FontSize * s_headingScales[level - 1];
 
-    private static Border RenderCodeBlock(string code, string? language, out Label text, out Label? caption)
+    private static Border RenderCodeBlock(string code, string? language, out Label text, out Label? caption, out ScrollView scroller)
     {
         // The chat's code styles, so code looks the same in answers and in tool cards.
         text = Styled(new ChatLabel { Text = code }, AIChatThemeKeys.CodeTextStyle);
         text.LineBreakMode = LineBreakMode.NoWrap;
 
         // Code keeps its line structure; long lines scroll sideways instead of wrapping.
-        var scroller = CreateSideScroller(text);
+        scroller = CreateSideScroller(text);
 
         var border = Styled(new ChatBorder(), AIChatThemeKeys.CodeBlockStyle);
         if (string.IsNullOrWhiteSpace(language))
@@ -293,6 +293,14 @@ internal sealed partial class MarkdownRenderer
         HorizontalScrollBarVisibility = s_sideScrollBarVisibility,
         Content = content,
     };
+
+    /// <summary>
+    /// Re-measures a side scroller whose content changed in place. On iOS and Mac Catalyst a child's measure
+    /// invalidation stops at a scroll view, and a scroller that scrolls sideways keeps its height, so a line or row
+    /// added while streaming would stay clipped until something else re-measured the answer. Invalidating the
+    /// scroller itself passes the change on to the message row.
+    /// </summary>
+    private static void ResizeSideScroller(ScrollView scroller) => ((IView)scroller).InvalidateMeasure();
 
     /// <summary>
     /// Gets the scroll bar of code and tables that scroll sideways. Android flashes a new scroller's bar across its
