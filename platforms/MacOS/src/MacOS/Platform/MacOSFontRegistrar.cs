@@ -82,30 +82,18 @@ public class MacOSFontRegistrar : IFontRegistrar
 
     string? LoadEmbeddedFont(string filename, Assembly assembly)
     {
-        var resourceNames = assembly.GetManifestResourceNames();
-        var filenameOnly = System.IO.Path.GetFileName(filename);
-        var fullSearchName = "." + filename.Replace('\\', '.').Replace('/', '.');
-        var fileOnlySearchName = "." + filenameOnly;
+        var resourceName = EmbeddedFontResourceResolver.FindResource(filename, assembly.GetManifestResourceNames());
+        if (resourceName is null)
+            return null;
 
-        foreach (var resourceName in resourceNames)
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream is null)
+            return null;
+        return _fontLoader.LoadFont(new EmbeddedFont
         {
-            if (!resourceName.EndsWith(fullSearchName, StringComparison.OrdinalIgnoreCase) &&
-                !resourceName.EndsWith(fileOnlySearchName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            using var stream = assembly.GetManifestResourceStream(resourceName);
-            if (stream is null)
-                continue;
-            return _fontLoader.LoadFont(new EmbeddedFont
-            {
-                FontName = filenameOnly,
-                ResourceStream = stream
-            });
-        }
-
-        return null;
+            FontName = System.IO.Path.GetFileName(filename.Replace('\\', '/')),
+            ResourceStream = stream
+        });
     }
 
     void CacheRegistration(RegisteredFont registration, string postScriptName)

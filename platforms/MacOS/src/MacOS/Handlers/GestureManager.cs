@@ -1,6 +1,7 @@
 using AppKit;
 using CoreGraphics;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
 #if NET11_0_OR_GREATER
 using Microsoft.Maui.Controls.Platform;
 #endif

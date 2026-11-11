@@ -89,6 +89,8 @@ retains its reflection compatibility path. The existing AppKit screenshot
 overload, raw asset logical names and filename defaults, and native `.icns`
 packaging remain available. Processed images and fonts use their processed
 outputs; referenced-library resources retain Apple's library-resource packaging.
+Embedded fonts resolve an exact manifest path before a unique basename fallback;
+ambiguous matches fail explicitly instead of depending on manifest ordering.
 
 Blazor root-component replacements and clears are serialized through the same
 managed reconciler used by GTK. The shared regression tests hold asynchronous

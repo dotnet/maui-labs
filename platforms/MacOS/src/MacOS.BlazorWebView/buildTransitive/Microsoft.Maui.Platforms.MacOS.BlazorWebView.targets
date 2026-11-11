@@ -13,16 +13,19 @@
 
   <Target Name="_IncludeBlazorWebViewBundleResources"
           BeforeTargets="_CollectBundleResources"
-          DependsOnTargets="ResolveProjectReferences;StaticWebAssetsPrepareForRun">
+          DependsOnTargets="ResolveProjectReferences;StaticWebAssetsPrepareForRun;_MacOSCollectMauiResources;_MacOSCollectProcessedMauiResources">
 
     <ComputeStaticWebAssetsTargetPaths Assets="@(StaticWebAsset)" PathPrefix="wwwroot">
       <Output TaskParameter="AssetsWithTargetPath" ItemName="_BlazorBundleResourceWithTargetPath" />
     </ComputeStaticWebAssetsTargetPaths>
 
     <ItemGroup>
+      <BundleResource Remove="@(_BlazorBundleResourceWithTargetPath)"
+                      MatchOnMetadata="FullPath" MatchOnMetadataOptions="PathLike" />
       <BundleResource Include="%(_BlazorBundleResourceWithTargetPath.Identity)"
                       Condition="'%(_BlazorBundleResourceWithTargetPath.Identity)' != ''"
-                      Link="%(_BlazorBundleResourceWithTargetPath.TargetPath)" />
+                      Link="%(_BlazorBundleResourceWithTargetPath.TargetPath)"
+                      LogicalName="%(_BlazorBundleResourceWithTargetPath.TargetPath)" />
     </ItemGroup>
 
   </Target>

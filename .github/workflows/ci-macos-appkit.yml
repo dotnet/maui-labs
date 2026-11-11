@@ -88,7 +88,6 @@ jobs:
           developer_dir="$(cd /Applications/Xcode_27.0.app/Contents/Developer && pwd -P)"
           sudo xcode-select -s "$developer_dir"
           echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
-          echo "MD_APPLE_SDK_ROOT=$(cd "$developer_dir/../.." && pwd -P)" >> "$GITHUB_ENV"
           xcodebuild -version
       - uses: actions/setup-dotnet@v5
         with:
@@ -158,7 +157,6 @@ jobs:
           developer_dir="$(cd "/Applications/Xcode_${APPKIT_XCODE_VERSION}.app/Contents/Developer" && pwd -P)"
           sudo xcode-select -s "$developer_dir"
           echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
-          echo "MD_APPLE_SDK_ROOT=$(cd "$developer_dir/../.." && pwd -P)" >> "$GITHUB_ENV"
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
@@ -199,6 +197,12 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Select Xcode 27
+        run: |
+          developer_dir="$(cd /Applications/Xcode_27.0.app/Contents/Developer && pwd -P)"
+          sudo xcode-select -s "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+          xcodebuild -version
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json

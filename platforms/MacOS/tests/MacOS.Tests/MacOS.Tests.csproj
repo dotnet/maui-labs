@@ -27,11 +27,17 @@
              Link="Platform/ShellTabBarCoordinator.cs" />
     <Compile Include="../../src/MacOS/Platform/WindowCloseCoordinator.cs"
              Link="Platform/WindowCloseCoordinator.cs" />
+    <Compile Include="../../src/MacOS/Platform/EmbeddedFontResourceResolver.cs"
+             Link="Platform/EmbeddedFontResourceResolver.cs" />
     <Compile Include="../../src/MacOS.Essentials/MediaCaptureCoordinator.cs"
              Link="Essentials/MediaCaptureCoordinator.cs" />
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="../../src/MacOS/buildTransitive/Microsoft.Maui.Platforms.MacOS.props;../../src/MacOS/buildTransitive/Microsoft.Maui.Platforms.MacOS.targets"
+          Link="BuildContracts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/MacOS.BlazorWebView/buildTransitive/Microsoft.Maui.Platforms.MacOS.BlazorWebView.targets"
+          Link="BuildContracts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Using Include="Xunit" />
   </ItemGroup>
 

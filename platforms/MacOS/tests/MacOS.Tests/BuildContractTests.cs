@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Xml.Linq;
 
 namespace Microsoft.Maui.Platforms.MacOS.Tests;
@@ -8,10 +7,10 @@ public sealed class BuildContractTests
 	[Fact]
 	public void PackageTargets_EvaluateBackendContractsAfterConsumerProperties()
 	{
-		var root = GetPlatformRoot();
-		var props = XDocument.Load(Path.Combine(root, "src", "MacOS", "buildTransitive",
+		var root = GetBuildContractsDirectory();
+		var props = XDocument.Load(Path.Combine(root,
 			"Microsoft.Maui.Platforms.MacOS.props"));
-		var targets = XDocument.Load(Path.Combine(root, "src", "MacOS", "buildTransitive",
+		var targets = XDocument.Load(Path.Combine(root,
 			"Microsoft.Maui.Platforms.MacOS.targets"));
 
 		Assert.Null(Element(props, "ResizetizerPlatformType"));
@@ -28,8 +27,8 @@ public sealed class BuildContractTests
 	[Fact]
 	public void ProcessedAssets_PreserveRawLogicalNamesAndFilenameDefaults()
 	{
-		var targets = XDocument.Load(Path.Combine(GetPlatformRoot(), "src", "MacOS",
-			"buildTransitive", "Microsoft.Maui.Platforms.MacOS.targets"));
+		var targets = XDocument.Load(Path.Combine(GetBuildContractsDirectory(),
+			"Microsoft.Maui.Platforms.MacOS.targets"));
 		var prepare = targets.Descendants().Single(element =>
 			element.Attribute("Name")?.Value == "_MacOSPrepareRawMauiAssets");
 		Assert.Equal("ProcessMauiAssets", prepare.Attribute("BeforeTargets")?.Value);
@@ -48,6 +47,22 @@ public sealed class BuildContractTests
 	static XElement? Element(XDocument document, string localName) =>
 		document.Descendants().FirstOrDefault(element => element.Name.LocalName == localName);
 
-	static string GetPlatformRoot([CallerFilePath] string sourcePath = "") =>
-		Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourcePath)!, "..", ".."));
+	[Fact]
+	public void BlazorAssets_ReplaceMappedResourcesWithCanonicalWebPaths()
+	{
+		var targets = XDocument.Load(Path.Combine(GetBuildContractsDirectory(),
+			"Microsoft.Maui.Platforms.MacOS.BlazorWebView.targets"));
+		var bridge = targets.Descendants().Single(element =>
+			element.Attribute("Name")?.Value == "_IncludeBlazorWebViewBundleResources");
+		Assert.Contains("_MacOSCollectProcessedMauiResources", bridge.Attribute("DependsOnTargets")?.Value);
+		var remove = bridge.Descendants().Single(element => element.Attribute("Remove") is not null);
+		Assert.Equal("FullPath", remove.Attribute("MatchOnMetadata")?.Value);
+		Assert.Equal("PathLike", remove.Attribute("MatchOnMetadataOptions")?.Value);
+		var include = bridge.Descendants().Single(element => element.Name.LocalName == "BundleResource" &&
+			element.Attribute("Include") is not null);
+		Assert.Equal("%(_BlazorBundleResourceWithTargetPath.TargetPath)", include.Attribute("LogicalName")?.Value);
+	}
+
+	static string GetBuildContractsDirectory() =>
+		Path.Combine(AppContext.BaseDirectory, "BuildContracts");
 }
