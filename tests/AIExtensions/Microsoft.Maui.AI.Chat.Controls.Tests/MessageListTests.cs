@@ -603,6 +603,28 @@ public class MessageListTests
     });
 
     [Fact]
+    public void RestoringIntoAShownSession_RendersTheConversation() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var session = ChatHost.Session(client);
+        var view = ChatHost.Create(session);
+        Assert.True(view.IsEmpty);
+
+        await session.RestoreAsync(
+        [
+            new ChatMessage(ChatRole.User, "Weather in Paris?"),
+            new ChatMessage(ChatRole.Assistant, "It is sunny in Paris."),
+        ]);
+
+        Assert.Empty(client.Requests);
+        Assert.False(view.IsEmpty);
+        Assert.Collection(
+            view.Rows(),
+            row => Assert.Equal("Weather in Paris?", ((TextContentBlock)Assert.Single(Assert.IsType<UserMessageRow>(row).Blocks)).RawText),
+            row => Assert.Equal("It is sunny in Paris.", ((TextContentBlock)Assert.IsType<BlockRow>(row).Block).RawText));
+    });
+
+    [Fact]
     public void ApprovedCall_ShowsItsResultInTheApprovalCard() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient()

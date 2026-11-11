@@ -97,10 +97,10 @@ chat.Session = new AgentContext(agent);
 
 `Session` wins over `ChatClient`, and the view never disposes a session it did not create.
 
-To continue a saved conversation, restore it before you assign the session: `RestoreAsync()` loads the turns of
-the agent's conversation thread, and `RestoreAsync(messages)` loads recorded `ChatMessage`s. Restored turns render
-right away, recorded tool calls show their recorded results and never run again, and the next message continues
-the conversation:
+To continue a saved conversation, restore it into the session, before or after you assign it: `RestoreAsync()`
+loads the turns of the agent's conversation thread, and `RestoreAsync(messages)` loads recorded `ChatMessage`s.
+Restored turns render right away, recorded tool calls show their recorded results and never run again, and the
+next message continues the conversation:
 
 ```csharp
 var session = new AgentContext(agent);

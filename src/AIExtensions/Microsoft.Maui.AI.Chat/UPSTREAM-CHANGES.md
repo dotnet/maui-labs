@@ -122,6 +122,10 @@ These match upstream so that upstream fixes apply directly:
   the history for the next send. Recorded tool calls show their recorded results and are never
   invoked; calls without a result and their approvals are shown but left out of the history. Upstream
   can only restore from a thread.
+- **Announced.** Once all restored turns are loaded, `AgentContext` raises its turn-added callback for
+  each of them, with their blocks in place, so a native view that already shows the context renders them.
+  Block-added and status-changed callbacks are still not raised. Upstream restores silently and relies on
+  the Blazor component re-rendering after the call.
 
 ### Tools, UI actions and approvals
 
