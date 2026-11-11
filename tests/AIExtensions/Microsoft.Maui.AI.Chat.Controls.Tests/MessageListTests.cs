@@ -480,6 +480,29 @@ public class MessageListTests
     });
 
     [Fact]
+    public void ChangesRaisedOnAnotherThread_AreAppliedOnTheUIThread() => UIThread.Run(async () =>
+    {
+        using var dispatcher = UIThreadDispatcher.Install();
+        var session = ChatHost.Session(new ScriptedChatClient().Reply("Hel", "lo"));
+        var view = ChatHost.Create(session);
+        view.MessageList.FlushDelay = TimeSpan.Zero;
+        var threads = new HashSet<int>();
+        ((INotifyCollectionChanged)view.MessageList.ItemsSource).CollectionChanged += (_, _) => threads.Add(Environment.CurrentManagedThreadId);
+        view.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(AIChatView.IsBusy) or nameof(AIChatView.IsEmpty))
+                threads.Add(Environment.CurrentManagedThreadId);
+        };
+
+        // An app that calls the engine from a worker thread gets the engine's notifications on that thread.
+        await Task.Run(() => session.SendMessageAsync("Hi"));
+        await UIThread.Until(() => view.Rows().Count == 2 && !view.IsBusy && !view.IsEmpty);
+
+        Assert.Equal("Hello", ((TextContentBlock)((BlockRow)view.Rows()[1]).Block).RawText);
+        Assert.Equal([dispatcher.ThreadId], threads);
+    });
+
+    [Fact]
     public void NewRows_ScrollToTheEndWhilePinned() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient().Reply("One").Reply("Two").Reply("Three");

@@ -157,6 +157,8 @@ internal sealed class FakeSpeechRecognizer : IChatSpeechRecognizer
 
     public int StopCount { get; private set; }
 
+    public List<int> StartThreadIds { get; } = [];
+
     public CultureInfo? LastCulture { get; private set; }
 
     public int HandlerCount => RecognitionChanged?.GetInvocationList().Length ?? 0;
@@ -173,6 +175,7 @@ internal sealed class FakeSpeechRecognizer : IChatSpeechRecognizer
     {
         cancellationToken.ThrowIfCancellationRequested();
         StartCount++;
+        StartThreadIds.Add(Environment.CurrentManagedThreadId);
         LastCulture = culture;
         if (StartError is not null)
             throw StartError;

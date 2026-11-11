@@ -3,7 +3,8 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// <summary>Lets the user pick files to attach to the next message.</summary>
 /// <remarks>
 /// <see cref="AppBuilderExtensions.UseAIChat"/> registers a default implementation that uses the platform
-/// file picker. <see cref="AIChatView"/> also falls back to that default when nothing is registered.
+/// file picker. <see cref="AIChatView"/> also falls back to that default when nothing is registered. The chat
+/// view calls the picker on its UI thread; the returned task may complete on any thread.
 /// </remarks>
 public interface IChatAttachmentPicker
 {

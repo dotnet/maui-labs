@@ -10,7 +10,8 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// <remarks>
 /// Audio capture and live speech never hold the microphone at the same time. Every asynchronous step checks a
 /// generation (bumped when the session changes or the view unloads) and a per-modality operation id, so a
-/// late platform callback can never write into a newer draft.
+/// late platform callback can never write into a newer draft. Recognizers may raise results on any thread; they
+/// are handled on the view's thread.
 /// </remarks>
 internal sealed class ChatComposer
 {
@@ -538,39 +539,7 @@ internal sealed class ChatComposer
 
         var dictationOperation = ++_dictationOperation;
         EventHandler<ChatSpeechRecognitionEventArgs>? handler = null;
-        handler = (_, e) =>
-        {
-            if (!IsDictationCurrent(generation, audioOperation, dictationOperation, source, recognizer, handler))
-                return;
-
-            if (e.ErrorKind != ChatSpeechRecognitionErrorKind.None)
-            {
-                CompleteDictationPass(recognizer, handler, dictationOperation);
-                if (_isRecording)
-                    Announce("Recording audio. Live transcription is unavailable.");
-                Notify();
-                return;
-            }
-
-            if (!e.IsFinal)
-            {
-                _dictationHadInterim = true;
-                if (!string.IsNullOrWhiteSpace(e.Text))
-                    _view.Text = Join(_dictationPrefix, _dictationCommitted, e.Text);
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(e.Text))
-            {
-                _dictationCommitted = Join(_dictationCommitted, e.Text);
-                _dictationHadInterim = true;
-            }
-
-            _view.Text = Join(_dictationPrefix, _dictationCommitted);
-            CompleteDictationPass(recognizer, handler, dictationOperation);
-            if (_isRecording)
-                ScheduleDictationRestart(generation, audioOperation, source);
-        };
+        handler = (_, e) => _view.RunOnOwnerThread(() => OnRecognized(e));
 
         _dictationRecognizer = recognizer;
         _dictationHandler = handler;
@@ -606,6 +575,40 @@ internal sealed class ChatComposer
                 Announce("Recording audio. Live transcription is unavailable.");
                 Notify();
             }
+        }
+
+        void OnRecognized(ChatSpeechRecognitionEventArgs e)
+        {
+            if (!IsDictationCurrent(generation, audioOperation, dictationOperation, source, recognizer, handler))
+                return;
+
+            if (e.ErrorKind != ChatSpeechRecognitionErrorKind.None)
+            {
+                CompleteDictationPass(recognizer, handler, dictationOperation);
+                if (_isRecording)
+                    Announce("Recording audio. Live transcription is unavailable.");
+                Notify();
+                return;
+            }
+
+            if (!e.IsFinal)
+            {
+                _dictationHadInterim = true;
+                if (!string.IsNullOrWhiteSpace(e.Text))
+                    _view.Text = Join(_dictationPrefix, _dictationCommitted, e.Text);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(e.Text))
+            {
+                _dictationCommitted = Join(_dictationCommitted, e.Text);
+                _dictationHadInterim = true;
+            }
+
+            _view.Text = Join(_dictationPrefix, _dictationCommitted);
+            CompleteDictationPass(recognizer, handler, dictationOperation);
+            if (_isRecording)
+                ScheduleDictationRestart(generation, audioOperation, source);
         }
     }
 
@@ -735,7 +738,7 @@ internal sealed class ChatComposer
                 return;
 
             _activeRecognizer = recognizer;
-            _speechHandler = (_, e) => OnSpeechRecognized(generation, operation, source, e);
+            _speechHandler = (_, e) => _view.RunOnOwnerThread(() => OnSpeechRecognized(generation, operation, source, e));
             recognizer.RecognitionChanged += _speechHandler;
             await recognizer.StartAsync(_view.SpeechRecognitionCulture, reportPartialResults: true, source.Token);
 
