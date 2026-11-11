@@ -14,6 +14,7 @@ public class BlockMappingContext
 {
     private readonly bool[] _handled;
     private int _handledCount;
+    private int _progress;
     private bool _updateHandled;
     private readonly IReadOnlyList<IHandlerEntry>? _inactiveHandlers;
     private readonly FunctionCallRegistry? _calls;
@@ -63,7 +64,13 @@ public class BlockMappingContext
     public bool AllHandled =>
         _handledCount >= Update.Contents.Count && (Update.Contents.Count > 0 || _updateHandled);
 
-    internal int HandledProgress => _handledCount + (_updateHandled ? 1 : 0);
+    internal int HandledProgress => _handledCount + _progress + (_updateHandled ? 1 : 0);
+
+    /// <summary>
+    /// Records that a handler emitted a block for part of a content item it has not marked handled
+    /// yet, so the pipeline asks it again for the rest of the item.
+    /// </summary>
+    internal void ReportProgress() => _progress++;
 
     public ContentBlock? CreateInnerBlock(AIContent content)
     {

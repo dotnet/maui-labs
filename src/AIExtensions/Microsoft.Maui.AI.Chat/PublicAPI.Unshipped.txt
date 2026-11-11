@@ -193,9 +193,8 @@ Microsoft.Maui.AI.Chat.ListNode.Ordered.set -> void
 Microsoft.Maui.AI.Chat.ListNode.Start.get -> int?
 Microsoft.Maui.AI.Chat.ListNode.Start.set -> void
 Microsoft.Maui.AI.Chat.MediaContentBlock
-Microsoft.Maui.AI.Chat.MediaContentBlock.AddContent(Microsoft.Extensions.AI.DataContent! content) -> void
-Microsoft.Maui.AI.Chat.MediaContentBlock.Items.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.DataContent!>!
-Microsoft.Maui.AI.Chat.MediaContentBlock.MediaContentBlock() -> void
+Microsoft.Maui.AI.Chat.MediaContentBlock.Content.get -> Microsoft.Extensions.AI.AIContent!
+Microsoft.Maui.AI.Chat.MediaContentBlock.MediaContentBlock(Microsoft.Extensions.AI.AIContent! content) -> void
 Microsoft.Maui.AI.Chat.ParagraphNode
 Microsoft.Maui.AI.Chat.ParagraphNode.ParagraphNode() -> void
 Microsoft.Maui.AI.Chat.ReasoningContentBlock

@@ -54,8 +54,8 @@ internal class BlockMappingPipeline
         // Built-in reasoning handler (before text so reasoning is rendered separately)
         _handlers.Add(new HandlerEntry<ReasoningContentBlock>(new ReasoningHandler()));
 
-        // Built-in media handler (before text so DataContent is claimed before fallback)
-        _handlers.Add(new HandlerEntry<MediaContentBlock>(new MediaContentHandler()));
+        // Built-in media handler (before text so DataContent and UriContent are claimed before fallback)
+        _handlers.Add(new HandlerEntry<MediaContentHandler.MediaHandlerState>(new MediaContentHandler()));
 
         // Provider-supplied rich snapshots take precedence over the plain text fallback.
         _handlers.Add(new HandlerEntry<RichContentBlock>(new RichTextContentHandler()));
