@@ -59,6 +59,25 @@ foreach (var block in turn.ResponseBlocks)
   (`ConversationTurn.IsStopped`), failed turns commit nothing and can be retried, and `ClearAsync`
   discards the active response before clearing.
 
+## Changing options between sends
+
+`UIAgentOptions.ChatOptions` is read for every request. Keep the instance and change it between
+sends, for example `Tools`, `ToolMode`, `ResponseFormat` or `ModelId`, and the next send uses the
+new values with the same history:
+
+```csharp
+var chatOptions = new ChatOptions { ModelId = "gpt-4.1" };
+var session = new AgentContext(new UIAgent(client, chatOptions));
+
+await session.SendMessageAsync("Hello");
+chatOptions.ModelId = "gpt-4.1-mini";
+chatOptions.Tools = null;
+await session.SendMessageAsync("Answer briefly");   // same history, new model, no tools
+```
+
+To compute options for every request instead, add `ConfigureOptions` to the chat client pipeline
+(before `UseFunctionInvocation` when it changes tools).
+
 ## Custom tool blocks
 
 For a simple one-call/one-result projection, annotate a partial function block:

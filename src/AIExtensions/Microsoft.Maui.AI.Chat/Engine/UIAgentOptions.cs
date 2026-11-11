@@ -13,6 +13,21 @@ namespace Microsoft.Maui.AI.Chat;
 /// into the pipeline.</remarks>
 public class UIAgentOptions
 {
+    /// <summary>
+    /// Gets or sets the chat options sent with every request, such as instructions, tools, tool mode,
+    /// response format and model.
+    /// </summary>
+    /// <remarks>
+    /// The agent reads the options for every request it sends and passes them to the chat client
+    /// unchanged, unless it must add UI-action tools or a conversation id to a copy. An app can
+    /// therefore change this instance between sends, for example to turn tools off or to set
+    /// <see cref="ChatOptions.ToolMode"/>, <see cref="ChatOptions.ResponseFormat"/> or
+    /// <see cref="ChatOptions.ModelId"/>, and the next send uses the new values with the same history.
+    /// A change made while a send runs applies from its next request, such as the round that follows
+    /// an approval or a UI action. To compute options for every request instead, add
+    /// <c>ConfigureOptions</c> to the chat client pipeline, before <c>UseFunctionInvocation</c> when it
+    /// changes tools.
+    /// </remarks>
     public ChatOptions? ChatOptions { get; set; }
 
     /// <summary>
