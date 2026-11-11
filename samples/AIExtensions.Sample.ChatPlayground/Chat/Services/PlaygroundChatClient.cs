@@ -74,7 +74,7 @@ public sealed class PlaygroundChatClient : IChatClient
             ?? throw new InvalidOperationException("The selected chat client did not expose a ChatClientDescriptor.");
         ThrowIfImagesUnsupported(request, descriptor);
 
-        var requestOptions = CreateRequestOptions(options);
+        var requestOptions = CreateRequestOptions(options, isFollowUp: request.Count > 0 && IsContinuation(request[^1]));
         request = AddRequestContext(request);
         if (!_settings.UseStreaming)
         {
@@ -170,10 +170,15 @@ public sealed class PlaygroundChatClient : IChatClient
 
     // The settings cannot change while a response runs, so the requests that continue it, after a tool result or an
     // approval, get the same tools. Within a turn the engine continues the provider's conversation, when it keeps one.
-    private ChatOptions CreateRequestOptions(ChatOptions? engineOptions)
+    // A required tool mode applies to the turn's first request only, as the engine and FunctionInvokingChatClient
+    // apply it: a request that sends results lets the model answer them, where requiring a tool again would make an
+    // automatic UI action loop.
+    private ChatOptions CreateRequestOptions(ChatOptions? engineOptions, bool isFollowUp)
     {
         var options = _settings.CreateChatOptions(CreateEnabledTools(), CreateUIActions(engineOptions?.Tools));
         options.ConversationId = engineOptions?.ConversationId;
+        if (isFollowUp && options.ToolMode is RequiredChatToolMode)
+            options.ToolMode = null;
         return options;
     }
 
