@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:chat="http://schemas.microsoft.com/dotnet/2026/maui/ai/chat"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.ScenarioView"
+             x:DataType="local:ScenarioSessionViewModel">
+    <ContentView.Resources>
+        <local:TurnFooterConverter x:Key="TurnFooter" />
+    </ContentView.Resources>
+
+    <!-- A scenario with state shows it in a panel: beside the chat on wide screens, above it on narrow ones. -->
+    <Grid x:Name="Workspace" ColumnSpacing="12" RowSpacing="10">
+        <Border x:Name="PanelCard" Style="{StaticResource PlaygroundPanel}" Padding="0" IsVisible="False"
+                AutomationId="ScenarioPanel">
+            <Grid RowDefinitions="Auto,*">
+                <Grid x:Name="PanelHeader" ColumnDefinitions="*,Auto" Padding="16,12,12,10" ColumnSpacing="8"
+                      SemanticProperties.Description="Show or hide the panel"
+                      AutomationId="ScenarioPanelHeader">
+                    <Grid.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="PanelHeaderTapped" />
+                    </Grid.GestureRecognizers>
+                    <Label x:Name="PanelTitleLabel" FontSize="15" FontAttributes="Bold" VerticalOptions="Center"
+                           MaxLines="1" LineBreakMode="TailTruncation" />
+                    <Label x:Name="PanelChevron" Grid.Column="1" Text="&#x25BE;" FontSize="16" IsVisible="False"
+                           Style="{StaticResource MutedLabel}" VerticalOptions="Center"
+                           AutomationProperties.IsInAccessibleTree="False" />
+                </Grid>
+                <ContentView x:Name="PanelContent" Grid.Row="1" />
+            </Grid>
+        </Border>
+
+        <Border x:Name="ChatCard" Style="{StaticResource PlaygroundPanel}" Padding="0" AutomationId="ScenarioChatPanel">
+            <chat:AIChatView x:Name="ChatView"
+                             Session="{Binding Session}"
+                             Placeholder="{Binding Placeholder}"
+                             WelcomeTitle="{Binding Title}"
+                             WelcomeMessage="{Binding WelcomeMessage}"
+                             Suggestions="{Binding Suggestions}"
+                             IsInputEnabled="{Binding IsInputEnabled}"
+                             AutomationId="ScenarioChatView">
+
+                <!-- Under each completed response: the model that answered and the tokens it used. -->
+                <chat:AIChatView.ResponseFooterTemplate>
+                    <DataTemplate x:DataType="chat:ConversationTurn">
+                        <Label Text="{Binding ., Converter={StaticResource TurnFooter}}"
+                               IsVisible="{Binding ., Converter={StaticResource TurnFooter}, ConverterParameter=visible}"
+                               Style="{DynamicResource AIChat.Style.SecondaryText}"
+                               FontSize="12"
+                               AutomationId="ScenarioTurnFooter" />
+                    </DataTemplate>
+                </chat:AIChatView.ResponseFooterTemplate>
+
+                <!--
+                    The scenarios' own cards. Each template matches a block type, and a tool name where the type is
+                    shared, so every other block keeps its built-in view.
+                -->
+
+                <!-- Tool cards: the typed get_weather card ([ToolBlock] + options.AddGeneratedToolBlocks()). -->
+                <chat:BlockTemplate BlockType="{x:Type local:WeatherToolBlock}"
+                                    ViewType="{x:Type local:WeatherCardView}" />
+
+                <!-- Combined tool calls: every get_weather call of a response in one card. -->
+                <chat:BlockTemplate BlockType="{x:Type local:WeatherComparisonBlock}"
+                                    ViewType="{x:Type local:WeatherComparisonView}" />
+
+                <!-- Human in the loop: the meeting's own approval card; send_email keeps the built-in one. -->
+                <chat:BlockTemplate BlockType="{x:Type chat:ToolApprovalBlock}"
+                                    ToolName="book_meeting"
+                                    ViewType="{x:Type local:MeetingApprovalView}" />
+
+                <!-- Frontend tools: the automatic action as a chip; reset_accent_color keeps the built-in Run card. -->
+                <chat:BlockTemplate BlockType="{x:Type chat:UIActionBlock}"
+                                    ToolName="set_accent_color"
+                                    ViewType="{x:Type local:AccentActionView}" />
+
+                <!-- Activity progress: the plan, updated in place. -->
+                <chat:BlockTemplate BlockType="{x:Type local:PlanActivityBlock}"
+                                    ViewType="{x:Type local:PlanActivityView}" />
+
+                <!-- Shared state: a compact note where the agent changed the recipe. -->
+                <chat:BlockTemplate BlockType="{x:Type chat:FunctionInvocationContentBlock}"
+                                    ToolName="update_recipe"
+                                    ViewType="{x:Type local:RecipeUpdateView}" />
+
+                <!-- Predictive state: accept or reject the proposed document. -->
+                <chat:BlockTemplate BlockType="{x:Type chat:UIActionBlock}"
+                                    ToolName="propose_document"
+                                    ViewType="{x:Type local:ProposalReviewView}" />
+            </chat:AIChatView>
+        </Border>
+    </Grid>
+</ContentView>

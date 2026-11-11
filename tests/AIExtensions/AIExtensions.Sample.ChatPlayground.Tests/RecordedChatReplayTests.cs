@@ -545,13 +545,16 @@ public sealed class RecordedChatReplayTests
             new ChatMessage(ChatRole.User, "Hello"),
         };
         var options = new ChatOptions { ModelId = "requested-model" };
+
+        // Recorded the way the router records a live request, but with a history no session sent.
+        var recordingClient = new RecordingChatClient(harness.Live!, harness.Recording);
         if (recordedStreaming)
         {
-            await foreach (var _ in harness.Live!.GetStreamingResponseAsync(messages, options)) { }
+            await foreach (var _ in recordingClient.GetStreamingResponseAsync(messages, options)) { }
         }
         else
         {
-            await harness.Live!.GetResponseAsync(messages, options);
+            await recordingClient.GetResponseAsync(messages, options);
         }
 
         var saved = ChatRecordingSerializer.Deserialize(File.ReadAllText(harness.Recording.AutosavePath));

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Human in the loop: a custom approval card for book_meeting. It shows the meeting the model asks to book, from the
+    call's arguments, and approves or rejects the ToolApprovalBlock. send_email keeps the built-in approval card.
+-->
+<local:ScenarioCardView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                        xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                        xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+                        x:Class="AIExtensions.Sample.ChatPlayground.MeetingApprovalView"
+                        AutomationId="MeetingApprovalCard">
+    <Border x:Name="Card" Style="{DynamicResource AIChat.Style.Card}"
+            HorizontalOptions="Start" MinimumWidthRequest="280" MaximumWidthRequest="460">
+        <VerticalStackLayout Spacing="12">
+            <Grid ColumnDefinitions="40,*" ColumnSpacing="10">
+                <Border WidthRequest="40" HeightRequest="40" StrokeThickness="0" StrokeShape="RoundRectangle 10"
+                        BackgroundColor="{DynamicResource AIChat.Color.Accent}" VerticalOptions="Center">
+                    <Label Text="&#x1F4C5;" FontSize="20" HorizontalOptions="Center" VerticalOptions="Center"
+                           AutomationProperties.IsInAccessibleTree="False" />
+                </Border>
+                <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                    <Label x:Name="CaptionLabel" Style="{DynamicResource AIChat.Style.SecondaryText}"
+                           FontSize="11" FontAttributes="Bold" CharacterSpacing="0.6" />
+                    <Label x:Name="TitleLabel" Style="{DynamicResource AIChat.Style.CardTitle}" FontSize="16"
+                           AutomationId="MeetingTitle" />
+                </VerticalStackLayout>
+            </Grid>
+            <Grid ColumnDefinitions="52,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="4">
+                <Label Text="When" Style="{DynamicResource AIChat.Style.SecondaryText}" />
+                <Label x:Name="WhenLabel" Grid.Column="1" Style="{DynamicResource AIChat.Style.AssistantText}"
+                       AutomationId="MeetingWhen" />
+                <Label Grid.Row="1" Text="With" Style="{DynamicResource AIChat.Style.SecondaryText}" />
+                <Label x:Name="WhoLabel" Grid.Row="1" Grid.Column="1"
+                       Style="{DynamicResource AIChat.Style.AssistantText}" AutomationId="MeetingAttendees" />
+            </Grid>
+            <HorizontalStackLayout x:Name="ButtonsRow" Spacing="8">
+                <Button x:Name="RejectButton" Text="Don't book" Clicked="RejectClicked"
+                        Style="{DynamicResource AIChat.Style.SecondaryButton}"
+                        AutomationId="MeetingRejectButton" />
+                <Button x:Name="ApproveButton" Text="Book it" Clicked="ApproveClicked"
+                        Style="{DynamicResource AIChat.Style.PrimaryButton}"
+                        AutomationId="MeetingApproveButton" />
+            </HorizontalStackLayout>
+            <Label x:Name="StatusLabel" Style="{DynamicResource AIChat.Style.SecondaryText}"
+                   AutomationId="MeetingStatus" />
+        </VerticalStackLayout>
+    </Border>
+</local:ScenarioCardView>

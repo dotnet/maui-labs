@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.PlanPanel"
+             x:DataType="local:PlanPanelViewModel"
+             AutomationId="PlanPanel">
+    <!-- The agent's typed state, UIAgent<PlanState>.State, which the state mapper keeps up to date. -->
+    <ScrollView>
+        <VerticalStackLayout Padding="16,0,16,16" Spacing="10">
+            <Label Text="{Binding ProgressText}" Style="{StaticResource MutedLabel}" FontSize="12"
+                   AutomationId="PlanPanelProgress" />
+            <ProgressBar Progress="{Binding Progress}" ProgressColor="{StaticResource Primary}"
+                         IsVisible="{Binding HasPlan}" />
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Steps}" Spacing="8">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="local:PlanStepRow">
+                        <Grid ColumnDefinitions="26,*" ColumnSpacing="10" AutomationId="{Binding AutomationId}">
+                            <Border WidthRequest="24" HeightRequest="24" StrokeShape="RoundRectangle 12"
+                                    StrokeThickness="1" VerticalOptions="Start"
+                                    Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
+                                    BackgroundColor="Transparent">
+                                <Border.Triggers>
+                                    <DataTrigger TargetType="Border" Binding="{Binding IsCompleted}" Value="True">
+                                        <Setter Property="BackgroundColor" Value="{StaticResource SuccessGreen}" />
+                                        <Setter Property="Stroke" Value="{StaticResource SuccessGreen}" />
+                                    </DataTrigger>
+                                </Border.Triggers>
+                                <Grid>
+                                    <Label Text="{Binding Glyph}" FontSize="12" FontAttributes="Bold"
+                                           IsVisible="{Binding ShowsGlyph}"
+                                           HorizontalOptions="Center" VerticalOptions="Center">
+                                        <Label.Triggers>
+                                            <DataTrigger TargetType="Label" Binding="{Binding IsCompleted}" Value="True">
+                                                <Setter Property="TextColor" Value="White" />
+                                            </DataTrigger>
+                                        </Label.Triggers>
+                                    </Label>
+                                    <ActivityIndicator IsRunning="{Binding IsRunning}" IsVisible="{Binding IsRunning}"
+                                                       WidthRequest="16" HeightRequest="16" Color="{StaticResource Primary}" />
+                                </Grid>
+                            </Border>
+                            <Label Grid.Column="1" Text="{Binding Description}" VerticalOptions="Center">
+                                <Label.Triggers>
+                                    <DataTrigger TargetType="Label" Binding="{Binding IsCompleted}" Value="True">
+                                        <Setter Property="TextColor"
+                                                Value="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextDark}}" />
+                                    </DataTrigger>
+                                    <DataTrigger TargetType="Label" Binding="{Binding IsRunning}" Value="True">
+                                        <Setter Property="FontAttributes" Value="Bold" />
+                                    </DataTrigger>
+                                </Label.Triggers>
+                            </Label>
+                        </Grid>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentView>

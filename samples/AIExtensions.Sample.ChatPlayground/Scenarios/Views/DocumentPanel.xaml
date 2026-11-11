@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.DocumentPanel"
+             x:DataType="local:DocumentPanelViewModel"
+             AutomationId="DocumentPanel">
+    <ContentView.Resources>
+        <local:DiffFormattedStringConverter x:Key="DiffText" />
+    </ContentView.Resources>
+    <!--
+        The document: the agent's typed state, UIAgent<DocumentState>.State. While a proposal waits for review it is
+        the predictive state, shown with its changes against the document before it.
+    -->
+    <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8" Padding="16,0,16,16">
+        <Label Text="{Binding WordCount}" Style="{StaticResource MutedLabel}" FontSize="12"
+               AutomationId="DocumentWordCount" />
+        <Editor Grid.Row="1" Text="{Binding DocumentText}" IsVisible="{Binding IsEditorVisible}"
+                IsReadOnly="{Binding IsReadOnly}"
+                Placeholder="Write here, or ask the agent to write something."
+                FontSize="14" MinimumHeightRequest="160"
+                SemanticProperties.Description="Document"
+                AutomationId="DocumentEditor" />
+        <!-- Lines the proposal's text up with the editor's, so switching between them does not move it. -->
+        <Border Grid.Row="1" IsVisible="{Binding IsPending}" Padding="5,8" StrokeThickness="0" StrokeShape="Rectangle"
+                BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}"
+                AutomationId="DocumentProposal">
+            <ScrollView>
+                <Label FormattedText="{Binding Diff, Converter={StaticResource DiffText}}" FontSize="14"
+                       LineHeight="1.2" AutomationId="DocumentDiff" />
+            </ScrollView>
+        </Border>
+        <Label Grid.Row="2" Text="{Binding ChangeSummary}" Style="{StaticResource MutedLabel}" FontSize="12"
+               IsVisible="{Binding IsPending}" AutomationId="DocumentChangeSummary" />
+    </Grid>
+</ContentView>

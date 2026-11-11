@@ -11,6 +11,8 @@ public partial class PlaygroundPageLayout : ContentView
         nameof(HeaderStatus), typeof(string), typeof(PlaygroundPageLayout), string.Empty);
     public static readonly BindableProperty SidebarTitleProperty = BindableProperty.Create(
         nameof(SidebarTitle), typeof(string), typeof(PlaygroundPageLayout), string.Empty);
+    public static readonly BindableProperty SidebarIconProperty = BindableProperty.Create(
+        nameof(SidebarIcon), typeof(ImageSource), typeof(PlaygroundPageLayout), ImageSource.FromFile("settings.png"));
     public static readonly BindableProperty StatusAutomationIdProperty = BindableProperty.Create(
         nameof(StatusAutomationId), typeof(string), typeof(PlaygroundPageLayout), "PageStatusLabel");
     public static readonly BindableProperty SettingsContentProperty = BindableProperty.Create(
@@ -30,7 +32,11 @@ public partial class PlaygroundPageLayout : ContentView
         propertyChanged: (bindable, _, _) => ((PlaygroundPageLayout)bindable).DiagnosticsOpenChanged());
     public static readonly BindableProperty DiagnosticsAutomationPrefixProperty = BindableProperty.Create(
         nameof(DiagnosticsAutomationPrefix), typeof(string), typeof(PlaygroundPageLayout), "Chat");
+    public static readonly BindableProperty TitleBelowActionsWhenCompactProperty = BindableProperty.Create(
+        nameof(TitleBelowActionsWhenCompact), typeof(bool), typeof(PlaygroundPageLayout), false,
+        propertyChanged: (bindable, _, _) => ((PlaygroundPageLayout)bindable).ArrangeHeader());
     private bool _isCompact;
+    private bool _isTitleBelowActions;
 
     public PlaygroundPageLayout()
     {
@@ -60,6 +66,23 @@ public partial class PlaygroundPageLayout : ContentView
     {
         get => (string)GetValue(SidebarTitleProperty);
         set => SetValue(SidebarTitleProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether the title moves to its own row below the header buttons on narrow screens, for titles
+    /// longer than the space the buttons leave beside them.
+    /// </summary>
+    public bool TitleBelowActionsWhenCompact
+    {
+        get => (bool)GetValue(TitleBelowActionsWhenCompactProperty);
+        set => SetValue(TitleBelowActionsWhenCompactProperty, value);
+    }
+
+    /// <summary>Gets or sets the icon of the button that opens the sidebar on narrow screens.</summary>
+    public ImageSource SidebarIcon
+    {
+        get => (ImageSource)GetValue(SidebarIconProperty);
+        set => SetValue(SidebarIconProperty, value);
     }
 
     public string StatusAutomationId
@@ -157,6 +180,7 @@ public partial class PlaygroundPageLayout : ContentView
             return;
 
         _isCompact = compact;
+        ArrangeHeader();
         OpenSettingsButton.IsVisible = compact;
         CloseSettingsButton.IsVisible = compact;
         SettingsBackdrop.IsVisible = false;
@@ -174,6 +198,31 @@ public partial class PlaygroundPageLayout : ContentView
         }
     }
 
+    private void ArrangeHeader()
+    {
+        var below = _isCompact && TitleBelowActionsWhenCompact;
+        if (below == _isTitleBelowActions)
+            return;
+
+        _isTitleBelowActions = below;
+        if (below)
+        {
+            HeaderGrid.RowDefinitions.Insert(1, new RowDefinition(GridLength.Auto));
+            Grid.SetRow(TitleGroup, 1);
+            Grid.SetColumn(TitleGroup, 0);
+            Grid.SetColumnSpan(TitleGroup, 3);
+            Grid.SetRow(StatusLabel, 2);
+        }
+        else
+        {
+            HeaderGrid.RowDefinitions.RemoveAt(1);
+            Grid.SetRow(TitleGroup, 0);
+            Grid.SetColumn(TitleGroup, 1);
+            Grid.SetColumnSpan(TitleGroup, 1);
+            Grid.SetRow(StatusLabel, 1);
+        }
+    }
+
     private void OpenSettingsClicked(object? sender, EventArgs e)
     {
         if (_isCompact)
@@ -183,6 +232,9 @@ public partial class PlaygroundPageLayout : ContentView
             SettingsPanel.IsVisible = true;
         }
     }
+
+    /// <summary>Closes the sidebar when it covers the content on a narrow screen.</summary>
+    public void CloseSidebar() => CloseSettingsClicked(this, EventArgs.Empty);
 
     private void CloseSettingsClicked(object? sender, EventArgs e)
     {
