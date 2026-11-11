@@ -23,7 +23,7 @@ internal sealed class ReasoningHandler : ContentBlockHandler<ReasoningContentBlo
 
         if (reasoningContent is null)
         {
-            return state.Text.Length > 0 || state.ProtectedData is not null
+            return state.TextLength > 0 || state.ProtectedData is not null
                 ? BlockMappingResult<ReasoningContentBlock>.Complete()
                 : BlockMappingResult<ReasoningContentBlock>.Pass();
         }
@@ -36,7 +36,7 @@ internal sealed class ReasoningHandler : ContentBlockHandler<ReasoningContentBlo
         if (!string.IsNullOrEmpty(reasoningContent.Text))
             state.AppendText(reasoningContent.Text);
 
-        if (state.Text.Length == 0 && state.ProtectedData is null)
+        if (state.TextLength == 0 && state.ProtectedData is null)
             return BlockMappingResult<ReasoningContentBlock>.Pass();
 
         if (string.IsNullOrEmpty(state.Id))

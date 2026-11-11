@@ -33,6 +33,20 @@ public class ReasoningContentBlockTests
     }
 
     [Fact]
+    public void Text_IsCachedUntilMoreTextArrives()
+    {
+        var block = new ReasoningContentBlock();
+        block.AppendText("Think");
+        var text = block.Text;
+
+        Assert.Same(text, block.Text);
+
+        block.AppendText("ing");
+
+        Assert.Equal("Thinking", block.Text);
+    }
+
+    [Fact]
     public void AppendText_Null_Throws()
     {
         Assert.Throws<ArgumentNullException>(
