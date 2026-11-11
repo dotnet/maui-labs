@@ -104,6 +104,8 @@ internal sealed class ToolApprovalView : BlockView
     private readonly Label _resultHeader = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle, "Result");
     private readonly Label _result = ChatVisuals.Label(AIChatThemeKeys.CodeTextStyle);
     private readonly Border _resultBlock;
+    private readonly Button _approve;
+    private readonly Button _reject;
     private readonly HorizontalStackLayout _buttons;
     private BlockTemplate? _innerTemplate;
     private View? _innerView;
@@ -121,11 +123,11 @@ internal sealed class ToolApprovalView : BlockView
         ApproveCommand = new Command(Approve, () => CanDecide);
         RejectCommand = new Command(Reject, () => CanDecide);
 
-        var approve = new Button { Text = "Approve", AutomationId = "ApproveToolButton", Command = ApproveCommand }
+        _approve = new Button { Text = "Approve", AutomationId = "ApproveToolButton", Command = ApproveCommand }
             .Styled(AIChatThemeKeys.PrimaryButtonStyle);
-        var reject = new Button { Text = "Reject", AutomationId = "RejectToolButton", Command = RejectCommand }
+        _reject = new Button { Text = "Reject", AutomationId = "RejectToolButton", Command = RejectCommand }
             .Styled(AIChatThemeKeys.SecondaryButtonStyle);
-        _buttons = new HorizontalStackLayout { Spacing = 8, Children = { approve, reject } };
+        _buttons = new HorizontalStackLayout { Spacing = 8, Children = { _approve, _reject } };
 
         var header = new Grid
         {
@@ -207,6 +209,8 @@ internal sealed class ToolApprovalView : BlockView
         ChatVisuals.SetExpanded(_toggle, open, name);
 
         _buttons.IsVisible = canDecide;
+        SemanticProperties.SetDescription(_approve, $"Approve {name}");
+        SemanticProperties.SetDescription(_reject, $"Reject {name}");
         SemanticProperties.SetDescription(_title, status.Length > 0 ? $"{name}, {status}" : _title.Text);
         ApproveCommand.ChangeCanExecute();
         RejectCommand.ChangeCanExecute();
@@ -332,6 +336,7 @@ internal sealed class UIActionView : BlockView
             _ => "Running\u2026",
         };
         _run.IsVisible = CanRun;
+        SemanticProperties.SetDescription(_run, $"Run {name}");
         SemanticProperties.SetDescription(_title, $"Action {name}, {_status.Text}");
         RunCommand.ChangeCanExecute();
     }
