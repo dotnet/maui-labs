@@ -117,6 +117,20 @@
     </ItemGroup>
   </Target>
 
+  <!-- The Apple SDK can leave a stamp without its per-library resource cache.
+       Recover the missing output before its timestamp check, or a no-change
+       build/publish drops referenced resources from the current bundle items. -->
+  <Target Name="_MacOSRecoverLibraryResourceCaches"
+          BeforeTargets="_BeforeUnpackLibraryResources"
+          DependsOnTargets="_PrepareUnpackLibraryResources"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(_CanOutputAppBundle)' == 'true'
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <Delete Files="%(_UnpackLibraryResourceItems.StampFile)"
+            Condition="!Exists('%(_UnpackLibraryResourceItems.ItemsFile)')" />
+  </Target>
+
   <!--
     macOS AppKit app icon generation from MauiIcon items.
     Processes MauiIcon SVG/PNG sources into a .icns file using sips + iconutil,

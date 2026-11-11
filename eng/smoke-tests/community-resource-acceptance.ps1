@@ -223,7 +223,8 @@ function Invoke-BackendAcceptance {
     Assert-NoFile $output 'Shared/zero.bin'
 
     $publish = Join-Path $root 'publish'
-    Invoke-DotNet ((Get-ResourcePublishArguments $Name $consumerProject $publish) + $buildArguments)
+    Invoke-DotNet ((Get-ResourcePublishArguments $Name $consumerProject $publish) + $buildArguments +
+        @("-flp:logfile=$root/publish.log;verbosity=diagnostic"))
     $publishedResources = $publish
     if ($Name -eq 'appkit') {
         $installers = @(Get-ChildItem -LiteralPath $publish -File -Recurse -Filter '*.pkg')

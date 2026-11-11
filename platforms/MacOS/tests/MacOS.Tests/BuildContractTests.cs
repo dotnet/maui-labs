@@ -70,6 +70,22 @@ public sealed class BuildContractTests
 		document.Descendants().FirstOrDefault(element => element.Name.LocalName == localName);
 
 	[Fact]
+	public void LibraryResources_MissingCacheInvalidatesOnlyItsNativeStamp()
+	{
+		var targets = XDocument.Load(Path.Combine(GetBuildContractsDirectory(),
+			"Microsoft.Maui.Platforms.MacOS.targets"));
+		var recover = targets.Descendants().Single(element =>
+			element.Attribute("Name")?.Value == "_MacOSRecoverLibraryResourceCaches");
+		Assert.Equal("_BeforeUnpackLibraryResources", recover.Attribute("BeforeTargets")?.Value);
+		Assert.Equal("_PrepareUnpackLibraryResources", recover.Attribute("DependsOnTargets")?.Value);
+		Assert.Contains("'$(_CanOutputAppBundle)' == 'true'", recover.Attribute("Condition")?.Value);
+		Assert.Contains("'$(EnableMacOSMauiResourceMapping)' != 'false'", recover.Attribute("Condition")?.Value);
+		var delete = recover.Elements().Single();
+		Assert.Equal("%(_UnpackLibraryResourceItems.StampFile)", delete.Attribute("Files")?.Value);
+		Assert.Equal("!Exists('%(_UnpackLibraryResourceItems.ItemsFile)')", delete.Attribute("Condition")?.Value);
+	}
+
+	[Fact]
 	public void BlazorAssets_ReplaceMappedResourcesWithCanonicalWebPaths()
 	{
 		var targets = XDocument.Load(Path.Combine(GetBuildContractsDirectory(),
