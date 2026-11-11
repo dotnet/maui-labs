@@ -106,6 +106,11 @@ with no platform or device:
   `ChatHost.Realize(row)` builds the item view the list would show for a row.
 - A module initializer installs an inline dispatcher, so the message list flushes synchronously. Install
   `TestDispatcher` when a test needs to observe coalesced updates.
+- Install `UIThreadDispatcher` (inside `UIThread.Run`, before creating the view) to test callbacks raised on
+  another thread: like a device, only the test thread has a dispatcher.
+- Test the built-in speech recognizer over `FakeSpeechToText`, which raises updates the way each platform's
+  CommunityToolkit.Maui service does (`SayOnApple`, `SayOnWindows`, `SayOnAndroid`), and move its pause timer
+  with `ManualTimeProvider`.
 
 ### Naming Convention
 
