@@ -27,8 +27,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Exclude bin and obj too: an explicit glob doesn't get the SDK's default excludes, and a build that puts its
+         output under the sample's directory would otherwise link its generated sources. -->
     <Compile Include="$(_ScrollingSampleDirectory)**\*.cs"
-             Exclude="$(_ScrollingSampleDirectory)**\*.Android.cs;$(_ScrollingSampleDirectory)**\*.iOS.cs"
+             Exclude="$(_ScrollingSampleDirectory)**\*.Android.cs;$(_ScrollingSampleDirectory)**\*.iOS.cs;$(_ScrollingSampleDirectory)bin\**;$(_ScrollingSampleDirectory)obj\**"
              LinkBase="Scrolling" />
   </ItemGroup>
 </Project>
