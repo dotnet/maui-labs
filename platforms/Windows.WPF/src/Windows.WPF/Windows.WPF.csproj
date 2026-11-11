@@ -6,7 +6,8 @@
     <MauiVersion Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net10.0-'))">$(Maui10Version)</MauiVersion>
     <MauiVersion Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.0-'))">$(Maui11Version)</MauiVersion>
     <UseWPF>true</UseWPF>
-    <UseMaui>true</UseMaui>
+    <!-- The backend uses the WPF SDK; MAUI app tooling belongs in consumers. -->
+    <UseMaui>false</UseMaui>
     <RootNamespace>Microsoft.Maui.Platforms.Windows.WPF</RootNamespace>
     <AssemblyName>Microsoft.Maui.Platforms.Windows.WPF</AssemblyName>
     <PackageId>Microsoft.Maui.Platforms.Windows.WPF</PackageId>

@@ -57,6 +57,12 @@ public class BlazorRootComponentTests
 				Assert.Empty(native.RootComponents);
 				replacement.RootComponents.Add(Component("#disconnected"));
 				Assert.Empty(native.RootComponents);
+				handler.SetVirtualView(replacement);
+				Assert.NotSame(native, handler.PlatformView);
+				Assert.Equal(["#second", "#disconnected"],
+					handler.PlatformView.RootComponents.Select(component => component.Selector));
+				replacement.RootComponents.Clear();
+				Assert.Empty(handler.PlatformView.RootComponents);
 			}
 			finally
 			{

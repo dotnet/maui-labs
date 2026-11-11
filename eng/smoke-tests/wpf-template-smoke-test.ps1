@@ -203,7 +203,8 @@ public static void Main(string[] args)
     [regex]::Replace($program, $signature, $route) | Set-Content $programPath
 }
 
-$consumerArguments = @("-p:RuntimeIdentifier=$RuntimeIdentifier", '-p:SelfContained=false', '-m:1', '-nr:false')
+$consumerArguments = @("-p:RuntimeIdentifier=$RuntimeIdentifier", '-p:SelfContained=false',
+    '-p:PublishReadyToRun=false', '-m:1', '-nr:false')
 Invoke-MSBuild -Arguments (@($appProject, '-restore', '-t:Build', '-p:Configuration=Release',
     "-p:RestoreConfigFile=$configPath", "-p:RestorePackagesPath=$(Join-Path $work 'cache')",
     '-warnaserror:NU1605', '-verbosity:minimal', '-nologo') + $consumerArguments)
@@ -243,11 +244,14 @@ if ($FontScenarios) {
     $fontItemJson | Set-Content (Join-Path $work 'font-items.json')
     $fontItems = ($fontItemJson -join "`n") | ConvertFrom-Json
     $consumerFont = Join-Path $appDirectory 'Resources\Fonts\OpenSans-Regular.ttf'
-    $copiedFonts = @($fontItems.Items.ContentWithTargetPath | Where-Object { $_.FullPath -eq $consumerFont })
+    $copiedFonts = @($fontItems.Items.ContentWithTargetPath | Where-Object {
+        $_.TargetPath -ceq 'Resources\Fonts\OpenSans-Regular.ttf'
+    })
     if ($fontItems.Properties.UseMaui -ne 'true' -or $copiedFonts.Count -ne 1 -or
-        $copiedFonts[0].TargetPath -cne 'Resources\Fonts\OpenSans-Regular.ttf' -or
         $copiedFonts[0].CopyToOutputDirectory -cne 'PreserveNewest' -or
-        $copiedFonts[0].CopyToPublishDirectory -cne 'PreserveNewest') {
+        $copiedFonts[0].CopyToPublishDirectory -cne 'PreserveNewest' -or
+        (Get-FileHash -LiteralPath $copiedFonts[0].FullPath).Hash -cne
+            (Get-FileHash -LiteralPath $consumerFont).Hash) {
         throw 'The real PackageReference consumer did not execute the installed font content contract.'
     }
     [ordered]@{

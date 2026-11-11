@@ -23,6 +23,17 @@
     <_MicrosoftMauiPlatformsWindowsWPFPlatformFolderAdded>true</_MicrosoftMauiPlatformsWindowsWPFPlatformFolderAdded>
   </PropertyGroup>
 
+  <Target Name="_WpfSetDefaultMauiAssetLogicalNames"
+          BeforeTargets="ProcessMauiAssets"
+          Condition="'$(_WpfUseMaui11ResourcePipeline)' == 'true'">
+    <ItemGroup>
+      <MauiAsset Condition="'%(MauiAsset.LogicalName)' == ''">
+        <LogicalName Condition="'%(MauiAsset.Link)' != ''">%(MauiAsset.Link)</LogicalName>
+        <LogicalName Condition="'%(MauiAsset.Link)' == ''">%(MauiAsset.RecursiveDir)%(MauiAsset.Filename)%(MauiAsset.Extension)</LogicalName>
+      </MauiAsset>
+    </ItemGroup>
+  </Target>
+
   <Target Name="_WpfCollectProcessedMauiResources"
           Condition="'$(_WpfUseMaui11ResourcePipeline)' == 'true' and '$(_WpfProcessedResourcesCollected)' != 'true'"
           DependsOnTargets="ProcessMauiAssets;ProcessMauiFonts;ResizetizeImages"

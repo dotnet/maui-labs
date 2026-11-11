@@ -55,6 +55,7 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 
 		protected override void ConnectHandler(Wpf.BlazorWebView platformView)
 		{
+			_rootComponentPlatformView = platformView;
 			platformView.Loaded += PlatformView_Loaded;
 			platformView.StartPath = VirtualView.StartPath;
 			platformView.Services = MauiContext!.Services!;
@@ -92,6 +93,7 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 		protected override void DisconnectHandler(Wpf.BlazorWebView platformView)
 		{
 			ObserveRootComponents(null);
+			_rootComponentPlatformView = null;
 			platformView.Loaded -= PlatformView_Loaded;
 
 			if (_hookedWebView != null)

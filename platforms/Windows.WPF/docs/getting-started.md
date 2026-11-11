@@ -40,7 +40,7 @@ code-only entry point, also set `EnableDefaultApplicationDefinition` and
 `EnableDefaultPageItems` to `false`, as the template does.
 
 Set `WindowsSdkPackageVersion` to the projection version used by the backend
-(currently `10.0.26100.86`). This does not raise the minimum supported Windows
+(currently `10.0.26100.87`). This does not raise the minimum supported Windows
 version; it ensures the consumer and Essentials reference the same Windows SDK
 assembly. The template stamps this value from the repository's dependency pin.
 

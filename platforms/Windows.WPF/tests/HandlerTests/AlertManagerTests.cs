@@ -119,6 +119,10 @@ public class AlertManagerTests
 #if NET10_0
 		var subscriptionType = typeof(Microsoft.Maui.Controls.Window).Assembly
 			.GetType("Microsoft.Maui.Controls.Platform.IAlertManagerSubscription")
+			?? typeof(Microsoft.Maui.Controls.Window).Assembly
+				.GetType("Microsoft.Maui.Controls.Platform.AlertManager")?
+				.GetNestedType("IAlertManagerSubscription",
+					System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
 			?? throw new InvalidOperationException("MAUI 10 dialog subscription contract was not found.");
 		var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
 		WPFAlertManagerSubscription.Register(services);

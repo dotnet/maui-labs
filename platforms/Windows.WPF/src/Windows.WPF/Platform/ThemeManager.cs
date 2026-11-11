@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Win32;
 using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Controls;
 
 namespace Microsoft.Maui.Platforms.Windows.WPF
 {

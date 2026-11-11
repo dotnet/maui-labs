@@ -73,6 +73,7 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 			=> handler.PlatformView.StartPath = webView.StartPath;
 
 		RootComponentsCollection? _observedRootComponents;
+		Wpf.BlazorWebView? _rootComponentPlatformView;
 		readonly RootComponentReconciler<RootComponent> _rootComponentReconciler = new();
 		readonly Dictionary<RootComponent, Wpf.RootComponent> _nativeRootComponents = [];
 
@@ -91,6 +92,9 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 
 		async void SynchronizeRootComponents()
 		{
+			var platformView = _rootComponentPlatformView;
+			if (platformView == null)
+				return;
 			try
 			{
 				await _rootComponentReconciler.SynchronizeAsync(
@@ -103,13 +107,13 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 							Parameters = component.Parameters!,
 							Selector = component.Selector!,
 						};
-						PlatformView.RootComponents.Add(native);
+						platformView.RootComponents.Add(native);
 						_nativeRootComponents.Add(component, native);
 						return Task.CompletedTask;
 					},
 					component =>
 					{
-						PlatformView.RootComponents.Remove(_nativeRootComponents[component]);
+						platformView.RootComponents.Remove(_nativeRootComponents[component]);
 						_nativeRootComponents.Remove(component);
 						return Task.CompletedTask;
 					});
