@@ -20,22 +20,33 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
     private readonly AIFunction _function;
     private readonly IServiceProvider? _services;
     private readonly ILogger _logger;
+    private readonly IActiveEntry? _innerEntry;
     private readonly TaskCompletionSource<AIContent> _resultSource =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _invocationStarted;
 
+    /// <param name="function">The registered action.</param>
+    /// <param name="mode">Whether the action is invoked automatically or by the UI.</param>
+    /// <param name="innerBlock">The block that shows the call and its result.</param>
+    /// <param name="services">The services passed to the action.</param>
+    /// <param name="logger">Logs a failed action.</param>
+    /// <param name="innerEntry">
+    /// The handler entry that created <paramref name="innerBlock"/>, which maps the result into it.
+    /// </param>
     internal UIActionBlock(
         AIFunction function,
         UIActionInvocationMode mode,
         FunctionInvocationContentBlock innerBlock,
         IServiceProvider? services,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        IActiveEntry? innerEntry = null)
         : base(innerBlock)
     {
         _function = function;
         Mode = mode;
         _services = services;
         _logger = logger ?? NullLogger.Instance;
+        _innerEntry = innerEntry;
     }
 
     public bool IsComplete => Result is not null;
@@ -68,13 +79,26 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
     internal void SetResult(FunctionResultContent result)
     {
         ArgumentNullException.ThrowIfNull(result);
-        InnerBlock.Result = result;
-        _resultSource.TrySetResult(result);
-        NotifyChanged();
+        try
+        {
+            // A typed inner block, such as a [ToolBlock], maps the result with its own handler.
+            if (_innerEntry?.Invoke(new BlockMappingContext(new ChatResponseUpdate(ChatRole.Tool, [result])))
+                is { Kind: not HandleResult.ResultKind.Pass })
+            {
+                InnerBlock.InvokeNotifyChanged();
+            }
+        }
+        finally
+        {
+            InnerBlock.Result ??= result;
+            _resultSource.TrySetResult(result);
+            NotifyChanged();
+        }
     }
 
     private async Task InvokeCoreAsync(CancellationToken cancellationToken)
     {
+        FunctionResultContent result;
         try
         {
             var arguments = new AIFunctionArguments(
@@ -82,20 +106,32 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
             {
                 Services = _services,
             };
-            var result = await _function.InvokeAsync(arguments, cancellationToken);
-            SetResult(new FunctionResultContent(Call!.CallId, result));
+            result = new FunctionResultContent(
+                Call!.CallId,
+                await _function.InvokeAsync(arguments, cancellationToken));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             _resultSource.TrySetCanceled(cancellationToken);
+            return;
         }
         catch (Exception exception)
         {
             UIAgentLog.UIActionFailed(_logger, _function.Name, Call!.CallId, exception);
-            SetResult(new FunctionResultContent(Call.CallId, "Error: Function failed.")
+            result = new FunctionResultContent(Call.CallId, "Error: Function failed.")
             {
                 Exception = exception,
-            });
+            };
+        }
+
+        try
+        {
+            SetResult(result);
+        }
+        catch (Exception exception)
+        {
+            // The result still reaches the model; only the block that shows it failed.
+            UIAgentLog.UIActionResultNotShown(_logger, _function.Name, Call.CallId, exception);
         }
     }
 }

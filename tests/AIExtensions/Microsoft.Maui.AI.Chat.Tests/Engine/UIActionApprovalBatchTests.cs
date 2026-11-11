@@ -44,14 +44,14 @@ public class UIActionApprovalBatchTests
         Assert.Equal("Done.", Assert.Single(turn.ResponseBlocks.OfType<TextContentBlock>()).RawText);
 
         Assert.Equal(2, scenario.Model.Requests.Count);
-        AssertValidToolHistory(scenario.Model.Requests[1]);
-        Assert.Equal("Map of Paris", FindResult(scenario.Model.Requests[1], "map-1"));
+        ToolHistory.AssertValid(scenario.Model.Requests[1]);
+        Assert.Equal("Map of Paris", ToolHistory.FindResult(scenario.Model.Requests[1], "map-1"));
 
         await context.SendMessageAsync("Again");
 
         Assert.Equal(ConversationStatus.Idle, context.Status);
         Assert.Equal(3, scenario.Model.Requests.Count);
-        AssertValidToolHistory(scenario.Model.Requests[2]);
+        ToolHistory.AssertValid(scenario.Model.Requests[2]);
         Assert.Equal(["Paris"], scenario.Shown);
         Assert.Equal(["a.txt"], scenario.Deleted);
     }
@@ -82,7 +82,7 @@ public class UIActionApprovalBatchTests
         await restored.SendMessageAsync("Again");
 
         Assert.Equal(ConversationStatus.Idle, restored.Status);
-        AssertValidToolHistory(scenario.Model.Requests[^1]);
+        ToolHistory.AssertValid(scenario.Model.Requests[^1]);
         Assert.Equal(["Paris"], scenario.Shown);
         Assert.Equal(["a.txt"], scenario.Deleted);
     }
@@ -117,13 +117,13 @@ public class UIActionApprovalBatchTests
             turn.ResponseBlocks.Count,
             turn.ResponseBlocks.Select(block => block.Id).Distinct().Count());
 
-        AssertValidToolHistory(scenario.Model.Requests[1]);
-        Assert.Equal(expected, FindResult(scenario.Model.Requests[1], "map-1"));
+        ToolHistory.AssertValid(scenario.Model.Requests[1]);
+        Assert.Equal(expected, ToolHistory.FindResult(scenario.Model.Requests[1], "map-1"));
 
         await context.SendMessageAsync("Again");
 
         Assert.Equal(ConversationStatus.Idle, context.Status);
-        AssertValidToolHistory(scenario.Model.Requests[2]);
+        ToolHistory.AssertValid(scenario.Model.Requests[2]);
         Assert.Equal(approve ? ["Paris"] : [], scenario.Shown);
     }
 
@@ -146,14 +146,14 @@ public class UIActionApprovalBatchTests
         Assert.Equal(ApprovalStatus.Approved, approval.Status);
         Assert.Equal("Map of Paris", approval.Result?.Result?.ToString());
         Assert.DoesNotContain(turn.ResponseBlocks, block => block is UIActionBlock);
-        AssertValidToolHistory(scenario.Model.Requests[1]);
-        Assert.Equal("Map of Paris", FindResult(scenario.Model.Requests[1], "map-1"));
+        ToolHistory.AssertValid(scenario.Model.Requests[1]);
+        Assert.Equal("Map of Paris", ToolHistory.FindResult(scenario.Model.Requests[1], "map-1"));
     }
 
     [Fact]
     public async Task ApprovalRequiredUIAction_WithoutFunctionInvocation_Throws()
     {
-        var model = new ScriptedModel();
+        var model = new ScriptedChatClient();
         var showMap = new ApprovalRequiredAIFunction(AIFunctionFactory.Create(
             (string city) => $"Map of {city}",
             "ShowMap",
@@ -169,46 +169,6 @@ public class UIActionApprovalBatchTests
         Assert.Empty(context.Turns);
         Assert.Empty(model.Requests);
     }
-
-    /// <summary>Asserts that a request is one a provider accepts: every call answered once, after the call.</summary>
-    private static void AssertValidToolHistory(IReadOnlyList<ChatMessage> messages)
-    {
-        var calls = new HashSet<string>(StringComparer.Ordinal);
-        var answered = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var message in messages)
-        {
-            foreach (var content in message.Contents)
-            {
-                switch (content)
-                {
-                    case FunctionCallContent call:
-                        Assert.True(calls.Add(call.CallId), $"Call '{call.CallId}' is sent more than once.");
-                        break;
-                    case FunctionResultContent result:
-                        Assert.True(
-                            calls.Contains(result.CallId),
-                            $"Result '{result.CallId}' is sent without its call before it.");
-                        Assert.True(answered.Add(result.CallId), $"Call '{result.CallId}' is answered more than once.");
-                        break;
-                    case ToolApprovalRequestContent { ToolCall: FunctionCallContent { InformationalOnly: false } } request:
-                        Assert.Fail($"The pending approval request '{request.RequestId}' reached the model.");
-                        break;
-                    case ToolApprovalResponseContent { ToolCall: FunctionCallContent { InformationalOnly: false } } response:
-                        Assert.Fail($"The pending approval response '{response.RequestId}' reached the model.");
-                        break;
-                }
-            }
-        }
-
-        Assert.Equal(calls.Order(), answered.Order());
-    }
-
-    private static string? FindResult(IReadOnlyList<ChatMessage> messages, string callId)
-        => messages
-            .SelectMany(message => message.Contents)
-            .OfType<FunctionResultContent>()
-            .Single(result => result.CallId == callId)
-            .Result?.ToString();
 
     private static async IAsyncEnumerable<ChatResponseUpdate> EmitCalls(
         [EnumeratorCancellation] CancellationToken cancellationToken,
@@ -230,7 +190,7 @@ public class UIActionApprovalBatchTests
         UIActionInvocationMode mode,
         InMemoryConversationThread? thread = null)
     {
-        internal ScriptedModel Model { get; } = new();
+        internal ScriptedChatClient Model { get; } = new();
 
         internal List<string> Deleted { get; } = [];
 
@@ -288,39 +248,6 @@ public class UIActionApprovalBatchTests
                 }
             });
             return context;
-        }
-    }
-
-    /// <summary>A model that answers each request with the next scripted response.</summary>
-    private sealed class ScriptedModel : IChatClient
-    {
-        private readonly Queue<Func<CancellationToken, IAsyncEnumerable<ChatResponseUpdate>>> _responses = new();
-
-        internal List<IReadOnlyList<ChatMessage>> Requests { get; } = [];
-
-        internal void Enqueue(Func<CancellationToken, IAsyncEnumerable<ChatResponseUpdate>> response)
-            => _responses.Enqueue(response);
-
-        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            Requests.Add(messages.Select(message => message.Clone()).ToList());
-            return _responses.Dequeue()(cancellationToken);
-        }
-
-        public Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
-
-        public object? GetService(Type serviceType, object? serviceKey = null)
-            => serviceType.IsInstanceOfType(this) ? this : null;
-
-        public void Dispose()
-        {
         }
     }
 }

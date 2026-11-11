@@ -32,17 +32,19 @@ internal class BlockMappingPipeline
     {
         _logger = logger ?? NullLogger.Instance;
         _calls = calls ?? new FunctionCallRegistry();
-        // User-registered handlers go first so they can customize behavior
-        foreach (var registration in options.HandlerRegistrations)
-        {
-            _handlers.Add(registration.CreateEntry());
-        }
 
-        // Registered UI actions claim their function calls before the approval and tool-call handlers.
+        // Registered UI actions claim their function calls first, so the action always runs. A handler
+        // registered for an action's name shows the call inside the action instead.
         if (options.UIActions.Count > 0)
         {
             _handlers.Add(new HandlerEntry<UIActionHandler.UIActionHandlerState>(
                 new UIActionHandler(options.UIActions, options.Services, _logger)));
+        }
+
+        // User-registered handlers go next so they can customize behavior
+        foreach (var registration in options.HandlerRegistrations)
+        {
+            _handlers.Add(registration.CreateEntry());
         }
 
         // Built-in approval handler (before function invocation so it claims ToolApprovalRequestContent first)
@@ -278,9 +280,12 @@ internal class BlockMappingPipeline
                 _calls.Register(call, block, entry);
                 break;
             case InteractiveFunctionBlock { Call: { } call } interactive:
-                // A wrapped call's result is claimed by the handler that created the inner block.
+                // A wrapped call's result is claimed by the handler that created the inner block, or for
+                // an approval of a UI action by the action, which maps it into the inner block.
                 var resultEntry = _calls.TryGet(call.CallId, out var inner)
-                    && ReferenceEquals(inner.Block, interactive.InnerBlock)
+                    && (ReferenceEquals(inner.Block, interactive.InnerBlock)
+                        || (interactive is ToolApprovalBlock { UIAction: { } action }
+                            && ReferenceEquals(inner.Block, action)))
                         ? inner.ResultEntry
                         : null;
                 _calls.Register(call, block, resultEntry);
