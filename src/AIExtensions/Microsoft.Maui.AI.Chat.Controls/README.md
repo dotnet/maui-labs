@@ -184,6 +184,69 @@ public sealed class WeatherCard : BlockView
 
 Generated blocks need `options.AddGeneratedToolBlocks()` on the agent, so assign a `Session` you build yourself.
 
+### Combine tool calls into one card
+
+To show several tool calls of a response as one card, write a block that holds them and a handler that folds the
+calls and their results into it. The first call emits the block; later calls and results update it in place.
+
+```csharp
+public sealed class WeatherComparisonBlock : ContentBlock
+{
+    public List<(FunctionCallContent Call, FunctionResultContent? Result)> Rows { get; } = [];
+}
+
+public sealed class WeatherComparisonHandler : ContentBlockHandler<WeatherComparisonBlock>
+{
+    public override BlockMappingResult<WeatherComparisonBlock> Handle(
+        BlockMappingContext context, WeatherComparisonBlock block)
+    {
+        var changed = false;
+        foreach (var content in context.UnhandledContents)
+        {
+            if (content is FunctionCallContent { Name: "get_weather" } call)
+            {
+                context.MarkHandled(call);
+                block.Rows.Add((call, null));
+                changed = true;
+            }
+            else if (content is FunctionResultContent result &&
+                block.Rows.FindIndex(row => row.Call.CallId == result.CallId) is >= 0 and var index)
+            {
+                context.MarkHandled(result); // a custom block claims its results itself
+                block.Rows[index] = (block.Rows[index].Call, result);
+                changed = true;
+            }
+        }
+
+        if (!changed)
+            return BlockMappingResult<WeatherComparisonBlock>.Pass();
+        if (string.IsNullOrEmpty(block.Id))
+        {
+            block.Id = "weather-" + context.Update.MessageId;
+            return BlockMappingResult<WeatherComparisonBlock>.Emit(block, block);
+        }
+
+        return BlockMappingResult<WeatherComparisonBlock>.Update(block);
+    }
+}
+
+var agent = new UIAgent(chatClient, options => options.AddBlockHandler(new WeatherComparisonHandler()));
+```
+
+```xml
+<chat:AIChatView Session="{Binding Session}">
+    <chat:BlockTemplate BlockType="{x:Type local:WeatherComparisonBlock}"
+                        ViewType="{x:Type local:WeatherComparisonView}" />
+</chat:AIChatView>
+```
+
+`WeatherComparisonView` derives from `BlockView` and redraws in `OnBlockChanged`, which runs on every update of its
+block. Mark the results handled as well as the calls: a custom block is not one of the engine's function blocks, so
+an unclaimed result is dropped. With `ChatOptions.AllowMultipleToolCalls = false` the card fills in one row at a
+time; with parallel calls, a batch's results arrive together. The ChatPlayground sample's Agentic tab shows it
+("Combined tool calls"), next to activities that update in place, shared and predictive state, and a conversation
+that survives restarting the app.
+
 ## Layout slots
 
 | Property | Shows |
