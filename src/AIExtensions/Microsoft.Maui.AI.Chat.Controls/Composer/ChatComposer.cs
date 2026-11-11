@@ -360,6 +360,12 @@ internal sealed class ChatComposer
                 if (_view.ShowInterimAudioTranscript && _view.GetSpeechRecognizer() is { IsSupported: true })
                     await StartDictationAsync(generation, operation, source);
             }
+            else if (!ReferenceEquals(_activeRecorder, recorder))
+            {
+                // Canceled or replaced while starting, and the recorder ignored the cancellation: the cleanup
+                // skipped it because it wasn't recording yet, so release it here.
+                await CancelQuietlyAsync(recorder);
+            }
         }
         catch (OperationCanceledException) when (source.IsCancellationRequested)
         {
@@ -1239,6 +1245,18 @@ internal sealed class ChatComposer
         catch (Exception)
         {
             // No screen reader service on this platform (or in unit tests).
+        }
+    }
+
+    private static async Task CancelQuietlyAsync(IChatAudioRecorder recorder)
+    {
+        try
+        {
+            await recorder.CancelAsync();
+        }
+        catch (Exception)
+        {
+            // Nothing else owns the recorder; there is no one left to report this to.
         }
     }
 

@@ -39,6 +39,38 @@ public class AudioTests
         Assert.Equal([picked, document, second], view.Attachments);
     });
 
+    [Theory]
+    [InlineData("unload")]
+    [InlineData("disallow")]
+    [InlineData("replace")]
+    public void RecorderThatFinishesStartingAfterCancellation_IsReleased(string cancellation) => UIThread.Run(async () =>
+    {
+        var recorder = new FakeAudioRecorder(FakeAudioRecorder.Wav()) { StartGate = Waiters.Signal() };
+        var view = CreateView(recorder);
+
+        var start = view.Composer.StartAudioCaptureAsync();
+        await UIThread.Until(() => recorder.StartCount == 1);
+        switch (cancellation)
+        {
+            case "unload":
+                ChatHost.Unload(view);
+                break;
+            case "disallow":
+                view.AllowAudioCapture = false;
+                break;
+            default:
+                view.AudioRecorder = new FakeAudioRecorder();
+                break;
+        }
+
+        recorder.StartGate.SetResult();
+        await start;
+
+        Assert.False(recorder.IsRecording);
+        Assert.Equal(1, recorder.CancelCount);
+        Assert.False(view.IsRecordingAudio);
+    });
+
     [Fact]
     public void RejectedRecording_KeepsTheAttachedAudio() => UIThread.Run(async () =>
     {
