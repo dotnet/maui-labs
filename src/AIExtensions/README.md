@@ -18,15 +18,17 @@ AI integration packages for .NET MAUI, built on [`Microsoft.Extensions.AI`](http
 | [`AIExtensions.Sample.DIParameters`](../../samples/AIExtensions.Sample.DIParameters/) | DI parameter binding with `[FromServices]` |
 | [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI chat app with navigation, cart, approval flow |
 | [`AIExtensions.Sample.ChatPlayground`](../../samples/AIExtensions.Sample.ChatPlayground/) | Azure/Apple `IChatClient` requests, images and tools, automatic recording, and offline replay with portable tests |
+| [`AIExtensions.Sample.Scrolling`](../../samples/AIExtensions.Sample.Scrolling/) | `ScrollAnchor`: keeps the end of a `CollectionView` or `ScrollView` in view while content streams in; a prototype for a dotnet/maui proposal, used by the playground's diagnostics sidebar |
 
 ## CI
 
 - GitHub Actions: `ci-ai.yml`
 - Solution filter: `AIExtensions.slnf` includes the MAUI playground. The portable
-  `AIExtensions.Packages.slnf` includes the recording/replay tests and is used by
-  the Windows official packaging job and package/test CI job. A separate macOS
-  CI job builds the MAUI sample with the required workloads and native Apple
-  dependencies.
+  `AIExtensions.Packages.slnf` includes the recording/replay tests and the
+  `ScrollAnchor` tests and is used by the Windows official packaging job and
+  package/test CI job. A separate macOS CI job builds the MAUI sample, and the
+  `ScrollAnchor` library it references, with the required workloads and native
+  Apple dependencies.
 
 ## Requirements
 

@@ -63,6 +63,11 @@ the pinned MEAI version provides image logging only. Model/usage data come from
 the provider. Payload logging and sensitive telemetry are disabled, but exceptions
 may contain sensitive data. Diagnostics are not exported automatically.
 
+The log list keeps its end in view as entries arrive. Scroll up to read and it
+stays put until you scroll back to the end. This uses
+[`ScrollAnchor`](../AIExtensions.Sample.Scrolling/), whose README lists DevFlow
+actions that exercise it without a model or network.
+
 ## Run the sample
 
 Use the repository's pinned .NET 10 SDK and matching MAUI workload.
