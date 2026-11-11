@@ -121,8 +121,6 @@
   </ItemGroup>
   <ItemGroup Label="EssentialsAI">
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIAbstractionsVersion)" />
-    <PackageVersion Include="Microsoft.Extensions.DataIngestion.Abstractions" Version="10.10.0-preview.1.26459.2" />
-    <PackageVersion Include="AngleSharp" Version="1.4.0" />
     <PackageVersion Include="Azure.Core" Version="1.53.0" />
     <PackageVersion Include="Microsoft.Extensions.Documents.Abstractions" Version="$(DocumentExtractionPreviewVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DocumentExtraction.Abstractions" Version="$(DocumentExtractionPreviewVersion)" />

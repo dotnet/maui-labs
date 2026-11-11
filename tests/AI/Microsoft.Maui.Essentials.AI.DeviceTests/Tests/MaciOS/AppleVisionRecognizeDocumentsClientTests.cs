@@ -18,7 +18,7 @@ public class AppleVisionRecognizeDocumentsClientTests
 	{
 		using DocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
 		Assert.Same(client, client.GetService(typeof(DocumentExtractionClient)));
-		using var image = await FileSystem.OpenAppPackageFileAsync("DocumentReader/headings.png");
+		using var image = await FileSystem.OpenAppPackageFileAsync("DocumentExtraction/headings.png");
 		var result = await client.ExtractAsync(image, "headings", "image/png");
 		client.Dispose();
 		var section = Assert.Single(result.Sections);
@@ -40,7 +40,7 @@ public class AppleVisionRecognizeDocumentsClientTests
 	[AppleVisionRecognizeDocumentsFact]
 	public async Task ExtractAsync_PdfPreservesPageOrderSourceFramesAndCallerInput()
 	{
-		using var pdf = await FileSystem.OpenAppPackageFileAsync("DocumentReader/two-pages.pdf");
+		using var pdf = await FileSystem.OpenAppPackageFileAsync("DocumentExtraction/two-pages.pdf");
 		using DocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
 		var result = await client.ExtractAsync(pdf, "pdf", "application/pdf");
 		Assert.Equal([1, 2], result.SourcePages.Select(page => page.PageNumber));
@@ -55,7 +55,7 @@ public class AppleVisionRecognizeDocumentsClientTests
 	[AppleVisionRecognizeDocumentsFact]
 	public async Task ExtractAsync_TablePreservesGeometrySpansAndNativeDataWithoutFabricatedAssets()
 	{
-		using var image = await FileSystem.OpenAppPackageFileAsync("DocumentReader/merged-table.png");
+		using var image = await FileSystem.OpenAppPackageFileAsync("DocumentExtraction/merged-table.png");
 		using DocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
 		var result = await client.ExtractAsync(image, "table", "image/png");
 		Assert.Empty(result.EnumerateContent().OfType<ExtractionDocumentImageElement>());

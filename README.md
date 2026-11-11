@@ -153,8 +153,7 @@ systems.
   Model download is explicit and observable.
 - **Document extraction (experimental):** Apple Vision extracts text, tables,
   source geometry, and merged cells from images and PDFs on Apple OS 26+.
-  A local reader projects results for data ingestion. See the
-  [extraction guide](docs/ai/apple-document-extraction.md) for native-only
+  See the [extraction guide](docs/ai/apple-document-extraction.md) for native-only
   details and fidelity limits.
 
 See [Essentials.AI](src/AI/README.md) for documentation and samples.

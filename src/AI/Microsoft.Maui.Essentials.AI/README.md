@@ -304,17 +304,7 @@ empty anchor cells, and mixed cell content. Confidence, OCR candidates, detected
 entities, barcodes, and list-specific details remain available through explicit
 native inspection rather than fabricated normalized fields.
 
-For data-ingestion pipelines, use the local reader projection:
-
-```csharp
-using var input = File.OpenRead("receipt.pdf");
-var reader = new AppleVisionRecognizeDocumentsReader();
-var document = await reader.ReadAsync(input, "receipt", "application/pdf");
-```
-
-The reader projects the same extraction model into DataIngestion content.
-Use the extraction client instead when you need geometry or the complete table
-structure. Native representations are detached, bounded bridge snapshots, not
+Native representations are detached, bounded bridge snapshots, not
 live Swift objects or original response bytes; inspect them deliberately rather
 than including them automatically in logs or embeddings.
 

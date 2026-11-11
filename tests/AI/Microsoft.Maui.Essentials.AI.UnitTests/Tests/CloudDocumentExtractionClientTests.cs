@@ -227,6 +227,36 @@ public sealed class CloudDocumentExtractionClientTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Toolkit_UnprojectedBlocksMarginsAndConfidenceRemainInDetachedNativeJson()
+    {
+        using var http = Http((_, _) => Ok("""
+            {"pages":[{"index":0,"markdown":"Readable body","header":"Native header","footer":"Native footer",
+              "blocks":[{"type":"text","content":"Native block","top_left_x":1,
+                "confidence_scores":{"min":78.125,"mean":93.5,"max":99.875}}]}]}
+            """));
+        using var extraction = Mistral(http);
+        using var input = new MemoryStream([1]);
+        var result = await extraction.ExtractAsync(input, "source", "application/pdf");
+        var native = Assert.IsType<JsonElement>(result.RawRepresentation).GetProperty("pages")[0];
+        Assert.Equal("Native header", native.GetProperty("header").GetString());
+        Assert.Equal("Native footer", native.GetProperty("footer").GetString());
+        Assert.Equal(93.5, native.GetProperty("blocks")[0].GetProperty("confidence_scores").GetProperty("mean").GetDouble());
+        Assert.Equal("Readable body", Assert.IsType<TextContent>(Assert.Single(result.Sections[0].Elements).Content).Text);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("""{"pages":[{"index":0},{"index":0}]}""")]
+    public async Task ToolkitRejectsMissingPagesAndDuplicatePageNumbers(string response)
+    {
+        using var http = Http((_, _) => Ok(response));
+        using var extraction = Mistral(http);
+        using var input = new MemoryStream([1]);
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            extraction.ExtractAsync(input, "source", "application/pdf"));
+    }
+
     private const string MistralResponse = """
         {"model":"reported","pages":[{"index":0,"markdown":"Before\n[t](t)\n![i](i)\nAfter",
           "dimensions":{"width":600,"height":800},

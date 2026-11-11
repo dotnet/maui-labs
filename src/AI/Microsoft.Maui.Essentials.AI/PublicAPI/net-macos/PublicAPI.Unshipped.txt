@@ -37,6 +37,3 @@
 [MAUIAI0001]override Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.Dispose(bool disposing) -> void
 [MAUIAI0001]override Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.ExtractAsync(System.IO.Stream! document, string! identifier, string! mediaType, Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Documents.ExtractionDocument!>!
 [MAUIAI0001]override Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
-[MAUIAI0001]Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsReader
-[MAUIAI0001]Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsReader.AppleVisionRecognizeDocumentsReader() -> void
-[MAUIAI0001]Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsReader.ReadAsync(System.IO.Stream! source, string! identifier, string! mediaType, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.DataIngestion.IngestionDocument!>!

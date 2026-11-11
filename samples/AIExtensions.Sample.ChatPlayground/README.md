@@ -56,14 +56,13 @@ input does not imply image-generation support.
 Choose a PDF or image, or use a packaged sample, then select Apple Vision (iOS/Mac Catalyst 26+)
 or your Foundry Mistral deployment. Processing uses the selected provider without fallback.
 
-**Extraction** calls `DocumentExtractionClient` and displays content, source geometry, hierarchy and table cells.
+**Extract** calls `DocumentExtractionClient` and displays content, source geometry, hierarchy and table cells.
 **Native** displays the provider's raw representation on request; **Normalized** switches back to the shared model.
-**Reader** is an optional comparison with the DataIngestion API, not a prerequisite for extraction.
-Its adapter converts extraction output to ingestion sections/elements; it does not call another service.
+All registered clients use the same UI and execution path. The sample forwards shared options without
+cloud/local capability flags or provider-specific controls; the client validates supported options.
 
 Under `Documents/`, services run the API calls, `DocumentResultFormatter` formats output, result files hold results,
 and view-model files own selection and commands, following the other tabs' structure.
-`ExtractionDocumentIngestionMapper` contains only the extraction-to-ingestion conversion.
 See [Apple document extraction](../../docs/ai/apple-document-extraction.md) for API usage, platform support and mapping limitations.
 
 ## Diagnostics

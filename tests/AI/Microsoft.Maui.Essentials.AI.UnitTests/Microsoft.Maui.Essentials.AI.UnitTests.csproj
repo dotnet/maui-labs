@@ -9,7 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AngleSharp" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Extensions.DocumentExtraction" />
@@ -26,15 +25,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\ExtractedDocumentReader.cs" Link="Documents\ExtractedDocumentReader.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\ExtractionDocumentIngestionMapper.cs" Link="Documents\ExtractionDocumentIngestionMapper.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AISettings.cs" Link="Documents\AISettings.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\InputFile.cs" Link="Services\InputFile.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentReadingService.cs" Link="Documents\DocumentReadingService.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentExtractionService.cs" Link="Documents\DocumentExtractionService.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentResultFormatter.cs" Link="Documents\DocumentResultFormatter.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentExtractionRunResult.cs" Link="Documents\DocumentExtractionRunResult.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentReadResult.cs" Link="Documents\DocumentReadResult.cs" />
     <Compile Include="..\Microsoft.Maui.Essentials.AI.DeviceTests\TestTraits.cs" Link="Conformance\TestTraits.cs" />
     <Compile Include="..\Microsoft.Maui.Essentials.AI.DeviceTests\Tests\ChatClientFunctionCallingTests.cs" Link="Conformance\ChatClientFunctionCallingTests.cs" />
     <Compile Include="..\Microsoft.Maui.Essentials.AI.DeviceTests\Tests\ChatClientGetServiceTestsBase.cs" Link="Conformance\ChatClientGetServiceTestsBase.cs" />

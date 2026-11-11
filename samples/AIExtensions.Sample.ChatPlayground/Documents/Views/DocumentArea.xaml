@@ -10,7 +10,7 @@
                    AutomationId="DocumentResultHeading" />
             <ScrollView Grid.Row="1" AutomationId="DocumentResultsScroll">
                 <Grid>
-                    <Label Text="Choose a PDF or image, select the API and provider, then run it to inspect actual normalized output."
+                    <Label Text="Choose a PDF or image, select a client, then extract to inspect its output."
                            Style="{StaticResource MutedLabel}" AutomationId="DocumentEmptyLabel">
                         <Label.Triggers>
                             <DataTrigger TargetType="Label" Binding="{Binding HasResult}" Value="True">

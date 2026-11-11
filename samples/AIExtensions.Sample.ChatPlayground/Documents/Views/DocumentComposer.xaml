@@ -29,18 +29,15 @@
                 <Label Grid.Column="1" Text="Add a PDF or image to process" Style="{StaticResource MutedLabel}"
                        MinimumHeightRequest="44" VerticalTextAlignment="Center" />
                 <Grid Grid.Column="2" WidthRequest="44" HeightRequest="44" VerticalOptions="End">
-                    <ImageButton Source="send.png" Command="{Binding ReadDocument}"
+                    <ImageButton Source="send.png" Command="{Binding ExtractDocument}"
                                  IsVisible="{Binding IsIdle}" Style="{StaticResource AttachmentButton}"
-                                 SemanticProperties.Description="{Binding OperationLabel}" ToolTipProperties.Text="{Binding OperationLabel}"
-                                 AutomationId="DocumentReadButton" />
-                    <ImageButton Source="stop.png" Command="{Binding CancelReading}" IsVisible="{Binding IsBusy}"
+                                 SemanticProperties.Description="Extract document" ToolTipProperties.Text="Extract"
+                                 AutomationId="DocumentExtractButton" />
+                    <ImageButton Source="stop.png" Command="{Binding CancelExtraction}" IsVisible="{Binding IsBusy}"
                                  Style="{StaticResource CancelActionButton}"
-                                 SemanticProperties.Description="Cancel document reading" AutomationId="DocumentCancelButton" />
+                                 SemanticProperties.Description="Cancel document extraction" AutomationId="DocumentCancelButton" />
                 </Grid>
             </Grid>
-            <Label Text="Processing uploads the entire document to the selected Azure provider. Charges may apply; no automatic cloud fallback."
-                   IsVisible="{Binding IsCloudSelected}" Style="{StaticResource MutedLabel}" FontSize="12"
-                   AutomationId="DocumentCloudDisclosure" />
         </VerticalStackLayout>
     </Border>
 </ContentView>

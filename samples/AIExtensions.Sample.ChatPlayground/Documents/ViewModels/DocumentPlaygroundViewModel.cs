@@ -1,32 +1,29 @@
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.DataIngestion;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Runs the selected real document reader against the imported file.</summary>
+/// <summary>Runs the selected extraction client against the imported file.</summary>
 public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 {
     private readonly FileInputService _input;
-    private readonly DocumentReadingService _reading;
     private readonly DocumentExtractionService _extraction;
     private InputFile? _selected;
     private string _normalizedOutput = string.Empty;
     private DocumentExtractionRunResult? _extractionResult;
 
     public DocumentPlaygroundViewModel(
-        DocumentReadingService reading, DocumentExtractionService extraction,
+        DocumentExtractionService extraction,
         FileInputService input, DocumentSettingsViewModel settings)
     {
-        _reading = reading;
         _extraction = extraction;
         _input = input;
         Settings = settings;
         Settings.PropertyChanged += SettingsPropertyChanged;
         StatusMessage = Settings.HasSelection
             ? $"Selected {Settings.CurrentName}. Choose a document."
-            : "No document reader available. On Apple, use iOS or Mac Catalyst 26+; for cloud, configure a Foundry document deployment.";
+            : "No document extraction client is configured.";
     }
 
     public DocumentSettingsViewModel Settings { get; }
@@ -43,15 +40,13 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     public bool HasRawResult => _extractionResult?.HasRawOutput == true;
     public bool CanInspect => !IsBusy && HasResult;
     public bool IsIdle => !IsBusy;
-    public bool IsCloudSelected => Settings.CurrentIsCloud;
-    public bool CanRead => !IsBusy && HasDocument && Settings.HasSelection;
-    public string OperationLabel => Settings.OperationLabel;
+    public bool CanExtract => !IsBusy && HasDocument && Settings.HasSelection;
     public IAsyncRelayCommand ChooseDocument => ChooseDocumentCommand;
     public IAsyncRelayCommand UseSamplePdf => UseSamplePdfCommand;
     public IAsyncRelayCommand UseSampleImage => UseSampleImageCommand;
-    public IAsyncRelayCommand ReadDocument => ReadDocumentCommand;
+    public IAsyncRelayCommand ExtractDocument => ExtractDocumentCommand;
     public IRelayCommand RemoveDocumentAction => RemoveDocumentCommand;
-    public System.Windows.Input.ICommand CancelReading => ReadDocumentCancelCommand;
+    public System.Windows.Input.ICommand CancelExtraction => ExtractDocumentCancelCommand;
     public IRelayCommand InspectNormalized => InspectNormalizedResultCommand;
     public IAsyncRelayCommand InspectRaw => InspectRawResultCommand;
 
@@ -81,7 +76,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     }
 
     private bool CanChooseDocument() => !IsBusy;
-    private bool CanReadDocument() => CanRead;
+    private bool CanExtractDocument() => CanExtract;
 
     [RelayCommand(CanExecute = nameof(CanChooseDocument))]
     private Task ChooseDocumentAsync() => SelectDocumentAsync(() => _input.PickAsync(new PickOptions
@@ -108,8 +103,8 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         ResultHeading = "DOCUMENT RESULT";
         StatusMessage = "Choose a PDF or image using the + menu.";
         OnPropertyChanged(nameof(HasDocument));
-        OnPropertyChanged(nameof(CanRead));
-        ReadDocumentCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanExtract));
+        ExtractDocumentCommand.NotifyCanExecuteChanged();
         RemoveDocumentCommand.NotifyCanExecuteChanged();
     }
 
@@ -132,10 +127,10 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
                 : ImageSource.FromFile("folder.png");
             ClearResult();
             ResultHeading = "DOCUMENT RESULT";
-            StatusMessage = $"Selected {file.FileName}. Choose an API and provider in settings.";
+            StatusMessage = $"Selected {file.FileName}. Choose a client in settings, then extract.";
             OnPropertyChanged(nameof(HasDocument));
-            OnPropertyChanged(nameof(CanRead));
-            ReadDocumentCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(CanExtract));
+            ExtractDocumentCommand.NotifyCanExecuteChanged();
             RemoveDocumentCommand.NotifyCanExecuteChanged();
         }
         catch (Exception exception)
@@ -149,8 +144,8 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanReadDocument), IncludeCancelCommand = true)]
-    private async Task ReadDocumentAsync(CancellationToken cancellationToken)
+    [RelayCommand(CanExecute = nameof(CanExtractDocument), IncludeCancelCommand = true)]
+    private async Task ExtractDocumentAsync(CancellationToken cancellationToken)
     {
         var file = _selected ?? throw new InvalidOperationException("Choose a document first.");
         var name = Settings.CurrentName;
@@ -160,30 +155,17 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         StatusMessage = $"Processing {file.FileName} with {name}...";
         try
         {
-            int pages;
-            if (Settings.IsExtractionMode)
-            {
-                var client = Settings.SelectedClientOption?.Client
-                    ?? throw new InvalidOperationException("Choose a document extraction client.");
-                var result = await _extraction.ExtractAsync(
-                    client, file, Settings.CreateOptions(), cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                _extractionResult = result;
-                ResultOutput = result.Output;
-                pages = result.PageCount;
-            }
-            else
-            {
-                var reader = Settings.SelectedReader ?? throw new InvalidOperationException("Choose a document reader.");
-                var result = await _reading.ReadAsync(reader, file, cancellationToken);
-                ResultOutput = result.Output;
-                pages = result.PageCount;
-            }
+            var client = Settings.SelectedClientOption?.Client
+                ?? throw new InvalidOperationException("Choose a document extraction client.");
+            var result = await _extraction.ExtractAsync(
+                client, file, Settings.CreateOptions(), cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            _extractionResult = result;
+            ResultOutput = result.Output;
             _normalizedOutput = ResultOutput;
             OnPropertyChanged(nameof(HasRawResult));
             ResultHeading = name.ToUpperInvariant() + " RESULT";
-            StatusMessage = $"Processed {pages} page(s) with {name} using {Settings.Mode}.";
+            StatusMessage = $"Extracted {result.PageCount} page(s) with {name}.";
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -209,21 +191,17 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 
     private void SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(DocumentSettingsViewModel.SelectedOption) ||
-            e.PropertyName == nameof(DocumentSettingsViewModel.SelectedClientOption) ||
-            e.PropertyName == nameof(DocumentSettingsViewModel.Mode))
+        if (e.PropertyName == nameof(DocumentSettingsViewModel.SelectedClientOption))
         {
-            ReadDocumentCommand.Cancel();
+            ExtractDocumentCommand.Cancel();
             InspectRawResultCommand.Cancel();
             ClearResult();
             ResultHeading = "DOCUMENT RESULT";
             StatusMessage = Settings.HasSelection
-                ? $"Selected {Settings.CurrentName}. Choose a file, then {Settings.OperationLabel.ToLowerInvariant()}."
-                : "No document provider selected for this API.";
-            OnPropertyChanged(nameof(IsCloudSelected));
-            OnPropertyChanged(nameof(CanRead));
-            OnPropertyChanged(nameof(OperationLabel));
-            ReadDocumentCommand.NotifyCanExecuteChanged();
+                ? $"Selected {Settings.CurrentName}. Choose a file, then extract."
+                : "No document extraction client selected.";
+            OnPropertyChanged(nameof(CanExtract));
+            ExtractDocumentCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -237,7 +215,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 
     public void ReleasePageResult()
     {
-        ReadDocumentCommand.Cancel();
+        ExtractDocumentCommand.Cancel();
         InspectRawResultCommand.Cancel();
         ClearResult();
     }
@@ -253,12 +231,12 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     partial void OnIsBusyChanged(bool value)
     {
         OnPropertyChanged(nameof(IsIdle));
-        OnPropertyChanged(nameof(CanRead));
+        OnPropertyChanged(nameof(CanExtract));
         ChooseDocumentCommand.NotifyCanExecuteChanged();
         UseSamplePdfCommand.NotifyCanExecuteChanged();
         UseSampleImageCommand.NotifyCanExecuteChanged();
         RemoveDocumentCommand.NotifyCanExecuteChanged();
-        ReadDocumentCommand.NotifyCanExecuteChanged();
+        ExtractDocumentCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanInspect));
         InspectNormalizedResultCommand.NotifyCanExecuteChanged();
         InspectRawResultCommand.NotifyCanExecuteChanged();

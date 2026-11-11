@@ -78,6 +78,17 @@ public class DocumentExtractionContractTests
     }
 
     [Fact]
+    public void TableCells_OverlappingSpansRejectInvalidLayout()
+    {
+        var table = new ExtractionDocumentTableElement(null, 1, 2);
+        table.Cells[0, 0] = new ExtractionDocumentTableCell(
+            new ExtractionDocumentTextElement(new TextContent("Merged")), 1, 2);
+        var error = Record.Exception(() => table.Cells[0, 1] =
+            new ExtractionDocumentTableCell(new ExtractionDocumentTextElement(new TextContent("Overlaps"))));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
     public void NativeObjectsRemainBorrowedAndDoNotEnterSemanticPayloads()
     {
         using var native = new MemoryStream([1]);

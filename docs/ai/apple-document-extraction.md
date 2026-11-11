@@ -20,7 +20,6 @@ caller-owned image or PDF stream
   -> cycle-safe native observation snapshot
   -> portable mapping to a completed ExtractionDocument
       -> structured extraction and explicit native inspection
-      -> local DataIngestion reader projection
 ```
 
 `AppleVisionRecognizeDocumentsClient` implements the official abstract
@@ -28,12 +27,9 @@ caller-owned image or PDF stream
 non-disposable `ExtractionDocument`; PDF page iteration is internal, not a
 public streaming or progress contract.
 
-`AppleVisionRecognizeDocumentsReader` maps that same exchange document into
-DataIngestion. It does not independently reinterpret native observations.
-The portable mapping and ingestion rendering live in
+The portable client and mapping live in
 `src/AI/Microsoft.Maui.Essentials.AI/DocumentExtraction/`, separate from the
-Vision/PDFKit processor in `Platform/MaciOS/`. `ExtractionDocumentIngestionMapper`
-projects extraction output into DataIngestion; it has no cloud or HTTP behavior.
+Vision/PDFKit processor in `Platform/MaciOS/`.
 The Swift bridge separates snapshot data, bounded traversal, and encoding.
 
 The Microsoft Documents and Extraction dependencies are official packages,
@@ -77,19 +73,13 @@ Apple source frames use a normalized `1 x 1` coordinate space with a bottom-left
 origin. These dimensions are not raster pixel dimensions. Rotated polygons
 must not be replaced with bounding rectangles or reordered.
 
-The reader is intentionally narrower than extraction: DataIngestion cannot
-carry all source frames, geometry, spans, or native structures. Its local
-renderer preserves nested/mixed table structure in HTML, including merged
-cells, while ordinary flat tables use a pipe-table projection. Leaf text is
-HTML-encoded. Covered cell positions come from anchor spans, not duplicate cells.
-
 ## Native inspection and safety
 
 Native representations are borrowed supporting data, not semantic payloads.
 The Apple bridge provides detached JSON snapshots, not live Swift
 `DocumentObservation` instances. There is no HTTP response body to retain.
 Raw output is not automatically included in normalized serialization,
-ingestion text, logging, or embedding input. There is no mutable client
+logging or embedding input. There is no mutable client
 last-response state.
 
 Vision's recursive list/table containers can expose overlapping or
@@ -114,8 +104,7 @@ guarantee that every native field or arbitrary recursive graph is captured.
 ## Playground comparison
 
 The [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md)
-offers both extraction and reader modes for compatibility and sample comparison;
-extraction itself does not require a reader. The providers are Apple Vision
+calls the selected extraction client directly. The configured examples are Apple Vision
 and one cloud comparison, Foundry Mistral. Mistral uses the published
 `CommunityToolkit.DocumentExtraction.Mistral` package (`1.0.0-preview`) and
 the shared `AI:Endpoint` / `AI:ApiKey` configuration plus
@@ -127,6 +116,10 @@ or response wrapper. The normalized view and explicit native JSON inspection
 are separate. Inspection serializes the full available native result on demand,
 without an output cap or cache; this does not remove the Apple bridge's
 native traversal safety bounds.
+The UI treats every registered client the same: names and descriptions are display
+metadata, not capability flags. Per-call options are forwarded unchanged; each client
+validates what it supports. There are no cloud/local or Apple-specific branches in the
+settings or execution path.
 
 ## Capability gaps and upstream feedback
 
@@ -153,8 +146,7 @@ These are current fidelity boundaries, not requests to reproduce an older API:
 The shared contract does not provide generalized confidence/annotation fields,
 first-class list/barcode/entity schemas, public page streaming, raw-capture
 controls, response-body ownership, or structural Markdown rendering. The
-provider does not recreate those APIs locally. Ingestion rendering is an
-explicit local projection.
+provider does not recreate those APIs locally.
 
 Use the [synthetic document corpus](../../tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/TestAssets/DocumentExtraction/README.md)
 to reproduce native classification and recursion behavior. It distinguishes

@@ -14,7 +14,7 @@ and embeddings through `Microsoft.Extensions.AI`, plus Apple document extraction
 | [Apple Foundation Models](../../docs/ai/apple-foundation-models.md) | Apple toolchain, availability, images, native bridge, and validation |
 | [Windows AI language models](../../docs/ai/windows-ai-language-models.md) | Windows packaging, dependencies, model setup, and validation |
 | [Gemini Nano Android](../../docs/ai/gemini-nano-android.md) | Android binding, AICore readiness, download, and validation |
-| [Apple document extraction](../../docs/ai/apple-document-extraction.md) | Extraction architecture, native fidelity, ingestion projection, and upstream feedback |
+| [Apple document extraction](../../docs/ai/apple-document-extraction.md) | Extraction architecture, native fidelity, and upstream feedback |
 | [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md) | Interactive provider comparison and diagnostics |
 
 ## Prerequisites
@@ -168,7 +168,7 @@ dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Ess
 ## Architecture
 
 - `Microsoft.Maui.Essentials.AI/DocumentExtraction/` — portable exchange-document
-  mapping and ingestion rendering. The Apple processor in `Platform/MaciOS/`
+  client and mapping. The Apple processor in `Platform/MaciOS/`
   handles Vision requests and PDFKit input; the Swift bridge snapshots native observations.
   See the [extraction guide](../../docs/ai/apple-document-extraction.md).
 - `Microsoft.Maui.Essentials.AI/Platform/MaciOS/` — managed Apple chat and

@@ -1,5 +1,4 @@
 using AIExtensions.Sample.ChatPlayground;
-using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Extensions.Documents;
 
@@ -8,90 +7,64 @@ namespace Microsoft.Maui.AI.Chat.Tests;
 public class DocumentSettingsViewModelTests
 {
     [Fact]
-    public void Constructor_RegistersActualClientsAndReadersWithoutProviderFactories()
+    public void Constructor_SelectsTheFirstConfiguredClient()
     {
-        var reader = Reader("apple-reader");
-        using var client = Client("apple-client");
-        var settings = new DocumentSettingsViewModel([reader], [client]);
-        Assert.Equal(DocumentOperationMode.Extraction, settings.Mode);
-        Assert.Same(client, settings.SelectedClientOption!.Client);
-        Assert.Same(reader, settings.SelectedReader);
+        using var first = Client("first");
+        using var second = Client("second");
+        var settings = new DocumentSettingsViewModel([first, second]);
+        Assert.Equal(2, settings.Clients.Count);
+        Assert.Same(first, settings.SelectedClientOption!.Client);
+        Assert.Equal("first", settings.CurrentName);
         Assert.True(settings.HasSelection);
-        Assert.False(settings.CanSelectModel);
-        settings.Mode = DocumentOperationMode.Reader;
-        Assert.True(settings.IsReaderMode);
-        Assert.False(settings.IsClientMode);
-        Assert.Equal("Reader", settings.CurrentName);
-        Assert.False(settings.IsExtractionMode);
-        Assert.Equal("Read", settings.OperationLabel);
-    }
-
-    [Fact]
-    public void ModelOverridesAreOnlyForwardedWhereTheSelectedProviderSupportsThem()
-    {
-        using var local = Client("apple-client");
-        using var cloud = Client("cloud-client", isCloud: true);
-        var settings = new DocumentSettingsViewModel([], [local, cloud]) { ExtractorName = "deployment" };
-        Assert.Null(settings.CreateOptions().ExtractorName);
         settings.SelectedClientOption = settings.Clients[1];
-        Assert.True(settings.CanSelectModel);
-        Assert.Equal("deployment", settings.CreateOptions()!.ExtractorName);
-        settings.Mode = DocumentOperationMode.Reader;
-        Assert.Null(settings.CreateOptions().ExtractorName);
+        Assert.Same(second, settings.SelectedClientOption.Client);
+        Assert.Equal("second", settings.CurrentName);
+    }
+
+    [Theory]
+    [InlineData("apple-vision-document")]
+    [InlineData("foundry-mistral-document")]
+    [InlineData("any-other-client")]
+    public void OptionsAreForwardedIdenticallyRegardlessOfClientIdentity(string id)
+    {
+        using var client = Client(id);
+        var settings = new DocumentSettingsViewModel([client]) { ExtractorName = " deployment " };
+        var options = settings.CreateOptions();
+        Assert.Equal("deployment", options.ExtractorName);
+        Assert.Empty(options.AdditionalProperties);
+        Assert.NotSame(options, settings.CreateOptions());
     }
 
     [Fact]
-    public void ReaderSelectionRemainsAvailableWhenNoExtractionClientIsConfigured()
+    public void EmptyConfigurationHasNoSelection()
     {
-        var settings = new DocumentSettingsViewModel([Reader("reader")]);
-        Assert.Equal(DocumentOperationMode.Reader, settings.Mode);
-        Assert.True(settings.HasSelection);
-        settings.Mode = DocumentOperationMode.Extraction;
+        var settings = new DocumentSettingsViewModel([]);
+        Assert.Empty(settings.Clients);
         Assert.False(settings.HasSelection);
-        settings.Mode = DocumentOperationMode.Reader;
-        Assert.True(settings.HasSelection);
+        Assert.Null(settings.SelectedClientOption);
+        Assert.Equal("No client", settings.CurrentName);
     }
 
-    [Fact]
-    public void NativeLanguageAndExtractorControlsArePerCallAndNeverForceAppleDefaults()
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void BlankOptionsPreserveClientDefaults(string extractorName)
     {
-        using var apple = Client("apple-vision-document");
-        using var cloud = Client("cloud", isCloud: true);
-        var settings = new DocumentSettingsViewModel([], [apple, cloud]);
-        Assert.True(settings.CanSelectAppleOptions);
-        Assert.Empty(settings.CreateOptions().AdditionalProperties);
-        settings.AppleRecognitionLanguages = " en, fr ";
-        settings.ExtractorName = "cloud-deployment";
-        var first = settings.CreateOptions();
-        Assert.Null(first.ExtractorName);
-        Assert.Equal(["en", "fr"], Assert.IsType<string[]>(first.AdditionalProperties["apple.vision.recognitionLanguages"]));
-        settings.SelectedClientOption = settings.Clients[1];
-        var second = settings.CreateOptions();
-        Assert.False(settings.CanSelectAppleOptions);
-        Assert.Equal("cloud-deployment", second.ExtractorName);
-        Assert.Empty(second.AdditionalProperties);
-        Assert.NotSame(first, second);
-        Assert.Single(first.AdditionalProperties);
+        var settings = new DocumentSettingsViewModel([]) { ExtractorName = extractorName };
+        var options = settings.CreateOptions();
+        Assert.Null(options.ExtractorName);
+        Assert.Empty(options.AdditionalProperties);
     }
 
-    private static IngestionDocumentReader Reader(string id) =>
-        new DescribedDocumentReader(new TestReader(), new DocumentReaderDescriptor(id, "Reader", "Description"));
-
-    private static DocumentExtractionClient Client(string id, bool isCloud = false) =>
+    private static DocumentExtractionClient Client(string id) =>
         new DescribedDocumentExtractionClient(
-            new TestClient(), new DocumentExtractionClientDescriptor(id, "Client", "Description", isCloud));
-
-    private sealed class TestReader : IngestionDocumentReader
-    {
-        public override Task<IngestionDocument> ReadAsync(
-            Stream source, string identifier, string mediaType, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new IngestionDocument(identifier));
-    }
+            new TestClient(), new DocumentExtractionClientDescriptor(id, id, "Description"));
 
     private sealed class TestClient : DocumentExtractionClient
     {
         public override Task<ExtractionDocument> ExtractAsync(
-            Stream document, string identifier, string mediaType, DocumentExtractionOptions? options = null, CancellationToken cancellationToken = default) =>
+            Stream document, string identifier, string mediaType, DocumentExtractionOptions? options = null,
+            CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 }
