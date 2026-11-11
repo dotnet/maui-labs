@@ -83,7 +83,10 @@ public static class AIChatThemeKeys
     /// <summary>The <see cref="Style"/> of the user's message text (<see cref="Label"/>).</summary>
     public const string UserTextStyle = "AIChat.Style.UserText";
 
-    /// <summary>The <see cref="Style"/> of assistant text (<see cref="Label"/>).</summary>
+    /// <summary>
+    /// The <see cref="Style"/> of assistant text (<see cref="Label"/>): Markdown paragraphs and list items, and the
+    /// welcome title.
+    /// </summary>
     public const string AssistantTextStyle = "AIChat.Style.AssistantText";
 
     /// <summary>The <see cref="Style"/> of muted text (<see cref="Label"/>).</summary>
@@ -95,13 +98,13 @@ public static class AIChatThemeKeys
     /// <summary>The <see cref="Style"/> of a card's title (<see cref="Label"/>).</summary>
     public const string CardTitleStyle = "AIChat.Style.CardTitle";
 
-    /// <summary>The <see cref="Style"/> of code blocks and tool arguments (<see cref="Border"/>).</summary>
+    /// <summary>The <see cref="Style"/> of Markdown code blocks and tool arguments (<see cref="Border"/>).</summary>
     public const string CodeBlockStyle = "AIChat.Style.CodeBlock";
 
     /// <summary>The <see cref="Style"/> of code text (<see cref="Label"/>).</summary>
     public const string CodeTextStyle = "AIChat.Style.CodeText";
 
-    /// <summary>The <see cref="Style"/> of links inside formatted text (<see cref="Span"/>).</summary>
+    /// <summary>The <see cref="Style"/> of links in Markdown (<see cref="Span"/>).</summary>
     public const string LinkSpanStyle = "AIChat.Style.LinkSpan";
 
     /// <summary>The <see cref="Style"/> of the error card (<see cref="Border"/>).</summary>
@@ -133,4 +136,46 @@ public static class AIChatThemeKeys
 
     /// <summary>The <see cref="Style"/> of the send and stop buttons (<see cref="Button"/>).</summary>
     public const string SendButtonStyle = "AIChat.Style.SendButton";
+
+    // Markdown. Paragraphs use AssistantTextStyle, links LinkSpanStyle, and fenced code CodeBlockStyle and
+    // CodeTextStyle; colors and fonts come from the AIChat.Color.*, AIChat.FontSize.* and AIChat.FontFamily.* keys.
+
+    /// <summary>The vertical space between top-level Markdown blocks (a <see cref="double"/>).</summary>
+    public const string MarkdownBlockSpacing = "AIChat.Markdown.BlockSpacing";
+
+    /// <summary>
+    /// The <see cref="Style"/> of Markdown headings (<see cref="Label"/>). Their sizes scale from
+    /// <see cref="BodyFontSize"/>.
+    /// </summary>
+    public const string MarkdownHeadingStyle = "AIChat.Markdown.HeadingStyle";
+
+    /// <summary>The <see cref="Style"/> of inline <c>code</c> in Markdown (<see cref="Span"/>).</summary>
+    public const string MarkdownInlineCodeStyle = "AIChat.Markdown.InlineCodeStyle";
+
+    /// <summary>The <see cref="Style"/> of the language caption above fenced code (<see cref="Label"/>).</summary>
+    public const string MarkdownCodeBlockLanguageStyle = "AIChat.Markdown.CodeBlockLanguageStyle";
+
+    /// <summary>The <see cref="Style"/> of the bar beside a Markdown block quote (<see cref="BoxView"/>).</summary>
+    public const string MarkdownBlockQuoteBarStyle = "AIChat.Markdown.BlockQuoteBarStyle";
+
+    /// <summary>The <see cref="Style"/> of text inside a Markdown block quote (<see cref="Label"/>).</summary>
+    public const string MarkdownBlockQuoteTextStyle = "AIChat.Markdown.BlockQuoteTextStyle";
+
+    /// <summary>The <see cref="Style"/> of Markdown list bullets, numbers, and task boxes (<see cref="Label"/>).</summary>
+    public const string MarkdownListMarkerStyle = "AIChat.Markdown.ListMarkerStyle";
+
+    /// <summary>The <see cref="Style"/> of the outline around a Markdown table (<see cref="Border"/>).</summary>
+    public const string MarkdownTableBorderStyle = "AIChat.Markdown.TableBorderStyle";
+
+    /// <summary>The <see cref="Style"/> of the lines between Markdown table cells (<see cref="BoxView"/>).</summary>
+    public const string MarkdownTableLineStyle = "AIChat.Markdown.TableLineStyle";
+
+    /// <summary>The <see cref="Style"/> of Markdown table header cells (<see cref="Label"/>).</summary>
+    public const string MarkdownTableHeaderCellStyle = "AIChat.Markdown.TableHeaderCellStyle";
+
+    /// <summary>The <see cref="Style"/> of Markdown table body cells (<see cref="Label"/>).</summary>
+    public const string MarkdownTableCellStyle = "AIChat.Markdown.TableCellStyle";
+
+    /// <summary>The <see cref="Style"/> of Markdown thematic breaks, <c>---</c> (<see cref="BoxView"/>).</summary>
+    public const string MarkdownThematicBreakStyle = "AIChat.Markdown.ThematicBreakStyle";
 }

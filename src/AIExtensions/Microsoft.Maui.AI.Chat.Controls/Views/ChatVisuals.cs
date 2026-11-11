@@ -56,7 +56,9 @@ internal static class ChatVisuals
             DataContent data when data.HasTopLevelMediaType("image") && !data.Data.IsEmpty =>
                 CreateImage(CreateImageSource(data)!, data.Name, alignEnd),
             UriContent link when link.HasTopLevelMediaType("image") && IsWebUri(link.Uri) =>
-                new LinkedImageView(link, alignEnd),
+                new LinkedImageView(
+                    CreateImage(CreateImageSource(link)!, GetLinkName(link.Uri), alignEnd),
+                    () => CreateLinkChip(link, alignEnd)),
             DataContent data => CreateFileChip(data, alignEnd),
             UriContent link => CreateLinkChip(link, alignEnd),
             _ => Label(AIChatThemeKeys.SecondaryTextStyle, content.GetType().Name),
@@ -109,6 +111,26 @@ internal static class ChatVisuals
         var detail = uri.IsAbsoluteUri ? $"{DescribeMediaType(content.MediaType)} · {uri.Host}" : DescribeMediaType(content.MediaType);
         var chip = CreateChip("\U0001F517", name, detail, alignEnd, trailing: null);
         if (IsSafeUri(uri))
+        {
+            chip.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(async () => await OpenLinkAsync(uri)) });
+            SemanticProperties.SetHint(chip, "Opens the link");
+        }
+
+        return chip;
+    }
+
+    /// <summary>
+    /// A chip for an image that is not shown: its source is not a web link (for example <c>attachment://chart.png</c>)
+    /// or it could not be loaded. Web links open when tapped.
+    /// </summary>
+    public static Border CreateImageChip(string? source, string? description)
+    {
+        Uri.TryCreate(source, UriKind.Absolute, out var uri);
+        var file = uri is null ? source : GetLinkName(uri);
+        var name = !string.IsNullOrWhiteSpace(description) ? description! : !string.IsNullOrWhiteSpace(file) ? file! : "Image";
+        var detail = string.IsNullOrWhiteSpace(file) || file == name ? "Image" : $"Image \u00B7 {file}";
+        var chip = CreateChip("\U0001F5BC", name, detail, alignEnd: false, trailing: null);
+        if (uri is not null && IsWebUri(uri))
         {
             chip.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(async () => await OpenLinkAsync(uri)) });
             SemanticProperties.SetHint(chip, "Opens the link");
@@ -264,29 +286,27 @@ internal static class ChatVisuals
     }
 }
 
-/// <summary>An image loaded from a web link. When it cannot be loaded, a link chip takes its place.</summary>
+/// <summary>An image loaded from a web link. When it cannot be loaded, a chip for the link takes its place.</summary>
 internal sealed class LinkedImageView : ContentView
 {
-    private readonly UriContent _link;
-    private readonly bool _alignEnd;
+    private readonly Func<View> _createFallback;
 
-    public LinkedImageView(UriContent link, bool alignEnd)
+    public LinkedImageView(Image image, Func<View> createFallback)
     {
-        _link = link;
-        _alignEnd = alignEnd;
-        Image = ChatVisuals.CreateImage(ChatVisuals.CreateImageSource(link)!, ChatVisuals.GetLinkName(link.Uri), alignEnd);
-        HorizontalOptions = Image.HorizontalOptions;
-        Content = Image;
+        _createFallback = createFallback;
+        Image = image;
+        HorizontalOptions = image.HorizontalOptions;
+        Content = image;
         Image.PropertyChanged += OnImagePropertyChanged;
     }
 
     public Image Image { get; }
 
-    /// <summary>Replaces the image with a chip for the link.</summary>
-    internal void ShowLink()
+    /// <summary>Replaces the image with the fallback chip.</summary>
+    internal void ShowFallback()
     {
         Image.PropertyChanged -= OnImagePropertyChanged;
-        Content = ChatVisuals.CreateLinkChip(_link, _alignEnd);
+        Content = _createFallback();
     }
 
     private void OnImagePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -297,7 +317,7 @@ internal sealed class LinkedImageView : ContentView
             Image.Handler is not null &&
             ((IView)Image).Measure(double.PositiveInfinity, double.PositiveInfinity).Height <= 0)
         {
-            ShowLink();
+            ShowFallback();
         }
     }
 }

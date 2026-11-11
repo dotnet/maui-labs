@@ -3,13 +3,11 @@
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>Default light and dark styles for rendered Markdown (keys in <see cref="MarkdownThemeKeys"/>).</summary>
+/// <summary>
+/// The Markdown styles (the <c>AIChat.Markdown.*</c> keys in <see cref="AIChatThemeKeys"/>). <see cref="AIChatTheme"/>
+/// merges one instance, so the styles load, and are overridden, with the rest of the chat theme.
+/// </summary>
 internal partial class MarkdownTheme : ResourceDictionary
 {
-    private static MarkdownTheme? s_defaults;
-
     public MarkdownTheme() => InitializeComponent();
-
-    // Shared fallback for views whose element tree does not (yet) provide a key. UI-thread only.
-    internal static MarkdownTheme Defaults => s_defaults ??= new MarkdownTheme();
 }

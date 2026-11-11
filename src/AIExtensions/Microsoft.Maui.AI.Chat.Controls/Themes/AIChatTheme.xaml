@@ -11,9 +11,13 @@
         defining it in App.xaml (or page) resources. The active "AIChat.Color.*" values are copied from the
         "AIChat.Light.*" or "AIChat.Dark.*" palette whenever the app theme changes (see AIChatTheme.xaml.cs).
 
-        Markdown: when the Markdown renderer lands, merge the dictionary from Markdown/MarkdownTheme.xaml
-        into this dictionary's MergedDictionaries so its styles load with the rest of the theme.
+        Markdown: the AIChat.Markdown.* styles live in Markdown/MarkdownTheme.xaml and are merged here, the one
+        place the chat theme is assembled. They read the same AIChat.Color.* and AIChat.FontSize.* keys.
     -->
+
+    <ResourceDictionary.MergedDictionaries>
+        <chat:MarkdownTheme />
+    </ResourceDictionary.MergedDictionaries>
 
     <!-- Light palette -->
     <Color x:Key="AIChat.Light.Text">#16181C</Color>

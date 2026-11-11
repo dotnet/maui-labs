@@ -9,6 +9,8 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// structurally unchanged and rebuilds only from the first block that differs, so a growing
 /// answer only re-renders its tail. Nodes passed to <see cref="SetDocument"/> must not be
 /// mutated afterwards (the top-level list itself is copied). Members are UI-thread affine.
+/// The look comes from the chat theme (<see cref="AIChatThemeKeys"/>); the first and last blocks
+/// have no outer margin, so the text lines up with the cards and rows around it.
 /// </remarks>
 internal sealed class MarkdownView : ContentView
 {
@@ -19,9 +21,17 @@ internal sealed class MarkdownView : ContentView
         15d,
         propertyChanged: static (bindable, _, _) => ((MarkdownView)bindable).OnFontSizeChanged());
 
+    internal static readonly BindableProperty CodeFontSizeProperty = BindableProperty.Create(
+        nameof(CodeFontSize),
+        typeof(double),
+        typeof(MarkdownView),
+        13d,
+        propertyChanged: static (bindable, _, _) => ((MarkdownView)bindable).OnFontSizeChanged());
+
     private readonly VerticalStackLayout _blocks;
     private readonly MarkdownRenderer _renderer;
     private readonly List<View?> _blockViews = new();
+    private readonly List<Thickness> _blockMargins = new();
     private IReadOnlyList<RichTextNode> _document = Array.Empty<RichTextNode>();
     private string? _markdown;
 
@@ -29,18 +39,27 @@ internal sealed class MarkdownView : ContentView
     {
         _renderer = new MarkdownRenderer(OpenLinkAsync);
         _blocks = new VerticalStackLayout();
-        MarkdownRenderer.ApplyThemeValue(_blocks, StackBase.SpacingProperty, MarkdownThemeKeys.BlockSpacing);
+        _blocks.SetDynamicResource(StackBase.SpacingProperty, AIChatThemeKeys.MarkdownBlockSpacing);
         Content = _blocks;
 
-        MarkdownRenderer.ApplyThemeValue(this, FontSizeProperty, MarkdownThemeKeys.FontSize);
+        SetDynamicResource(FontSizeProperty, AIChatThemeKeys.BodyFontSize);
+        SetDynamicResource(CodeFontSizeProperty, AIChatThemeKeys.CodeFontSize);
         _renderer.FontSize = FontSize;
+        _renderer.CodeFontSize = CodeFontSize;
     }
 
-    /// <summary>Body font size; headings and code scale from it. Themed by <see cref="MarkdownThemeKeys.FontSize"/>.</summary>
+    /// <summary>The body font size (<see cref="AIChatThemeKeys.BodyFontSize"/>); headings scale from it.</summary>
     internal double FontSize
     {
         get => (double)GetValue(FontSizeProperty);
         set => SetValue(FontSizeProperty, value);
+    }
+
+    /// <summary>The code font size (<see cref="AIChatThemeKeys.CodeFontSize"/>); inline code keeps its ratio to the text.</summary>
+    internal double CodeFontSize
+    {
+        get => (double)GetValue(CodeFontSizeProperty);
+        set => SetValue(CodeFontSizeProperty, value);
     }
 
     /// <summary>The Markdown last passed to <see cref="SetMarkdown"/>, or <see langword="null"/> after <see cref="SetDocument"/>.</summary>
@@ -111,11 +130,13 @@ internal sealed class MarkdownView : ContentView
         {
             var view = _renderer.RenderBlock(document[i]);
             _blockViews.Add(view);
+            _blockMargins.Add(view?.Margin ?? default);
             if (view is not null)
                 _blocks.Children.Add(view);
         }
 
         _document = document;
+        TrimOuterMargins();
     }
 
     private void RemoveBlocksFrom(int index)
@@ -126,12 +147,35 @@ internal sealed class MarkdownView : ContentView
             if (_blockViews[i] is not null)
                 _blocks.Children.RemoveAt(_blocks.Children.Count - 1);
             _blockViews.RemoveAt(i);
+            _blockMargins.RemoveAt(i);
+        }
+    }
+
+    // Space above a heading or around a rule separates it from its neighbours, but on the first or last block it
+    // would only push the text away from the edges of the row.
+    private void TrimOuterMargins()
+    {
+        var first = _blockViews.FindIndex(static view => view is not null);
+        var last = _blockViews.FindLastIndex(static view => view is not null);
+        for (var i = 0; i < _blockViews.Count; i++)
+        {
+            if (_blockViews[i] is not { } view)
+                continue;
+
+            var margin = _blockMargins[i];
+            if (i == first)
+                margin.Top = 0;
+            if (i == last)
+                margin.Bottom = 0;
+            if (view.Margin != margin)
+                view.Margin = margin;
         }
     }
 
     private void OnFontSizeChanged()
     {
         _renderer.FontSize = FontSize;
+        _renderer.CodeFontSize = CodeFontSize;
         var document = _document;
         RemoveBlocksFrom(0);
         _document = Array.Empty<RichTextNode>();

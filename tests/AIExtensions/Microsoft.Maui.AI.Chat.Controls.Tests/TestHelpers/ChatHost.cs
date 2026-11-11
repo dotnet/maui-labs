@@ -52,4 +52,8 @@ internal static class ChatHost
 
     public static IEnumerable<T> Descendants<T>(this Element element) =>
         element.GetVisualTreeDescendants().OfType<T>();
+
+    /// <summary>The text of every label under <paramref name="element"/>, one line per label.</summary>
+    public static string VisibleText(this Element element) =>
+        string.Join("\n", element.Descendants<Label>().Select(label => label.FormattedText?.ToString() ?? label.Text));
 }

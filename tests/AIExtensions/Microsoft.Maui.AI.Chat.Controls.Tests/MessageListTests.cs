@@ -68,12 +68,12 @@ public class MessageListTests
         var row = (BlockRow)view.Rows()[1];
         var host = Assert.IsType<BlockHost>(view.Realize(row));
         var text = Assert.IsType<TextBlockView>(host.HostedView);
-        Assert.Equal("Hel", text.Label.Text);
+        Assert.Equal("Hel", text.VisibleText());
 
         var collectionChanges = 0;
         ((INotifyCollectionChanged)view.MessageList.ItemsSource).CollectionChanged += (_, _) => collectionChanges++;
         stream.Text("lo");
-        await UIThread.Until(() => text.Label.Text == "Hello");
+        await UIThread.Until(() => text.VisibleText() == "Hello");
 
         Assert.Same(row, view.Rows()[1]);
         Assert.Equal(0, collectionChanges);
@@ -476,12 +476,12 @@ public class MessageListTests
         await UIThread.Until(() => ((TextContentBlock)row.Block).RawText == "abcde");
 
         Assert.Equal(0, refreshes);
-        Assert.Equal("a", custom.Label.Text);
+        Assert.Equal("a", custom.VisibleText());
         Assert.Equal(1, dispatcher.PendingCount);
 
         dispatcher.RunPending();
         Assert.Equal(1, refreshes);
-        Assert.Equal("abcde", custom.Label.Text);
+        Assert.Equal("abcde", custom.VisibleText());
 
         stream.Complete();
         await UIThread.Until(() => dispatcher.PendingCount > 0 || !view.IsBusy);

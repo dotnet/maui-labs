@@ -1,22 +1,21 @@
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>Assistant text. Full width, no bubble.</summary>
+/// <summary>Assistant text, rendered as Markdown. Full width, no bubble.</summary>
 /// <remarks>
-/// Plain text for now. The Markdown renderer replaces this view: it is registered for
-/// <see cref="TextContentBlock"/> in <see cref="BuiltInBlockTemplates"/>.
+/// Each coalesced streaming update re-parses the text, and <see cref="MarkdownView"/> rebuilds only the blocks that
+/// changed (usually the last one), so earlier blocks keep their views while the answer grows.
 /// </remarks>
 internal sealed class TextBlockView : BlockView
 {
-    private readonly Label _label = ChatVisuals.Label(AIChatThemeKeys.AssistantTextStyle);
+    private readonly MarkdownView _markdown = new();
 
     public TextBlockView()
     {
         AutomationId = "AIChatAssistantText";
-        Content = _label;
+        Content = _markdown;
     }
 
-    internal Label Label => _label;
+    internal MarkdownView Markdown => _markdown;
 
-    // Models often start or end a message with blank lines; they would only pad the row.
-    protected override void OnBlockChanged() => _label.Text = (Block as RichContentBlock)?.RawText.Trim();
+    protected override void OnBlockChanged() => _markdown.SetMarkdown((Block as RichContentBlock)?.RawText);
 }
