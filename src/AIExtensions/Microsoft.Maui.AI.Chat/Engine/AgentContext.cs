@@ -650,7 +650,7 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
         }
         catch (Exception) when (cancellationToken.IsCancellationRequested)
         {
-            var abandoned = AbandonPendingInteractions(interactiveBlocks);
+            var abandoned = AbandonUnfinished(turn, interactiveBlocks);
             try
             {
                 return EndCanceledAttempt(attempt, pendingTurn, turn);
@@ -662,7 +662,7 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            var abandoned = AbandonPendingInteractions(interactiveBlocks);
+            var abandoned = AbandonUnfinished(turn, interactiveBlocks);
             try
             {
                 Fail(attempt, turn, message, ex);
@@ -677,9 +677,18 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
 
         // The turn is committed, so an exception from an app callback while it is reported reaches the
         // caller instead of failing a turn that can no longer be retried.
+        var unanswered = AbandonUnfinished(turn, interactiveBlocks: null);
         _retryMessage = null;
         Status = ConversationStatus.Idle;
-        ReportAttemptEnded(attempt);
+        try
+        {
+            ReportAttemptEnded(attempt);
+        }
+        finally
+        {
+            ReportAbandoned(unanswered);
+        }
+
         return AttemptOutcome.Succeeded;
     }
 
@@ -802,14 +811,35 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
             _attempt = null;
     }
 
-    /// <summary>Stops the turn's approvals and UI actions from accepting what can no longer be sent.</summary>
-    /// <returns>The blocks that stopped waiting for input.</returns>
-    private static List<InteractiveFunctionBlock> AbandonPendingInteractions(List<IInteractiveBlock> interactiveBlocks)
+    /// <summary>
+    /// Ends what the turn left unfinished once nothing can send it: the approvals and UI actions of a turn that
+    /// stopped or failed stop accepting input, and the turn's calls without a result are abandoned, because
+    /// they can no longer get one. Nothing is reported yet.
+    /// </summary>
+    /// <param name="turn">The turn that ended.</param>
+    /// <param name="interactiveBlocks">
+    /// The turn's approvals and UI actions, or <see langword="null"/> once all of them were answered.
+    /// </param>
+    /// <returns>The blocks whose changes <see cref="ReportAbandoned"/> raises, each once.</returns>
+    private static List<ContentBlock> AbandonUnfinished(ConversationTurn turn, List<IInteractiveBlock>? interactiveBlocks)
     {
-        var abandoned = new List<InteractiveFunctionBlock>();
-        foreach (var interactive in interactiveBlocks)
+        var abandoned = new List<ContentBlock>();
+        foreach (var interactive in interactiveBlocks ?? [])
         {
             if (interactive is InteractiveFunctionBlock block && block.Abandon())
+                abandoned.Add(block);
+        }
+
+        foreach (var block in turn.RequestBlocks.Concat(turn.ResponseBlocks))
+        {
+            var call = block as FunctionInvocationContentBlock ?? (block as InteractiveFunctionBlock)?.InnerBlock;
+            if (call is null || !call.Abandon())
+                continue;
+
+            abandoned.Add(call);
+
+            // A card shown by an approval or UI action refreshes from the wrapper's notification.
+            if (!ReferenceEquals(call, block) && !abandoned.Exists(other => ReferenceEquals(other, block)))
                 abandoned.Add(block);
         }
 
@@ -817,16 +847,27 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Raises the change notification of blocks that stopped waiting for input. Runs once the turn's outcome
-    /// is final, so a change callback that throws cannot leave the turn running.
+    /// Raises the changes of the blocks the turn's end changed: first every property change, then each
+    /// block's change notification, so a view that refreshes finds all of them raised. Runs once the turn's
+    /// outcome is final, so a handler that throws cannot leave the turn running.
     /// </summary>
-    private static void ReportAbandoned(List<InteractiveFunctionBlock> abandoned)
+    private static void ReportAbandoned(List<ContentBlock> abandoned)
     {
         foreach (var block in abandoned)
         {
-            block.ReportAwaitingInputChanged();
-            block.InvokeNotifyChanged();
+            switch (block)
+            {
+                case InteractiveFunctionBlock interactive:
+                    interactive.ReportAwaitingInputChanged();
+                    break;
+                case FunctionInvocationContentBlock call:
+                    call.ReportAbandonedChanged();
+                    break;
+            }
         }
+
+        foreach (var block in abandoned)
+            block.InvokeNotifyChanged();
     }
 
     private static ChatMessage EnsureMessageId(ChatMessage message)

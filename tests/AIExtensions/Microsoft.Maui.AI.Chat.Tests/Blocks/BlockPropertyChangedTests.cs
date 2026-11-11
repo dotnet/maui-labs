@@ -74,6 +74,62 @@ public class BlockPropertyChangedTests
     }
 
     [Fact]
+    public void FunctionInvocationContentBlock_RaisesApprovalWhenAnApprovalWrapsIt()
+    {
+        var call = new FunctionInvocationContentBlock { Call = new FunctionCallContent("delete-1", "DeleteFile") };
+        var names = Record(call);
+
+        var approval = new ToolApprovalBlock(call, new ToolApprovalRequestContent("approval-1", call.Call));
+
+        Assert.Same(approval, call.Approval);
+        Assert.Equal(["Approval"], names);
+    }
+
+    [Fact]
+    public void FunctionInvocationContentBlock_Abandoned_RaisesIsAbandonedWhenReportedUntilAResultArrives()
+    {
+        var call = new FunctionInvocationContentBlock { Call = new FunctionCallContent("search-1", "Search") };
+        var seen = new List<string>();
+        call.PropertyChanged += (_, e) => seen.Add($"{e.PropertyName}:{call.IsAbandoned}");
+
+        Assert.True(call.Abandon());
+        Assert.False(call.Abandon());
+        Assert.True(call.IsAbandoned);
+        Assert.Empty(seen);
+        call.ReportAbandonedChanged();
+        call.Result = new FunctionResultContent("search-1", "Found it.");
+
+        Assert.False(call.IsAbandoned);
+        Assert.Equal(["IsAbandoned:True", "Result:False", "HasResult:False", "IsAbandoned:False"], seen);
+    }
+
+    [Fact]
+    public void FunctionInvocationContentBlock_WithAResult_IsNotAbandoned()
+    {
+        var call = new FunctionInvocationContentBlock
+        {
+            Call = new FunctionCallContent("search-1", "Search"),
+            Result = new FunctionResultContent("search-1", "Found it."),
+        };
+
+        Assert.False(call.Abandon());
+        Assert.False(call.IsAbandoned);
+    }
+
+    [Fact]
+    public void ToolApprovalBlock_RaisesIsAbandonedOfItsCall()
+    {
+        var approval = CreateApproval();
+        var seen = new List<string>();
+        approval.PropertyChanged += (_, e) => seen.Add($"{e.PropertyName}:{approval.IsAbandoned}");
+
+        Assert.True(approval.InnerBlock.Abandon());
+        approval.InnerBlock.ReportAbandonedChanged();
+
+        Assert.Equal(["IsAbandoned:True"], seen);
+    }
+
+    [Fact]
     public void ToolApprovalBlock_Approve_RaisesStatusAndIsAwaitingInputOnce()
     {
         var approval = CreateApproval();
@@ -195,7 +251,7 @@ public class BlockPropertyChangedTests
         inner.Changed();
 
         Assert.Equal([""], innerNames);
-        Assert.Equal(["Call", "ToolName", "Arguments", "Result", "HasResult", "IsComplete"], names);
+        Assert.Equal(["Call", "ToolName", "Arguments", "Result", "HasResult", "IsAbandoned", "IsComplete"], names);
     }
 
     [Fact]

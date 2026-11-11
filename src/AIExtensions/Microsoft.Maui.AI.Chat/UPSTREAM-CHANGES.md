@@ -229,6 +229,17 @@ These match upstream so that upstream fixes apply directly:
   `PropertyChanged` for it and its change notification when the value changes, after the turn's outcome
   is final. Upstream has no
   equivalent, so a restored pending approval looks answerable.
+- **A call says whether it can still get a result, and which approval wraps it.**
+  `FunctionInvocationContentBlock.IsAbandoned`, which `InteractiveFunctionBlock` forwards, turns true
+  when the call's turn ends without a result for it: the turn completed, stopped or failed, or left the
+  call's approval or UI action unanswered. A restore sets it for a call without a recorded result. Once
+  a turn ended, each of its calls has a result or is abandoned, as in the history, which leaves out
+  calls without a result. The change is raised once the turn's outcome is final, after the turn's and
+  the context's changes, with one change notification per block. A rejected call is not abandoned: it
+  keeps the rejection that `FunctionInvokingChatClient` returns as its result, unless the turn ended
+  before that arrived. `FunctionInvocationContentBlock.Approval` is the `ToolApprovalBlock` that wraps
+  the call, set when the approval is created. Upstream has neither, so a card bound to its call cannot
+  tell a stopped call from a running one, or find its approval, without searching the conversation.
 - **Canceling one invocation.** Canceling the token passed to `UIActionBlock.InvokeAsync` cancels only
   that invocation: its task is canceled, the action can be invoked again, and the turn keeps waiting
   for the result. Upstream cancels the block's result, which fails the turn.
