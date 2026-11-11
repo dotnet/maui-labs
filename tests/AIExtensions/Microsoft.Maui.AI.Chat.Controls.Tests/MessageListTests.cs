@@ -1512,6 +1512,47 @@ public class MessageListTests
     });
 
     [Fact]
+    public void AppTemplate_CanBindALabelToTheStreamingText() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var template = new BlockTemplate
+        {
+            BlockType = typeof(TextContentBlock),
+            Role = "assistant",
+            Template = new DataTemplate(() =>
+            {
+                var label = new Label();
+                label.SetBinding(Label.TextProperty, nameof(RichContentBlock.RawText));
+                return label;
+            }),
+        };
+        var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(template));
+
+        view.Text = "Hi";
+        var send = view.SendAsync();
+        stream.Text("Hel");
+        await UIThread.Until(() => view.Rows().OfType<BlockRow>().Any(row => row.Block.Role == ChatRole.Assistant));
+        var row = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block.Role == ChatRole.Assistant);
+        var label = Assert.IsType<Label>(((BlockHost)view.Realize(row)).HostedView);
+        Assert.Equal("Hel", label.Text);
+        var contextChanges = 0;
+        label.BindingContextChanged += (_, _) => contextChanges++;
+        var rendered = false;
+        row.Changed += (_, _) => rendered = true;
+
+        stream.Text("lo");
+        await UIThread.Until(() => label.Text == "Hello" && rendered);
+        stream.Complete();
+        await send;
+
+        // The block raises the change of RawText, so the binding follows it without a new binding context.
+        Assert.Equal("Hello", label.Text);
+        Assert.Same(row.Block, label.BindingContext);
+        Assert.Equal(0, contextChanges);
+    });
+
+    [Fact]
     public void PartialImages_UpdateTheirRowInPlace() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient();

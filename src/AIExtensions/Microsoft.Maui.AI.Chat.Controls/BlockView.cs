@@ -83,9 +83,9 @@ public class BlockView : ContentView
             blockView.Turn = turn;
         }
 
-        // Blocks don't raise property changes: resetting the context re-evaluates every binding once.
-        view.BindingContext = null;
-        view.BindingContext = block;
+        // The block raises its property changes, so the bindings follow it without a new context.
+        if (!ReferenceEquals(view.BindingContext, block))
+            view.BindingContext = block;
 
         if (blockView is null)
             return;
