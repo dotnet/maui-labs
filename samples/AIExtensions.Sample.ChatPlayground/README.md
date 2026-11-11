@@ -48,14 +48,13 @@ works without credentials or a model.
 
 Documents evaluates the merged API from [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588)
 using official packages `11.0.0-preview.1.26560.3` from NuGet.org. It retains completed-document extraction and native-reader modes, original services/view-model conventions,
-and explicit cloud choices.
-All source bridges are removed. Azure and Foundry Mistral extraction use the published
-`CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence` and `CommunityToolkit.DocumentExtraction.Mistral` packages,
-both version `1.0.0-preview`.
+and explicit provider selection.
+All source bridges are removed. Foundry Mistral is the single cloud comparison provider, using
+`CommunityToolkit.DocumentExtraction.Mistral/1.0.0-preview`. The sample does not need a second Azure document service.
 Apple Vision remains our on-device provider of the same official contract. No private substitute API is used.
 The cloud reader modes project those same Toolkit results rather than maintaining independent service protocols or HTML parsing.
 NuGet clients and their options are constructed directly in `AddDocumentFeature`, not provider-specific wrapper classes.
-Both cloud reader registrations use one shared adapter. Only shared application safeguards and the required ingestion projection remain;
+The cloud reader registration uses a shared adapter. Only shared application safeguards and the required ingestion projection remain;
 Mistral response limiting runs in the normal HTTP handler pipeline without a second forwarding client.
 Mistral table content remains literal Markdown/HTML without an addressed cell grid; native-only blocks/captions/confidence remain
 explicitly inspectable instead of being repackaged into metadata.
@@ -99,12 +98,33 @@ dotnet user-secrets set "AI:ApiKey" "<key>" --project samples\AIExtensions.Sampl
 dotnet user-secrets set "AI:DeploymentName" "<chat-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 dotnet user-secrets set "AI:ImageDeploymentName" "<image-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 dotnet user-secrets set "AI:EmbeddingDeploymentName" "<embedding-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
+dotnet user-secrets set "AI:DocumentDeploymentName" "<mistral-ocr-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 ```
 
 Only set the deployment names you intend to use: `AI:DeploymentName` enables
 Chat, `AI:ImageDeploymentName` enables Images and Chat's image-generation tool,
-and `AI:EmbeddingDeploymentName` enables Embeddings. The endpoint and key are
+`AI:EmbeddingDeploymentName` enables Embeddings, and `AI:DocumentDeploymentName` enables Documents.
+Documents reuses the same `AI:Endpoint` and `AI:ApiKey`; the native Foundry OCR route is derived from that resource URL.
+No Document Intelligence endpoint/key or separately configured document endpoint is needed. The endpoint and key are
 required only when at least one Azure deployment name is configured.
 User secrets are **embedded in Debug builds** for device testing: never
 distribute those builds or commit keys. Azure prompts, images, and indexed
 text may leave the device and incur charges.
+
+## Shared file input
+
+Chat attachments, image edits and document extraction share root-level `FileInputService` and `InputFile`.
+Callers supply their picker options and use the shared `FileInputService.ImageFiles` or `FileInputService.DocumentFiles`
+presets rather than defining private file-type lists. Packaged sample names are also supplied by the caller.
+
+```csharp
+var file = await files.PickAsync(new PickOptions
+{
+    PickerTitle = "Choose a document",
+    FileTypes = FileInputService.DocumentFiles,
+}, cancellationToken);
+```
+
+For already-opened input, `InputFile.ReadAsync(stream, fileName, contentType, cancellationToken)` copies from the current stream position,
+enforces the shared 20 MB limit, and leaves the caller's stream open. The common value replaces separate image/document byte records.
+Feature-specific format support is still respected: image chat/edit filters do not offer HEIC/TIFF just because document OCR supports them.

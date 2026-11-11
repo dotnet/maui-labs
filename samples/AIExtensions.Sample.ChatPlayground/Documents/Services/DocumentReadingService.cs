@@ -7,7 +7,7 @@ namespace AIExtensions.Sample.ChatPlayground;
 public sealed class DocumentReadingService
 {
     public async Task<DocumentReadResult> ReadAsync(
-        IngestionDocumentReader reader, SelectedDocument input, CancellationToken cancellationToken = default)
+        IngestionDocumentReader reader, InputFile input, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(input);

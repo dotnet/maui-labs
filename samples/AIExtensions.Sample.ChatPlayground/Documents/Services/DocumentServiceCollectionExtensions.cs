@@ -1,7 +1,3 @@
-using Azure;
-using Azure.AI.DocumentIntelligence;
-using Azure.Core.Pipeline;
-using CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence;
 using CommunityToolkit.DocumentExtraction.Mistral;
 using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,7 +14,6 @@ internal static class DocumentServiceCollectionExtensions
 {
     public static IServiceCollection AddDocumentFeature(this IServiceCollection services, AISettings settings)
     {
-        services.AddSingleton<DocumentInputService>();
         services.AddSingleton<DocumentReadingService>();
         services.AddSingleton<DocumentExtractionService>();
         services.AddSingleton<DocumentSettingsViewModel>();
@@ -32,27 +27,6 @@ internal static class DocumentServiceCollectionExtensions
             services.AddSingleton<DocumentExtractionClient>(CreateAppleRecognizeDocumentsClient);
         }
 #endif
-
-        if (settings.DocumentIntelligenceEndpoint is not null &&
-            !string.IsNullOrWhiteSpace(settings.DocumentIntelligenceKey))
-        {
-            services.AddKeyedSingleton<HttpClient>("azure-document", (_, _) =>
-                new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan });
-            services.AddSingleton(provider => CreateAzureClient(provider, settings));
-            services.AddKeyedSingleton<DocumentExtractionClient>("azure-document", (provider, _) =>
-                new CloudDocumentExtractionPolicy(
-                    provider.GetRequiredService<DocumentIntelligenceClient>().AsDocumentExtractionClient(),
-                    TimeSpan.FromSeconds(100)));
-            services.AddSingleton<IngestionDocumentReader>(provider => new DescribedDocumentReader(
-                new ExtractedDocumentReader(provider.GetRequiredKeyedService<DocumentExtractionClient>("azure-document")),
-                new DocumentReaderDescriptor("azure-document-intelligence", "Azure Document Intelligence",
-                    "Uploads the entire document to Azure for prebuilt-layout analysis; may incur charges.", IsCloud: true)));
-            services.AddSingleton<DocumentExtractionClient>(provider =>
-                Describe(provider.GetRequiredKeyedService<DocumentExtractionClient>("azure-document"),
-                    new DocumentExtractionClientDescriptor(
-                        "azure-document-intelligence", "Azure Document Intelligence",
-                        "Uploads the document using the Toolkit Azure adapter (prebuilt-layout by default); charges may apply. Native SDK output is explicitly inspectable.", IsCloud: true), provider));
-        }
 
         if (!string.IsNullOrWhiteSpace(settings.DocumentDeploymentName))
         {
@@ -111,18 +85,4 @@ internal static class DocumentServiceCollectionExtensions
             .Use(inner => new DescribedDocumentExtractionClient(inner, descriptor))
             .UseLogging(provider.GetRequiredService<ILoggerFactory>())
             .Build();
-
-    private static DocumentIntelligenceClient CreateAzureClient(IServiceProvider provider, AISettings settings)
-    {
-        var endpoint = settings.DocumentIntelligenceEndpoint!;
-        if (!endpoint.IsAbsoluteUri || endpoint.Scheme != Uri.UriSchemeHttps ||
-            endpoint.UserInfo.Length != 0 || endpoint.Query.Length != 0 || endpoint.Fragment.Length != 0 ||
-            endpoint.AbsolutePath != "/")
-            throw new InvalidOperationException("Document Intelligence endpoint must be an HTTPS resource root URL.");
-        return new DocumentIntelligenceClient(endpoint, new AzureKeyCredential(settings.DocumentIntelligenceKey!),
-            new DocumentIntelligenceClientOptions
-            {
-                Transport = new HttpClientTransport(provider.GetRequiredKeyedService<HttpClient>("azure-document")),
-            });
-    }
 }

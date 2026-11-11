@@ -86,12 +86,10 @@
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIAbstractionsVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DataIngestion.Abstractions" Version="10.10.0-preview.1.26459.2" />
     <PackageVersion Include="AngleSharp" Version="1.4.0" />
-    <PackageVersion Include="Azure.AI.DocumentIntelligence" Version="1.0.0" />
     <PackageVersion Include="Azure.Core" Version="1.53.0" />
     <PackageVersion Include="Microsoft.Extensions.Documents.Abstractions" Version="$(DocumentExtractionPreviewVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DocumentExtraction.Abstractions" Version="$(DocumentExtractionPreviewVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DocumentExtraction" Version="$(DocumentExtractionPreviewVersion)" />
-    <PackageVersion Include="CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence" Version="1.0.0-preview" />
     <PackageVersion Include="CommunityToolkit.DocumentExtraction.Mistral" Version="1.0.0-preview" />
     <!-- Sample app: Microsoft Agents AI -->
     <PackageVersion Include="Microsoft.Agents.AI" Version="$(MicrosoftAgentsAIVersion)" />

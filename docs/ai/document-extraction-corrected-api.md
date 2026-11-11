@@ -3,12 +3,26 @@
 ## Published packages only - 2026-11-11
 
 Microsoft Documents/Extraction packages now use NuGet.org version `11.0.0-preview.1.26560.3` (repository commit
-`c60d72e7973a90cd4e4300d9153e97b93315e4b7`). The Azure and Mistral Toolkit providers now use published `1.0.0-preview`
+`c60d72e7973a90cd4e4300d9153e97b93315e4b7`). The Mistral Toolkit provider uses the published `1.0.0-preview`
 packages (repository commit `74935f4e20490889ae051b4bb8f4bc32959ab3bd`).
 All remaining copied source, local provider projects/adapters, manifests and source-verification scripts are removed.
 No provider mapping, app limits, caller ownership or Apple implementation changes are needed.
 
-### Registration cleanup
+### One cloud comparison and shared file input
+
+The sample deliberately keeps only Apple Vision and one cloud comparison: Foundry Mistral. The Azure Document Intelligence
+registration, NuGet dependencies, separate endpoint/key settings and provider-specific tests are removed; this is a user-directed
+scope reduction, not a missing backend fallback. Mistral uses the same `AI:Endpoint`/`AI:ApiKey` as the other Azure features and
+adds only `AI:DocumentDeploymentName`. Generic exchange/ingestion table, role, source, blank-cell and mixed-content tests remain
+provider-neutral instead of depending on Azure SDK model factories.
+
+Root-level `FileInputService` replaces the image/document input services. Callers pass `PickOptions` using reusable
+`ImageFiles`/`DocumentFiles` presets and pass packaged sample names explicitly. A shared `InputFile` replaces the two duplicate
+byte records and provides caller-stream loading with MIME resolution, cancellation, a 20 MB limit and borrowed stream ownership.
+The image-only filters stay distinct from OCR document filters; format support is not widened to whatever a different feature accepts.
+The standalone chat-recording and embedding text import paths still stream into their existing parsers and retain their own limits.
+
+### Registration cleanup (before narrowing to Mistral)
 
 Provider construction and options now live directly in `AddDocumentFeature`: Azure uses the package's
 `AsDocumentExtractionClient()` extension and Foundry constructs the package's `MistralDocumentExtractionClient`.
@@ -38,24 +52,26 @@ The migration introduces or updates these exact packages, including the newly re
 - Microsoft.Extensions.Documents.Abstractions/11.0.0-preview.1.26560.3
 - Microsoft.Extensions.DocumentExtraction.Abstractions/11.0.0-preview.1.26560.3
 - Microsoft.Extensions.DocumentExtraction/11.0.0-preview.1.26560.3
-- CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence/1.0.0-preview
 - CommunityToolkit.DocumentExtraction.Mistral/1.0.0-preview
 - Microsoft.Extensions.AI.Abstractions/11.0.0
 - Microsoft.Extensions.DependencyInjection.Abstractions/10.0.15
 - Microsoft.Extensions.Logging.Abstractions/10.0.15
 
-Existing Azure SDK dependencies are unchanged (`Azure.AI.DocumentIntelligence/1.0.0`, `Azure.Core/1.53.0`).
+`Azure.Core/1.53.0` remains the Mistral dependency. `Azure.AI.DocumentIntelligence` is no longer needed by this sample or its tests.
 
 ### Publication validation
 
-The full portable integration suite passes 479 tests; Chat/Embeddings/Images/settings passes 158 tests against actual published assemblies.
+After narrowing the provider scope and unifying file input, the portable integration suite passes 476 tests;
+Chat/Embeddings/Images/settings/file-input passes 169 tests against actual published assemblies.
+The isolated full playground exposes only Apple/Mistral extraction choices. It successfully processes the bundled image through
+Mistral extraction and reader modes, and the bundled two-page PDF through the Apple reader using the shared file service.
+Chat attachments and image-edit previews also load their packaged sample through that same service without issuing model requests.
 The complete Catalyst and Android playgrounds build without warnings/errors. The restored Xcode 27.2 installation is usable;
 the installed packs support 26.0 and 27.2 rather than the repository's explicit 27.0 preview target, so Catalyst validation uses the
 normal `net10.0-maccatalyst` target with command-line `ValidateXcodeVersion=false`, without changing repository TFMs or workloads.
 Actual Release Catalyst execution against the published contracts passes all 11 Apple document client/reader cases.
-A session-only smoke harness using the published Toolkit assemblies and exact sample policy sources also succeeds against both
-existing configured cloud resources with the bundled synthetic image: Azure returns one page/five elements and Mistral one page,
-with native results retained and caller input streams open. No credentials or source content are logged.
+Earlier session-only smoke runs exercised both configured resources before narrowing to Mistral; those are historical comparisons,
+not a requirement to retain both providers. Native results and caller stream ownership remain explicit; credentials/content are not logged.
 The existing test-only AngleSharp 1.4.0 moderate advisory remains unrelated and unchanged.
 
 ## Official daily packages and source-backed Toolkit reuse - 2026-11-10 (superseded)

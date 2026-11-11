@@ -47,7 +47,8 @@ The playground exercises completed-document extraction, the concrete ingestion r
 native inspection. It displays payload/frame/polygon/span/role data; raw objects are not implicitly serialized into normalized output.
 Page streaming and capture controls are removed rather than emulated.
 
-Azure Document Intelligence and Foundry Mistral reuse the Toolkit providers, retaining explicit sample-only selection and configured resources/transports.
+Foundry Mistral is the single cloud comparison provider, using its Toolkit package and the shared endpoint/key plus
+`AI:DocumentDeploymentName`. Azure Document Intelligence and its separate endpoint/key configuration are removed from the sample.
 No client fallback, extra cloud resource, credentials in source or distribution of secret-embedded Debug binaries is introduced.
 
 See [corrected adoption details](document-extraction-corrected-api.md) and [feature gaps](apple-document-extraction-gaps.md).

@@ -12,7 +12,7 @@ public sealed class DocumentExtractionService
     private static readonly JsonSerializerOptions s_json = new() { WriteIndented = true };
 
     public async Task<DocumentExtractionRunResult> ExtractAsync(
-        DocumentExtractionClient client, SelectedDocument input, DocumentExtractionOptions? options = null,
+        DocumentExtractionClient client, InputFile input, DocumentExtractionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);

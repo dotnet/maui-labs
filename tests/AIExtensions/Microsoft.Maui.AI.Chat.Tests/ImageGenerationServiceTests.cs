@@ -27,7 +27,7 @@ public sealed class ImageGenerationServiceTests
     [Fact]
     public async Task GenerateAsync_WithOriginalAndOptions_PassesThemToGenerator()
     {
-        var original = new ImageAttachment("input.png", "image/png", [3, 4]);
+        var original = new InputFile("input.png", "image/png", [3, 4]);
         var settings = CreateSettings();
         settings.SelectedSize = settings.ImageSizes.Single(size => size.Size == new Size(1024, 1024));
         settings.SelectedMediaType = "image/jpeg";

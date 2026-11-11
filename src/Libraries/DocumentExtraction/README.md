@@ -9,8 +9,10 @@ document-consuming projects rather than changing the whole repository's dependen
 The contracts are still experimental (`EXTEXP0019`, `MEDE0001`). `Microsoft.Maui.Essentials.AI` stays non-shipping/non-packable
 pending provider acceptance; consuming an official package does not make the prototype a supported release.
 
-Sample cloud providers now come from [CommunityToolkit/AI](https://github.com/CommunityToolkit/AI/tree/main/DocumentExtraction),
-not local Azure/Mistral extraction implementations. Both providers use published `1.0.0-preview` packages.
+The single sample cloud provider is Foundry Mistral from
+[CommunityToolkit/AI](https://github.com/CommunityToolkit/AI/tree/main/DocumentExtraction), using the published `1.0.0-preview` package,
+not a local protocol/mapping implementation. It reuses the shared endpoint/key plus the document deployment name.
+The optional Azure Document Intelligence provider and its separate endpoint/key configuration were removed from the sample.
 All copied Toolkit sources, verification manifests and build adapters are removed.
 The Apple Vision provider remains our implementation of the official abstract client.
 

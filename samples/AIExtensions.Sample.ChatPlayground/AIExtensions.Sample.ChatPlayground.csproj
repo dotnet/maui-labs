@@ -30,7 +30,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Azure.AI.DocumentIntelligence" />
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
@@ -39,7 +38,6 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.Extensions.DataIngestion.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.DocumentExtraction" />
-    <PackageReference Include="CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence" />
     <PackageReference Include="CommunityToolkit.DocumentExtraction.Mistral" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     <PackageReference Include="Microsoft.Maui.Controls" />

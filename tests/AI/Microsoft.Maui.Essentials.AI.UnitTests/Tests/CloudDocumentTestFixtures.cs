@@ -1,10 +1,6 @@
 using System.Net;
-using Azure;
-using Azure.AI.DocumentIntelligence;
-using CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence;
 using CommunityToolkit.DocumentExtraction.Mistral;
 using Microsoft.Extensions.DocumentExtraction;
-using NSubstitute;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
@@ -25,35 +21,6 @@ internal static class CloudDocumentTestFixtures
         new CloudDocumentExtractionPolicy(new MistralDocumentExtractionClient(
             new() { OcrEndpoint = OcrEndpoint, DefaultModel = deployment, IncludeImages = true }, "test-key", http),
             TimeSpan.FromMinutes(5));
-
-    internal static DocumentExtractionClient AzureExtractor(DocumentIntelligenceClient client) =>
-        new CloudDocumentExtractionPolicy(client.AsDocumentExtractionClient(), TimeSpan.FromSeconds(100));
-
-    internal static DocumentIntelligenceClient AzureSdk(
-        Func<AnalyzeDocumentOptions, CancellationToken, Task<AnalyzeResult>> analyze)
-    {
-        var sdk = Substitute.For<DocumentIntelligenceClient>();
-        sdk.AnalyzeDocumentAsync(WaitUntil.Completed, Arg.Any<AnalyzeDocumentOptions>(), Arg.Any<CancellationToken>())
-            .Returns(async call =>
-            {
-                var result = await analyze(call.ArgAt<AnalyzeDocumentOptions>(1), call.ArgAt<CancellationToken>(2));
-                var operation = Substitute.For<Operation<AnalyzeResult>>();
-                operation.Value.Returns(result);
-                operation.Id.Returns("operation-id");
-                operation.GetRawResponse().Returns(Substitute.For<Response>());
-                return operation;
-            });
-        return sdk;
-    }
-
-    internal static DocumentIntelligenceClient AzureSdk(AnalyzeResult result) =>
-        AzureSdk((_, _) => Task.FromResult(result));
-
-    internal static DocumentSpan Span(int offset, int length) =>
-        DocumentIntelligenceModelFactory.DocumentSpan(offset: offset, length: length);
-
-    internal static BoundingRegion Region(int page) =>
-        DocumentIntelligenceModelFactory.BoundingRegion(pageNumber: page, polygon: [1, 2, 3, 2, 3, 4, 1, 4]);
 
     private sealed class Handler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond)
         : HttpMessageHandler

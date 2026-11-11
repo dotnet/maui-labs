@@ -36,15 +36,4 @@ public sealed class DocumentSettingsTests
         var error = Assert.Throws<InvalidOperationException>(() => settings.GetFoundryDocumentEndpoint());
         Assert.DoesNotContain(endpoint, error.Message);
     }
-
-    [Fact]
-    public void Validate_IndependentDocumentIntelligenceSettingsRequireBothValues()
-    {
-        var settings = new AISettings { DocumentIntelligenceKey = "test-key" };
-        Assert.Throws<InvalidOperationException>(settings.Validate);
-        settings.DocumentIntelligenceEndpoint = new Uri("https://example.services.ai.azure.com/");
-        settings.Validate();
-        settings.DocumentIntelligenceKey = null;
-        Assert.Throws<InvalidOperationException>(settings.Validate);
-    }
 }

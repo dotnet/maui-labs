@@ -8,16 +8,16 @@ namespace AIExtensions.Sample.ChatPlayground;
 /// <summary>Runs the selected real document reader against the imported file.</summary>
 public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 {
-    private readonly DocumentInputService _input;
+    private readonly FileInputService _input;
     private readonly DocumentReadingService _reading;
     private readonly DocumentExtractionService _extraction;
-    private SelectedDocument? _selected;
+    private InputFile? _selected;
     private string _normalizedOutput = string.Empty;
     private DocumentExtractionRunResult? _extractionResult;
 
     public DocumentPlaygroundViewModel(
         DocumentReadingService reading, DocumentExtractionService extraction,
-        DocumentInputService input, DocumentSettingsViewModel settings)
+        FileInputService input, DocumentSettingsViewModel settings)
     {
         _reading = reading;
         _extraction = extraction;
@@ -26,7 +26,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         Settings.PropertyChanged += SettingsPropertyChanged;
         StatusMessage = Settings.HasSelection
             ? $"Selected {Settings.CurrentName}. Choose a document."
-            : "No document reader available. On Apple, use iOS or Mac Catalyst 26+; for cloud, configure Document Intelligence or Foundry.";
+            : "No document reader available. On Apple, use iOS or Mac Catalyst 26+; for cloud, configure a Foundry document deployment.";
     }
 
     public DocumentSettingsViewModel Settings { get; }
@@ -84,13 +84,17 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     private bool CanReadDocument() => CanRead;
 
     [RelayCommand(CanExecute = nameof(CanChooseDocument))]
-    private Task ChooseDocumentAsync() => SelectDocumentAsync(() => _input.PickAsync());
+    private Task ChooseDocumentAsync() => SelectDocumentAsync(() => _input.PickAsync(new PickOptions
+    {
+        PickerTitle = "Select a PDF or image document",
+        FileTypes = FileInputService.DocumentFiles,
+    }));
 
     [RelayCommand(CanExecute = nameof(CanChooseDocument))]
-    private Task UseSamplePdfAsync() => SelectDocumentAsync(async () => await _input.LoadSamplePdfAsync());
+    private Task UseSamplePdfAsync() => SelectDocumentAsync(async () => await _input.LoadSampleAsync("document_sample.pdf"));
 
     [RelayCommand(CanExecute = nameof(CanChooseDocument))]
-    private Task UseSampleImageAsync() => SelectDocumentAsync(async () => await _input.LoadSampleImageAsync());
+    private Task UseSampleImageAsync() => SelectDocumentAsync(async () => await _input.LoadSampleAsync("document_sample.png"));
 
     private bool CanRemoveDocument() => !IsBusy && HasDocument;
 
@@ -109,7 +113,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         RemoveDocumentCommand.NotifyCanExecuteChanged();
     }
 
-    private async Task SelectDocumentAsync(Func<Task<SelectedDocument?>> load)
+    private async Task SelectDocumentAsync(Func<Task<InputFile?>> load)
     {
         IsBusy = true;
         Settings.IsBusy = true;

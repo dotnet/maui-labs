@@ -1,45 +1,49 @@
-using Azure.AI.DocumentIntelligence;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DataIngestion;
+using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Extensions.Documents;
 using Xunit;
-using static AIExtensions.Sample.ChatPlayground.CloudDocumentTestFixtures;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
 public sealed class DocumentMappingTests
 {
     [Fact]
-    public async Task ReadAsync_UsesToolkitNativePointersToKeepTableParagraphsInsideCells()
+    public async Task ReadAsync_PreservesPageAndElementOrderAndKeepsTableParagraphsInsideCells()
     {
-        var result = DocumentIntelligenceModelFactory.AnalyzeResult(content: "TitleABAfter",
-            pages: [DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 1, spans: [Span(0, 12)]),
-                DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 3)],
-            paragraphs:
-            [
-                Paragraph("After", 7, 5),
-                Paragraph("A", 5, 1),
-                Paragraph("Title", 0, 5, ParagraphRole.Title),
-            ],
-            tables: [DocumentIntelligenceModelFactory.DocumentTable(rowCount: 1, columnCount: 2,
-                boundingRegions: [Region(1)], spans: [Span(5, 2)], cells:
-                [
-                    DocumentIntelligenceModelFactory.DocumentTableCell(content: "A", boundingRegions: [Region(1)],
-                        elements: ["/paragraphs/1"]),
-                    DocumentIntelligenceModelFactory.DocumentTableCell(columnIndex: 1, content: "B", boundingRegions: [Region(1)]),
-                ])]);
-        using var extraction = AzureExtractor(AzureSdk(result));
+        var result = new ExtractionDocument("layout.pdf");
+        var firstPage = new ExtractionDocumentSourcePage("first", 3);
+        var secondPage = new ExtractionDocumentSourcePage("second", 1);
+        result.SourcePages.Add(firstPage);
+        result.SourcePages.Add(secondPage);
+        var section = new ExtractionDocumentSection();
+        section.Sources.Add(new(firstPage));
+        var cell = new ExtractionDocumentSection();
+        cell.Elements.Add(new ExtractionDocumentTextElement(new TextContent("A")));
+        var table = new ExtractionDocumentTableElement(null, 1, 2);
+        table.Cells[0, 0] = new ExtractionDocumentTableCell(cell);
+        table.Cells[0, 1] = new ExtractionDocumentTableCell(new ExtractionDocumentTextElement(new TextContent("B")));
+        section.Elements.AddRange([
+            new ExtractionDocumentTextElement(new TextContent("Title"), "heading"),
+            table,
+            new ExtractionDocumentTextElement(new TextContent("After")),
+        ]);
+        result.Sections.Add(section);
+        var emptySection = new ExtractionDocumentSection();
+        emptySection.Sources.Add(new(secondPage));
+        result.Sections.Add(emptySection);
+        using var extraction = new StubClient(result);
         using var input = new MemoryStream([1]);
         var document = await new ExtractedDocumentReader(extraction)
             .ReadAsync(input, "layout.pdf", "application/pdf");
         Assert.Equal("layout.pdf", document.Identifier);
-        Assert.Equal([1, 3], document.Sections.Select(section => section.PageNumber));
+        Assert.Equal([3, 1], document.Sections.Select(section => section.PageNumber));
         var elements = document.Sections[0].Elements;
         Assert.Equal("Title", elements[0].Text);
         Assert.IsType<IngestionDocumentParagraph>(elements[0]);
-        var table = Assert.IsType<IngestionDocumentTable>(elements[1]);
-        Assert.Equal("A", Assert.Single(Assert.IsType<IngestionDocumentSection>(table.Cells[0, 0]).Elements).Text);
-        Assert.Equal("B", table.Cells[0, 1]!.Text);
+        var projectedTable = Assert.IsType<IngestionDocumentTable>(elements[1]);
+        Assert.Equal("A", Assert.Single(Assert.IsType<IngestionDocumentSection>(projectedTable.Cells[0, 0]).Elements).Text);
+        Assert.Equal("B", projectedTable.Cells[0, 1]!.Text);
         Assert.Equal("After", elements[2].Text);
         Assert.Equal(3, elements.Count);
         Assert.Empty(document.Sections[1].Elements);
@@ -49,21 +53,22 @@ public sealed class DocumentMappingTests
     [Fact]
     public async Task ReadAsync_RendersReportedCellKindsAndSpansWithoutInventingHeaders()
     {
-        var native = DocumentIntelligenceModelFactory.AnalyzeResult(
-            pages: [DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 1)],
-            tables: [DocumentIntelligenceModelFactory.DocumentTable(rowCount: 3, columnCount: 2,
-                boundingRegions: [Region(1)], cells:
-                [
-                    DocumentIntelligenceModelFactory.DocumentTableCell(kind: DocumentTableCellKind.ColumnHeader,
-                        columnSpan: 2, content: "Names & roles", boundingRegions: [Region(1)]),
-                    DocumentIntelligenceModelFactory.DocumentTableCell(kind: DocumentTableCellKind.RowHeader,
-                        rowIndex: 1, rowSpan: 2, content: "Team", boundingRegions: [Region(1)]),
-                    DocumentIntelligenceModelFactory.DocumentTableCell(rowIndex: 1, columnIndex: 1,
-                        kind: DocumentTableCellKind.Content, content: "Alex", boundingRegions: [Region(1)]),
-                    DocumentIntelligenceModelFactory.DocumentTableCell(rowIndex: 2, columnIndex: 1,
-                        content: "Sam", boundingRegions: [Region(1)]),
-                ])]);
-        using var extraction = AzureExtractor(AzureSdk(native));
+        var result = new ExtractionDocument("table.pdf");
+        var page = new ExtractionDocumentSourcePage("page", 1);
+        result.SourcePages.Add(page);
+        var section = new ExtractionDocumentSection();
+        section.Sources.Add(new(page));
+        var grid = new ExtractionDocumentTableElement(null, 3, 2);
+        grid.Cells[0, 0] = new ExtractionDocumentTableCell(
+            new ExtractionDocumentTextElement(new TextContent("Names & roles")), 1, 2, "columnHeader");
+        grid.Cells[1, 0] = new ExtractionDocumentTableCell(
+            new ExtractionDocumentTextElement(new TextContent("Team")), 2, 1, "rowHeader");
+        grid.Cells[1, 1] = new ExtractionDocumentTableCell(
+            new ExtractionDocumentTextElement(new TextContent("Alex")), 1, 1, "content");
+        grid.Cells[2, 1] = new ExtractionDocumentTableCell(new ExtractionDocumentTextElement(new TextContent("Sam")));
+        section.Elements.Add(grid);
+        result.Sections.Add(section);
+        using var extraction = new StubClient(result);
         using var input = new MemoryStream([1]);
         var document = await new ExtractedDocumentReader(extraction)
             .ReadAsync(input, "table.pdf", "application/pdf");
@@ -131,15 +136,68 @@ public sealed class DocumentMappingTests
     }
 
     [Fact]
+    public async Task ReadAsync_MixedCellContentUsesExplicitSourcesAndBorrowsClientInputAndNativeObjects()
+    {
+        using var native = new MemoryStream([9]);
+        var result = new ExtractionDocument("source")
+        {
+            Content = new TextContent("Document local"),
+            RawRepresentation = native,
+        };
+        var section = new ExtractionDocumentSection { Content = new TextContent("Section local") };
+        section.Sources.Add(new(new("section", 4)));
+        var mixed = new ExtractionDocumentSection { Content = new TextContent("Cell local") };
+        mixed.Elements.Add(new ExtractionDocumentTextElement(new TextContent("<before &>")));
+        var nested = new ExtractionDocumentTableElement(null, 1, 1);
+        var nestedText = new ExtractionDocumentTextElement(new TextContent("Nested"));
+        nestedText.Sources.Add(new(new("nested", 9)));
+        nested.Cells[0, 0] = new ExtractionDocumentTableCell(nestedText);
+        mixed.Elements.Add(nested);
+        mixed.Elements.Add(new ExtractionDocumentTextElement(new TextContent("After")));
+        var outer = new ExtractionDocumentTableElement(null, 1, 1);
+        var cell = new ExtractionDocumentTableCell(mixed);
+        cell.Sources.Add(new(new("cell", 7), rawRepresentation: native));
+        outer.Cells[0, 0] = cell;
+        section.Elements.Add(outer);
+        result.Sections.Add(section);
+        using var extraction = new StubClient(result);
+        var reader = new ExtractedDocumentReader(extraction);
+        using var input = new MemoryStream([1]);
+
+        var document = await reader.ReadAsync(input, "source", "application/pdf");
+        Assert.Equal("Document local", Assert.Single(document.Sections[0].Elements).Text);
+        Assert.Null(document.Sections[0].PageNumber);
+        Assert.Equal("Section local", document.Sections[1].Elements[0].Text);
+        var table = Assert.IsType<IngestionDocumentTable>(document.Sections[1].Elements[1]);
+        Assert.Equal(4, table.PageNumber);
+        var projected = Assert.IsType<IngestionDocumentSection>(table.Cells[0, 0]);
+        Assert.Equal(["Cell local", "<before &>", "Nested", "After"], projected.Elements.Select(element => element.Text));
+        Assert.All(projected.Elements, element => Assert.Equal(7, element.PageNumber));
+        var nestedTable = Assert.IsType<IngestionDocumentTable>(projected.Elements[2]);
+        Assert.Equal(9, nestedTable.Cells[0, 0]!.PageNumber);
+        Assert.Contains("Cell local&lt;before &amp;&gt;\n<table><tr><td>Nested</td></tr></table>\nAfter", table.GetMarkdown());
+        Assert.Same(native, result.RawRepresentation);
+        Assert.Same(native, cell.Sources[0].GetRawRepresentation());
+        Assert.True(native.CanRead);
+        Assert.True(input.CanRead);
+        Assert.False(extraction.Disposed);
+        await reader.ReadAsync(input, "source", "application/pdf");
+        Assert.False(extraction.Disposed);
+    }
+
+    [Fact]
     public async Task ReadAsync_FirstRowContentCellIsNotInventedHeaderAndBlankCellsRemainBlank()
     {
-        var native = DocumentIntelligenceModelFactory.AnalyzeResult(
-            pages: [DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 1)],
-            tables: [DocumentIntelligenceModelFactory.DocumentTable(rowCount: 1, columnCount: 2,
-                boundingRegions: [Region(1)], cells:
-                [DocumentIntelligenceModelFactory.DocumentTableCell(content: "Value", kind: DocumentTableCellKind.Content),
-                 DocumentIntelligenceModelFactory.DocumentTableCell(columnIndex: 1, content: "")])]);
-        using var extraction = AzureExtractor(AzureSdk(native));
+        var result = new ExtractionDocument("source");
+        var section = new ExtractionDocumentSection();
+        var grid = new ExtractionDocumentTableElement(null, 1, 3);
+        grid.Cells[0, 0] = new ExtractionDocumentTableCell(
+            new ExtractionDocumentTextElement(new TextContent("Value")), 1, 1, "content");
+        grid.Cells[0, 1] = new ExtractionDocumentTableCell(new ExtractionDocumentTextElement(new TextContent("")));
+        grid.Cells[0, 2] = new ExtractionDocumentTableCell();
+        section.Elements.Add(grid);
+        result.Sections.Add(section);
+        using var extraction = new StubClient(result);
         using var input = new MemoryStream([1]);
         var document = await new ExtractedDocumentReader(extraction)
             .ReadAsync(input, "source", "application/pdf");
@@ -147,25 +205,37 @@ public sealed class DocumentMappingTests
         Assert.Contains("<td>Value</td>", table.GetMarkdown());
         Assert.DoesNotContain("<th", table.GetMarkdown());
         Assert.Null(table.Cells[0, 1]);
+        Assert.Null(table.Cells[0, 2]);
+        Assert.Equal("<table><tr><td>Value</td><td></td><td></td></tr></table>", table.GetMarkdown());
     }
 
     [Fact]
-    public async Task ReadAsync_OverlappingTableCellsRejectInvalidLayout()
+    public void TableCells_OverlappingSpansRejectInvalidLayout()
     {
-        var native = DocumentIntelligenceModelFactory.AnalyzeResult(
-            pages: [DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 1)],
-            tables: [DocumentIntelligenceModelFactory.DocumentTable(rowCount: 1, columnCount: 2,
-                boundingRegions: [Region(1)], cells:
-                [DocumentIntelligenceModelFactory.DocumentTableCell(columnSpan: 2, content: "Merged"),
-                 DocumentIntelligenceModelFactory.DocumentTableCell(columnIndex: 1, content: "Overlaps")])]);
-        using var extraction = AzureExtractor(AzureSdk(native));
-        using var input = new MemoryStream([1]);
-        var error = await Record.ExceptionAsync(() =>
-            new ExtractedDocumentReader(extraction).ReadAsync(input, "source", "application/pdf"));
+        var table = new ExtractionDocumentTableElement(null, 1, 2);
+        table.Cells[0, 0] = new ExtractionDocumentTableCell(
+            new ExtractionDocumentTextElement(new TextContent("Merged")), 1, 2);
+        var error = Record.Exception(() => table.Cells[0, 1] =
+            new ExtractionDocumentTableCell(new ExtractionDocumentTextElement(new TextContent("Overlaps"))));
         Assert.NotNull(error);
     }
 
-    private static DocumentParagraph Paragraph(string content, int offset, int length, ParagraphRole? role = null) =>
-        DocumentIntelligenceModelFactory.DocumentParagraph(content: content, role: role,
-            boundingRegions: [Region(1)], spans: [Span(offset, length)]);
+    private sealed class StubClient(ExtractionDocument result) : DocumentExtractionClient
+    {
+        public bool Disposed { get; private set; }
+
+        public override Task<ExtractionDocument> ExtractAsync(
+            Stream document, string identifier, string mediaType, DocumentExtractionOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(result);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            Disposed = true;
+            base.Dispose(disposing);
+        }
+    }
 }

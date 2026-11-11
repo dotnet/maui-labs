@@ -34,7 +34,7 @@ public sealed class DocumentReadingServiceTests
         });
 
         var result = await new DocumentReadingService().ReadAsync(
-            reader, new SelectedDocument("selected.pdf", "application/pdf", [1, 2, 3]), cancellation.Token);
+            reader, new InputFile("selected.pdf", "application/pdf", [1, 2, 3]), cancellation.Token);
 
         Assert.Equal(1, result.PageCount);
         Assert.Contains("Document: selected.pdf", result.Output);
@@ -57,7 +57,7 @@ public sealed class DocumentReadingServiceTests
             return Task.FromResult(new IngestionDocument(identifier));
         });
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new DocumentReadingService().ReadAsync(
-            reader, new SelectedDocument("input.png", "image/png", [1]), cancellation.Token));
+            reader, new InputFile("input.png", "image/png", [1]), cancellation.Token));
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public sealed class DocumentReadingServiceTests
         cancellation.Cancel();
         var reader = new StubReader((_, _, _, _) => throw new InvalidOperationException("Must not run."));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new DocumentReadingService().ReadAsync(
-            reader, new SelectedDocument("input.png", "image/png", [1]), cancellation.Token));
+            reader, new InputFile("input.png", "image/png", [1]), cancellation.Token));
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public sealed class DocumentReadingServiceTests
         var expected = new InvalidDataException("Invalid document.");
         var reader = new StubReader((_, _, _, _) => throw expected);
         var error = await Assert.ThrowsAsync<InvalidDataException>(() => new DocumentReadingService().ReadAsync(
-            reader, new SelectedDocument("input.png", "image/png", [1])));
+            reader, new InputFile("input.png", "image/png", [1])));
         Assert.Same(expected, error);
     }
 

@@ -1,14 +1,10 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
-using Azure;
-using Azure.AI.DocumentIntelligence;
-using Azure.Core.Pipeline;
 using CommunityToolkit.DocumentExtraction.Mistral;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Extensions.Documents;
-using NSubstitute;
 using Xunit;
 using static AIExtensions.Sample.ChatPlayground.CloudDocumentTestFixtures;
 
@@ -36,113 +32,6 @@ public sealed class CloudDocumentExtractionClientTests
         Assert.Equal("bounded response", await response.Content.ReadAsStringAsync());
         Assert.Equal("original request", await request.Content.ReadAsStringAsync());
         Assert.Equal(1, sends);
-    }
-
-    [Fact]
-    public async Task Azure_ToolkitUsesSdkOptionsAndPreservesUnicodeNativeLayoutAndCells()
-    {
-        var paragraph = DocumentIntelligenceModelFactory.DocumentParagraph(content: "A😀é", role: ParagraphRole.Title,
-            spans: [Span(0, 4)], boundingRegions: [Region(1)]);
-        var native = DocumentIntelligenceModelFactory.AnalyzeResult(content: "A😀é Value",
-            pages: [DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 1, width: 8, height: 11,
-                unit: LengthUnit.Inch, spans: [Span(0, 10)])],
-            paragraphs: [paragraph],
-            tables: [DocumentIntelligenceModelFactory.DocumentTable(rowCount: 2, columnCount: 2,
-                boundingRegions: [Region(1)], spans: [Span(5, 5)], cells:
-                [DocumentIntelligenceModelFactory.DocumentTableCell(content: "Value", columnSpan: 2,
-                    kind: DocumentTableCellKind.Content, boundingRegions: [Region(1)]),
-                 DocumentIntelligenceModelFactory.DocumentTableCell(rowIndex: 1, content: "", boundingRegions: [Region(1)])])]);
-        var sdk = AzureSdk((options, token) =>
-        {
-            Assert.Equal("custom-layout", options.ModelId);
-            Assert.Equal(DocumentContentFormat.Markdown, options.OutputContentFormat);
-            Assert.Equal(new byte[] { 1, 2 }, options.BytesSource.ToArray());
-            Assert.Equal("en-US", options.Locale);
-            Assert.Equal("1", options.Pages);
-            Assert.True(token.CanBeCanceled);
-            return Task.FromResult(native);
-        });
-        using var client = AzureExtractor(sdk);
-        using var input = new MemoryStream([1, 2]);
-        var options = new DocumentExtractionOptions { ExtractorName = "custom-layout" };
-        options.AdditionalProperties["locale"] = "en-US";
-        options.AdditionalProperties["pages"] = "1";
-        var result = await client.ExtractAsync(input, "source", "application/pdf", options);
-
-        Assert.True(input.CanRead);
-        Assert.Same(sdk, client.GetService(typeof(DocumentIntelligenceClient)));
-        Assert.Null(client.GetService(typeof(DocumentIntelligenceClient), "key"));
-        Assert.Same(native, result.RawRepresentation);
-        Assert.Empty(result.Metadata);
-        var frame = Assert.Single(result.SourcePages);
-        Assert.Equal(new ExtractionDocumentPageDimensions(8, 11), frame.Dimensions);
-        Assert.Equal(ExtractionDocumentCoordinateUnit.Inch, frame.CoordinateUnit);
-        Assert.Equal(ExtractionDocumentCoordinateOrigin.TopLeft, frame.CoordinateOrigin);
-        var title = Assert.IsType<ExtractionDocumentTextElement>(result.Sections[0].Elements[0]);
-        Assert.Equal("A😀é", Assert.IsType<TextContent>(title.Content).Text);
-        Assert.Equal("heading", title.Role);
-        Assert.Null(title.HeadingLevel);
-        Assert.Same(paragraph, title.Sources[0].GetRawRepresentation());
-        var table = Assert.IsType<ExtractionDocumentTableElement>(result.Sections[0].Elements[1]);
-        Assert.Equal(2, table.Cells[0, 0]!.ColumnSpan);
-        Assert.Null(table.Cells[0, 1]);
-        Assert.Equal("content", table.Cells[0, 0]!.Role);
-        Assert.Equal("Value", Assert.IsType<TextContent>(table.Cells[0, 0]!.Content!.Content).Text);
-        Assert.Same(frame, table.Cells[0, 0]!.Sources[0].Page);
-        Assert.Equal(new ExtractionDocumentPoint(1, 2), table.Cells[0, 0]!.Sources[0].Polygon[0]);
-        Assert.IsType<DocumentTableCell>(table.Cells[0, 0]!.Sources[0].GetRawRepresentation());
-        Assert.Equal("", Assert.IsType<TextContent>(table.Cells[1, 0]!.Content!.Content).Text);
-    }
-
-    [Fact]
-    public async Task Azure_TransportUsesOfficialSdkWireRequestAndPropagatesCancellation()
-    {
-        using var cancellation = new CancellationTokenSource();
-        using var http = Http((request, token) =>
-        {
-            Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.Contains("prebuilt-layout:analyze", request.RequestUri!.AbsolutePath);
-            Assert.Contains("outputContentFormat=markdown", request.RequestUri.Query);
-            Assert.Equal("test-key", Assert.Single(request.Headers.GetValues("Ocp-Apim-Subscription-Key")));
-            cancellation.Cancel();
-            token.ThrowIfCancellationRequested();
-            return Ok("{}");
-        });
-        var sdk = new DocumentIntelligenceClient(new Uri("https://example.invalid"), new AzureKeyCredential("test-key"),
-            new DocumentIntelligenceClientOptions { Transport = new HttpClientTransport(http) });
-        using var client = AzureExtractor(sdk);
-        using var input = new MemoryStream([1]);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            client.ExtractAsync(input, "source", "application/pdf", cancellationToken: cancellation.Token));
-        Assert.True(input.CanRead);
-    }
-
-    [Fact]
-    public async Task Azure_FiguresAndPageObservationsRetainNativeSources()
-    {
-        var figure = DocumentIntelligenceModelFactory.DocumentFigure(
-            caption: DocumentIntelligenceModelFactory.DocumentCaption(content: "Caption"),
-            boundingRegions: [Region(1), Region(3)]);
-        var page = DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 1,
-            words: [DocumentIntelligenceModelFactory.DocumentWord(content: "Word", confidence: 0.81f)],
-            selectionMarks: [DocumentIntelligenceModelFactory.DocumentSelectionMark(state: DocumentSelectionMarkState.Selected,
-                confidence: 0.72f, polygon: [1, 0, 2, 0, 2, 1])],
-            barcodes: [DocumentIntelligenceModelFactory.DocumentBarcode(kind: DocumentBarcodeKind.QrCode,
-                value: "code", confidence: 0.91f, polygon: [2, 0, 3, 0, 3, 1])]);
-        using var client = AzureExtractor(AzureSdk(
-            DocumentIntelligenceModelFactory.AnalyzeResult(pages: [page,
-                DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 3)], figures: [figure])));
-        using var input = new MemoryStream([1]);
-        var result = await client.ExtractAsync(input, "source", "image/png");
-        var image = Assert.IsType<ExtractionDocumentImageElement>(Assert.Single(result.Sections[0].Elements));
-        Assert.Equal("Caption", image.AlternativeText);
-        Assert.Null(image.Content);
-        Assert.Null(image.Text);
-        Assert.Equal([1, 3], image.Sources.Select(source => source.Page.PageNumber));
-        Assert.All(image.Sources, source => Assert.Same(figure, source.GetRawRepresentation()));
-        Assert.Same(page, result.Sections[0].Sources[0].GetRawRepresentation());
-        Assert.Equal("Word", page.Words[0].Content);
-        Assert.Equal(3, result.Sections[0].Sources.Count);
     }
 
     [Fact]
@@ -211,9 +100,8 @@ public sealed class CloudDocumentExtractionClientTests
     }
 
     [Fact]
-    public async Task Clients_ConcurrentOverridesAreSnapshottedAndDoNotChangeDefault()
+    public async Task Foundry_ConcurrentOverridesAreSnapshottedAndDoNotChangeDefault()
     {
-        var azureModels = new ConcurrentBag<string>();
         var mistralModels = new ConcurrentBag<string>();
         using var http = Http(async (request, token) =>
         {
@@ -222,57 +110,38 @@ public sealed class CloudDocumentExtractionClientTests
             await Task.Yield();
             return Ok("""{"pages":[{"index":0,"markdown":"Body"}]}""");
         });
-        using var mistral = Mistral(http);
-        using var azure = AzureExtractor(AzureSdk(async (options, _) =>
-        {
-            azureModels.Add(options.ModelId);
-            await Task.Yield();
-            return DocumentIntelligenceModelFactory.AnalyzeResult(
-                pages: [DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 1)]);
-        }));
-        foreach (var client in new DocumentExtractionClient[] { azure, mistral })
-        {
-            var options = new DocumentExtractionOptions { ExtractorName = "first" };
-            using var firstInput = new MemoryStream([1]);
-            using var secondInput = new MemoryStream([2]);
-            var first = client.ExtractAsync(firstInput, "a", "application/pdf", options);
-            options.ExtractorName = "changed";
-            await Task.WhenAll(first, client.ExtractAsync(secondInput, "b", "application/pdf",
-                new() { ExtractorName = "second" }));
-            using var thirdInput = new MemoryStream([3]);
-            await client.ExtractAsync(thirdInput, "c", "application/pdf");
-        }
-        Assert.Equal(["first", "prebuilt-layout", "second"], azureModels.Order().ToArray());
+        using var client = Mistral(http);
+        var options = new DocumentExtractionOptions { ExtractorName = "first" };
+        using var firstInput = new MemoryStream([1]);
+        using var secondInput = new MemoryStream([2]);
+        var first = client.ExtractAsync(firstInput, "a", "application/pdf", options);
+        options.ExtractorName = "changed";
+        await Task.WhenAll(first, client.ExtractAsync(secondInput, "b", "application/pdf",
+            new() { ExtractorName = "second" }));
+        using var thirdInput = new MemoryStream([3]);
+        await client.ExtractAsync(thirdInput, "c", "application/pdf");
         Assert.Equal(["deployment", "first", "second"], mistralModels.Order().ToArray());
     }
 
     [Fact]
-    public async Task Clients_UnsupportedOptionsLimitsMediaAndCancellationKeepCallerStreamsOpen()
+    public async Task Foundry_UnsupportedOptionsLimitsMediaAndCancellationKeepCallerStreamsOpen()
     {
         var requests = 0;
         using var http = Http((_, _) => { requests++; return Ok(MistralResponse); });
-        using var mistral = Mistral(http);
-        using var azure = AzureExtractor(AzureSdk((_, _) =>
-        {
-            requests++;
-            throw new InvalidOperationException("Unexpected upload");
-        }));
-        foreach (var client in new DocumentExtractionClient[] { azure, mistral })
-        {
-            using var input = new MemoryStream([1]);
-            var options = new DocumentExtractionOptions();
-            options.AdditionalProperties["unknown"] = true;
-            await Assert.ThrowsAsync<NotSupportedException>(() => client.ExtractAsync(input, "source", "image/png", options));
-            using var oversized = new RepeatingStream(20 * 1024 * 1024 + 1);
-            await Assert.ThrowsAsync<InvalidOperationException>(() => client.ExtractAsync(oversized, "source", "image/jpeg"));
-            Assert.True(oversized.CanRead);
-            await Assert.ThrowsAsync<NotSupportedException>(() => client.ExtractAsync(input, "source", "text/plain"));
-            using var cancelled = new CancellationTokenSource();
-            cancelled.Cancel();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                client.ExtractAsync(input, "source", "application/pdf", cancellationToken: cancelled.Token));
-            Assert.True(input.CanRead);
-        }
+        using var client = Mistral(http);
+        using var input = new MemoryStream([1]);
+        var options = new DocumentExtractionOptions();
+        options.AdditionalProperties["unknown"] = true;
+        await Assert.ThrowsAsync<NotSupportedException>(() => client.ExtractAsync(input, "source", "image/png", options));
+        using var oversized = new RepeatingStream(20 * 1024 * 1024 + 1);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.ExtractAsync(oversized, "source", "image/jpeg"));
+        Assert.True(oversized.CanRead);
+        await Assert.ThrowsAsync<NotSupportedException>(() => client.ExtractAsync(input, "source", "text/plain"));
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.ExtractAsync(input, "source", "application/pdf", cancellationToken: cancelled.Token));
+        Assert.True(input.CanRead);
         Assert.Equal(0, requests);
     }
 
@@ -330,20 +199,6 @@ public sealed class CloudDocumentExtractionClientTests
         Assert.Equal(2, requests);
         Assert.Equal(bodies[0], bodies[1]);
         Assert.Equal("Recovered", Assert.IsType<TextContent>(Assert.Single(result.Sections[0].Elements).Content).Text);
-    }
-
-    [Fact]
-    public async Task Azure_SpansOnlyContentRemainsNativeRatherThanBeingRemappedLocally()
-    {
-        var native = DocumentIntelligenceModelFactory.AnalyzeResult(content: "A😀é",
-            pages: [DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 1, spans: [Span(0, 4)])]);
-        using var extraction = AzureExtractor(AzureSdk(native));
-        using var input = new MemoryStream([1]);
-        var result = await extraction.ExtractAsync(input, "source", "application/pdf");
-        Assert.Equal("A😀é", Assert.IsType<AnalyzeResult>(result.RawRepresentation).Content);
-        Assert.Null(result.Content);
-        Assert.Null(result.Sections[0].Content);
-        Assert.Empty(result.Sections[0].Elements);
     }
 
     [Fact]
@@ -405,7 +260,7 @@ public sealed class CloudDocumentExtractionClientTests
     }
 
     [Fact]
-    public async Task Dispose_LeavesBorrowedSdkAndHttpClientUsable()
+    public async Task Dispose_LeavesBorrowedHttpClientUsable()
     {
         using var http = Http((_, _) => Ok(MistralResponse));
         var client = Mistral(http);
@@ -416,10 +271,6 @@ public sealed class CloudDocumentExtractionClientTests
         Assert.Throws<ObjectDisposedException>(() => client.GetService(typeof(DocumentExtractionClient)));
         using var response = await http.GetAsync(OcrEndpoint);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var sdk = AzureSdk(DocumentIntelligenceModelFactory.AnalyzeResult());
-        AzureExtractor(sdk).Dispose();
-        await sdk.AnalyzeDocumentAsync(WaitUntil.Completed, new AnalyzeDocumentOptions("model", BinaryData.FromBytes(new byte[] { 1 })));
-        await sdk.Received(1).AnalyzeDocumentAsync(WaitUntil.Completed, Arg.Any<AnalyzeDocumentOptions>(), Arg.Any<CancellationToken>());
     }
 
     private const string MistralResponse = """
