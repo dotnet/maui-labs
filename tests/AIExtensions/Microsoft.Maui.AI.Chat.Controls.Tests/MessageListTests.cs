@@ -762,6 +762,11 @@ public class MessageListTests
         var requests = new List<int>();
         view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
 
+        // iOS reports each scroll to the end while it happens, as a step forward with the end row on screen. Those
+        // follow the answer; they must not count as the reader moving forward.
+        view.MessageList.ScrollToRequested += (_, _) =>
+            view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = 30, LastVisibleItemIndex = view.EndIndex() });
+
         view.Text = "Hi";
         var send = view.SendAsync();
         stream.Text("An answer");
@@ -988,6 +993,145 @@ public class MessageListTests
         requests.Clear();
         dispatcher.RunPending();
         Assert.Empty(requests);
+    });
+
+    [Fact]
+    public void ABounceAtTheEnd_KeepsFollowing() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Reply("One");
+        var view = ChatHost.Create(ChatHost.Session(client));
+        await SendAsync(view, "first");
+        var frames = new Frames(view);
+
+        // iOS and Mac Catalyst report a bounce at the end as raw offset changes a frame apart, out past the end and
+        // back, with the newest row on screen.
+        foreach (var delta in Bounce)
+            frames.Step(delta, frames.Newest);
+        Assert.True(view.MessageList.IsPinned);
+
+        // Moving back further than the bounce went out, in the same gesture, is the reader scrolling back.
+        frames.Step(-3, frames.Newest);
+        Assert.False(view.MessageList.IsPinned);
+
+        // So is a drag back that starts after a pause, however far down the last gesture went.
+        frames.Step(40, frames.End);
+        Assert.True(view.MessageList.IsPinned);
+        frames.Pause();
+        frames.Step(-3, frames.Newest);
+        Assert.False(view.MessageList.IsPinned);
+    });
+
+    [Fact]
+    public void ABounceAtTheEndWhileAnAnswerStreams_KeepsFollowing() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var view = ChatHost.Create(ChatHost.Session(client));
+        using var dispatcher = TestDispatcher.Install();
+        var frames = new Frames(view);
+        var requests = new List<int>();
+        view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
+
+        // The platform reports the list's own scrolls to the end at once, with the end row on screen.
+        view.MessageList.ScrollToRequested += (_, _) =>
+            view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = 20, LastVisibleItemIndex = view.EndIndex() });
+
+        view.Text = "Hi";
+        var send = view.SendAsync();
+        stream.Text("An answer");
+        await UIThread.Until(() => view.Session!.Turns.Count == 1 && view.Session.Turns[0].ResponseBlocks.Count == 1);
+        dispatcher.RunPending();
+        dispatcher.RunPending();
+        var block = (TextContentBlock)Assert.IsType<BlockRow>(view.Rows()[^1]).Block;
+
+        // The answer grows while the list bounces, so the end row stays below the screen on the way back.
+        for (var step = 0; step < Bounce.Length; step++)
+        {
+            frames.Step(Bounce[step], frames.Newest);
+            if (step % 3 == 2)
+            {
+                var expected = block.RawText + " more";
+                stream.Text(" more");
+                await UIThread.Until(() => block.RawText == expected);
+                requests.Clear();
+                dispatcher.RunPending();
+                Assert.Equal(view.EndIndex(), Assert.Single(requests));
+            }
+        }
+
+        Assert.True(view.MessageList.IsPinned);
+
+        // A slow drag back after it is the reader, at once.
+        frames.Pause();
+        frames.Step(-3, frames.Newest);
+        Assert.False(view.MessageList.IsPinned);
+
+        stream.Complete();
+        await UIThread.Until(() => dispatcher.PendingCount > 0 || !view.IsBusy);
+        dispatcher.RunPending();
+        await send;
+    });
+
+    [Fact]
+    public void AFlingBackDownThatBouncesAtTheEnd_FollowsAgain() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Reply("One");
+        var view = ChatHost.Create(ChatHost.Session(client));
+        await SendAsync(view, "first");
+        var frames = new Frames(view);
+        frames.Step(-400, 0);
+        Assert.False(view.MessageList.IsPinned);
+        frames.Pause();
+
+        // The reader flings back down: the list reaches its end, overshoots and springs back with only the newest
+        // row on screen.
+        foreach (var delta in new double[] { 120, 80, 40 })
+            frames.Step(delta, frames.Newest);
+        foreach (var delta in Bounce)
+            frames.Step(delta, delta > 0 ? frames.End : frames.Newest);
+
+        Assert.True(view.MessageList.IsPinned);
+    });
+
+    [Fact]
+    public void ScrollsToTheEndReportedLater_DoNotHideASlowDragBack() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var view = ChatHost.Create(ChatHost.Session(client));
+        using var dispatcher = TestDispatcher.Install();
+        var frames = new Frames(view);
+
+        view.Text = "Hi";
+        var send = view.SendAsync();
+        stream.Text("An answer");
+        await UIThread.Until(() => view.Session!.Turns.Count == 1 && view.Session.Turns[0].ResponseBlocks.Count == 1);
+        dispatcher.RunPending();
+        dispatcher.RunPending();
+        var block = (TextContentBlock)Assert.IsType<BlockRow>(view.Rows()[^1]).Block;
+
+        // Windows reports the list's own scroll to the end a frame later, as a step forward to the end.
+        async Task StreamAsync(string text)
+        {
+            var expected = block.RawText + text;
+            stream.Text(text);
+            await UIThread.Until(() => block.RawText == expected);
+            dispatcher.RunPending();
+            frames.Step(30, frames.End);
+        }
+
+        await StreamAsync(" that");
+        await StreamAsync(" grows");
+        Assert.True(view.MessageList.IsPinned);
+
+        // The reader dragging back slowly right after moves the list back: the follows were not theirs.
+        frames.Step(-3, frames.Newest);
+        Assert.False(view.MessageList.IsPinned);
+
+        stream.Complete();
+        await UIThread.Until(() => dispatcher.PendingCount > 0 || !view.IsBusy);
+        dispatcher.RunPending();
+        await send;
     });
 
     [Fact]
@@ -1426,6 +1570,34 @@ public class MessageListTests
         Assert.NotSame(rows[1], row);
         Assert.Equal(template.Version, row.TemplateVersion);
     });
+
+    // A bounce at the end as iOS and Mac Catalyst report it, a frame apart: out past the end and back.
+    private static readonly double[] Bounce = [12, 9, 6, 3, -10, -8, -6, -4, -2];
+
+    /// <summary>Sends scroll steps to a chat's list a frame apart, on a clock the test controls.</summary>
+    private sealed class Frames
+    {
+        private readonly AIChatView _view;
+        private long _now = 1_000;
+
+        public Frames(AIChatView view)
+        {
+            _view = view;
+            view.MessageList.Clock = () => _now;
+        }
+
+        public int End => _view.EndIndex();
+
+        public int Newest => _view.EndIndex() - 1;
+
+        public void Step(double delta, int lastVisible)
+        {
+            _now += 16;
+            _view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = delta, LastVisibleItemIndex = lastVisible });
+        }
+
+        public void Pause() => _now += 500;
+    }
 
     private static async Task<(AIChatView View, LinkedImageView Image, List<int> Requests)> ShowImageAnswerAsync()
     {
