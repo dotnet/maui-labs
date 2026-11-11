@@ -28,7 +28,18 @@ public sealed class StateMapperContext
     public ChatResponseUpdate Update { get; }
 
     /// <summary>Enumerates content items that have not been consumed by this mapper.</summary>
-    public UnhandledContentsEnumerable UnhandledContents => new(Update.Contents, _handled);
+    public IEnumerable<AIContent> UnhandledContents
+    {
+        get
+        {
+            var contents = Update.Contents;
+            for (var i = 0; i < contents.Count; i++)
+            {
+                if (!_handled[i])
+                    yield return contents[i];
+            }
+        }
+    }
 
     /// <summary>Marks one content item as state-only so it does not reach the block pipeline.</summary>
     public void MarkHandled(AIContent content)
@@ -51,10 +62,10 @@ public sealed class StateMapperContext
     }
 
     /// <summary>Gets the state value supplied by the mapper, if any.</summary>
-    public object? StateValue { get; private set; }
+    internal object? StateValue { get; private set; }
 
     /// <summary>Gets whether <see cref="StateValue"/> is provisional until explicitly accepted.</summary>
-    public bool IsPredictiveState { get; private set; }
+    internal bool IsPredictiveState { get; private set; }
 
     /// <summary>Supplies the new typed state value for a <see cref="UIAgent{TState}"/>.</summary>
     public void SetState(object value)
@@ -89,47 +100,5 @@ public sealed class StateMapperContext
                 (_, index) => !_handled[index]),
         ];
         return filtered;
-    }
-
-    /// <summary>A lightweight enumerable over unhandled content.</summary>
-    public readonly struct UnhandledContentsEnumerable
-    {
-        private readonly IList<AIContent> _contents;
-        private readonly bool[] _handled;
-
-        internal UnhandledContentsEnumerable(IList<AIContent> contents, bool[] handled)
-        {
-            _contents = contents;
-            _handled = handled;
-        }
-
-        public UnhandledContentsEnumerator GetEnumerator() => new(_contents, _handled);
-    }
-
-    /// <summary>Enumerates unhandled content without allocating an intermediate collection.</summary>
-    public struct UnhandledContentsEnumerator
-    {
-        private readonly IList<AIContent> _contents;
-        private readonly bool[] _handled;
-        private int _index;
-
-        internal UnhandledContentsEnumerator(IList<AIContent> contents, bool[] handled)
-        {
-            _contents = contents;
-            _handled = handled;
-            _index = -1;
-        }
-
-        public AIContent Current => _contents[_index];
-
-        public bool MoveNext()
-        {
-            while (++_index < _contents.Count)
-            {
-                if (!_handled[_index])
-                    return true;
-            }
-            return false;
-        }
     }
 }

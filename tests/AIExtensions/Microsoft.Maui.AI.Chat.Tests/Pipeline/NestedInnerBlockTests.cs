@@ -8,6 +8,55 @@ namespace Microsoft.Maui.AI.Chat.Tests.Pipeline;
 public class NestedInnerBlockTests
 {
     [Fact]
+    public async Task CreateInnerBlock_CopiesTheUpdatesMetadataAndIsInactive()
+    {
+        var pipeline = new BlockMappingPipeline(new UIAgentOptions());
+        var createdAt = new DateTimeOffset(2026, 8, 7, 12, 34, 0, TimeSpan.Zero);
+        var update = new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            AuthorName = "planner",
+            MessageId = "msg-1",
+            CreatedAt = createdAt,
+            Contents =
+            [
+                new ToolApprovalRequestContent("req-1", new FunctionCallContent("call-1", "GetWeather")),
+            ],
+        };
+
+        var blocks = new List<ContentBlock>();
+        await foreach (var block in pipeline.Process(update))
+            blocks.Add(block);
+
+        var inner = Assert.IsType<ToolApprovalBlock>(Assert.Single(blocks)).InnerBlock;
+        Assert.Equal(ChatRole.Assistant, inner.Role);
+        Assert.Equal("planner", inner.AuthorName);
+        Assert.Equal(createdAt, inner.CreatedAt);
+        Assert.Equal(BlockLifecycleState.Inactive, inner.LifecycleState);
+    }
+
+    [Fact]
+    public void CreateInnerBlock_UsesTheUpdatesMessageIdForText()
+    {
+        var context = new BlockMappingContext(
+            new ChatResponseUpdate { Role = ChatRole.Assistant, MessageId = "msg-1" },
+            [new HandlerEntry<TextContentBlock>(new TextBlockHandler())]);
+
+        var inner = Assert.IsType<TextContentBlock>(context.CreateInnerBlock(new TextContent("Hi")));
+
+        Assert.Equal("msg-1", inner.Id);
+        Assert.Equal(ChatRole.Assistant, inner.Role);
+    }
+
+    [Fact]
+    public void CreateInnerBlock_NullContent_Throws()
+    {
+        var context = new BlockMappingContext(new ChatResponseUpdate());
+
+        Assert.Throws<ArgumentNullException>(() => context.CreateInnerBlock(null!));
+    }
+
+    [Fact]
     public async Task CreateInnerBlock_CanUseHandlerSetRecursively()
     {
         var options = new UIAgentOptions();

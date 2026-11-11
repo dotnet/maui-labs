@@ -63,11 +63,17 @@ public class UIAgent : IDisposable
     }
 
     public UIAgent(IChatClient chatClient, Action<UIAgentOptions>? configure, ILoggerFactory? loggerFactory)
+        : this(chatClient, new UIAgentOptions(), loggerFactory)
+    {
+        configure?.Invoke(_options);
+    }
+
+    /// <summary>Initializes the agent with options that the caller configures afterwards.</summary>
+    internal UIAgent(IChatClient chatClient, UIAgentOptions options, ILoggerFactory? loggerFactory)
     {
         ArgumentNullException.ThrowIfNull(chatClient);
         _chatClient = chatClient;
-        _options = new UIAgentOptions();
-        configure?.Invoke(_options);
+        _options = options;
         _logger = (ILogger?)loggerFactory?.CreateLogger<BlockMappingPipeline>() ?? NullLogger.Instance;
     }
 

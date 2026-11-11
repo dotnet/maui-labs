@@ -52,7 +52,8 @@ foreach (var block in turn.ResponseBlocks)
   image-generation outputs; streamed partial images update their block in place.
 - Custom streaming handlers and many-to-one aggregate blocks.
 - `[ToolBlock]`, `[ToolParameter]`, and `[ToolResult]` source generation for simple 1:1 tool blocks.
-- `UIAgent<TState>` and `StateMapperContext` for typed inbound state.
+- `UIAgent<TState>` and `StateMapperContext` for typed inbound state; a state mapper can read and
+  merge the current state through `UIAgentOptions<TState>.State`.
 - `IConversationThread` restore/retry/stateful-provider support.
 - `ConversationTurn.ModelId` (the last model id the provider reported) and `ConversationTurn.Usage`
   (token usage summed over the turn's requests), live and restored.
