@@ -27,8 +27,6 @@
 
   <ItemGroup>
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\ExtractedDocumentReader.cs" Link="Documents\ExtractedDocumentReader.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\BoundedDocumentResponseHandler.cs" Link="Documents\BoundedDocumentResponseHandler.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\CloudDocumentExtractionPolicy.cs" Link="Documents\CloudDocumentExtractionPolicy.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\CloudDocumentIngestionProjection.cs" Link="Documents\CloudDocumentIngestionProjection.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AISettings.cs" Link="Documents\AISettings.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\InputStreamReader.cs" Link="Services\InputStreamReader.cs" />

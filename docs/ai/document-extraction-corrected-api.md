@@ -6,7 +6,7 @@ Microsoft Documents/Extraction packages now use NuGet.org version `11.0.0-previe
 `c60d72e7973a90cd4e4300d9153e97b93315e4b7`). The Mistral Toolkit provider uses the published `1.0.0-preview`
 packages (repository commit `74935f4e20490889ae051b4bb8f4bc32959ab3bd`).
 All remaining copied source, local provider projects/adapters, manifests and source-verification scripts are removed.
-No provider mapping, app limits, caller ownership or Apple implementation changes are needed.
+The package migration preserves provider mappings, caller ownership and the Apple implementation.
 
 ### One cloud comparison and shared file input
 
@@ -22,7 +22,18 @@ byte records and provides caller-stream loading with MIME resolution, cancellati
 The image-only filters stay distinct from OCR document filters; format support is not widened to whatever a different feature accepts.
 The standalone chat-recording and embedding text import paths still stream into their existing parsers and retain their own limits.
 
-### Registration cleanup (before narrowing to Mistral)
+### Direct Toolkit client
+
+The playground constructs `MistralDocumentExtractionClient` directly with the Foundry endpoint, key and deployment name.
+The custom cloud policy and bounded-response handler are removed: no extra upload/media validation, response buffering/cap,
+operation deadline or exception rewriting wraps the provider. HTTP transport lifetime and defaults belong to the Toolkit.
+Cancellation still flows from the existing UI commands, and the shared reader still projects the selected client's output.
+Each developer uses their own Foundry deployment; this playground does not need a separate infrastructure policy layer.
+After removing these layers, all 471 portable integration tests pass and the complete Catalyst playground builds without warnings/errors.
+Tests retain provider mapping, reader projection, transport-error propagation, cancellation and ownership coverage; tests of removed
+playground-specific limits and exception rewriting are removed rather than reintroducing those policies through fixtures.
+
+### Historical registration cleanup (before narrowing to Mistral; policy layer since removed)
 
 Provider construction and options now live directly in `AddDocumentFeature`: Azure uses the package's
 `AsDocumentExtractionClient()` extension and Foundry constructs the package's `MistralDocumentExtractionClient`.

@@ -30,21 +30,14 @@ internal static class DocumentServiceCollectionExtensions
 
         if (!string.IsNullOrWhiteSpace(settings.DocumentDeploymentName))
         {
-            services.AddKeyedSingleton<HttpClient>("foundry-document", (_, _) =>
-                new HttpClient(new BoundedDocumentResponseHandler
-                {
-                    InnerHandler = new HttpClientHandler { AllowAutoRedirect = false },
-                }) { Timeout = Timeout.InfiniteTimeSpan });
-            services.AddKeyedSingleton<DocumentExtractionClient>("foundry-document", (provider, _) =>
-                new CloudDocumentExtractionPolicy(
-                    new MistralDocumentExtractionClient(
-                        new MistralDocumentExtractionClientOptions
-                        {
-                            OcrEndpoint = new Uri(settings.GetFoundryDocumentEndpoint(), "providers/mistral/azure/ocr"),
-                            DefaultModel = settings.DocumentDeploymentName!,
-                            IncludeImages = true,
-                        }, settings.ApiKey!, provider.GetRequiredKeyedService<HttpClient>("foundry-document")),
-                    TimeSpan.FromMinutes(5)));
+            services.AddKeyedSingleton<DocumentExtractionClient>("foundry-document", (_, _) =>
+                new MistralDocumentExtractionClient(
+                    new MistralDocumentExtractionClientOptions
+                    {
+                        OcrEndpoint = new Uri(settings.GetFoundryDocumentEndpoint(), "providers/mistral/azure/ocr"),
+                        DefaultModel = settings.DocumentDeploymentName!,
+                        IncludeImages = true,
+                    }, settings.ApiKey!));
             services.AddSingleton<IngestionDocumentReader>(provider => new DescribedDocumentReader(
                 new ExtractedDocumentReader(provider.GetRequiredKeyedService<DocumentExtractionClient>("foundry-document")),
                 new DocumentReaderDescriptor("foundry-mistral-document", "Foundry Mistral Document AI",

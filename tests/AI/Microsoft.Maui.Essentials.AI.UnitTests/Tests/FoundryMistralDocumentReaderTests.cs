@@ -110,56 +110,24 @@ public sealed class FoundryMistralDocumentReaderTests
     }
 
     [Fact]
-    public async Task ReadAsync_RejectsUnsupportedAndOversizedDocumentsBeforeRequest()
-    {
-        var requests = 0;
-        using var http = Http((_, _) => { requests++; return Ok("{}"); });
-        using var extraction = Mistral(http);
-        var reader = new ExtractedDocumentReader(extraction);
-        using var input = new MemoryStream([1]);
-        await Assert.ThrowsAsync<NotSupportedException>(() => reader.ReadAsync(input, "source", "text/plain"));
-        await Assert.ThrowsAsync<ArgumentException>(() => reader.ReadAsync(input, "source", ""));
-        using var oversized = new RepeatingStream(20 * 1024 * 1024 + 1);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => reader.ReadAsync(oversized, "source", "image/tiff"));
-        Assert.True(oversized.CanRead);
-        Assert.Equal(0, requests);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ReadAsync_BoundsKnownAndStreamingResponses(bool streaming)
-    {
-        using var http = Http((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = streaming ? new StreamContent(new RepeatingStream(32 * 1024 * 1024 + 1)) :
-                new ByteArrayContent(new byte[32 * 1024 * 1024 + 1]),
-        });
-        using var extraction = Mistral(http);
-        using var input = new MemoryStream([1]);
-        var error = await Assert.ThrowsAsync<InvalidDataException>(() =>
-            new ExtractedDocumentReader(extraction).ReadAsync(input, "source", "image/tiff"));
-        Assert.Contains("32 MB", error.Message);
-        Assert.True(input.CanRead);
-    }
-
-    [Fact]
-    public async Task ReadAsync_StatusAndTransportErrorsDoNotExposeResponseReasonOrCredentials()
+    public async Task ReadAsync_PropagatesProviderStatusAndTransportErrors()
     {
         foreach (var transportFailure in new[] { false, true })
         {
-            using var http = Http((_, _) => transportFailure ? throw new HttpRequestException("SECRET-key") :
+            var transportError = new HttpRequestException("Transport failed.");
+            using var http = Http((_, _) => transportFailure ? throw transportError :
                 new HttpResponseMessage(HttpStatusCode.BadRequest)
                 {
-                    ReasonPhrase = "SECRET-reason",
-                    Content = new StringContent("SECRET-body"),
+                    ReasonPhrase = "Invalid document",
+                    Content = new StringContent("Unsupported input"),
                 });
             using var extraction = Mistral(http);
             using var input = new MemoryStream([1]);
             var error = await Assert.ThrowsAsync<HttpRequestException>(() =>
                 new ExtractedDocumentReader(extraction).ReadAsync(input, "source", "image/heic"));
-            Assert.DoesNotContain("SECRET", error.ToString());
-            if (!transportFailure)
+            if (transportFailure)
+                Assert.Same(transportError, error);
+            else
             {
                 Assert.Contains("400", error.Message);
                 Assert.Equal(HttpStatusCode.BadRequest, error.StatusCode);

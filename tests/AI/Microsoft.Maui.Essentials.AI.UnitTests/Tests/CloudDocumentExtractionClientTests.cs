@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
-using CommunityToolkit.DocumentExtraction.Mistral;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Extensions.Documents;
@@ -12,28 +11,6 @@ namespace AIExtensions.Sample.ChatPlayground;
 
 public sealed class CloudDocumentExtractionClientTests
 {
-    [Fact]
-    public async Task ResponseHandler_UsesOnePipelineWithoutCopyingOrResendingTheRequest()
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Post, OcrEndpoint)
-        {
-            Content = new StringContent("original request"),
-        };
-        request.Headers.Add("x-test", "unchanged");
-        var sends = 0;
-        using var http = Http((received, _) =>
-        {
-            sends++;
-            Assert.Same(request, received);
-            Assert.Equal("unchanged", Assert.Single(received.Headers.GetValues("x-test")));
-            return Ok("bounded response");
-        });
-        using var response = await http.SendAsync(request);
-        Assert.Equal("bounded response", await response.Content.ReadAsStringAsync());
-        Assert.Equal("original request", await request.Content.ReadAsStringAsync());
-        Assert.Equal(1, sends);
-    }
-
     [Fact]
     public async Task Foundry_ExactRouteBearerHeaderOptionsAndDetachedImagePayload()
     {
@@ -124,7 +101,7 @@ public sealed class CloudDocumentExtractionClientTests
     }
 
     [Fact]
-    public async Task Foundry_UnsupportedOptionsLimitsMediaAndCancellationKeepCallerStreamsOpen()
+    public async Task Foundry_UnsupportedOptionsAndCancellationKeepCallerStreamsOpen()
     {
         var requests = 0;
         using var http = Http((_, _) => { requests++; return Ok(MistralResponse); });
@@ -133,10 +110,6 @@ public sealed class CloudDocumentExtractionClientTests
         var options = new DocumentExtractionOptions();
         options.AdditionalProperties["unknown"] = true;
         await Assert.ThrowsAsync<NotSupportedException>(() => client.ExtractAsync(input, "source", "image/png", options));
-        using var oversized = new RepeatingStream(20 * 1024 * 1024 + 1);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => client.ExtractAsync(oversized, "source", "image/jpeg"));
-        Assert.True(oversized.CanRead);
-        await Assert.ThrowsAsync<NotSupportedException>(() => client.ExtractAsync(input, "source", "text/plain"));
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
@@ -146,19 +119,18 @@ public sealed class CloudDocumentExtractionClientTests
     }
 
     [Fact]
-    public async Task Policy_DeadlineCancelsProviderAndLeavesCallerStreamOpen()
+    public async Task Foundry_CallerCancellationReachesTransportAndLeavesCallerStreamOpen()
     {
         using var http = Http(async (_, token) =>
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
             return Ok("{}");
         });
-        using var provider = new MistralDocumentExtractionClient(
-            new() { OcrEndpoint = OcrEndpoint, DefaultModel = "deployment" }, "test-key", http);
-        using var policy = new CloudDocumentExtractionPolicy(provider, TimeSpan.FromMilliseconds(50));
+        using var client = Mistral(http);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
         using var input = new MemoryStream([1]);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            policy.ExtractAsync(input, "source", "application/pdf"));
+            client.ExtractAsync(input, "source", "application/pdf", cancellationToken: cancellation.Token));
         Assert.True(input.CanRead);
     }
 
@@ -232,29 +204,14 @@ public sealed class CloudDocumentExtractionClientTests
         Assert.Equal(reported, Assert.IsType<JsonElement>(result.RawRepresentation).GetProperty("model").GetString());
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Foundry_FailureOrCancellationDisposesResponseAndKeepsCallerStreamOpen(bool cancel)
+    [Fact]
+    public async Task Foundry_InvalidJsonDisposesResponseAndKeepsCallerStreamOpen()
     {
-        using var cancellation = new CancellationTokenSource();
-        var content = new TrackingContent("invalid JSON SECRET");
-        using var http = Http((_, _) =>
-        {
-            if (cancel)
-                cancellation.Cancel();
-            return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
-        });
+        var content = new TrackingContent("not JSON");
+        using var http = Http((_, _) => new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
         using var client = Mistral(http);
         using var input = new MemoryStream([1]);
-        var error = await Record.ExceptionAsync(() =>
-            client.ExtractAsync(input, "source", "application/pdf", cancellationToken: cancellation.Token));
-        Assert.NotNull(error);
-        if (cancel)
-            Assert.IsAssignableFrom<OperationCanceledException>(error);
-        else
-            Assert.IsType<InvalidDataException>(error);
-        Assert.DoesNotContain("SECRET", error.ToString());
+        await Assert.ThrowsAnyAsync<JsonException>(() => client.ExtractAsync(input, "source", "application/pdf"));
         Assert.True(content.Disposed);
         Assert.True(input.CanRead);
     }
@@ -266,9 +223,6 @@ public sealed class CloudDocumentExtractionClientTests
         var client = Mistral(http);
         client.Dispose();
         client.Dispose();
-        using var input = new MemoryStream([1]);
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => client.ExtractAsync(input, "source", "image/png"));
-        Assert.Throws<ObjectDisposedException>(() => client.GetService(typeof(DocumentExtractionClient)));
         using var response = await http.GetAsync(OcrEndpoint);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
