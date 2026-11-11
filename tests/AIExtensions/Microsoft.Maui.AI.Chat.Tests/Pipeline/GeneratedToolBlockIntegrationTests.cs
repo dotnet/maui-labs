@@ -80,6 +80,42 @@ public class GeneratedToolBlockIntegrationTests
     }
 
     [Fact]
+    public async Task GeneratedHandler_MultiplePrimitiveResults_ReadJsonStringsButNotClrObjects()
+    {
+        var pipeline = CreatePipeline();
+        var fromJson = Assert.IsType<GeneratedSummaryBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents =
+                [
+                    new FunctionCallContent("call-json", "summarize"),
+                    new FunctionResultContent("call-json", """{"title":"Summary","count":3}"""),
+                ],
+            })));
+        var fromClr = Assert.IsType<GeneratedSummaryBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents =
+                [
+                    new FunctionCallContent("call-clr", "summarize"),
+                    new FunctionResultContent("call-clr", new { title = "Summary", count = 3 }),
+                ],
+            })));
+
+        Assert.Equal("Summary", fromJson.Title);
+        Assert.Equal(3, fromJson.Count);
+
+        // Reading a CLR object would need reflection, which an all-primitive block avoids for NativeAOT.
+        Assert.Equal(string.Empty, fromClr.Title);
+        Assert.Equal(0, fromClr.Count);
+        Assert.NotNull(fromClr.Result);
+    }
+
+    [Fact]
     public async Task GeneratedHandler_SingleNamedResult_MapsNamedJsonProperty()
     {
         var pipeline = CreatePipeline();

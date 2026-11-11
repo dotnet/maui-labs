@@ -211,6 +211,10 @@ These match upstream so that upstream fixes apply directly:
 - Primitive values sent as strings, such as `"5"`, are parsed with the invariant culture. A value that
   cannot be converted leaves its property unchanged; upstream fails the turn. Complex types use
   reflection-based `System.Text.Json`, as upstream.
+- A block whose properties are all primitive uses no reflection, so trimmed and NativeAOT apps get no
+  IL2026 or IL3050 warnings. It reads several results, or a named result, from a `JsonElement` or a
+  string that holds JSON, and leaves other result objects unread. Upstream serializes any result object
+  with reflection-based `System.Text.Json`; here only a block with a complex-typed property does.
 
 ## Not ported
 

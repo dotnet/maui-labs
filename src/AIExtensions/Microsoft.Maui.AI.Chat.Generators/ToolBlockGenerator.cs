@@ -460,6 +460,10 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         var readsResultObject = model.Results.Length > 1
             || (model.Results.Length == 1 && model.Results[0].HasExplicitName);
 
+        // Only a block with a complex-typed property uses reflection-based System.Text.Json, which trimming
+        // and NativeAOT can break (IL2026, IL3050).
+        var usesReflection = conversions.Contains(ConversionKind.Complex);
+
         // Primitive conversions read JsonElement directly so they work with trimming and NativeAOT.
         foreach (var conversion in conversions.OrderBy(conversion => conversion))
         {
@@ -515,19 +519,30 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
                 "                using var document = global::System.Text.Json.JsonDocument.Parse(json);");
             builder.AppendLine("                return document.RootElement.Clone();");
             builder.AppendLine("            }");
-            builder.AppendLine();
-            builder.AppendLine("            // Other CLR results are serialized with reflection-based System.Text.Json.");
-            builder.AppendLine(
-                "            return global::System.Text.Json.JsonSerializer.SerializeToElement(value, JsonOptions);");
+            if (usesReflection)
+            {
+                builder.AppendLine();
+                builder.AppendLine("            // Other CLR results are serialized with reflection-based System.Text.Json.");
+                builder.AppendLine(
+                    "            return global::System.Text.Json.JsonSerializer.SerializeToElement(value, JsonOptions);");
+            }
             builder.AppendLine("        }");
             builder.AppendLine("        catch (global::System.Exception)");
             builder.AppendLine("        {");
-            builder.AppendLine("            return default;");
+            if (usesReflection)
+                builder.AppendLine("            return default;");
             builder.AppendLine("        }");
+            if (!usesReflection)
+            {
+                builder.AppendLine();
+                builder.AppendLine(
+                    "        // Reading other CLR results needs reflection, which trimming and NativeAOT can break.");
+                builder.AppendLine("        return default;");
+            }
             builder.AppendLine("    }");
         }
 
-        if (!conversions.Contains(ConversionKind.Complex) && !readsResultObject)
+        if (!usesReflection)
             return;
 
         builder.AppendLine();
@@ -535,8 +550,6 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
             "    private static readonly global::System.Text.Json.JsonSerializerOptions JsonOptions =");
         builder.AppendLine(
             "        new() { PropertyNameCaseInsensitive = true };");
-        if (!conversions.Contains(ConversionKind.Complex))
-            return;
 
         // Complex types use reflection-based System.Text.Json.
         builder.AppendLine();
