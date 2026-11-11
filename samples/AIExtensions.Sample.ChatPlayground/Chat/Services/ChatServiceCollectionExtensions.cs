@@ -3,6 +3,7 @@ using System.Runtime.Versioning;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.AI.Chat.Controls;
 using OpenAI;
 
 #if IOS || MACCATALYST || ANDROID || WINDOWS
@@ -24,9 +25,9 @@ internal static class ChatServiceCollectionExtensions
             FileSystem.CacheDirectory));
         services.AddSingleton<IChatRecordingSession>(provider => provider.GetRequiredService<ChatSessionService>());
         services.AddSingleton<SettingsPaneViewModel>();
-        services.AddSingleton<ChatAreaViewModel>();
         services.AddSingleton<ModelReadinessViewModel>();
         services.AddSingleton<ChatViewModel>();
+        services.AddSingleton<IChatAttachmentPicker, PlaygroundAttachmentPicker>();
         services.AddTransient<Page, ChatPage>();
 
 #if WINDOWS

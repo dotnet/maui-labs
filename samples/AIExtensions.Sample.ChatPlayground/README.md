@@ -21,12 +21,53 @@ Chat, Embeddings, and Images have separate providers and capabilities.
 Native chat does not fall back to Azure. Structured responses stream only when
 the selected provider emits incremental updates.
 
-Chat shows the provider's model ID and auto-saves the recording locally.
-**New** replaces the recording; **More** loads examples or imports/exports
-recordings. Replay works offline; switch to a live provider to continue chatting.
-Controls reflect provider capabilities. Uncheck tools or choose **None** to disable calls.
-Switching providers preserves your Structured JSON preference, but providers
-that opt out receive plain-text requests and their responses display as text.
+Under each answer, a footer shows the model that answered and its token usage.
+The chat auto-saves a recording locally. **New** replaces the recording; **More**
+loads the example or imports/exports recordings. Replay works offline; switch to
+a live provider to continue chatting. Settings apply to the next message without
+starting a new chat. Controls reflect provider capabilities. Uncheck tools or
+choose **None** to disable calls. Switching providers preserves your Structured
+JSON preference, but providers that opt out receive plain-text requests and their
+responses display as text.
+
+#### Built on AIChatView
+
+The Chat tab is the showcase for `AIChatView` (`Microsoft.Maui.AI.Chat.Controls`)
+on the `Microsoft.Maui.AI.Chat` engine. The messages, tool and approval cards, and
+the composer are all the control; the playground only configures it:
+
+| Piece | Where | What it does |
+|-------|-------|--------------|
+| Session | `ChatViewModel` | One `AgentContext` for the page, bound to `AIChatView.Session`. **New** clears it; it is never recreated. |
+| Router client | `PlaygroundChatClient` | The one `IChatClient` the engine talks to. It sends each request to the client selected in settings, with `ChatOptions` built from the settings for that request, or to the replay client while a recording replays. With **Streaming** off it asks for the whole response. Requests the client cannot take, such as images for a text-only client or an invalid setting, fail before anything is sent, and the chat shows the error with **Retry**. |
+| Custom cards | `ChatPage.xaml` | A `BlockTemplate` for the `calculate` tool shows the call as arithmetic (`12 × 7 = 84`). `StructuredResponseTemplate` overrides `When` to pick assistant text that is a JSON object, and shows the structured response as a card with its JSON one tap away. |
+| Slots | `ChatPage.xaml` | `MessagesHeaderTemplate` shows the system instructions in effect, `ResponseFooterTemplate` the model and usage, and `InputHeaderContent` the model readiness banner above the composer. |
+| Attachments | `PlaygroundAttachmentPicker` | Registered as the `IChatAttachmentPicker`: choose an image or attach the bundled sample image. **Attach** appears only for clients that accept images. |
+| Theme | `App.xaml` | Overrides a few `AIChat.Light.*` and `AIChat.Dark.*` colors to match the playground. Remove them to see the control's defaults. |
+
+#### Tools and approvals
+
+The settings enable the local date/time, calculator, and connection-status tools,
+and Azure image generation. **Ask before running tools** puts each local tool
+behind an approval card: **Approve** runs it, **Reject** tells the model it was
+declined. The suggestions on an empty chat try the features the selected client
+supports.
+
+#### Recording and replay
+
+Each live request is recorded with its response, including the tool calls and
+results in it. Replay runs through the same engine path as a live chat: each
+recorded user message is sent again and the replay client answers with the
+recorded response, without contacting a model.
+
+- **Play all** clears the chat and replays every turn; **Next turn** replays one;
+  **Restart** rewinds. **Stop** interrupts the replay, clears the chat, and rewinds.
+- Recorded approval decisions are applied to the approval cards. A turn whose
+  approval the recording never answered is shown stopped.
+- A recorded request that does not end with a user message, such as one from a
+  client that sends tool results itself, is restored as history.
+- While a replay is part-way through, sending stays disabled until it finishes or
+  you start a new chat. The auto-saved chat replays when the app starts.
 
 ### Embeddings
 
@@ -147,3 +188,13 @@ when at least one Azure deployment is configured.
 or commit credentials.** Azure prompts, images, and indexed text may leave the
 device and incur charges. Recordings may also contain sensitive data; review
 them before sharing.
+
+## Tests
+
+The playground's tests run without MAUI workloads. They cover the router, the
+replay driver, and the custom cards, and replay every recording in `TestData`
+through the engine:
+
+```sh
+dotnet test tests/AIExtensions/AIExtensions.Sample.ChatPlayground.Tests
+```

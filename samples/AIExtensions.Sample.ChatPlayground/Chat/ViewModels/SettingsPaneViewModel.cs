@@ -41,6 +41,7 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     [ObservableProperty] private bool useCalculatorTool = true;
     [ObservableProperty] private bool useConnectionStatusTool = true;
     [ObservableProperty] private bool useImageGenerationTool = true;
+    [ObservableProperty] private bool requireToolApproval;
 
     // Store tool choices in the same types that ChatOptions accepts.
     [ObservableProperty] private ChatToolMode toolMode = ChatToolMode.Auto;

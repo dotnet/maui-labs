@@ -136,6 +136,14 @@
                                        IsVisible="{Binding SelectedDescriptor.SupportsImageGeneration}"
                                        Text="Let Azure generate or edit images; results stay in this conversation." />
                     </Grid>
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
+                        <CheckBox IsChecked="{Binding RequireToolApproval}"
+                                  WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
+                                  AutomationId="RequireToolApprovalCheckBox" />
+                        <Label Grid.Column="1" Text="Ask before running tools" VerticalOptions="Center" />
+                        <local:InfoTip Grid.Column="2"
+                                       Text="Show an Approve or Reject card in the chat before each local tool runs." />
+                    </Grid>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                         <Label Text="Tool mode" VerticalOptions="Center" />
                         <local:InfoTip Grid.Column="1"
