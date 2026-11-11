@@ -1,0 +1,407 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                    xmlns:chat="clr-namespace:Microsoft.Maui.AI.Chat.Controls"
+                    x:Class="Microsoft.Maui.AI.Chat.Controls.AIChatTheme">
+
+    <!--
+        Default look of AIChatView. Every key is prefixed "AIChat." and documented in AIChatThemeKeys.
+
+        All visuals read these resources with DynamicResource, so an application overrides any key by
+        defining it in App.xaml (or page) resources. The active "AIChat.Color.*" values are copied from the
+        "AIChat.Light.*" or "AIChat.Dark.*" palette whenever the app theme changes (see AIChatTheme.xaml.cs).
+
+        Markdown: when the Markdown renderer lands, merge the dictionary from Markdown/MarkdownTheme.xaml
+        into this dictionary's MergedDictionaries so its styles load with the rest of the theme.
+    -->
+
+    <!-- Light palette -->
+    <Color x:Key="AIChat.Light.Text">#16181C</Color>
+    <Color x:Key="AIChat.Light.SecondaryText">#5F6670</Color>
+    <Color x:Key="AIChat.Light.Accent">#2563EB</Color>
+    <Color x:Key="AIChat.Light.OnAccent">#FFFFFF</Color>
+    <Color x:Key="AIChat.Light.UserBubble">#EEF1F5</Color>
+    <Color x:Key="AIChat.Light.UserText">#16181C</Color>
+    <Color x:Key="AIChat.Light.Surface">#F6F7F9</Color>
+    <Color x:Key="AIChat.Light.Stroke">#DEE1E6</Color>
+    <Color x:Key="AIChat.Light.CodeBackground">#F0F2F5</Color>
+    <Color x:Key="AIChat.Light.Error">#B3261E</Color>
+    <Color x:Key="AIChat.Light.ErrorBackground">#FCEDEC</Color>
+    <Color x:Key="AIChat.Light.Success">#1B7F3B</Color>
+
+    <!-- Dark palette -->
+    <Color x:Key="AIChat.Dark.Text">#ECEDEF</Color>
+    <Color x:Key="AIChat.Dark.SecondaryText">#A0A6AF</Color>
+    <Color x:Key="AIChat.Dark.Accent">#4C8DF6</Color>
+    <Color x:Key="AIChat.Dark.OnAccent">#FFFFFF</Color>
+    <Color x:Key="AIChat.Dark.UserBubble">#2C2F35</Color>
+    <Color x:Key="AIChat.Dark.UserText">#ECEDEF</Color>
+    <Color x:Key="AIChat.Dark.Surface">#23262B</Color>
+    <Color x:Key="AIChat.Dark.Stroke">#3A3E45</Color>
+    <Color x:Key="AIChat.Dark.CodeBackground">#1B1D21</Color>
+    <Color x:Key="AIChat.Dark.Error">#F2B8B5</Color>
+    <Color x:Key="AIChat.Dark.ErrorBackground">#3B1F1E</Color>
+    <Color x:Key="AIChat.Dark.Success">#7BD88F</Color>
+
+    <!-- Typography. AIChat.FontFamily.Code is set per platform in code. -->
+    <x:Double x:Key="AIChat.FontSize.Body">15</x:Double>
+    <x:Double x:Key="AIChat.FontSize.Small">13</x:Double>
+    <x:Double x:Key="AIChat.FontSize.Code">13</x:Double>
+
+    <!-- Message rows -->
+    <Style x:Key="AIChat.Style.Row" TargetType="ContentView">
+        <Setter Property="Padding" Value="16,6" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.UserBubble" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{DynamicResource AIChat.Color.UserBubble}" />
+        <Setter Property="StrokeThickness" Value="0" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 18" />
+        <Setter Property="Padding" Value="14,10" />
+        <Setter Property="Margin" Value="48,0,0,0" />
+        <Setter Property="HorizontalOptions" Value="End" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.UserText" TargetType="Label">
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.UserText}" />
+        <Setter Property="FontSize" Value="{DynamicResource AIChat.FontSize.Body}" />
+        <Setter Property="LineBreakMode" Value="WordWrap" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.AssistantText" TargetType="Label">
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Text}" />
+        <Setter Property="FontSize" Value="{DynamicResource AIChat.FontSize.Body}" />
+        <Setter Property="LineBreakMode" Value="WordWrap" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.SecondaryText" TargetType="Label">
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.SecondaryText}" />
+        <Setter Property="FontSize" Value="{DynamicResource AIChat.FontSize.Small}" />
+        <Setter Property="LineBreakMode" Value="WordWrap" />
+    </Style>
+
+    <!-- Cards: tool calls, approvals, UI actions, reasoning, and files -->
+    <Style x:Key="AIChat.Style.Card" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{DynamicResource AIChat.Color.Surface}" />
+        <Setter Property="Stroke" Value="{DynamicResource AIChat.Color.Stroke}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 12" />
+        <Setter Property="Padding" Value="12,10" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.CardTitle" TargetType="Label">
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Text}" />
+        <Setter Property="FontSize" Value="{DynamicResource AIChat.FontSize.Small}" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="LineBreakMode" Value="TailTruncation" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.CodeBlock" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{DynamicResource AIChat.Color.CodeBackground}" />
+        <Setter Property="StrokeThickness" Value="0" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 8" />
+        <Setter Property="Padding" Value="10,8" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.CodeText" TargetType="Label">
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Text}" />
+        <Setter Property="FontSize" Value="{DynamicResource AIChat.FontSize.Code}" />
+        <Setter Property="FontFamily" Value="{DynamicResource AIChat.FontFamily.Code}" />
+        <Setter Property="LineBreakMode" Value="WordWrap" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.LinkSpan" TargetType="Span">
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Accent}" />
+        <Setter Property="TextDecorations" Value="Underline" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.ErrorCard" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{DynamicResource AIChat.Color.ErrorBackground}" />
+        <Setter Property="StrokeThickness" Value="0" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 12" />
+        <Setter Property="Padding" Value="12,10" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.ErrorText" TargetType="Label">
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Error}" />
+        <Setter Property="FontSize" Value="{DynamicResource AIChat.FontSize.Small}" />
+        <Setter Property="LineBreakMode" Value="WordWrap" />
+    </Style>
+
+    <!-- Buttons -->
+    <Style x:Key="AIChat.Style.PrimaryButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{DynamicResource AIChat.Color.Accent}" />
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.OnAccent}" />
+        <Setter Property="FontSize" Value="{DynamicResource AIChat.FontSize.Small}" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="14,6" />
+        <Setter Property="MinimumHeightRequest" Value="32" />
+        <Setter Property="BorderWidth" Value="0" />
+        <Style.Triggers>
+            <Trigger TargetType="Button" Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="AIChat.Style.SecondaryButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Text}" />
+        <Setter Property="BorderColor" Value="{DynamicResource AIChat.Color.Stroke}" />
+        <Setter Property="BorderWidth" Value="1" />
+        <Setter Property="FontSize" Value="{DynamicResource AIChat.FontSize.Small}" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="14,6" />
+        <Setter Property="MinimumHeightRequest" Value="32" />
+        <Style.Triggers>
+            <Trigger TargetType="Button" Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Composer -->
+    <Style x:Key="AIChat.Style.Suggestion" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{DynamicResource AIChat.Color.Surface}" />
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Text}" />
+        <Setter Property="BorderColor" Value="{DynamicResource AIChat.Color.Stroke}" />
+        <Setter Property="BorderWidth" Value="1" />
+        <Setter Property="FontSize" Value="{DynamicResource AIChat.FontSize.Small}" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="Margin" Value="4" />
+        <Setter Property="LineBreakMode" Value="TailTruncation" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.AttachmentChip" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{DynamicResource AIChat.Color.Surface}" />
+        <Setter Property="Stroke" Value="{DynamicResource AIChat.Color.Stroke}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 10" />
+        <Setter Property="Padding" Value="10,4,4,4" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.Composer" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{DynamicResource AIChat.Color.Surface}" />
+        <Setter Property="Stroke" Value="{DynamicResource AIChat.Color.Stroke}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 22" />
+        <Setter Property="Padding" Value="6,4" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.Input" TargetType="Editor">
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Text}" />
+        <Setter Property="PlaceholderColor" Value="{DynamicResource AIChat.Color.SecondaryText}" />
+        <Setter Property="FontSize" Value="{DynamicResource AIChat.FontSize.Body}" />
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="AutoSize" Value="TextChanges" />
+        <Setter Property="MinimumHeightRequest" Value="40" />
+        <Setter Property="MaximumHeightRequest" Value="140" />
+        <Setter Property="VerticalOptions" Value="Center" />
+    </Style>
+
+    <Style x:Key="AIChat.Style.IconButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.SecondaryText}" />
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="WidthRequest" Value="36" />
+        <Setter Property="HeightRequest" Value="36" />
+        <Setter Property="CornerRadius" Value="18" />
+        <Setter Property="BorderWidth" Value="0" />
+        <Setter Property="VerticalOptions" Value="End" />
+        <Style.Triggers>
+            <Trigger TargetType="Button" Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.4" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="AIChat.Style.SendButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{DynamicResource AIChat.Color.Accent}" />
+        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.OnAccent}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="WidthRequest" Value="36" />
+        <Setter Property="HeightRequest" Value="36" />
+        <Setter Property="CornerRadius" Value="18" />
+        <Setter Property="BorderWidth" Value="0" />
+        <Setter Property="VerticalOptions" Value="End" />
+        <Style.Triggers>
+            <Trigger TargetType="Button" Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.35" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!--
+        The AIChatView template. Copy it to restyle the layout. Named parts are optional:
+          PART_Header       ContentView  filled from HeaderTemplate
+          PART_Messages     ContentView  hosts the message list
+          PART_EmptyView    ContentView  replaced by EmptyViewTemplate when it is set
+          PART_Suggestions  Layout       filled with one Button per suggestion
+          PART_Attachments  Layout       filled with one chip per staged attachment
+          PART_Input        Editor       focused by FocusInput()
+        The buttons only need the view's commands.
+    -->
+    <ControlTemplate x:Key="AIChat.Template.ChatView">
+        <Grid RowDefinitions="Auto,*,Auto" x:DataType="chat:AIChatView">
+
+            <ContentView x:Name="PART_Header" IsVisible="False" />
+
+            <Grid Grid.Row="1">
+                <ContentView x:Name="PART_Messages" />
+                <ContentView x:Name="PART_EmptyView"
+                             IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=IsEmpty}">
+                    <VerticalStackLayout VerticalOptions="Center" Padding="32" Spacing="8">
+                        <Label Text="{Binding Source={RelativeSource TemplatedParent}, Path=WelcomeTitle}"
+                               Style="{DynamicResource AIChat.Style.AssistantText}"
+                               FontSize="22"
+                               FontAttributes="Bold"
+                               HorizontalTextAlignment="Center"
+                               SemanticProperties.HeadingLevel="Level1" />
+                        <Label Text="{Binding Source={RelativeSource TemplatedParent}, Path=WelcomeMessage}"
+                               Style="{DynamicResource AIChat.Style.SecondaryText}"
+                               FontSize="{DynamicResource AIChat.FontSize.Body}"
+                               HorizontalTextAlignment="Center" />
+                    </VerticalStackLayout>
+                </ContentView>
+            </Grid>
+
+            <VerticalStackLayout Grid.Row="2"
+                                 Padding="12,4,12,12"
+                                 Spacing="8"
+                                 IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=IsInputVisible}">
+
+                <Label Style="{DynamicResource AIChat.Style.ErrorText}"
+                       Text="{Binding Source={RelativeSource TemplatedParent}, Path=ErrorMessage}"
+                       IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=HasError}"
+                       Margin="8,0"
+                       AutomationId="AIChatError" />
+
+                <FlexLayout x:Name="PART_Suggestions"
+                            Wrap="Wrap"
+                            JustifyContent="Center"
+                            IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=ShowSuggestions}" />
+
+                <ScrollView Orientation="Horizontal"
+                            HorizontalScrollBarVisibility="Never"
+                            IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=HasAttachments}">
+                    <HorizontalStackLayout x:Name="PART_Attachments" Spacing="8" />
+                </ScrollView>
+
+                <Border Style="{DynamicResource AIChat.Style.Composer}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="2">
+
+                        <HorizontalStackLayout VerticalOptions="End" Spacing="2">
+                            <ContentView Content="{Binding Source={RelativeSource TemplatedParent}, Path=InputLeadingContent}" />
+                            <Button Text="+"
+                                    Style="{DynamicResource AIChat.Style.IconButton}"
+                                    FontSize="22"
+                                    Command="{Binding Source={RelativeSource TemplatedParent}, Path=PickAttachmentsCommand}"
+                                    IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=AllowAttachments}"
+                                    AutomationId="AIChatAttachButton"
+                                    SemanticProperties.Description="Add attachment"
+                                    ToolTipProperties.Text="Add attachment" />
+                        </HorizontalStackLayout>
+
+                        <Editor x:Name="PART_Input"
+                                Grid.Column="1"
+                                Style="{DynamicResource AIChat.Style.Input}"
+                                Text="{Binding Source={RelativeSource TemplatedParent}, Path=Text, Mode=TwoWay}"
+                                Placeholder="{Binding Source={RelativeSource TemplatedParent}, Path=Placeholder}"
+                                IsEnabled="{Binding Source={RelativeSource TemplatedParent}, Path=IsInputEnabled}"
+                                AutomationId="AIChatInput">
+                            <Editor.Triggers>
+                                <DataTrigger TargetType="Editor"
+                                             Binding="{Binding Source={RelativeSource TemplatedParent}, Path=IsListening}"
+                                             Value="True">
+                                    <Setter Property="IsReadOnly" Value="True" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Editor"
+                                             Binding="{Binding Source={RelativeSource TemplatedParent}, Path=IsTranscribingAudio}"
+                                             Value="True">
+                                    <Setter Property="IsReadOnly" Value="True" />
+                                </DataTrigger>
+                            </Editor.Triggers>
+                        </Editor>
+
+                        <HorizontalStackLayout Grid.Column="2" VerticalOptions="End" Spacing="2">
+                            <ContentView Content="{Binding Source={RelativeSource TemplatedParent}, Path=InputTrailingContent}" />
+
+                            <Button Text="&#x1F3A4;"
+                                    Style="{DynamicResource AIChat.Style.IconButton}"
+                                    Command="{Binding Source={RelativeSource TemplatedParent}, Path=ToggleAudioCaptureCommand}"
+                                    IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=CanCaptureAudio}"
+                                    AutomationId="AIChatAudioButton"
+                                    SemanticProperties.Description="Record audio"
+                                    ToolTipProperties.Text="Record audio">
+                                <Button.Triggers>
+                                    <DataTrigger TargetType="Button"
+                                                 Binding="{Binding Source={RelativeSource TemplatedParent}, Path=IsRecordingAudio}"
+                                                 Value="True">
+                                        <Setter Property="Text" Value="&#x25A0;" />
+                                        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Error}" />
+                                        <Setter Property="SemanticProperties.Description" Value="Stop recording" />
+                                        <Setter Property="ToolTipProperties.Text" Value="Stop recording" />
+                                    </DataTrigger>
+                                    <DataTrigger TargetType="Button"
+                                                 Binding="{Binding Source={RelativeSource TemplatedParent}, Path=IsTranscribingAudio}"
+                                                 Value="True">
+                                        <Setter Property="Text" Value="&#x2026;" />
+                                        <Setter Property="SemanticProperties.Description" Value="Cancel transcription" />
+                                        <Setter Property="ToolTipProperties.Text" Value="Cancel transcription" />
+                                    </DataTrigger>
+                                </Button.Triggers>
+                            </Button>
+
+                            <Button Text="&#x1F5E3;"
+                                    Style="{DynamicResource AIChat.Style.IconButton}"
+                                    Command="{Binding Source={RelativeSource TemplatedParent}, Path=ToggleLiveSpeechCommand}"
+                                    IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=CanUseLiveSpeech}"
+                                    AutomationId="AIChatLiveSpeechButton"
+                                    SemanticProperties.Description="Start live voice"
+                                    ToolTipProperties.Text="Start live voice">
+                                <Button.Triggers>
+                                    <DataTrigger TargetType="Button"
+                                                 Binding="{Binding Source={RelativeSource TemplatedParent}, Path=IsListening}"
+                                                 Value="True">
+                                        <Setter Property="Text" Value="&#x25A0;" />
+                                        <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Error}" />
+                                        <Setter Property="SemanticProperties.Description" Value="Stop live voice" />
+                                        <Setter Property="ToolTipProperties.Text" Value="Stop live voice" />
+                                    </DataTrigger>
+                                </Button.Triggers>
+                            </Button>
+
+                            <Button Text="&#x2191;"
+                                    Style="{DynamicResource AIChat.Style.SendButton}"
+                                    Command="{Binding Source={RelativeSource TemplatedParent}, Path=SendCommand}"
+                                    AutomationId="AIChatSendButton"
+                                    SemanticProperties.Description="Send message"
+                                    ToolTipProperties.Text="Send">
+                                <Button.Triggers>
+                                    <DataTrigger TargetType="Button"
+                                                 Binding="{Binding Source={RelativeSource TemplatedParent}, Path=CanStop}"
+                                                 Value="True">
+                                        <Setter Property="IsVisible" Value="False" />
+                                    </DataTrigger>
+                                </Button.Triggers>
+                            </Button>
+
+                            <Button Text="&#x25A0;"
+                                    Style="{DynamicResource AIChat.Style.SendButton}"
+                                    Command="{Binding Source={RelativeSource TemplatedParent}, Path=StopCommand}"
+                                    IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=CanStop}"
+                                    AutomationId="AIChatStopButton"
+                                    SemanticProperties.Description="Stop response"
+                                    ToolTipProperties.Text="Stop" />
+                        </HorizontalStackLayout>
+                    </Grid>
+                </Border>
+            </VerticalStackLayout>
+        </Grid>
+    </ControlTemplate>
+
+</ResourceDictionary>
