@@ -179,8 +179,12 @@ These match upstream so that upstream fixes apply directly:
   the client pipeline has no `FunctionInvokingChatClient` (which is what asks for approvals).
 - **Calls left unanswered in a continuation round** get an error result. When one call of a batch
   targets a UI action, `FunctionInvokingChatClient` hands the whole batch back, and providers reject a
-  continuation that leaves a call without a result.
-- **One block per call id.** Each turn keeps a registry of its function calls. When
+  continuation that leaves a call without a result. The calls are found from the round's calls and
+  results (a call id reused after its result is a new call), not from the blocks that show them, so a
+  call that a handler of the app's own folds into its block is answered too. The error result reaches
+  the block through the next round's request, like any result.
+- **One block per call id.** Each turn keeps a registry of its function calls, including calls that a
+  handler of the app's own claims into a block of its own, whose result it then receives. When
   `FunctionInvokingChatClient` sends an approved call again, a rejected call comes back as
   informational, a replayed conversation repeats a call, or a complete response lists a call or its
   result more than once in one message, the existing block (for an approval, its inner block) is

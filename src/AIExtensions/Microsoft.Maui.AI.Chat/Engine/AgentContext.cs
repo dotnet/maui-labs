@@ -517,7 +517,6 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
             {
                 var humanInputBlocks = new List<IInteractiveBlock>();
                 var uiActionBlocks = new List<UIActionBlock>();
-                var toolCallBlocks = new List<FunctionInvocationContentBlock>();
 
                 // The round stops between updates, so every update it recorded is shown in full, and a stop
                 // before the request is sent still shows the request.
@@ -537,9 +536,6 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
                         case IInteractiveBlock interactive:
                             humanInputBlocks.Add(interactive);
                             interactiveBlocks.Add(interactive);
-                            break;
-                        case FunctionInvocationContentBlock toolCall:
-                            toolCallBlocks.Add(toolCall);
                             break;
                     }
 
@@ -599,19 +595,21 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
                         .Cast<AIContent>()
                         .ToList();
 
-                    // Server tools run inside FunctionInvokingChatClient. A call that is still
-                    // unanswered here was handed back uninvoked (for example because it shared a
-                    // batch with a UI action), and the provider rejects a continuation that leaves
-                    // it without a result.
-                    foreach (var toolCall in toolCallBlocks)
+                    // Server tools run inside FunctionInvokingChatClient. A call of the round that is
+                    // still unanswered here was handed back uninvoked (for example because it shared a
+                    // batch with a UI action), and the provider rejects a continuation that leaves it
+                    // without a result. The calls come from the round's messages, not from the blocks
+                    // that show them, so a call that a handler of the app's own folds into its block is
+                    // answered too. The block shows the result once the continuation is sent, through
+                    // the handler that claimed the call, like any result.
+                    var answered = toolResults
+                        .Cast<FunctionResultContent>()
+                        .Select(static result => result.CallId)
+                        .ToHashSet(StringComparer.Ordinal);
+                    foreach (var call in pendingTurn.OpenCalls)
                     {
-                        if (toolCall is { Result: null, Call: { InformationalOnly: false } call })
-                        {
-                            var error = _agent.CreateUnansweredCallResult(call);
-                            toolCall.Result = error;
-                            toolCall.InvokeNotifyChanged();
-                            toolResults.Add(error);
-                        }
+                        if (!answered.Contains(call.CallId))
+                            toolResults.Add(_agent.CreateUnansweredCallResult(call));
                     }
 
                     if (toolResults.Count > 0)
