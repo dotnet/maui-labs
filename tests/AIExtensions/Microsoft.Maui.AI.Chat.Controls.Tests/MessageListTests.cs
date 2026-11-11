@@ -138,6 +138,7 @@ public class MessageListTests
         Assert.False(view.HasError);
 
         var error = Assert.IsType<TurnErrorView>(view.Realize(errorRow));
+        Assert.Equal("AIChatTurnError", error.AutomationId);
         Assert.Equal("AIChatRetryButton", error.RetryButton.AutomationId);
         error.RetryButton.Command.Execute(null);
         await UIThread.Until(() => view.Session.Status == ConversationStatus.Idle);

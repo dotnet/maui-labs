@@ -83,7 +83,7 @@ internal sealed class TurnErrorView : RowView<TurnErrorRow>
 
     public TurnErrorView()
     {
-        AutomationId = "AIChatError";
+        AutomationId = "AIChatTurnError";
 
         _retry = new Button
         {
