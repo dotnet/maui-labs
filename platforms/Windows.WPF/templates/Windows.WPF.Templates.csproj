@@ -11,7 +11,7 @@
     <PackageProjectUrl>https://github.com/dotnet/maui-labs/tree/main/platforms/Windows.WPF</PackageProjectUrl>
     <RepositoryUrl>https://github.com/dotnet/maui-labs.git</RepositoryUrl>
 
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <IncludeContentInPack>true</IncludeContentInPack>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <ContentTargetFolders>content</ContentTargetFolders>
@@ -28,12 +28,12 @@
   </ItemGroup>
 
   <Target Name="PrepareWpfTemplate" BeforeTargets="_GetPackageFiles">
-    <Error Condition="'$(PackageVersion)' == '' or '$(MauiVersion)' == ''"
-           Text="WPF template packaging requires PackageVersion and MauiVersion." />
+    <Error Condition="'$(PackageVersion)' == '' or '$(MauiVersion)' == '' or '$(MicrosoftWindowsSdkNetRefVersion)' == ''"
+           Text="WPF template packaging requires PackageVersion, MauiVersion, and MicrosoftWindowsSdkNetRefVersion." />
     <PropertyGroup>
       <_WpfTemplateProject>$(IntermediateOutputPath)templates\maui-wpf-app\MauiWpfApp.csproj</_WpfTemplateProject>
       <_WpfTemplateContent>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\maui-wpf-app\MauiWpfApp.csproj'))</_WpfTemplateContent>
-      <_WpfTemplateContent>$(_WpfTemplateContent.Replace('__WPF_VERSION__', '$(PackageVersion)').Replace('__MAUI_VERSION__', '$(MauiVersion)'))</_WpfTemplateContent>
+      <_WpfTemplateContent>$(_WpfTemplateContent.Replace('__WPF_VERSION__', '$(PackageVersion)').Replace('__MAUI_VERSION__', '$(MauiVersion)').Replace('__WINDOWS_SDK_VERSION__', '$(MicrosoftWindowsSdkNetRefVersion)'))</_WpfTemplateContent>
     </PropertyGroup>
     <WriteLinesToFile File="$(_WpfTemplateProject)" Lines="$(_WpfTemplateContent)"
                       Overwrite="true" WriteOnlyWhenDifferent="true" />

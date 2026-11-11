@@ -47,9 +47,6 @@ namespace Microsoft.Maui.Handlers.WPF
 		{
 			var app = MauiContext?.Services.GetService<PlatformView>() ?? throw new InvalidOperationException($"MauiContext did not have a valid application.");
 
-			// Wire lifecycle events
-			LifecycleManager.RegisterLifecycleEvents(app, VirtualView);
-
 			return app;
 		}
 

@@ -1,3 +1,4 @@
+#if NET10_0
 #nullable enable
 using System;
 using System.Collections.Generic;
@@ -542,3 +543,4 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		}
 	}
 }
+#endif

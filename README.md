@@ -142,6 +142,7 @@ A native macOS AppKit backend for .NET MAUI — run MAUI apps as true AppKit app
 
 A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI apps on Windows desktops using native WPF controls with 22+ fully implemented controls, Shell navigation, Blazor WebView, and 14 Essentials APIs.
 
+- **.NET 11 and .NET 10** — public MAUI 11 backend contracts and processed resources, with an isolated .NET 10 compatibility lane
 - **22+ controls** — Label, Button, Entry, Editor, Image, CheckBox, Switch, Slider, Picker, DatePicker, and more
 - **Navigation** — Shell (flyout + tabs + URI routing), NavigationPage, TabbedPage, FlyoutPage, modal pages
 - **Blazor WebView** — via WebView2 and AspNetCore.Components.WebView.Wpf

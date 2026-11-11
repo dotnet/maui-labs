@@ -5,7 +5,9 @@
     <LangVersion>preview</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <MauiVersion>10.0.41</MauiVersion>
+    <Maui10Version>10.0.41</Maui10Version>
+    <Maui11Version>11.0.0-rc.2.26505.5</Maui11Version>
+    <MauiVersion Condition="'$(MauiVersion)' == ''">$(Maui11Version)</MauiVersion>
     <!-- Set to false when the maui-labs DevFlow projects should not be referenced by the sample -->
     <EnableMauiDevFlow Condition="'$(EnableMauiDevFlow)' == ''">false</EnableMauiDevFlow>
   </PropertyGroup>

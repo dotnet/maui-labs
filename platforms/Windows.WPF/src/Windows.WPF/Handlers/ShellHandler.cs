@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -776,14 +777,12 @@ namespace Microsoft.Maui.Handlers.WPF
 				{
 					var fileName = fileSource.File;
 					if (string.IsNullOrEmpty(fileName)) return;
+					if (Path.GetExtension(fileName).Equals(".svg", StringComparison.OrdinalIgnoreCase))
+						throw new NotSupportedException(
+							"Runtime SVG loading is not supported by the WPF backend. Use the Resizetizer-processed bitmap name.");
 					var resolvedPath = ImageHandler.ResolveImagePath(fileName);
 					if (resolvedPath != null)
 					{
-						if (resolvedPath.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
-						{
-							var svgSource = ImageHandler.RenderSvgToBitmap(resolvedPath, 35, 35);
-							if (svgSource != null) { img.Source = svgSource; return; }
-						}
 						img.Source = new global::System.Windows.Media.Imaging.BitmapImage(new Uri(resolvedPath, UriKind.Absolute));
 					}
 					else
@@ -851,22 +850,21 @@ namespace Microsoft.Maui.Handlers.WPF
 					wpfImage.Height = img.HeightRequest > 0 ? img.HeightRequest : double.NaN;
 					var resolvedPath = img.Source is Microsoft.Maui.Controls.FileImageSource fis && !string.IsNullOrEmpty(fis.File)
 						? ImageHandler.ResolveImagePath(fis.File) : null;
+					if (img.Source is Microsoft.Maui.Controls.FileImageSource svg
+						&& Path.GetExtension(svg.File).Equals(".svg", StringComparison.OrdinalIgnoreCase))
+						throw new NotSupportedException(
+							"Runtime SVG loading is not supported by the WPF backend. Use the Resizetizer-processed bitmap name.");
 					if (string.Equals(previousPath, resolvedPath, StringComparison.Ordinal))
 						return;
 					wpfImage.Source = null;
 					if (resolvedPath != null)
 					{
-						if (resolvedPath.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
-							wpfImage.Source = ImageHandler.RenderSvgToBitmap(resolvedPath);
-						else
-						{
-							var bitmap = new global::System.Windows.Media.Imaging.BitmapImage();
-							bitmap.BeginInit();
-							bitmap.CacheOption = global::System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-							bitmap.UriSource = new Uri(resolvedPath, UriKind.Absolute);
-							bitmap.EndInit();
-							wpfImage.Source = bitmap;
-						}
+						var bitmap = new global::System.Windows.Media.Imaging.BitmapImage();
+						bitmap.BeginInit();
+						bitmap.CacheOption = global::System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+						bitmap.UriSource = new Uri(resolvedPath, UriKind.Absolute);
+						bitmap.EndInit();
+						wpfImage.Source = bitmap;
 					}
 					previousPath = resolvedPath;
 				}

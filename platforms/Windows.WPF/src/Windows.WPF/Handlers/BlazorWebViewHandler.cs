@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Linq;
+using System.Collections.Specialized;
 using System.Runtime.Versioning;
 using Microsoft.AspNetCore.Components.WebView;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Platforms.Shared;
 using Microsoft.Maui;
 using Microsoft.Maui.Handlers;
 
@@ -20,6 +23,7 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 		{
 			[nameof(IBlazorWebView.HostPage)] = MapHostPage,
 			[nameof(IBlazorWebView.RootComponents)] = MapRootComponents,
+			[nameof(IBlazorWebView.StartPath)] = MapStartPath,
 		};
 
 		/// <summary>
@@ -61,21 +65,61 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 		public static void MapRootComponents(BlazorWebViewHandler handler, BlazorWebView webView)
 		{
 #if WINDOWS
-			handler.PlatformView.RootComponents.Clear();
-
-
-			foreach (var component in webView.RootComponents)
-			{
-				handler.PlatformView.RootComponents.Add(new Wpf.RootComponent()
-				{
-					ComponentType = component.ComponentType!,
-					Parameters = component.Parameters!,
-					Selector = component.Selector!
-				});
-			}
-
-			//handler.StartWebViewCoreIfPossible();
+			handler.ObserveRootComponents(webView.RootComponents);
 #endif
+		}
+
+		public static void MapStartPath(BlazorWebViewHandler handler, BlazorWebView webView)
+			=> handler.PlatformView.StartPath = webView.StartPath;
+
+		RootComponentsCollection? _observedRootComponents;
+		readonly RootComponentReconciler<RootComponent> _rootComponentReconciler = new();
+		readonly Dictionary<RootComponent, Wpf.RootComponent> _nativeRootComponents = [];
+
+		void ObserveRootComponents(RootComponentsCollection? components)
+		{
+			if (_observedRootComponents != null)
+				_observedRootComponents.CollectionChanged -= RootComponentsChanged;
+			_observedRootComponents = components;
+			if (components != null)
+				components.CollectionChanged += RootComponentsChanged;
+			SynchronizeRootComponents();
+		}
+
+		void RootComponentsChanged(object? sender, NotifyCollectionChangedEventArgs args)
+			=> SynchronizeRootComponents();
+
+		async void SynchronizeRootComponents()
+		{
+			try
+			{
+				await _rootComponentReconciler.SynchronizeAsync(
+					() => _observedRootComponents?.ToArray() ?? [],
+					component =>
+					{
+						var native = new Wpf.RootComponent
+						{
+							ComponentType = component.ComponentType!,
+							Parameters = component.Parameters!,
+							Selector = component.Selector!,
+						};
+						PlatformView.RootComponents.Add(native);
+						_nativeRootComponents.Add(component, native);
+						return Task.CompletedTask;
+					},
+					component =>
+					{
+						PlatformView.RootComponents.Remove(_nativeRootComponents[component]);
+						_nativeRootComponents.Remove(component);
+						return Task.CompletedTask;
+					});
+			}
+			catch (Exception ex)
+			{
+				MauiContext?.Services.GetService<ILogger<BlazorWebViewHandler>>()?
+					.LogError(ex, "WPF Blazor root component synchronization failed.");
+				System.Diagnostics.Trace.TraceError($"WPF Blazor root component synchronization failed: {ex}");
+			}
 		}
 
 #if WINDOWS

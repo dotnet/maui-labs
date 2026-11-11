@@ -25,9 +25,11 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 			Services = applicationContext.Services;
 
-			// Override MAUI's default DeviceInfo with our WPF implementation
-			// Must happen AFTER CreateMauiApp() because Build() sets the default
+#if NET10_0
+			// MAUI 10 does not bridge Essentials static facades to DI. Keep this compatibility
+			// path isolated from .NET 11, where the public DI integration is used.
 			OverrideEssentialsDefaults();
+#endif
 
 			Application = Services.GetRequiredService<IApplication>();
 
@@ -42,10 +44,13 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			this.CreatePlatformWindow(Application, args);
 		}
 
-		/// <summary>
-		/// Override the static Essentials defaults that MAUI sets during Build().
-		/// This ensures OnIdiom, OnPlatform, etc. resolve correctly for WPF.
-		/// </summary>
+		public static new MauiWPFApplication Current => (MauiWPFApplication)System.Windows.Application.Current;
+
+		public IServiceProvider Services { get; protected set; } = null!;
+
+		public IApplication Application { get; protected set; } = null!;
+
+#if NET10_0
 		void OverrideEssentialsDefaults()
 		{
 			var deviceInfo = Services.GetService<Microsoft.Maui.Devices.IDeviceInfo>()
@@ -57,10 +62,6 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			setter.Invoke(null, [deviceInfo]);
 		}
 
-		/// <summary>
-		/// Minimal IDeviceInfo for WPF that returns Desktop idiom.
-		/// Used as fallback when the Essentials project implementation isn't available via DI.
-		/// </summary>
 		sealed class WPFDeviceInfoFallback : Microsoft.Maui.Devices.IDeviceInfo
 		{
 			public string Model => "WPF";
@@ -68,15 +69,10 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			public string Name => Environment.MachineName;
 			public string VersionString => Environment.OSVersion.VersionString;
 			public Version Version => Environment.OSVersion.Version;
-			public Microsoft.Maui.Devices.DevicePlatform Platform => Microsoft.Maui.Devices.DevicePlatform.WinUI;
+			public Microsoft.Maui.Devices.DevicePlatform Platform => Microsoft.Maui.Devices.DevicePlatform.Create("WPF");
 			public Microsoft.Maui.Devices.DeviceIdiom Idiom => Microsoft.Maui.Devices.DeviceIdiom.Desktop;
 			public Microsoft.Maui.Devices.DeviceType DeviceType => Microsoft.Maui.Devices.DeviceType.Physical;
 		}
-
-		public static new MauiWPFApplication Current => (MauiWPFApplication)System.Windows.Application.Current;
-
-		public IServiceProvider Services { get; protected set; } = null!;
-
-		public IApplication Application { get; protected set; } = null!;
+#endif
 	}
 }

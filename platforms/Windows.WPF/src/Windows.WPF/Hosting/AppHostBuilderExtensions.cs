@@ -66,8 +66,6 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 			handlersCollection.AddHandler<Microsoft.Maui.Controls.Shapes.Path, ShapeViewHandler>();
 			handlersCollection.AddHandler<Microsoft.Maui.Controls.Shapes.Polygon, ShapeViewHandler>();
 			handlersCollection.AddHandler<Microsoft.Maui.Controls.Shapes.Polyline, ShapeViewHandler>();
-			handlersCollection.AddHandler<AspNetCore.Components.WebView.Maui.BlazorWebView, AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler>();
-
 			// Navigation handlers
 			handlersCollection.AddHandler<NavigationPage, NavigationViewHandler>();
 			handlersCollection.AddHandler<TabbedPage, TabbedViewHandler>();
@@ -123,8 +121,15 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 			// Register WPF-specific animation ticker (runs on dispatcher thread)
 			builder.Services.AddSingleton<Microsoft.Maui.Animations.Ticker>(new Microsoft.Maui.Platforms.Windows.WPF.WPFTicker());
 
-			// Register alert/prompt/action sheet handler
+#if NET10_0
+			builder.ConfigureMauiHandlers(handlers =>
+				handlers.AddHandler<AspNetCore.Components.WebView.Maui.BlazorWebView, AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler>());
 			Microsoft.Maui.Platforms.Windows.WPF.WPFAlertManagerSubscription.Register(builder.Services);
+#else
+			Microsoft.Maui.Platforms.Windows.WPF.WPFDialogService.Register(builder.Services);
+			builder.Services.TryAddSingleton<Microsoft.Maui.Controls.Platform.IGesturePlatformManagerFactory,
+				Microsoft.Maui.Platforms.Windows.WPF.WPFGesturePlatformManagerFactory>();
+#endif
 
 			// Initialize theme detection
 			Microsoft.Maui.Platforms.Windows.WPF.ThemeManager.Initialize();
@@ -510,7 +515,9 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 			{
 				if (handler.PlatformView is System.Windows.FrameworkElement fe)
 				{
+#if NET10_0
 					Microsoft.Maui.Platforms.Windows.WPF.GestureManager.SetupGestures(fe, view);
+#endif
 					// Hook VisualStateManager for hover/pressed/focused states
 					Microsoft.Maui.Platforms.Windows.WPF.VisualStateManagerHooks.AttachVisualStateHooks(fe, view);
 				}

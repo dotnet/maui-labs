@@ -7,6 +7,7 @@ namespace HandlerTests;
 
 public class AlertManagerSubscriptionTests
 {
+#if NET10_0
     [Fact]
     public void Register_RegistersTheSubscriptionConsumedByMaui()
     {
@@ -27,4 +28,18 @@ public class AlertManagerSubscriptionTests
             subscription.GetType().BaseType!.GetGenericTypeDefinition());
         Assert.Same(subscription, provider.GetRequiredService(subscriptionType));
     }
+#else
+    [Theory]
+    [InlineData(WPFDialogService.DisplayAlertKey, typeof(Func<Page, Microsoft.Maui.Controls.Internals.AlertArguments, Task<bool>>))]
+    [InlineData(WPFDialogService.DisplayActionSheetKey, typeof(Func<Page, Microsoft.Maui.Controls.Internals.ActionSheetArguments, Task<string>>))]
+    [InlineData(WPFDialogService.DisplayPromptKey, typeof(Func<Page, Microsoft.Maui.Controls.Internals.PromptArguments, Task<string>>))]
+    public void Register_RegistersPublicKeyedDialogDelegate(string key, Type serviceType)
+    {
+        var services = new ServiceCollection();
+        WPFDialogService.Register(services);
+
+        using var provider = services.BuildServiceProvider();
+        Assert.NotNull(provider.GetRequiredKeyedService(serviceType, key));
+    }
+#endif
 }

@@ -365,7 +365,25 @@ function Invoke-BackendSwitchAcceptance {
     }
     Assert-NoFile $wpf10Output 'Microsoft.Maui.Platforms.Linux.Gtk4.dll'
 
-    Write-Host 'PASS backend-switch: one consumer switched GTK/WPF on .NET 11 without leakage and retained .NET 10 package compatibility.'
+    Set-BackendProjects `
+        -TargetFramework 'net11.0' `
+        -PackageId 'Microsoft.Maui.Platforms.Linux.Gtk4' `
+        -PlatformProperties ''
+    Invoke-DotNet @('restore', $consumerProject, '--configfile', $config, '--packages', $restore.FullName)
+    Invoke-DotNet @('build', $consumerProject, '--no-restore', '-c', 'Release', '-m:1', '-nr:false')
+    Assert-BackendIdentity $gtkOutput 'linux'
+    Assert-NoFile $gtkOutput 'Microsoft.Maui.Platforms.Windows.WPF.dll'
+    Assert-SingleFile $gtkOutput 'Shared/Nested/payload.bin' ([System.Text.Encoding]::UTF8.GetBytes("referenced-payload-v1`n")) | Out-Null
+    $publish = Join-Path $root 'gtk-return-publish'
+    Invoke-DotNet @('publish', $consumerProject, '--no-build', '--no-restore', '-c', 'Release',
+        "-p:PublishDir=$publish", '-m:1', '-nr:false')
+    if (-not (Test-Path (Join-Path $publish 'Microsoft.Maui.Platforms.Linux.Gtk4.dll'))) {
+        throw 'GTK return publish did not contain the GTK backend assembly.'
+    }
+    Assert-NoFile $publish 'Microsoft.Maui.Platforms.Windows.WPF.dll'
+    Assert-SingleFile $publish 'Shared/Nested/payload.bin' ([System.Text.Encoding]::UTF8.GetBytes("referenced-payload-v1`n")) | Out-Null
+
+    Write-Host 'PASS backend-switch: one consumer switched GTK/WPF and back on .NET 11 without leakage, published without rebuilding, and retained .NET 10 package compatibility.'
 }
 
 try {
@@ -397,6 +415,16 @@ try {
             -PlatformProperties '<UseWPF>true</UseWPF><RuntimeIdentifier>win-x64</RuntimeIdentifier><EnableWindowsTargeting>true</EnableWindowsTargeting><PublishReadyToRun>false</PublishReadyToRun><EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition><EnableDefaultPageItems>false</EnableDefaultPageItems>' `
             -ExpectedBackendIdentity 'wpf' `
             -RuntimeIdentifier 'win-x64'
+
+        Invoke-BackendAcceptance `
+            -Name 'wpf-net10' `
+            -PackageId 'Microsoft.Maui.Platforms.Windows.WPF' `
+            -Project (Join-Path $repo 'platforms\Windows.WPF\src\Windows.WPF\Windows.WPF.csproj') `
+            -TargetFramework 'net10.0-windows10.0.17763.0' `
+            -PlatformProperties '<UseWPF>true</UseWPF><RuntimeIdentifier>win-x64</RuntimeIdentifier><EnableWindowsTargeting>true</EnableWindowsTargeting><PublishReadyToRun>false</PublishReadyToRun><EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition><EnableDefaultPageItems>false</EnableDefaultPageItems>' `
+            -ExpectedBackendIdentity '' `
+            -RuntimeIdentifier 'win-x64' `
+            -ConsumerMauiVersion '10.0.110'
     }
 
     if ($Backend -in @('all', 'appkit')) {

@@ -96,6 +96,7 @@ try {
         Push-Location $repo
         try {
             & dotnet test 'platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj' -c Release `
+                -f net10.0-windows10.0.17763.0 `
                 -p:UseMaui=false -p:UseSharedCompilation=false -m:1 -nr:false `
                 --filter 'FullyQualifiedName~HandlerTests.ShellTabNavigationTests.NativeTabEnabled_' `
                 --logger 'trx;LogFileName=enabled.trx' --results-directory $resultDirectory `

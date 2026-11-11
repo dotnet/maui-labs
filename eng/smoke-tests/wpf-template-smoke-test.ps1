@@ -87,11 +87,12 @@ if ($FontScenarios) {
     $backendPackage = Join-Path $packages "Microsoft.Maui.Platforms.Windows.WPF.$PackageVersion.nupkg"
     $mainTargetEntry = 'build/Microsoft.Maui.Platforms.Windows.WPF.targets'
     $fontTargetEntry = 'build/Fonts/Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets'
-    $fontImport = '$(MSBuildThisFileDirectory)Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets'
+    $transitiveTargetEntry = 'buildTransitive/Microsoft.Maui.Platforms.Windows.WPF.targets'
+    $fontImport = '$(MSBuildThisFileDirectory)..\build\Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets'
     $packedTargets = @{}
     $archive = [IO.Compression.ZipFile]::OpenRead($backendPackage)
     try {
-        foreach ($entryPath in @($mainTargetEntry, $fontTargetEntry)) {
+        foreach ($entryPath in @($mainTargetEntry, $fontTargetEntry, $transitiveTargetEntry)) {
             $entry = $archive.GetEntry($entryPath)
             if (!$entry) { throw "The actual backend package is missing $entryPath." }
             $reader = [IO.StreamReader]::new($entry.Open())
@@ -102,20 +103,23 @@ if ($FontScenarios) {
     }
     [xml] $mainTargets = $packedTargets[$mainTargetEntry]
     [xml] $fontTargets = $packedTargets[$fontTargetEntry]
-    $orderedTargets = @($mainTargets.Project.ChildNodes | Where-Object { $_.LocalName -in @('Target', 'Import') } |
-        ForEach-Object {
-            if ($_.LocalName -eq 'Import' -and $_.GetAttribute('Project') -ceq $fontImport) { '_WpfProcessMauiFont' }
-            elseif ($_.LocalName -eq 'Target') { $_.GetAttribute('Name') }
-            else { throw 'The public build entry point has an unexpected import.' }
-        })
-    if (($orderedTargets -join ',') -cne '_WpfProcessMauiIcon,_WpfProcessMauiImage,_WpfProcessMauiFont,_WpfProcessMauiAsset,_WpfProcessMauiSplashScreen' -or
-        @($mainTargets.Project.Import | Where-Object Project -CEQ $fontImport).Count -ne 1) {
-        throw 'The packed umbrella must import the font child in the existing target order.'
+    [xml] $transitiveTargets = $packedTargets[$transitiveTargetEntry]
+    if (@($mainTargets.Project.Import).Count -ne 1 -or
+        $mainTargets.Project.Import.Project -cne '$(MSBuildThisFileDirectory)..\buildTransitive\Microsoft.Maui.Platforms.Windows.WPF.targets' -or
+        $mainTargets.Project.Import.Condition -cne '''$(_MicrosoftMauiPlatformsWindowsWPFBuildTargetsImported)'' != ''true''') {
+        throw 'The public build entry point must import the transitive resource pipeline exactly once.'
     }
-    $importCondition = '''$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)'' != ''true'''
-    if ($mainTargets.Project.Import.Condition -cne $importCondition -or
+    $fontImports = @($transitiveTargets.Project.Import | Where-Object Project -CEQ $fontImport)
+    $importCondition = '''$(_WpfUseLegacyResourcePipeline)'' == ''true'' and ''$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)'' != ''true'''
+    if ($fontImports.Count -ne 1 -or $fontImports[0].Condition -cne $importCondition -or
         $fontTargets.Project.PropertyGroup._MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported -cne 'true') {
-        throw 'The packed font import must prevent duplicate loading without a test-only enable condition.'
+        throw 'The legacy font import must remain packaged, version-gated, and protected against duplicate loading.'
+    }
+    foreach ($name in @('_WpfCollectProcessedMauiResources', '_WpfLegacyProcessMauiImage', '_WpfLegacyProcessMauiAsset',
+        '_WpfProcessMauiIcon', '_WpfProcessMauiSplashScreen')) {
+        if (@($transitiveTargets.SelectNodes("//*[local-name()='Target' and @Name='$name']")).Count -ne 1) {
+            throw "The packed transitive pipeline must preserve target $name exactly once."
+        }
     }
     $fontTarget = @($fontTargets.SelectNodes('//*[local-name()="Target"]'))
     if ($fontTarget.Count -ne 1 -or $fontTarget[0].Name -cne '_WpfProcessMauiFont' -or
@@ -143,10 +147,13 @@ foreach ($id in @('Microsoft.Maui.Platforms.Windows.WPF', 'Microsoft.Maui.Platfo
         throw "$id must use the packed version $PackageVersion, not '$($references[$id])'."
     }
 }
-[xml] $platformProps = Get-Content (Join-Path $platform 'Directory.Build.props') -Raw
-$mauiVersion = [string] ($platformProps.SelectSingleNode('//MauiVersion').InnerText)
+$mauiVersion = (Invoke-MSBuild @($templateProject, '-getProperty:MauiVersion', '-verbosity:quiet', '-nologo') -join "`n").Trim()
 if ($references['Microsoft.Maui.Controls'] -ne $mauiVersion) {
     throw "Microsoft.Maui.Controls must explicitly match the backend's MauiVersion ($mauiVersion)."
+}
+$windowsSdkVersion = (Invoke-MSBuild @($templateProject, '-getProperty:MicrosoftWindowsSdkNetRefVersion', '-verbosity:quiet', '-nologo') -join "`n").Trim()
+if ($projectXml.SelectSingleNode('/Project/PropertyGroup/WindowsSdkPackageVersion').InnerText -cne $windowsSdkVersion) {
+    throw 'The generated consumer must use the same Windows SDK projection version as Essentials.'
 }
 if ((Get-Content $appProject -Raw) -match '__\w+_VERSION__') {
     throw 'The packed template contains unresolved version tokens.'
@@ -209,27 +216,29 @@ foreach ($id in $references.Keys) {
     }
 }
 
-$output = Join-Path $appDirectory "bin\Release\net10.0-windows\$RuntimeIdentifier"
+$targetFramework = $projectXml.SelectSingleNode('/Project/PropertyGroup/TargetFramework').InnerText
+$output = Join-Path $appDirectory "bin\Release\$targetFramework\$RuntimeIdentifier"
 if ($FontScenarios) {
     $installedPackage = Join-Path $work "cache\microsoft.maui.platforms.windows.wpf\$($PackageVersion.ToLowerInvariant())"
-    foreach ($entryPath in @($mainTargetEntry, $fontTargetEntry)) {
+    foreach ($entryPath in @($mainTargetEntry, $fontTargetEntry, $transitiveTargetEntry)) {
         $installed = Join-Path $installedPackage ($entryPath.Replace('/', '\'))
         if (!(Test-Path -LiteralPath $installed) -or (Get-Content $installed -Raw) -cne $packedTargets[$entryPath]) {
             throw "The consumer did not restore the tested package target: $entryPath."
         }
     }
-    $installedFontTarget = Join-Path $installedPackage ($fontTargetEntry.Replace('/', '\'))
+    $installedFontTarget = Join-Path $installedPackage ($transitiveTargetEntry.Replace('/', '\'))
     $preprocessed = Join-Path $work 'font-consumer.xml'
     Invoke-MSBuild -Arguments (@($appProject, '-p:Configuration=Release', "-preprocess:$preprocessed",
         '-verbosity:quiet', '-nologo') + $consumerArguments)
     $consumerImportText = Get-Content $preprocessed -Raw
     [xml] $consumerImports = $consumerImportText
     if ($consumerImportText.IndexOf($installedFontTarget, [StringComparison]::OrdinalIgnoreCase) -lt 0 -or
-        @($consumerImports.SelectNodes('//*[local-name()="Target" and @Name="_WpfProcessMauiFont"]')).Count -ne 1) {
-        throw 'The package consumer must import exactly one WPF font target from its private package cache.'
+        @($consumerImports.SelectNodes('//*[local-name()="Target" and @Name="_WpfCollectProcessedMauiResources"]')).Count -ne 1 -or
+        @($consumerImports.SelectNodes('//*[local-name()="Target" and @Name="_WpfProcessMauiFont"]')).Count -ne 0) {
+        throw 'The .NET 11 consumer must import the processed-resource target exactly once, without the legacy font target.'
     }
     $fontItemJson = Invoke-MSBuild -Arguments (@($appProject, '-p:Configuration=Release',
-        '-target:_WpfProcessMauiFont', '-getProperty:UseMaui', '-getItem:ContentWithTargetPath',
+        '-target:_WpfCollectProcessedMauiResources', '-getProperty:UseMaui', '-getItem:ContentWithTargetPath',
         '-verbosity:quiet', '-nologo') + $consumerArguments)
     $fontItemJson | Set-Content (Join-Path $work 'font-items.json')
     $fontItems = ($fontItemJson -join "`n") | ConvertFrom-Json
@@ -245,7 +254,7 @@ if ($FontScenarios) {
         PackageVersion = $PackageVersion
         PackageSha256 = (Get-FileHash $backendPackage).Hash
         MainTargetEntry = $mainTargetEntry
-        FontTargetEntry = $fontTargetEntry
+        FontTargetEntry = $transitiveTargetEntry
         InstalledFontTarget = $installedFontTarget
         FontTargetSha256 = (Get-FileHash $installedFontTarget).Hash
         UseMaui = $fontItems.Properties.UseMaui
