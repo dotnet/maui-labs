@@ -14,14 +14,26 @@ namespace Microsoft.Maui.AI.Chat;
 public class RichContentBlock : ContentBlock
 {
     private readonly List<string> _segments = new();
+    private readonly List<RichTextNode> _completedParagraphs = new();
     private string? _cachedText;
+    private IReadOnlyList<RichTextNode>? _content;
+    private IReadOnlyList<RichTextNode>? _paragraphs;
+    private int _completedParagraphsEnd;
 
     /// <summary>Gets the complete streamed text accumulated so far.</summary>
     public string RawText => _cachedText ??= string.Concat(_segments);
 
     /// <summary>Gets the current structured projection of <see cref="RawText"/>.</summary>
-    public IReadOnlyList<RichTextNode> Content { get; internal set; } =
-        Array.Empty<RichTextNode>();
+    /// <remarks>
+    /// Unless a provider supplied structured content, this is the text's paragraphs, separated by blank
+    /// lines. They are computed when read, and paragraphs that a later blank line completed are kept
+    /// rather than rebuilt while more text streams in.
+    /// </remarks>
+    public IReadOnlyList<RichTextNode> Content
+    {
+        get => _content ?? (_paragraphs ??= ProjectParagraphs());
+        internal set => _content = value;
+    }
 
     /// <summary>Appends one streaming text segment.</summary>
     public void AppendText(string text)
@@ -29,6 +41,7 @@ public class RichContentBlock : ContentBlock
         ArgumentNullException.ThrowIfNull(text);
         _segments.Add(text);
         _cachedText = null;
+        _paragraphs = null;
     }
 
     /// <summary>Replaces the complete text and structured projection with one provider snapshot.</summary>
@@ -40,6 +53,38 @@ public class RichContentBlock : ContentBlock
         _segments.Clear();
         _segments.Add(text);
         _cachedText = text;
-        Content = content;
+        _content = content;
+        _paragraphs = null;
+        _completedParagraphs.Clear();
+        _completedParagraphsEnd = 0;
+    }
+
+    private IReadOnlyList<RichTextNode> ProjectParagraphs()
+    {
+        var text = RawText;
+
+        // Appending text cannot change paragraphs that end before an earlier blank line.
+        int breakIndex;
+        while ((breakIndex = text.IndexOf("\n\n", _completedParagraphsEnd, StringComparison.Ordinal)) >= 0)
+        {
+            AddParagraph(_completedParagraphs, text.AsSpan(_completedParagraphsEnd, breakIndex - _completedParagraphsEnd));
+            _completedParagraphsEnd = breakIndex + 2;
+        }
+
+        var paragraphs = new List<RichTextNode>(_completedParagraphs.Count + 1);
+        paragraphs.AddRange(_completedParagraphs);
+        AddParagraph(paragraphs, text.AsSpan(_completedParagraphsEnd));
+        return paragraphs.Count == 0 ? Array.Empty<RichTextNode>() : paragraphs;
+    }
+
+    private static void AddParagraph(List<RichTextNode> paragraphs, ReadOnlySpan<char> text)
+    {
+        var trimmed = text.TrimEnd("\r\n".AsSpan());
+        if (trimmed.Length == 0)
+            return;
+
+        var paragraph = new ParagraphNode();
+        paragraph.AddChild(new TextNode(trimmed.ToString()));
+        paragraphs.Add(paragraph);
     }
 }

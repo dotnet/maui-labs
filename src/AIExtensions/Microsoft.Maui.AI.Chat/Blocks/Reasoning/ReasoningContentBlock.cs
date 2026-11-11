@@ -9,8 +9,11 @@ namespace Microsoft.Maui.AI.Chat;
 public class ReasoningContentBlock : ContentBlock
 {
     private readonly StringBuilder _builder = new();
+    private string? _text;
 
-    public string Text => _builder.ToString();
+    public string Text => _text ??= _builder.ToString();
+
+    internal int TextLength => _builder.Length;
 
     public string? ProtectedData { get; set; }
 
@@ -20,5 +23,6 @@ public class ReasoningContentBlock : ContentBlock
     {
         ArgumentNullException.ThrowIfNull(text);
         _builder.Append(text);
+        _text = null;
     }
 }
