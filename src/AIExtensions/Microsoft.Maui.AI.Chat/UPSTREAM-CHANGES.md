@@ -191,6 +191,11 @@ These match upstream so that upstream fixes apply directly:
   first content each block claims). Upstream emits them in handler order, so a complete response, which
   delivers each message as one update, shows a message's tool call before its text, and with #68672's
   media handler a user message with text and an image shows the image first.
+- **Updates without output.** An update with no content other than usage, such as one that only
+  reports a model id, does not complete the active text, rich-text or reasoning block. Upstream
+  completes the block on any update without its content, so such an update in the middle of a message
+  split it into two blocks with the same id, and the encrypted content that follows an OpenAI Responses
+  reasoning summary after empty updates became a separate block.
 - **`ContentBlock.Id` has a public setter** so blocks defined outside the engine can be given ids, and
   **`ContentBlock.CreatedAt`** records when a block was created. Upstream's `Id` setter is internal.
 - **`TextContentBlock`** marks plain streamed text so a renderer can tell it from a provider's rich

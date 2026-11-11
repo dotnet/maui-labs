@@ -24,12 +24,10 @@ internal sealed class TextBlockHandler : ContentBlockHandler<TextContentBlock>
 
         if (textContent is null)
         {
-            if (state.Id != string.Empty)
-            {
-                return BlockMappingResult<TextContentBlock>.Complete();
-            }
-
-            return BlockMappingResult<TextContentBlock>.Pass();
+            // Other output ends the text; an update without output, such as metadata, does not.
+            return state.Id != string.Empty && context.HasOutput
+                ? BlockMappingResult<TextContentBlock>.Complete()
+                : BlockMappingResult<TextContentBlock>.Pass();
         }
 
         // Each message gets its own block, for example consecutive restored assistant messages.
