@@ -5,12 +5,12 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>Renders Markdown, or an already-parsed rich-text document, as native MAUI views.</summary>
 /// <remarks>
-/// Built for streaming: each update keeps the views of leading top-level blocks that are
-/// structurally unchanged and rebuilds only from the first block that differs, so a growing
-/// answer only re-renders its tail. Nodes passed to <see cref="SetDocument"/> must not be
-/// mutated afterwards (the top-level list itself is copied). Members are UI-thread affine.
-/// The look comes from the chat theme (<see cref="AIChatThemeKeys"/>); the first and last blocks
-/// have no outer margin, so the text lines up with the cards and rows around it.
+/// Built for streaming: each update keeps the views of unchanged blocks and changes the views of a
+/// block that grew in place (see <see cref="MarkdownRenderer"/>), so a growing answer costs work in
+/// proportion to what changed. Nodes passed to <see cref="SetDocument"/> must not be mutated
+/// afterwards (the top-level list itself is copied). Members are UI-thread affine. The look comes
+/// from the chat theme (<see cref="AIChatThemeKeys"/>); the first and last blocks have no outer
+/// margin, so the text lines up with the cards and rows around it.
 /// </remarks>
 internal sealed class MarkdownView : ContentView
 {
@@ -31,8 +31,10 @@ internal sealed class MarkdownView : ContentView
     private readonly bool _themed = ChatElements.EnsureTheme();
     private readonly VerticalStackLayout _blocks;
     private readonly MarkdownRenderer _renderer;
+    private readonly List<MarkdownRenderer.Rendering> _renderings = new();
     private readonly List<View?> _blockViews = new();
     private readonly List<Thickness> _blockMargins = new();
+    private readonly List<View> _shownBlocks = new();
     private IReadOnlyList<RichTextNode> _document = Array.Empty<RichTextNode>();
     private string? _markdown;
 
@@ -117,39 +119,60 @@ internal sealed class MarkdownView : ContentView
 
     private void Render(IReadOnlyList<RichTextNode> document)
     {
-        // A changed reference definition can restyle any earlier block, so start over then.
-        var keep = 0;
-        if (_renderer.UpdateDefinitions(document))
+        // A changed reference definition can restyle any block, so start over then.
+        if (!_renderer.UpdateDefinitions(document))
+            Clear();
+
+        for (var i = 0; i < document.Count; i++)
         {
-            var count = Math.Min(_document.Count, document.Count);
-            while (keep < count && RichTextNodeComparer.AreEqual(_document[keep], document[keep]))
-                keep++;
+            if (i == _renderings.Count)
+            {
+                var rendering = _renderer.Render(document[i]);
+                _renderings.Add(rendering);
+                _blockViews.Add(rendering.View);
+                _blockMargins.Add(rendering.View?.Margin ?? default);
+                continue;
+            }
+
+            _renderings[i] = _renderings[i].Update(document[i]);
+            var view = _renderings[i].View;
+            if (ReferenceEquals(view, _blockViews[i]))
+                continue;
+
+            // The old view can live on inside the new one (a paragraph that gains an image stacks its text above
+            // it), so it gets back the margin it had before the outer margins were trimmed.
+            if (_blockViews[i] is { } previous)
+                previous.Margin = _blockMargins[i];
+            _blockViews[i] = view;
+            _blockMargins[i] = view?.Margin ?? default;
         }
 
-        RemoveBlocksFrom(keep);
-        for (var i = keep; i < document.Count; i++)
+        if (_renderings.Count > document.Count)
         {
-            var view = _renderer.RenderBlock(document[i]);
-            _blockViews.Add(view);
-            _blockMargins.Add(view?.Margin ?? default);
+            var extra = _renderings.Count - document.Count;
+            _renderings.RemoveRange(document.Count, extra);
+            _blockViews.RemoveRange(document.Count, extra);
+            _blockMargins.RemoveRange(document.Count, extra);
+        }
+
+        _shownBlocks.Clear();
+        foreach (var view in _blockViews)
+        {
             if (view is not null)
-                _blocks.Children.Add(view);
+                _shownBlocks.Add(view);
         }
 
+        MarkdownRenderer.SyncChildren(_blocks, _shownBlocks);
         _document = document;
         TrimOuterMargins();
     }
 
-    private void RemoveBlocksFrom(int index)
+    private void Clear()
     {
-        for (var i = _blockViews.Count - 1; i >= index; i--)
-        {
-            // Block views are appended in document order, so the trailing ones come off the end.
-            if (_blockViews[i] is not null)
-                _blocks.Children.RemoveAt(_blocks.Children.Count - 1);
-            _blockViews.RemoveAt(i);
-            _blockMargins.RemoveAt(i);
-        }
+        _renderings.Clear();
+        _blockViews.Clear();
+        _blockMargins.Clear();
+        _blocks.Clear();
     }
 
     // Space above a heading or around a rule separates it from its neighbours, but on the first or last block it
@@ -177,9 +200,7 @@ internal sealed class MarkdownView : ContentView
     {
         _renderer.FontSize = FontSize;
         _renderer.CodeFontSize = CodeFontSize;
-        var document = _document;
-        RemoveBlocksFrom(0);
-        _document = Array.Empty<RichTextNode>();
-        Render(document);
+        Clear();
+        Render(_document);
     }
 }

@@ -8,6 +8,7 @@ using Markdig;
 using Markdig.Extensions.EmphasisExtras;
 using Markdig.Extensions.Tables;
 using Markdig.Extensions.TaskLists;
+using Markdig.Parsers;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 
@@ -25,14 +26,15 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </remarks>
 internal static class MarkdownRichTextParser
 {
-    private static readonly MarkdownPipeline s_pipeline = new MarkdownPipelineBuilder()
-        .UsePipeTables()
-        .UseTaskLists()
-        .UseAutoLinks()
-        .UseEmphasisExtras(EmphasisExtraOptions.Strikethrough)
-        .UseSoftlineBreakAsHardlineBreak()
-        .DisableHtml()
-        .Build();
+    /// <summary>
+    /// The most emphasis and link markers (<c>*</c>, <c>_</c>, <c>~</c>, <c>[</c>) a paragraph or heading has and is
+    /// still parsed for formatting. Inline parsing takes time quadratic in them (48 KB of <c>*a</c> takes most of a
+    /// second) and a streaming answer is parsed again on every update; no real answer comes near this. Past it, the
+    /// block keeps its text, unformatted.
+    /// </summary>
+    internal const int MaxInlineMarkers = 1000;
+
+    private static readonly MarkdownPipeline s_pipeline = CreatePipeline();
 
     /// <summary>Parses <paramref name="markdown"/> into top-level block nodes. Never throws.</summary>
     internal static IReadOnlyList<RichTextNode> Parse(string markdown)
@@ -62,6 +64,42 @@ internal static class MarkdownRichTextParser
         var document = new DocumentNode();
         AddBlocks(document, Markdown.Parse(markdown, s_pipeline), markdown);
         return document.Children;
+    }
+
+    private static MarkdownPipeline CreatePipeline()
+    {
+        var builder = new MarkdownPipelineBuilder()
+            .UsePipeTables()
+            .UseTaskLists()
+            .UseAutoLinks()
+            .UseEmphasisExtras(EmphasisExtraOptions.Strikethrough)
+            .UseSoftlineBreakAsHardlineBreak()
+            .DisableHtml();
+
+        // Blocks close before any inlines are parsed, so this decides which blocks are parsed for formatting.
+        builder.BlockParsers.Find<ParagraphBlockParser>()!.Closed += LimitInlineParsing;
+        builder.BlockParsers.Find<HeadingBlockParser>()!.Closed += LimitInlineParsing;
+        return builder.Build();
+    }
+
+    private static void LimitInlineParsing(BlockProcessor processor, Block block)
+    {
+        if (block is not LeafBlock leaf)
+            return;
+
+        var markers = 0;
+        var lines = leaf.Lines;
+        for (var i = 0; i < lines.Count; i++)
+        {
+            foreach (var c in lines.Lines[i].Slice.AsSpan())
+            {
+                if (c is '*' or '_' or '~' or '[' && ++markers > MaxInlineMarkers)
+                {
+                    leaf.ProcessInlines = false;
+                    return;
+                }
+            }
+        }
     }
 
     // ── Blocks ──────────────────────────────────────────────────────────
@@ -109,9 +147,15 @@ internal static class MarkdownRichTextParser
         }
     }
 
-    // An inline without a mapping shows the block's source instead, so no text is lost.
-    private static RichTextNode MapLeaf(RichTextNode node, LeafBlock leaf, string source) =>
-        AddInlines(node, leaf.Inline) ? node : CreateLiteral(GetSource(leaf, source));
+    // An inline without a mapping shows the block's source instead, so no text is lost. A block with too many
+    // markers to parse for formatting (see LimitInlineParsing) shows its text as written.
+    private static RichTextNode MapLeaf(RichTextNode node, LeafBlock leaf, string source)
+    {
+        if (!leaf.ProcessInlines)
+            return AddLiteral(node, leaf.Lines.ToString());
+
+        return AddInlines(node, leaf.Inline) ? node : CreateLiteral(GetSource(leaf, source));
+    }
 
     private static ListNode MapList(ListBlock list, string source)
     {
@@ -296,19 +340,21 @@ internal static class MarkdownRichTextParser
     }
 
     // A paragraph that shows text verbatim, with a LineBreakNode for every newline.
-    private static ParagraphNode CreateLiteral(string text)
+    private static ParagraphNode CreateLiteral(string text) => AddLiteral(new ParagraphNode(), text);
+
+    private static T AddLiteral<T>(T node, string text)
+        where T : RichTextNode
     {
-        var paragraph = new ParagraphNode();
         var lines = text.ReplaceLineEndings("\n").Split('\n');
         for (var i = 0; i < lines.Length; i++)
         {
             if (i > 0)
-                paragraph.AddChild(new LineBreakNode());
+                node.AddChild(new LineBreakNode());
             if (lines[i].Length > 0)
-                paragraph.AddChild(new TextNode(lines[i]));
+                node.AddChild(new TextNode(lines[i]));
         }
 
-        return paragraph;
+        return node;
     }
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
