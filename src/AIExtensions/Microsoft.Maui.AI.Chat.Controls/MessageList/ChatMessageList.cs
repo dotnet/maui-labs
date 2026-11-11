@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Runtime.CompilerServices;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
@@ -20,10 +19,6 @@ internal sealed class ChatMessageList : CollectionView
     // and how far back that moves it at most: further is the reader scrolling back.
     private static readonly TimeSpan SettleTime = TimeSpan.FromMilliseconds(500);
     private const double SettleDrift = 64;
-
-    // Turns that failed. The engine commits nothing for a failed turn and forgets the failure once another message
-    // is sent, so the view keeps it, for as long as the turn lives.
-    private static readonly ConditionalWeakTable<ConversationTurn, object> FailedTurns = new();
 
     private readonly bool _themed = ChatElements.EnsureTheme();
     private readonly AIChatView _owner;
@@ -95,11 +90,8 @@ internal sealed class ChatMessageList : CollectionView
             _sessionSubscriptions.Add(session.RegisterOnTurnAdded(_ => Invalidate()));
             _sessionSubscriptions.Add(session.RegisterOnStatusChanged(_ => OnStatusChanged()));
             _sessionSubscriptions.Add(session.RegisterOnBlockAdded((_, _) => Invalidate()));
-            _sessionSubscriptions.Add(session.RegisterOnResponseBlocksCleared(OnResponseBlocksCleared));
+            _sessionSubscriptions.Add(session.RegisterOnResponseBlocksCleared(_ => Invalidate()));
         }
-
-        // The session may have failed while nothing observed it.
-        RememberFailedTurn();
 
         // Rows kept from before the list was detached missed every change made in the meantime.
         _dirtyRows.UnionWith(_rows);
@@ -263,28 +255,7 @@ internal sealed class ChatMessageList : CollectionView
             return;
         }
 
-        // Remember a failure now: by the next flush another message may already have been sent.
-        RememberFailedTurn();
         _statusChanged = true;
-        Invalidate();
-    }
-
-    private void RememberFailedTurn()
-    {
-        if (_session is { Status: ConversationStatus.Error, Turns: [.., var failed] })
-            FailedTurns.AddOrUpdate(failed, failed);
-    }
-
-    private void OnResponseBlocksCleared(ConversationTurn turn)
-    {
-        if (this.GetDispatcherIfRequired() is { } owner)
-        {
-            owner.Dispatch(() => OnResponseBlocksCleared(turn));
-            return;
-        }
-
-        // A retry sends the turn again.
-        FailedTurns.Remove(turn);
         Invalidate();
     }
 
@@ -341,10 +312,9 @@ internal sealed class ChatMessageList : CollectionView
                     desired.Add(_thinkingRow);
                 }
 
-                var failed = FailedTurns.TryGetValue(turn, out _);
-                if (isLast && status == ConversationStatus.Error)
+                var failed = turn.IsFailed;
+                if (failed && isLast && status == ConversationStatus.Error)
                 {
-                    failed = true;
                     desired.Add(GetRow(_errorRows, turn, () => new TurnErrorRow(turn, session)));
                 }
                 else if (failed)

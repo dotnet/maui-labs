@@ -198,6 +198,57 @@ public class MessageListTests
     });
 
     [Fact]
+    public void FailedTurn_WhenAnAppCallbackSendsTheNextMessage_IsMarkedNotSent() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Fail(new InvalidOperationException("model offline")).Reply("Hello");
+        var session = ChatHost.Session(client);
+
+        // Registered before the view, so it sends the queued message before the view hears of the failure.
+        Task? queued = null;
+        session.RegisterOnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.Error && queued is null)
+                queued = session.SendMessageAsync("Queued");
+        });
+        var view = ChatHost.Create(session, v =>
+            v.ResponseFooterTemplate = new DataTemplate(() => new Label { AutomationId = "Footer" }));
+
+        await SendAsync(view, "Hi");
+        Assert.NotNull(queued);
+        await queued;
+        await UIThread.Until(() => view.Rows().OfType<TurnFooterRow>().Any());
+
+        var turns = session.Turns;
+        Assert.Collection(
+            view.Rows(),
+            row => Assert.Same(turns[0], Assert.IsType<UserMessageRow>(row).Turn),
+            row => Assert.Same(turns[0], Assert.IsType<TurnNotSentRow>(row).Turn),
+            row => Assert.Same(turns[1], Assert.IsType<UserMessageRow>(row).Turn),
+            row => Assert.Equal("Hello", ((TextContentBlock)Assert.IsType<BlockRow>(row).Block).RawText),
+            row => Assert.Same(turns[1], Assert.IsType<TurnFooterRow>(row).Turn));
+    });
+
+    [Fact]
+    public void TurnRetriedWhileTheViewWasUnloaded_IsNotMarkedNotSent() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Fail(new InvalidOperationException("model offline")).Reply("Recovered");
+        var view = ChatHost.Create(ChatHost.Session(client));
+        await SendAsync(view, "Hi");
+        Assert.IsType<TurnErrorRow>(view.Rows()[^1]);
+
+        var page = (ContentPage)view.Parent;
+        page.Content = null;
+        await view.Session!.RetryAsync();
+        page.Content = view;
+        await UIThread.Until(() => view.Rows().OfType<BlockRow>().Any());
+
+        Assert.Collection(
+            view.Rows(),
+            row => Assert.IsType<UserMessageRow>(row),
+            row => Assert.Equal("Recovered", ((TextContentBlock)Assert.IsType<BlockRow>(row).Block).RawText));
+    });
+
+    [Fact]
     public void RetriedTurn_IsNotMarkedNotSent() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient().Fail(new InvalidOperationException("model offline")).Reply("Recovered").Reply("Again");
