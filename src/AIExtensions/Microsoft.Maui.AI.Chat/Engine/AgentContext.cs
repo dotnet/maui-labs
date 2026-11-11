@@ -385,16 +385,20 @@ public sealed class AgentContext : IDisposable
                 if (humanInputBlocks.Count == 0 && uiActionBlocks.Count == 0)
                     break;
 
-                var resultTasks = new List<Task<AIContent>>();
+                var resultTasks = new List<Task<AIContent[]>>();
 
                 foreach (var uiAction in uiActionBlocks)
                 {
                     _ = uiAction.InvokeAsync(cancellationToken);
-                    resultTasks.Add(uiAction.GetResultAsync(cancellationToken));
+                    resultTasks.Add(GetResultAsync(uiAction, cancellationToken));
                 }
 
                 foreach (var interactive in humanInputBlocks)
-                    resultTasks.Add(interactive.GetResultAsync(cancellationToken));
+                {
+                    resultTasks.Add(interactive is ToolApprovalBlock { UIAction: { } action } approval
+                        ? RunApprovedUIActionAsync(approval, action, interactiveBlocks, cancellationToken)
+                        : GetResultAsync(interactive, cancellationToken));
+                }
 
                 if (humanInputBlocks.Count > 0)
                 {
@@ -402,7 +406,9 @@ public sealed class AgentContext : IDisposable
                     NotifyStatusChanged();
                 }
 
-                var results = await Task.WhenAll(resultTasks);
+                var results = (await Task.WhenAll(resultTasks))
+                    .SelectMany(static contents => contents)
+                    .ToArray();
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (results.Length > 0)
@@ -477,6 +483,38 @@ public sealed class AgentContext : IDisposable
             Fail(message, ex);
             return AttemptOutcome.Failed;
         }
+    }
+
+    private static async Task<AIContent[]> GetResultAsync(
+        IInteractiveBlock interactive,
+        CancellationToken cancellationToken)
+        => [await interactive.GetResultAsync(cancellationToken)];
+
+    /// <summary>
+    /// Waits for the decision on a UI action that needs approval and runs the action once it is approved.
+    /// The approval is the action's UI step, so a manual action runs on approval too.
+    /// </summary>
+    /// <returns>The approval response, followed by the action's result when it was approved.</returns>
+    /// <remarks>
+    /// <see cref="FunctionInvokingChatClient"/> cannot invoke a UI action, so the client answers the
+    /// approved call with the action's result. A rejection is answered by the approval response alone.
+    /// </remarks>
+    private static async Task<AIContent[]> RunApprovedUIActionAsync(
+        ToolApprovalBlock approval,
+        UIActionBlock action,
+        List<IInteractiveBlock> interactiveBlocks,
+        CancellationToken cancellationToken)
+    {
+        var response = await approval.GetResultAsync(cancellationToken);
+        if (response is not ToolApprovalResponseContent { Approved: true })
+            return [response];
+
+        interactiveBlocks.Add(action);
+        _ = action.InvokeAsync(cancellationToken);
+        var result = await action.GetResultAsync(cancellationToken);
+        approval.InnerBlock.InvokeNotifyChanged();
+        approval.InvokeNotifyChanged();
+        return [response, result];
     }
 
     private AttemptOutcome EndCanceledAttempt(

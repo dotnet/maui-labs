@@ -54,7 +54,11 @@ Actions that must run in the app, such as reading the current location or asking
 something, are registered with `options.RegisterUIAction(function, mode)`. `Automatic` actions are
 invoked by the engine on the caller's thread; `Manual` actions wait until the app calls
 `UIActionBlock.InvokeAsync()`. An action that throws sends an error result to the model instead of
-failing the turn.
+failing the turn. A UI action requested together with a tool that needs approval still runs as a UI
+action. A UI action wrapped in `ApprovalRequiredAIFunction` needs `FunctionInvokingChatClient` too
+(sending throws without it, because nothing would ask for the approval). It shows a
+`ToolApprovalBlock` and runs once approved, whatever its mode; edit the approval's `Call.Arguments`
+before approving to supply input.
 
 ## Features
 

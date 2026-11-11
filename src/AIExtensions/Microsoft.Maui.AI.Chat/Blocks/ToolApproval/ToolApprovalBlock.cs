@@ -33,6 +33,11 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
 
     public ToolApprovalRequestContent ApprovalRequest { get; }
 
+    /// <summary>
+    /// Gets the registered UI action the approval is for, which the client runs once the call is approved.
+    /// </summary>
+    internal UIActionBlock? UIAction { get; init; }
+
     public void Approve()
     {
         Resolve(ApprovalStatus.Approved, approved: true, reason: null);

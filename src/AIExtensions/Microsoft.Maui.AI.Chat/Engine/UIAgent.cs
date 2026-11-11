@@ -146,9 +146,9 @@ public class UIAgent : IDisposable
             turn.AddRequest(requestMessage);
 
         var conversationId = GetConversationId(_options.Thread, turn);
-        ChatMessage[] request = conversationId is not null
+        var request = SendAnsweredUIActionsAsCalls(conversationId is not null
             ? requestMessages
-            : [.. _history, .. turn.Messages];
+            : [.. _history, .. turn.Messages]);
 
         var pipeline = new BlockMappingPipeline(_options, _logger, turn.Calls);
         try
@@ -534,31 +534,42 @@ public class UIAgent : IDisposable
     }
 
     /// <summary>
-    /// Throws when the configured tools include an invocable <see cref="AIFunction"/> but no
-    /// <see cref="FunctionInvokingChatClient"/> is present to invoke it.
+    /// Throws when the configured tools include an invocable <see cref="AIFunction"/>, or a UI action
+    /// that requires approval, but no <see cref="FunctionInvokingChatClient"/> is present to invoke the
+    /// tool or to request the approval.
     /// </summary>
     internal void ThrowIfToolsCannotBeInvoked()
     {
-        var tools = _options.ChatOptions?.Tools;
-        if (tools is null)
-            return;
-
-        foreach (var tool in tools)
+        bool? hasFunctionInvocation = null;
+        foreach (var tool in _options.ChatOptions?.Tools ?? [])
         {
-            if (tool is AIFunction function && !_options.UIActions.ContainsKey(function.Name))
+            if (tool is AIFunction function
+                && !_options.UIActions.ContainsKey(function.Name)
+                && !HasFunctionInvocation())
             {
-                if (_chatClient.GetService<FunctionInvokingChatClient>() is null)
-                {
-                    throw new InvalidOperationException(
-                        $"ChatOptions.Tools contains the invocable function '{function.Name}', but the chat " +
-                        "client has no function invocation. Build the client with " +
-                        "'.AsBuilder().UseFunctionInvocation().Build()' so tools are invoked, or register " +
-                        "client-side functions with UIAgentOptions.RegisterUIAction.");
-                }
-
-                return;
+                throw new InvalidOperationException(
+                    $"ChatOptions.Tools contains the invocable function '{function.Name}', but the chat " +
+                    "client has no function invocation. Build the client with " +
+                    "'.AsBuilder().UseFunctionInvocation().Build()' so tools are invoked, or register " +
+                    "client-side functions with UIAgentOptions.RegisterUIAction.");
             }
         }
+
+        foreach (var registration in _options.UIActions.Values)
+        {
+            // Without the function invoking client nothing asks for the approval, so the action would
+            // run without it.
+            if (registration.RequiresApproval && !HasFunctionInvocation())
+            {
+                throw new InvalidOperationException(
+                    $"The UI action '{registration.Function.Name}' requires approval, but the chat client has " +
+                    "no function invocation to request it. Build the client with " +
+                    "'.AsBuilder().UseFunctionInvocation().Build()'.");
+            }
+        }
+
+        bool HasFunctionInvocation()
+            => hasFunctionInvocation ??= _chatClient.GetService<FunctionInvokingChatClient>() is not null;
     }
 
     /// <summary>Creates the error result returned to the model for a call nobody executed.</summary>
@@ -627,6 +638,86 @@ public class UIAgent : IDisposable
         var clone = message.Clone();
         clone.MessageId = Guid.NewGuid().ToString("N");
         return clone;
+    }
+
+    /// <summary>
+    /// Sends the approval requests that <see cref="FunctionInvokingChatClient"/> created for UI actions as
+    /// the calls they carry once the client has answered them, and leaves out their approval responses.
+    /// </summary>
+    /// <remarks>
+    /// When one call of a response needs approval, the function invoking client turns every call of the
+    /// response into an approval request, UI actions included. It cannot invoke a UI action, so the client
+    /// runs the action and sends its result. The function invoking client would remove such a request and
+    /// skip its response because the call already has a result, so without this the result would reach
+    /// the model without its call. A call that the function invoking client answered itself, such as a
+    /// rejected one, is already in the messages as a call and keeps its request.
+    /// </remarks>
+    private ChatMessage[] SendAnsweredUIActionsAsCalls(ChatMessage[] messages)
+    {
+        if (_options.UIActions.Count == 0)
+            return messages;
+
+        HashSet<string>? answered = null;
+        HashSet<string>? calls = null;
+        foreach (var message in messages)
+        {
+            foreach (var content in message.Contents)
+            {
+                if (content is FunctionResultContent result)
+                    (answered ??= new(StringComparer.Ordinal)).Add(result.CallId);
+                else if (content is FunctionCallContent call)
+                    (calls ??= new(StringComparer.Ordinal)).Add(call.CallId);
+            }
+        }
+
+        if (answered is null)
+            return messages;
+
+        List<ChatMessage>? rewritten = null;
+        for (var i = 0; i < messages.Length; i++)
+        {
+            var message = messages[i];
+            List<AIContent>? contents = null;
+            for (var j = 0; j < message.Contents.Count; j++)
+            {
+                var content = message.Contents[j];
+                var replacement = content switch
+                {
+                    ToolApprovalRequestContent { ToolCall: FunctionCallContent call }
+                        when IsAnsweredUIAction(call) => call,
+                    ToolApprovalResponseContent { ToolCall: FunctionCallContent call }
+                        when IsAnsweredUIAction(call) => null,
+                    _ => content,
+                };
+                if (contents is null && ReferenceEquals(replacement, content))
+                    continue;
+
+                contents ??= [.. message.Contents.Take(j)];
+                if (replacement is not null)
+                    contents.Add(replacement);
+            }
+
+            if (contents is null)
+            {
+                rewritten?.Add(message);
+                continue;
+            }
+
+            rewritten ??= [.. messages.Take(i)];
+            if (contents.Count > 0)
+            {
+                var clone = message.Clone();
+                clone.Contents = contents;
+                rewritten.Add(clone);
+            }
+        }
+
+        return rewritten is null ? messages : [.. rewritten];
+
+        bool IsAnsweredUIAction(FunctionCallContent call)
+            => answered.Contains(call.CallId)
+                && calls?.Contains(call.CallId) != true
+                && _options.UIActions.ContainsKey(call.Name);
     }
 
     internal static ChatResponseUpdate CreateMessageUpdate(

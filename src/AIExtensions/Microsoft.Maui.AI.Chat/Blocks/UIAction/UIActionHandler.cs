@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -47,14 +48,10 @@ internal sealed class UIActionHandler
 
         foreach (var content in context.UnhandledContents)
         {
-            if (content is not FunctionCallContent call
-                || call.InformationalOnly
-                || !_actions.TryGetValue(call.Name, out var registration))
-            {
+            if (!TryGetActionCall(content, out var call, out var registration))
                 continue;
-            }
 
-            context.MarkHandled(call);
+            context.MarkHandled(content);
             var innerBlock = new FunctionInvocationContentBlock { Call = call };
             var block = new UIActionBlock(
                 registration.Function,
@@ -80,6 +77,37 @@ internal sealed class UIActionHandler
         }
 
         return BlockMappingResult<UIActionHandlerState>.Pass();
+    }
+
+    /// <summary>Gets the call to a registered UI action that a content item asks to run.</summary>
+    /// <remarks>
+    /// When one call of a response needs approval, <see cref="FunctionInvokingChatClient"/> turns every
+    /// call of the response into an approval request. It cannot invoke a UI action, so a UI action that
+    /// does not need approval itself runs as a UI action. One that does is left to the approval handler.
+    /// </remarks>
+    private bool TryGetActionCall(
+        AIContent content,
+        [NotNullWhen(true)] out FunctionCallContent? call,
+        [NotNullWhen(true)] out UIAgentOptions.UIActionRegistration? registration)
+    {
+        call = content switch
+        {
+            FunctionCallContent functionCall => functionCall,
+            ToolApprovalRequestContent { ToolCall: FunctionCallContent functionCall } => functionCall,
+            _ => null,
+        };
+        registration = null;
+        if (call is null
+            || call.InformationalOnly
+            || !_actions.TryGetValue(call.Name, out registration)
+            || (content is ToolApprovalRequestContent && registration.RequiresApproval))
+        {
+            call = null;
+            registration = null;
+            return false;
+        }
+
+        return true;
     }
 
     internal sealed class UIActionHandlerState

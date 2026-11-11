@@ -131,7 +131,8 @@ These match upstream so that upstream fixes apply directly:
 
 - **Server tools need `FunctionInvokingChatClient`,** as upstream. Upstream silently never runs a tool
   when it is missing; here `SendMessageAsync` throws `InvalidOperationException` when `ChatOptions.Tools`
-  contains an invocable `AIFunction` and the client pipeline has no `FunctionInvokingChatClient`.
+  contains an invocable `AIFunction`, or a registered UI action is an `ApprovalRequiredAIFunction`, and
+  the client pipeline has no `FunctionInvokingChatClient` (which is what asks for approvals).
 - **Calls left unanswered in a continuation round** get an error result. When one call of a batch
   targets a UI action, `FunctionInvokingChatClient` hands the whole batch back, and providers reject a
   continuation that leaves a call without a result.
@@ -145,11 +146,22 @@ These match upstream so that upstream fixes apply directly:
   (`ConversationStatus.AwaitingInput`). Upstream always leaves invocation to the renderer. A UI action
   that throws returns an error result to the model instead of failing the turn, and
   `UIAgentOptions.Services` is passed to it as `AIFunctionArguments.Services`.
+- **UI actions in an approval batch.** When one call of a response needs approval,
+  `FunctionInvokingChatClient` turns every call of that response into an approval request, UI actions
+  included, and it cannot invoke a UI action because UI actions are sent as declarations. A UI action
+  that does not need approval is therefore shown and run as a `UIActionBlock` (automatic or manual as
+  registered). A UI action that is an `ApprovalRequiredAIFunction` keeps its approval card and runs once
+  approved; the approval is its UI step, so a manual one runs on approval too. The client answers such
+  a call with the action's result and sends its approval request as the plain call it carries, without
+  an approval response: `FunctionInvokingChatClient` removes approval requests and skips responses
+  whose call already has a result, so the result would otherwise reach the model without its call. A
+  rejected UI action is answered by the approval response alone, and `FunctionInvokingChatClient`
+  returns the rejection. Upstream nests the UI action's block in the approval and answers only with
+  the approval response, which `FunctionInvokingChatClient` cannot carry out for a declaration.
 - **`InteractiveFunctionBlock`.** `ToolApprovalBlock` and `UIActionBlock` both wrap an inner
-  `FunctionInvocationContentBlock` that carries the call and result. Upstream's
-  `FunctionApprovalBlock.InnerBlock` is a `ContentBlock` and its `UIActionBlock` has no inner block, so
-  an approval can wrap a UI action there. That nesting is not ported: `FunctionInvokingChatClient` only
-  asks approval for `ApprovalRequiredAIFunction`s, and UI actions are sent as declarations.
+  `FunctionInvocationContentBlock` that carries the call and result; an approval for a UI action shares
+  the action's inner block. Upstream's `FunctionApprovalBlock.InnerBlock` is a `ContentBlock` and its
+  `UIActionBlock` has no inner block.
 - **Same-update call and result.** Handlers here complete a block whose result arrives in the same
   update (`IsAlreadyComplete`); upstream re-invokes the handler after emitting a function block. The
   outcome is the same.

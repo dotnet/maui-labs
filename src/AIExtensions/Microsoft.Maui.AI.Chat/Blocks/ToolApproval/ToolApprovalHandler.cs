@@ -28,21 +28,37 @@ internal sealed class ToolApprovalHandler : ContentBlockHandler<ToolApprovalHand
 
             context.MarkHandled(approvalRequest);
 
-            // Delegate the inner FunctionCallContent to produce a typed block
-            var innerBlock = context.CreateInnerBlock(approvalRequest.ToolCall)
-                as FunctionInvocationContentBlock
-                ?? CreateFallbackInnerBlock(approvalRequest.ToolCall);
+            // Delegate the inner FunctionCallContent to produce a typed block. A registered UI action
+            // that needs approval is run by the client once approved, because
+            // FunctionInvokingChatClient cannot invoke it.
+            var created = context.CreateInnerBlock(approvalRequest.ToolCall);
+            var action = created as UIActionBlock;
+            var innerBlock = action is not null
+                ? CreateActionInnerBlock(action)
+                : created as FunctionInvocationContentBlock
+                    ?? CreateFallbackInnerBlock(approvalRequest.ToolCall);
 
             state.Emitted = true;
             return BlockMappingResult<ApprovalHandlerState>.Emit(
                 new ToolApprovalBlock(innerBlock, approvalRequest)
                 {
                     Id = GetBlockId(approvalRequest, innerBlock),
+                    UIAction = action,
                 },
                 state);
         }
 
         return BlockMappingResult<ApprovalHandlerState>.Pass();
+    }
+
+    private static FunctionInvocationContentBlock CreateActionInnerBlock(UIActionBlock action)
+    {
+        var innerBlock = action.InnerBlock;
+        innerBlock.Role = action.Role;
+        innerBlock.AuthorName = action.AuthorName;
+        innerBlock.CreatedAt = action.CreatedAt;
+        innerBlock.LifecycleState = BlockLifecycleState.Inactive;
+        return innerBlock;
     }
 
     private static FunctionInvocationContentBlock CreateFallbackInnerBlock(ToolCallContent toolCall)
