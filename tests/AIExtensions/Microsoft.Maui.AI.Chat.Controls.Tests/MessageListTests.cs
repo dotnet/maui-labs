@@ -427,6 +427,59 @@ public class MessageListTests
     });
 
     [Fact]
+    public void ReloadingTheView_ShowsWhatChangedWhileItWasUnloaded() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(
+            new BlockTemplate { BlockType = typeof(TextContentBlock), Role = "assistant", ViewType = typeof(CountingBlockView) }));
+
+        view.Text = "Weather?";
+        var send = view.SendAsync();
+        stream.Content(new FunctionCallContent("c1", "get_weather"));
+        stream.Text("Checking");
+        await UIThread.Until(() => view.Rows().Any(row => row is BlockRow { Block: TextContentBlock }));
+
+        var textRow = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is TextContentBlock);
+        var text = Assert.IsType<CountingBlockView>(((BlockHost)view.Realize(textRow)).HostedView);
+        var toolRow = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is FunctionInvocationContentBlock);
+        var card = Assert.IsType<ToolCallView>(((BlockHost)view.Realize(toolRow)).HostedView);
+        Assert.Equal("Running\u2026", card.StatusLabel.Text);
+        var renders = text.ChangeCount;
+
+        // The response streams on and ends while the view is away (another tab, a pushed page).
+        ChatHost.Unload(view);
+        stream.Text(" the forecast");
+        stream.Complete();
+        await send;
+
+        ChatHost.Load(view);
+
+        Assert.Equal("Checking the forecast", ((TextContentBlock)textRow.Block).RawText);
+        Assert.Same(textRow, view.Rows().OfType<BlockRow>().Single(row => row.Block is TextContentBlock));
+        Assert.True(text.ChangeCount > renders);
+        Assert.Equal("Not completed", card.StatusLabel.Text);
+    });
+
+    [Fact]
+    public void ChangingTemplatesWhileUnloaded_DoesNotObserveTheSession() => UIThread.Run(async () =>
+    {
+        var view = ChatHost.Create(ChatHost.Session(new ScriptedChatClient().Reply("Hello")));
+        await SendAsync(view, "Hi");
+        ChatHost.Unload(view);
+
+        view.ResponseFooterTemplate = new DataTemplate(() => new Label());
+        view.ContentTemplates = [new BlockTemplate { BlockType = typeof(TextContentBlock), Role = "assistant", ViewType = typeof(CountingBlockView) }];
+
+        Assert.Equal(0, view.MessageList.SubscriptionCount);
+
+        ChatHost.Load(view);
+        Assert.True(view.MessageList.SubscriptionCount > 0);
+        Assert.IsType<CountingBlockView>(((BlockHost)view.Realize(view.Rows()[1])).HostedView);
+        Assert.IsType<TurnFooterRow>(view.Rows()[^1]);
+    });
+
+    [Fact]
     public void NewRows_ScrollToTheEndWhilePinned() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient().Reply("One").Reply("Two").Reply("Three");

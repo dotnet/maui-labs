@@ -31,6 +31,7 @@ internal sealed class ChatMessageList : CollectionView
     private readonly ThinkingRow _thinkingRow = new();
     private readonly List<IDisposable> _sessionSubscriptions = [];
     private AgentContext? _session;
+    private bool _isAttached;
     private bool _flushScheduled;
     private int _flushGeneration;
     private bool _isPinned = true;
@@ -64,6 +65,7 @@ internal sealed class ChatMessageList : CollectionView
     {
         Detach();
         _session = session;
+        _isAttached = true;
         if (session is not null)
         {
             _sessionSubscriptions.Add(session.RegisterOnTurnAdded(_ => Invalidate()));
@@ -72,12 +74,16 @@ internal sealed class ChatMessageList : CollectionView
             _sessionSubscriptions.Add(session.RegisterOnResponseBlocksCleared(_ => Invalidate()));
         }
 
+        // Rows kept from before the list was detached missed every change made in the meantime.
+        _dirtyRows.UnionWith(_rows);
         Flush();
     }
 
     /// <summary>Stops observing the session so nothing it owns references this list.</summary>
     public void Detach()
     {
+        _isAttached = false;
+        _session = null;
         _flushGeneration++;
         _flushScheduled = false;
 
@@ -104,10 +110,12 @@ internal sealed class ChatMessageList : CollectionView
         ScrollToEnd();
     }
 
-    /// <summary>Applies all pending changes now.</summary>
+    /// <summary>Applies all pending changes now. Does nothing while detached, so nothing re-subscribes to the session.</summary>
     internal void Flush()
     {
         _flushScheduled = false;
+        if (!_isAttached)
+            return;
 
         bool structureChanged;
         var refreshed = false;
@@ -156,7 +164,7 @@ internal sealed class ChatMessageList : CollectionView
 
     private void Invalidate()
     {
-        if (_flushScheduled)
+        if (_flushScheduled || !_isAttached)
             return;
 
         _flushScheduled = true;
