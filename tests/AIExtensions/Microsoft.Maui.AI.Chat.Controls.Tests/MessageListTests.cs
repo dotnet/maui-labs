@@ -374,6 +374,60 @@ public class MessageListTests
     });
 
     [Fact]
+    public void EncryptedReasoning_GetsNoRow() => UIThread.Run(async () =>
+    {
+        // Azure returns the reasoning summary, the answer, then the encrypted reasoning in a block of its own.
+        var client = new ScriptedChatClient().Reply(
+            new TextReasoningContent("Checking the forecast."),
+            new TextContent("Sunny."),
+            new TextReasoningContent(null) { ProtectedData = "opaque" });
+        var view = ChatHost.Create(ChatHost.Session(client));
+
+        await SendAsync(view, "Weather?");
+
+        Assert.Equal(2, view.Session!.Turns[0].ResponseBlocks.OfType<ReasoningContentBlock>().Count());
+        var reasoning = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is ReasoningContentBlock);
+        Assert.Equal("Checking the forecast.", ((ReasoningContentBlock)reasoning.Block).Text);
+    });
+
+    [Fact]
+    public void OnlyEncryptedReasoning_ShowsNothingForIt() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var view = ChatHost.Create(ChatHost.Session(client));
+
+        view.Text = "Weather?";
+        var send = view.SendAsync();
+        stream.Content(new TextReasoningContent(null) { ProtectedData = "opaque" });
+        await UIThread.Until(() => view.Session!.Turns[0].ResponseBlocks.Count == 1);
+
+        // Still working, with nothing to show yet.
+        Assert.IsType<ThinkingRow>(view.Rows()[^1]);
+
+        stream.Text("Sunny.");
+        stream.Complete();
+        await send;
+
+        Assert.Collection(
+            view.Rows(),
+            row => Assert.IsType<UserMessageRow>(row),
+            row => Assert.IsType<TextContentBlock>(Assert.IsType<BlockRow>(row).Block));
+    });
+
+    [Fact]
+    public void AppTemplates_StillGetEncryptedReasoning() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Reply(new TextReasoningContent(null) { ProtectedData = "opaque" }, new TextContent("Sunny."));
+        var template = new BlockTemplate { BlockType = typeof(ReasoningContentBlock), ViewType = typeof(CountingBlockView) };
+        var view = ChatHost.Create(ChatHost.Session(client), v => v.ContentTemplates.Add(template));
+
+        await SendAsync(view, "Weather?");
+
+        Assert.Same(template, Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is ReasoningContentBlock).Template);
+    });
+
+    [Fact]
     public void ChangingTemplates_ReselectsExistingRows() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient().Reply("Hello");
