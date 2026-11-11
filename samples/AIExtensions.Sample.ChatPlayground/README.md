@@ -51,32 +51,20 @@ input does not imply image-generation support.
 | Android on-device | Not supported |
 | Azure OpenAI | Supported by the configured image deployment |
 
-### Documents API experiment
+### Documents
 
-Documents evaluates the merged API from [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588)
-using official packages `11.0.0-preview.1.26560.3` from NuGet.org. It retains completed-document extraction and native-reader modes, original services/view-model conventions,
-and explicit provider selection.
-All source bridges are removed. Foundry Mistral is the single cloud comparison provider, using
-`CommunityToolkit.DocumentExtraction.Mistral/1.0.0-preview`. The sample does not need a second Azure document service.
-Apple Vision remains our on-device provider of the same official contract. No private substitute API is used.
-The cloud reader modes project those same Toolkit results rather than maintaining independent service protocols or HTML parsing.
-NuGet clients and their options are constructed directly in `AddDocumentFeature`, not provider-specific wrapper classes.
-The cloud reader registration uses a shared adapter for the required ingestion projection.
-Mistral uses the Toolkit's own HTTP transport and defaults, with no playground policy wrapper, response cap or custom deadline.
-Mistral table content remains literal Markdown/HTML without an addressed cell grid; native-only blocks/captions/confidence remain
-explicitly inspectable instead of being repackaged into metadata.
+Choose a PDF or image, or use a packaged sample, then select Apple Vision (iOS/Mac Catalyst 26+)
+or your Foundry Mistral deployment. Processing uses the selected provider without fallback.
 
-The experiment distinguishes normalized shared-document content/layout from deliberate borrowed-native inspection.
-Native inspection displays complete structured JSON on request and reports inspection errors directly;
-there is no playground output cap, truncation policy or inspection cache.
-The final API has no streaming, raw-capture toggle, original-body ownership contract or generic structural renderer.
-Normalized output, logging and reader results do not automatically inspect native output.
-The old upstream OCR reader, configuration/OpenTelemetry middleware and usage/progress envelope remain removed.
-See [the correction report](../../docs/ai/document-extraction-corrected-api.md) for data ownership and provider limitations.
-Select the Documents tab to compare the same PDF/image across providers.
+**Extraction** calls `DocumentExtractionClient` and displays content, source geometry, hierarchy and table cells.
+**Native** displays the provider's raw representation on request; **Normalized** switches back to the shared model.
+**Reader** is an optional comparison with the DataIngestion API, not a prerequisite for extraction.
+Its adapter converts extraction output to ingestion sections/elements; it does not call another service.
 
-Debug binaries embed local user secrets and must not be distributed. Selected cloud calls upload immediately with inline disclosure.
-No automatic fallback or new cloud resource is created.
+Under `Documents/`, services run the API calls, `DocumentResultFormatter` formats output, result files hold results,
+and view-model files own selection and commands, following the other tabs' structure.
+`ExtractionDocumentIngestionMapper` contains only the extraction-to-ingestion conversion.
+See [Apple document extraction](../../docs/ai/apple-document-extraction.md) for API usage, platform support and mapping limitations.
 
 ## Diagnostics
 

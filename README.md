@@ -151,9 +151,11 @@ systems.
 - **Android:** Gemini Nano text/image chat, streaming, and input-token usage on
   supported AICore devices, plus native tools on capable Nano V4 profiles.
   Model download is explicit and observable.
-- **Document API prototype:** Apple Vision `RecognizeDocumentsRequest` returns completed documents with
-  titles, paragraphs, tables, nested cells/spans and geometry. Lists/barcodes/entities remain in native output.
-  Internal PDFKit rendering supports per-page PDF input for the native client and ingestion reader.
+- **Document extraction (experimental):** Apple Vision extracts text, tables,
+  source geometry, and merged cells from images and PDFs on Apple OS 26+.
+  A local reader projects results for data ingestion. See the
+  [extraction guide](docs/ai/apple-document-extraction.md) for native-only
+  details and fidelity limits.
 
 See [Essentials.AI](src/AI/README.md) for documentation and samples.
 

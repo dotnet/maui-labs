@@ -108,7 +108,7 @@ public sealed class DocumentMappingTests
         });
         section.Elements.Add(nested);
 
-        var result = CloudDocumentIngestionProjection.Project(document);
+        var result = ExtractionDocumentIngestionMapper.Project(document);
         Assert.Equal("Local", result.Sections[0].Elements[0].Text);
         var projected = Assert.IsType<IngestionDocumentSection>(result.Sections[0].Elements[1]);
         Assert.Equal(2, Assert.IsType<IngestionDocumentHeader>(projected.Elements[0]).Level);
@@ -129,7 +129,7 @@ public sealed class DocumentMappingTests
         var section = new ExtractionDocumentSection();
         section.Elements.Add(new ExtractionDocumentTextElement(new TextContent("# Native heading"), "heading"));
         document.Sections.Add(section);
-        var element = Assert.Single(CloudDocumentIngestionProjection.Project(document).Sections[0].Elements);
+        var element = Assert.Single(ExtractionDocumentIngestionMapper.Project(document).Sections[0].Elements);
         Assert.IsType<IngestionDocumentParagraph>(element);
         Assert.Equal("# Native heading", element.GetMarkdown());
         Assert.Null(element.PageNumber);

@@ -115,7 +115,7 @@
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
     <Compile Remove="Platform\MaciOS\**\*.cs" />
-    <Compile Remove="Internal\DocumentExtraction\AppleVisionRecognizeDocumentsClient.cs" />
+    <Compile Remove="DocumentExtraction\AppleVisionRecognizeDocumentsClient.cs" />
   </ItemGroup>
   <ItemGroup Condition="!$(TargetFramework.Contains('-android'))">
     <Compile Remove="Platform\Android\**\*.cs" />

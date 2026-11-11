@@ -23,6 +23,10 @@
 		A20000012F00000100000001 /* RecognizeDocumentsRequestOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000112F00000100000001 /* RecognizeDocumentsRequestOptions.swift */; };
 		A20000022F00000100000001 /* RecognizeDocumentsRequestSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000122F00000100000001 /* RecognizeDocumentsRequestSnapshot.swift */; };
 		A20000032F00000100000001 /* RecognizeDocumentsRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000132F00000100000001 /* RecognizeDocumentsRequest.swift */; };
+		A20000042F00000100000001 /* RecognizeDocumentsRequestCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000142F00000100000001 /* RecognizeDocumentsRequestCapabilities.swift */; };
+		A20000052F00000100000001 /* RecognizeDocumentsRequestNodeSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000152F00000100000001 /* RecognizeDocumentsRequestNodeSnapshot.swift */; };
+		A20000062F00000100000001 /* RecognizeDocumentsRequestSnapshotBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000162F00000100000001 /* RecognizeDocumentsRequestSnapshotBuilder.swift */; };
+		A20000072F00000100000001 /* RecognizeDocumentsRequestSnapshotValues.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000172F00000100000001 /* RecognizeDocumentsRequestSnapshotValues.swift */; };
 		34279CA12EC421CC00583050 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 34279CA02EC421CC00583050 /* FoundationModels.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 /* End PBXBuildFile section */
 
@@ -43,6 +47,10 @@
 		A20000112F00000100000001 /* RecognizeDocumentsRequestOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognizeDocumentsRequestOptions.swift; sourceTree = "<group>"; };
 		A20000122F00000100000001 /* RecognizeDocumentsRequestSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognizeDocumentsRequestSnapshot.swift; sourceTree = "<group>"; };
 		A20000132F00000100000001 /* RecognizeDocumentsRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognizeDocumentsRequest.swift; sourceTree = "<group>"; };
+		A20000142F00000100000001 /* RecognizeDocumentsRequestCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognizeDocumentsRequestCapabilities.swift; sourceTree = "<group>"; };
+		A20000152F00000100000001 /* RecognizeDocumentsRequestNodeSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognizeDocumentsRequestNodeSnapshot.swift; sourceTree = "<group>"; };
+		A20000162F00000100000001 /* RecognizeDocumentsRequestSnapshotBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognizeDocumentsRequestSnapshotBuilder.swift; sourceTree = "<group>"; };
+		A20000172F00000100000001 /* RecognizeDocumentsRequestSnapshotValues.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognizeDocumentsRequestSnapshotValues.swift; sourceTree = "<group>"; };
 		34279C902EC421CC00583050 /* EssentialsAI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = EssentialsAI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		34279CA02EC421CC00583050 /* FoundationModels.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FoundationModels.framework; path = System/Library/Frameworks/FoundationModels.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -78,6 +86,10 @@
 				340019322EDF4D6800DAB0A3 /* ToolNative.swift */,
 				A20000112F00000100000001 /* RecognizeDocumentsRequestOptions.swift */,
 				A20000122F00000100000001 /* RecognizeDocumentsRequestSnapshot.swift */,
+				A20000142F00000100000001 /* RecognizeDocumentsRequestCapabilities.swift */,
+				A20000152F00000100000001 /* RecognizeDocumentsRequestNodeSnapshot.swift */,
+				A20000162F00000100000001 /* RecognizeDocumentsRequestSnapshotBuilder.swift */,
+				A20000172F00000100000001 /* RecognizeDocumentsRequestSnapshotValues.swift */,
 				A20000132F00000100000001 /* RecognizeDocumentsRequest.swift */,
 				34279C912EC421CC00583050 /* Products */,
 			);
@@ -189,6 +201,10 @@
 				3400193E2EDF4D6800DAB0A3 /* ChatTool.swift in Sources */,
 				A20000012F00000100000001 /* RecognizeDocumentsRequestOptions.swift in Sources */,
 				A20000022F00000100000001 /* RecognizeDocumentsRequestSnapshot.swift in Sources */,
+				A20000042F00000100000001 /* RecognizeDocumentsRequestCapabilities.swift in Sources */,
+				A20000052F00000100000001 /* RecognizeDocumentsRequestNodeSnapshot.swift in Sources */,
+				A20000062F00000100000001 /* RecognizeDocumentsRequestSnapshotBuilder.swift in Sources */,
+				A20000072F00000100000001 /* RecognizeDocumentsRequestSnapshotValues.swift in Sources */,
 				A20000032F00000100000001 /* RecognizeDocumentsRequest.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

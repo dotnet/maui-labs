@@ -10,7 +10,7 @@ internal sealed class ExtractedDocumentReader(DocumentExtractionClient client) :
 
     public override async Task<IngestionDocument> ReadAsync(
         Stream source, string identifier, string mediaType, CancellationToken cancellationToken = default) =>
-        CloudDocumentIngestionProjection.Project(
+        ExtractionDocumentIngestionMapper.Project(
             await _client.ExtractAsync(source, identifier, mediaType, cancellationToken: cancellationToken)
                 .ConfigureAwait(false), cancellationToken);
 }

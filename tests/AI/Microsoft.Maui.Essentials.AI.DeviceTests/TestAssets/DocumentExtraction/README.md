@@ -1,7 +1,9 @@
-# Document extraction list fixtures
+# Synthetic document extraction corpus
 
-These source documents evaluate how Apple Vision represents common document
-features inside `DocumentObservation.Container`.
+These synthetic source documents evaluate how Apple Vision represents common
+document features inside `DocumentObservation.Container`. They contain no
+customer documents or credentials. Contact details and barcode payloads are
+fixture content, not test-service configuration.
 
 [`source-content.md`](source-content.md) is the human-readable Markdown source
 for the scenarios. The SVG files provide deterministic typography and geometry
@@ -51,6 +53,47 @@ dotnet test \
   --filter 'FullyQualifiedName~AppleVisionDocumentCorpusTests|FullyQualifiedName~AppleVisionListStructureTests'
 ```
 
-Each Vision test writes a compact raw/normalized model summary into the
-DeviceRunners result event. See [RESULTS.md](RESULTS.md) for the current
-revision-1 baseline and interpretation.
+Each Vision test writes a compact native/normalized model summary into the
+DeviceRunners result event. Tests exercise native recognition separately from
+the managed projection.
+
+## Interpreting results
+
+Fixture names describe source layout, not guaranteed Vision classifications.
+The committed images use a controlled 1600 x 1200 layout; recognition can vary
+with request revision and OS.
+
+| Scenario | What to check |
+|----------|---------------|
+| Headings and paragraphs | Readable title/body text and source geometry; do not infer heading levels |
+| Tables | Cell text, row/column addresses, spans, and geometry in extraction output |
+| Detected data and barcodes | Native types/payloads where recognized; no normalized entity/barcode schema is promised |
+| Mixed document | Coexistence of text and table content; do not assume cross-collection reading order |
+| Lists | Native classification and self-projection safety, separately from normalized text |
+
+Revision-1 list behavior motivates the fixtures:
+
+- A multi-item list can expose duplicated paragraphs and same-polygon nested
+  lists whose descendants re-enter the owning item's semantic container.
+- Visually indented bullets and hyphens can be returned as one flat list;
+  marker and geometry differences do not guarantee parent/child hierarchy.
+- A standalone single bullet or bullets inside table cells may be text only,
+  not `DocumentObservation.Container.List`.
+
+The mapper projects supported text without duplicating exact self-projections.
+List markers, detection details, and confidence remain native; they are not
+custom normalized blocks or metadata schemas. Ancestor detection and depth/node
+bounds protect native snapshot traversal. Tests should distinguish traversal
+safety from a claim that arbitrary native graphs are completely captured.
+
+Barcode assertions run on Mac Catalyst and physical iOS devices. The iOS
+simulator case returns early because Vision barcode detection is not reliably
+available there; that is not evidence that the fixture has no barcode.
+
+When a new OS/request revision changes recognition, inspect both native and
+normalized output before changing expectations. Genuine native improvements,
+such as nested lists or removal of self-projections, should prompt a deliberate
+review rather than preserving obsolete output shapes.
+
+See the [extraction guide](../../../../../docs/ai/apple-document-extraction.md)
+for mapping boundaries and native safety.

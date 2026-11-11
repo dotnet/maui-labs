@@ -7,7 +7,7 @@ using Microsoft.Extensions.Documents;
 namespace AIExtensions.Sample.ChatPlayground;
 
 /// <summary>A sample-local, structural projection; provider interpretation remains entirely in the Toolkit.</summary>
-internal static class CloudDocumentIngestionProjection
+internal static class ExtractionDocumentIngestionMapper
 {
     public static IngestionDocument Project(ExtractionDocument source, CancellationToken cancellationToken = default)
     {

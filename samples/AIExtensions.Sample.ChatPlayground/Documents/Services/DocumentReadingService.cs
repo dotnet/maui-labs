@@ -38,5 +38,3 @@ public sealed class DocumentReadingService
         return new DocumentReadResult(document.Sections.Count, output.ToString());
     }
 }
-
-public sealed record DocumentReadResult(int PageCount, string Output);

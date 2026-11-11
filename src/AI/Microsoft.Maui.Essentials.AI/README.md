@@ -270,16 +270,20 @@ The default generator uses English sentence embeddings. Select another supported
 language with the `NLLanguage` constructor or wrap an existing `NLEmbedding`.
 The corresponding model asset must be installed.
 
-## Guides and samples
+## Document extraction
 
-### Merged document extraction experiment
+On iOS, Mac Catalyst, and macOS 26+, Apple Vision recognizes documents locally.
+This feature uses the experimental `Microsoft.Extensions.DocumentExtraction`
+and `Microsoft.Extensions.Documents` contracts. It does not require Apple
+Intelligence or a cloud deployment.
 
-This checkout evaluates [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588)
-using official packages `11.0.0-preview.1.26560.3`, published on NuGet.org.
-Their repository commit is `c60d72e7973a90cd4e4300d9153e97b93315e4b7`; all copied Microsoft/Toolkit sources and build shims are removed.
-The prototype library remains non-shipping/non-packable pending provider acceptance.
+| Input | Support |
+|-------|---------|
+| PDF | Each page is rendered internally with PDFKit |
+| JPEG, PNG, HEIC, TIFF | Orientation-aware image input; only the first raster frame |
+| Android and Windows | No Apple Vision extraction support |
 
-On iOS/Mac Catalyst/macOS 26+, the native `RecognizeDocumentsRequest` client implements the merged abstract client:
+Use the extraction client when you need document structure and source geometry:
 
 ```csharp
 using Microsoft.Extensions.DocumentExtraction;
@@ -294,17 +298,30 @@ foreach (var element in result.EnumerateContent().OfType<ExtractionDocumentTextE
     Console.WriteLine(((TextContent)element.Content!).Text);
 ```
 
-The result is non-disposable data; the input remains caller-owned. Source references retain exact geometry, table spans and borrowed
-native observations. Confidence, candidates, detections and list details remain native, not invented metadata schemas.
-There is no page-streaming, generalized annotation, capture-toggle, response-body ownership or Markdown-rendering API.
-Apple native inspection uses a detached bounded bridge snapshot, not a live Swift object or original response bytes.
-The concrete `AppleVisionRecognizeDocumentsReader` projects the same exchange document into DataIngestion.
+The result is non-disposable data; the input remains caller-owned. Source
+references retain exact polygons and coordinate frames. Tables preserve spans,
+empty anchor cells, and mixed cell content. Confidence, OCR candidates, detected
+entities, barcodes, and list-specific details remain available through explicit
+native inspection rather than fabricated normalized fields.
 
-See [adoption details](../../../docs/ai/document-extraction-corrected-api.md) and
-[remaining feature gaps](../../../docs/ai/apple-document-extraction-gaps.md). Existing Chat/Embeddings documentation above remains
-separate from the non-shipping document experiment.
+For data-ingestion pipelines, use the local reader projection:
 
-### Other guides
+```csharp
+using var input = File.OpenRead("receipt.pdf");
+var reader = new AppleVisionRecognizeDocumentsReader();
+var document = await reader.ReadAsync(input, "receipt", "application/pdf");
+```
+
+The reader projects the same extraction model into DataIngestion content.
+Use the extraction client instead when you need geometry or the complete table
+structure. Native representations are detached, bounded bridge snapshots, not
+live Swift objects or original response bytes; inspect them deliberately rather
+than including them automatically in logs or embeddings.
+
+See the [Apple document extraction guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-document-extraction.md)
+for architecture, request settings, and fidelity limits.
+
+## Guides and samples
 
 - [Chat provider implementation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider.md) — shared behavior and provider policy.
 - [Apple Foundation Models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models.md) — Apple toolchain, images, availability, bridge mechanics, and validation.

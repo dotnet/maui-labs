@@ -1,3 +1,12 @@
+# Synthetic fixture content
+
+Human-readable content for the document extraction corpus. Sections separated
+by horizontal rules correspond to the fixture scenarios in [README.md](README.md).
+The SVG sources control rendered layout; these headings and lists describe the
+input, not guaranteed recognition classifications.
+
+---
+
 # Document Extraction Evaluation
 
 ## Structured Content

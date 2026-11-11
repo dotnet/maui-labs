@@ -162,7 +162,7 @@ public sealed class FoundryMistralDocumentReaderTests
         Assert.Equal("Native header", native.GetProperty("header").GetString());
         Assert.Equal("Native footer", native.GetProperty("footer").GetString());
         Assert.Equal(93.5, native.GetProperty("blocks")[0].GetProperty("confidence_scores").GetProperty("mean").GetDouble());
-        var document = CloudDocumentIngestionProjection.Project(result);
+        var document = ExtractionDocumentIngestionMapper.Project(result);
         Assert.Equal("Readable body", Assert.Single(document.Sections[0].Elements).Text);
     }
 }
