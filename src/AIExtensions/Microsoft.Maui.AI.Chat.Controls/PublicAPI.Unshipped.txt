@@ -1,110 +1,10 @@
 #nullable enable
-Microsoft.Maui.AI.Chat.Controls.AIChatTheme
-Microsoft.Maui.AI.Chat.Controls.AIChatTheme.AIChatTheme() -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys
-Microsoft.Maui.AI.Chat.Controls.AIChatView
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AIChatView() -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AddAttachment(Microsoft.Extensions.AI.DataContent! attachment) -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowAttachments.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowAttachments.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowAudioCapture.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowAudioCapture.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowLiveSpeech.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowLiveSpeech.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowRemoteImages.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowRemoteImages.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentFileTypes.get -> Microsoft.Maui.Storage.FilePickerFileType?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentFileTypes.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentPicker.get -> Microsoft.Maui.AI.Chat.Controls.IChatAttachmentPicker?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentPicker.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Attachments.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.DataContent!>!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AudioRecorder.get -> Microsoft.Maui.AI.Chat.Controls.IChatAudioRecorder?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AudioRecorder.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AudioTranscriber.get -> Microsoft.Maui.AI.Chat.Controls.IChatAudioTranscriber?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.AudioTranscriber.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.CanCaptureAudio.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.CanSend.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.CanStop.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.CanUseLiveSpeech.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ChatClient.get -> Microsoft.Extensions.AI.IChatClient?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ChatClient.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ClearAsync() -> System.Threading.Tasks.Task!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ContentTemplates.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.BlockTemplate!>!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ContentTemplates.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.EmptyViewTemplate.get -> Microsoft.Maui.Controls.DataTemplate?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.EmptyViewTemplate.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ErrorMessage.get -> string?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.FocusInput() -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.HasAttachments.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.HasError.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.HeaderTemplate.get -> Microsoft.Maui.Controls.DataTemplate?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.HeaderTemplate.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.InputHeaderContent.get -> Microsoft.Maui.Controls.View?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.InputHeaderContent.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.InputLeadingContent.get -> Microsoft.Maui.Controls.View?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.InputLeadingContent.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.InputTrailingContent.get -> Microsoft.Maui.Controls.View?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.InputTrailingContent.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Instructions.get -> string?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Instructions.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.IsBusy.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.IsEmpty.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.IsInputEnabled.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.IsInputEnabled.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.IsInputVisible.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.IsInputVisible.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.IsListening.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.IsRecordingAudio.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.IsTranscribingAudio.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.LiveSpeechAutoSubmit.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.LiveSpeechAutoSubmit.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.MaximumAttachmentBytes.get -> long
-Microsoft.Maui.AI.Chat.Controls.AIChatView.MaximumAttachmentBytes.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.MaximumAttachmentCount.get -> int
-Microsoft.Maui.AI.Chat.Controls.AIChatView.MaximumAttachmentCount.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.MessagesHeaderTemplate.get -> Microsoft.Maui.Controls.DataTemplate?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.MessagesHeaderTemplate.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.PickAttachmentsAsync() -> System.Threading.Tasks.Task!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.PickAttachmentsCommand.get -> System.Windows.Input.ICommand!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Placeholder.get -> string?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Placeholder.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.RemoveAttachment(Microsoft.Extensions.AI.DataContent! attachment) -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ResponseFooterTemplate.get -> Microsoft.Maui.Controls.DataTemplate?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ResponseFooterTemplate.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.SendAsync() -> System.Threading.Tasks.Task!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.SendCommand.get -> System.Windows.Input.ICommand!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Session.get -> Microsoft.Maui.AI.Chat.AgentContext?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Session.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ShowInterimAudioTranscript.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ShowInterimAudioTranscript.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ShowInterimSpeechText.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ShowInterimSpeechText.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ShowSuggestions.get -> bool
-Microsoft.Maui.AI.Chat.Controls.AIChatView.SpeechRecognitionCulture.get -> System.Globalization.CultureInfo!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.SpeechRecognitionCulture.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.SpeechRecognizer.get -> Microsoft.Maui.AI.Chat.Controls.IChatSpeechRecognizer?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.SpeechRecognizer.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.StopAsync() -> System.Threading.Tasks.Task!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.StopCommand.get -> System.Windows.Input.ICommand!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Suggestions.get -> System.Collections.Generic.IList<string!>!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Suggestions.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Text.get -> string?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Text.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ToggleAudioCaptureCommand.get -> System.Windows.Input.ICommand!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.ToggleLiveSpeechCommand.get -> System.Windows.Input.ICommand!
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Tools.get -> System.Collections.Generic.IList<Microsoft.Extensions.AI.AITool!>?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.Tools.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.WelcomeMessage.get -> string?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.WelcomeMessage.set -> void
-Microsoft.Maui.AI.Chat.Controls.AIChatView.WelcomeTitle.get -> string?
-Microsoft.Maui.AI.Chat.Controls.AIChatView.WelcomeTitle.set -> void
 Microsoft.Maui.AI.Chat.Controls.AllMatch
 Microsoft.Maui.AI.Chat.Controls.AllMatch.AllMatch() -> void
 Microsoft.Maui.AI.Chat.Controls.AllMatch.Conditions.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.BlockMatch!>!
 Microsoft.Maui.AI.Chat.Controls.AnyMatch
 Microsoft.Maui.AI.Chat.Controls.AnyMatch.AnyMatch() -> void
 Microsoft.Maui.AI.Chat.Controls.AnyMatch.Conditions.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.BlockMatch!>!
-Microsoft.Maui.AI.Chat.Controls.AppBuilderExtensions
 Microsoft.Maui.AI.Chat.Controls.BlockMatch
 Microsoft.Maui.AI.Chat.Controls.BlockMatch.BlockMatch() -> void
 Microsoft.Maui.AI.Chat.Controls.BlockTemplate
@@ -126,42 +26,6 @@ Microsoft.Maui.AI.Chat.Controls.BlockView.BlockView() -> void
 Microsoft.Maui.AI.Chat.Controls.BlockView<TBlock>
 Microsoft.Maui.AI.Chat.Controls.BlockView<TBlock>.Block.get -> TBlock?
 Microsoft.Maui.AI.Chat.Controls.BlockView<TBlock>.BlockView() -> void
-Microsoft.Maui.AI.Chat.Controls.ChatBlockView
-Microsoft.Maui.AI.Chat.Controls.ChatBlockView.ChatBlockView() -> void
-Microsoft.Maui.AI.Chat.Controls.ChatBlockView.Session.get -> Microsoft.Maui.AI.Chat.AgentContext?
-Microsoft.Maui.AI.Chat.Controls.ChatBlockView.Session.set -> void
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind.Aborted = 2 -> Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind.Fatal = 6 -> Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind.LanguageNotSupported = 4 -> Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind.NoSpeech = 1 -> Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind.None = 0 -> Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind.PermissionDenied = 3 -> Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind.Transient = 5 -> Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionEventArgs
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionEventArgs.ChatSpeechRecognitionEventArgs(string? text, bool isFinal) -> void
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionEventArgs.ChatSpeechRecognitionEventArgs(string? text, bool isFinal, Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind errorKind, System.Exception? exception) -> void
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionEventArgs.ErrorKind.get -> Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionErrorKind
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionEventArgs.Exception.get -> System.Exception?
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionEventArgs.IsFinal.get -> bool
-Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionEventArgs.Text.get -> string!
-Microsoft.Maui.AI.Chat.Controls.IChatAttachmentPicker
-Microsoft.Maui.AI.Chat.Controls.IChatAttachmentPicker.PickAsync(Microsoft.Maui.Storage.FilePickerFileType? fileTypes, long maxBytesPerFile, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.DataContent!>!>!
-Microsoft.Maui.AI.Chat.Controls.IChatAudioRecorder
-Microsoft.Maui.AI.Chat.Controls.IChatAudioRecorder.CancelAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-Microsoft.Maui.AI.Chat.Controls.IChatAudioRecorder.IsRecording.get -> bool
-Microsoft.Maui.AI.Chat.Controls.IChatAudioRecorder.IsSupported.get -> bool
-Microsoft.Maui.AI.Chat.Controls.IChatAudioRecorder.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-Microsoft.Maui.AI.Chat.Controls.IChatAudioRecorder.StopAsync(long maximumBytes, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.DataContent?>!
-Microsoft.Maui.AI.Chat.Controls.IChatAudioTranscriber
-Microsoft.Maui.AI.Chat.Controls.IChatAudioTranscriber.TranscribeAsync(Microsoft.Extensions.AI.DataContent! recording, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
-Microsoft.Maui.AI.Chat.Controls.IChatSpeechRecognizer
-Microsoft.Maui.AI.Chat.Controls.IChatSpeechRecognizer.IsListening.get -> bool
-Microsoft.Maui.AI.Chat.Controls.IChatSpeechRecognizer.IsSupported.get -> bool
-Microsoft.Maui.AI.Chat.Controls.IChatSpeechRecognizer.RecognitionChanged -> System.EventHandler<Microsoft.Maui.AI.Chat.Controls.ChatSpeechRecognitionEventArgs!>?
-Microsoft.Maui.AI.Chat.Controls.IChatSpeechRecognizer.RequestPermissionsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
-Microsoft.Maui.AI.Chat.Controls.IChatSpeechRecognizer.StartAsync(System.Globalization.CultureInfo! culture, bool reportPartialResults, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-Microsoft.Maui.AI.Chat.Controls.IChatSpeechRecognizer.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.Controls.IsExtension
 Microsoft.Maui.AI.Chat.Controls.IsExtension.IsExtension() -> void
 Microsoft.Maui.AI.Chat.Controls.IsExtension.ProvideValue(System.IServiceProvider! serviceProvider) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
@@ -198,86 +62,13 @@ Microsoft.Maui.AI.Chat.Controls.ViewTemplateExtension.ViewTemplateExtension() ->
 Microsoft.Maui.AI.Chat.Controls.ViewTemplateExtension.ViewType.get -> System.Type?
 Microsoft.Maui.AI.Chat.Controls.ViewTemplateExtension.ViewType.set -> void
 abstract Microsoft.Maui.AI.Chat.Controls.BlockMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.AccentColor = "AIChat.Color.Accent" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.AssistantTextStyle = "AIChat.Style.AssistantText" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.AttachIcon = "AIChat.Icon.Attach" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.AttachmentChipStyle = "AIChat.Style.AttachmentChip" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.AudioIcon = "AIChat.Icon.Audio" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.BodyFontSize = "AIChat.FontSize.Body" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.CardStyle = "AIChat.Style.Card" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.CardTitleStyle = "AIChat.Style.CardTitle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.ChatViewTemplate = "AIChat.Template.ChatView" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.CodeBackgroundColor = "AIChat.Color.CodeBackground" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.CodeBlockStyle = "AIChat.Style.CodeBlock" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.CodeFontFamily = "AIChat.FontFamily.Code" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.CodeFontSize = "AIChat.FontSize.Code" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.CodeTextStyle = "AIChat.Style.CodeText" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.CollapseIcon = "AIChat.Icon.Collapse" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.ComposerStyle = "AIChat.Style.Composer" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.DarkPalettePrefix = "AIChat.Dark." -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.DocumentIcon = "AIChat.Icon.Document" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.ErrorBackgroundColor = "AIChat.Color.ErrorBackground" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.ErrorCardStyle = "AIChat.Style.ErrorCard" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.ErrorColor = "AIChat.Color.Error" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.ErrorTextStyle = "AIChat.Style.ErrorText" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.ExpandIcon = "AIChat.Icon.Expand" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.FontFamily = "AIChat.FontFamily" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.IconButtonStyle = "AIChat.Style.IconButton" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.IconFontFamily = "AIChat.FontFamily.Icons" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.ImageIcon = "AIChat.Icon.Image" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.InputStyle = "AIChat.Style.Input" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.LightPalettePrefix = "AIChat.Light." -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.LinkIcon = "AIChat.Icon.Link" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.LinkSpanStyle = "AIChat.Style.LinkSpan" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.LiveVoiceIcon = "AIChat.Icon.LiveVoice" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MarkdownBlockQuoteBarStyle = "AIChat.Markdown.BlockQuoteBarStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MarkdownBlockQuoteTextStyle = "AIChat.Markdown.BlockQuoteTextStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MarkdownBlockSpacing = "AIChat.Markdown.BlockSpacing" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MarkdownCodeBlockLanguageStyle = "AIChat.Markdown.CodeBlockLanguageStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MarkdownHeadingStyle = "AIChat.Markdown.HeadingStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MarkdownInlineCodeStyle = "AIChat.Markdown.InlineCodeStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MarkdownListMarkerStyle = "AIChat.Markdown.ListMarkerStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MarkdownTableBorderStyle = "AIChat.Markdown.TableBorderStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MarkdownTableCellStyle = "AIChat.Markdown.TableCellStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MarkdownTableHeaderCellStyle = "AIChat.Markdown.TableHeaderCellStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MarkdownTableLineStyle = "AIChat.Markdown.TableLineStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MarkdownThematicBreakStyle = "AIChat.Markdown.ThematicBreakStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.MicrophoneIcon = "AIChat.Icon.Microphone" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.OnAccentColor = "AIChat.Color.OnAccent" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.PrimaryButtonStyle = "AIChat.Style.PrimaryButton" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.ReasoningHeaderStyle = "AIChat.Style.ReasoningHeader" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.RemoveIcon = "AIChat.Icon.Remove" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.RowStyle = "AIChat.Style.Row" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.SecondaryButtonStyle = "AIChat.Style.SecondaryButton" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.SecondaryTextColor = "AIChat.Color.SecondaryText" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.SecondaryTextStyle = "AIChat.Style.SecondaryText" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.SendButtonStyle = "AIChat.Style.SendButton" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.SendIcon = "AIChat.Icon.Send" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.SmallFontSize = "AIChat.FontSize.Small" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.StopIcon = "AIChat.Icon.Stop" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.StrokeColor = "AIChat.Color.Stroke" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.SuccessColor = "AIChat.Color.Success" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.SuggestionStyle = "AIChat.Style.Suggestion" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.SurfaceColor = "AIChat.Color.Surface" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.TextColor = "AIChat.Color.Text" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.TranscribingIcon = "AIChat.Icon.Transcribing" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.UserBubbleColor = "AIChat.Color.UserBubble" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.UserBubbleStyle = "AIChat.Style.UserBubble" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.UserTextColor = "AIChat.Color.UserText" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatThemeKeys.UserTextStyle = "AIChat.Style.UserText" -> string!
-const Microsoft.Maui.AI.Chat.Controls.AIChatView.XmlNamespace = "http://schemas.microsoft.com/dotnet/2026/maui/ai/chat" -> string!
-override Microsoft.Maui.AI.Chat.Controls.AIChatView.OnApplyTemplate() -> void
-override Microsoft.Maui.AI.Chat.Controls.AIChatView.OnBindingContextChanged() -> void
-override Microsoft.Maui.AI.Chat.Controls.AIChatView.OnHandlerChanging(Microsoft.Maui.Controls.HandlerChangingEventArgs! args) -> void
 override Microsoft.Maui.AI.Chat.Controls.AllMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
 override Microsoft.Maui.AI.Chat.Controls.AnyMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
 override Microsoft.Maui.AI.Chat.Controls.BlockTypeMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
 override Microsoft.Maui.AI.Chat.Controls.BlockView.OnBindingContextChanged() -> void
-override Microsoft.Maui.AI.Chat.Controls.ChatBlockView.OnBlockPropertyChanged(string? propertyName) -> void
 override Microsoft.Maui.AI.Chat.Controls.NotMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
 override Microsoft.Maui.AI.Chat.Controls.RoleMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
 override Microsoft.Maui.AI.Chat.Controls.ToolMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
-static Microsoft.Maui.AI.Chat.Controls.AppBuilderExtensions.UseAIChat(this Microsoft.Maui.Hosting.MauiAppBuilder! builder) -> Microsoft.Maui.Hosting.MauiAppBuilder!
 static Microsoft.Maui.AI.Chat.Controls.BlockMatch.All(params Microsoft.Maui.AI.Chat.Controls.BlockMatch![]! matches) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
 static Microsoft.Maui.AI.Chat.Controls.BlockMatch.Any(params Microsoft.Maui.AI.Chat.Controls.BlockMatch![]! matches) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
 static Microsoft.Maui.AI.Chat.Controls.BlockMatch.Is<TBlock>() -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
@@ -285,56 +76,7 @@ static Microsoft.Maui.AI.Chat.Controls.BlockMatch.Not(Microsoft.Maui.AI.Chat.Con
 static Microsoft.Maui.AI.Chat.Controls.BlockMatch.Role(Microsoft.Extensions.AI.ChatRole role) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
 static Microsoft.Maui.AI.Chat.Controls.BlockMatch.Tool(string! name) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
 static Microsoft.Maui.AI.Chat.Controls.BlockMatch.When(System.Func<Microsoft.Maui.AI.Chat.ContentBlock!, bool>! predicate) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowAttachmentsProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowAudioCaptureProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowLiveSpeechProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowRemoteImagesProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentFileTypesProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentPickerProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentsProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AudioRecorderProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AudioTranscriberProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.CanCaptureAudioProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.CanSendProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.CanStopProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.CanUseLiveSpeechProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.ChatClientProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.ContentTemplatesProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.EmptyViewTemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.ErrorMessageProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.HasAttachmentsProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.HasErrorProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.HeaderTemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.InputHeaderContentProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.InputLeadingContentProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.InputTrailingContentProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.InstructionsProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.IsBusyProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.IsEmptyProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.IsInputEnabledProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.IsInputVisibleProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.IsListeningProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.IsRecordingAudioProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.IsTranscribingAudioProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.LiveSpeechAutoSubmitProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.MaximumAttachmentBytesProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.MaximumAttachmentCountProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.MessagesHeaderTemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.PlaceholderProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.ResponseFooterTemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.SessionProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.ShowInterimAudioTranscriptProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.ShowInterimSpeechTextProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.ShowSuggestionsProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.SpeechRecognitionCultureProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.SpeechRecognizerProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.SuggestionsProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.TextProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.ToolsProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.WelcomeMessageProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.WelcomeTitleProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.BlockTemplate.TemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.BlockTemplate.WhenProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatBlockView.SessionProperty -> Microsoft.Maui.Controls.BindableProperty!
 virtual Microsoft.Maui.AI.Chat.Controls.BlockView.OnBlockChanged() -> void
 virtual Microsoft.Maui.AI.Chat.Controls.BlockView.OnBlockPropertyChanged(string? propertyName) -> void

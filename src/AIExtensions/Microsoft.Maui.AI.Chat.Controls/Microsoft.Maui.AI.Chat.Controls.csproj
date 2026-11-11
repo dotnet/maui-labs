@@ -3,8 +3,7 @@
   <!--
     A plain net10.0 class library that references Microsoft.Maui.Controls as a package, like
     Microsoft.Maui.DevFlow.Agent.Core. UseMaui is deliberately not set: on net10.0 it imports the
-    Microsoft.Maui.Sdk workload SDK (NETSDK1147 without the maui workload), while the package's
-    buildTransitive targets already compile the XAML resources in this project.
+    Microsoft.Maui.Sdk workload SDK (NETSDK1147 without the maui workload).
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -12,14 +11,12 @@
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <PackageId>Microsoft.Maui.AI.Chat.Controls</PackageId>
-    <Description>Drop-in .NET MAUI chat control for AI agents built on Microsoft.Maui.AI.Chat: streaming responses, tool cards and approvals, attachments, audio notes, dictation, live speech, XAML block templates, and theming.</Description>
+    <Description>XAML block templates for the Microsoft.Maui.AI.Chat engine: show each content block of an AI conversation (text, tool calls, approvals, your own [ToolBlock] cards) with the view you choose, in any CollectionView or BindableLayout.</Description>
     <PackRepoRootReadme>false</PackRepoRootReadme>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <NoWarn>$(NoWarn);MEAI001</NoWarn>
-    <!-- Compile the template's {Binding Source={RelativeSource TemplatedParent}} bindings (x:DataType is set). -->
-    <MauiEnableXamlCBindingWithSourceCompilation>true</MauiEnableXamlCBindingWithSourceCompilation>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,21 +26,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The built-in icons: a subset of the Fluent UI System Icons (MIT). AIChatView registers it (see ChatIconFont). -->
-    <EmbeddedResource Include="Fonts\AIChatIcons.ttf" LogicalName="Microsoft.Maui.AI.Chat.Controls.Fonts.AIChatIcons.ttf" />
-  </ItemGroup>
-
-  <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Controls.Tests" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
-    <PackageReference Include="CommunityToolkit.Maui.Core" />
-    <PackageReference Include="Markdig" />
     <PackageReference Include="Microsoft.Maui.Controls" />
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
-    <PackageReference Include="Plugin.Maui.Audio" />
   </ItemGroup>
 
 </Project>
