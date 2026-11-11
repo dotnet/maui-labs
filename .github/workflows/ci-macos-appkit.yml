@@ -47,6 +47,9 @@ jobs:
         run: dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj -c Release
       - name: Verify native runner contracts
         run: python3 -B -m unittest discover -s platforms/MacOS/tests/MacOS.RuntimeTests -p 'test_*.py'
+      - name: Verify platform-specific resource acceptance commands
+        shell: pwsh
+        run: ./eng/smoke-tests/tests/community-resource-acceptance.tests.ps1
 
   build:
     uses: ./.github/workflows/_build.yml

@@ -127,6 +127,20 @@ function Copy-Fixture {
     Copy-Item (Join-Path $fixture 'Consumer') $Destination -Recurse
 }
 
+function Get-ResourcePublishArguments {
+    param(
+        [string] $BackendName,
+        [string] $Project,
+        [string] $Destination
+    )
+
+    $arguments = @('publish', $Project, '--no-restore', "-p:PublishDir=$Destination")
+    if ($BackendName -ne 'appkit') {
+        $arguments += '--no-build'
+    }
+    return $arguments
+}
+
 function Invoke-BackendAcceptance {
     param(
         [string] $Name,
@@ -209,12 +223,24 @@ function Invoke-BackendAcceptance {
     Assert-NoFile $output 'Shared/zero.bin'
 
     $publish = Join-Path $root 'publish'
-    Invoke-DotNet (@('publish', $consumerProject, '--no-build', '--no-restore', "-p:PublishDir=$publish") + $buildArguments)
-    Assert-SingleFile $publish 'Shared/Renamed/payload.bin' $payloadV2 | Out-Null
-    Assert-SingleFile $publish 'Shared/Unicode/café.txt' $unicode | Out-Null
-    Assert-SingleFile $publish 'App/local.txt' $local | Out-Null
-    Assert-NoFile $publish 'Shared/Nested/payload.bin'
-    Assert-NoFile $publish 'Shared/zero.bin'
+    Invoke-DotNet ((Get-ResourcePublishArguments $Name $consumerProject $publish) + $buildArguments)
+    $publishedResources = $publish
+    if ($Name -eq 'appkit') {
+        $installers = @(Get-ChildItem -LiteralPath $publish -File -Recurse -Filter '*.pkg')
+        if ($installers.Count -ne 1) {
+            throw "Expected exactly one published AppKit installer; found $($installers.Count)."
+        }
+        $publishedResources = Join-Path $root 'installed-package'
+        & pkgutil --expand-full $installers[0].FullName $publishedResources
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not expand the published AppKit installer (exit $LASTEXITCODE)."
+        }
+    }
+    Assert-SingleFile $publishedResources 'Shared/Renamed/payload.bin' $payloadV2 | Out-Null
+    Assert-SingleFile $publishedResources 'Shared/Unicode/café.txt' $unicode | Out-Null
+    Assert-SingleFile $publishedResources 'App/local.txt' $local | Out-Null
+    Assert-NoFile $publishedResources 'Shared/Nested/payload.bin'
+    Assert-NoFile $publishedResources 'Shared/zero.bin'
 
     $collision = Join-Path $root 'Consumer\Resources\Raw\collision.bin'
     [System.IO.File]::WriteAllText($collision, "collision`n")
@@ -226,7 +252,8 @@ function Invoke-BackendAcceptance {
     $collisionPublish = Join-Path $root 'collision-publish'
     Invoke-DotNet (@('publish', $consumerProject, '--no-restore', "-p:PublishDir=$collisionPublish") + $buildArguments) -ExpectFailure
 
-    Write-Host "PASS ${Name}: referenced-library bytes/names, incremental mutation, stale removal, no-build publish, and collision failure."
+    $publishMode = if ($Name -eq 'appkit') { 'supported publish and installer payload' } else { 'no-build publish' }
+    Write-Host "PASS ${Name}: referenced-library bytes/names, incremental mutation, stale removal, $publishMode, and collision failure."
 }
 
 function Invoke-BackendSwitchAcceptance {
