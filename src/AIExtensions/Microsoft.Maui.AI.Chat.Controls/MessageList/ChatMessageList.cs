@@ -1,11 +1,12 @@
 using System.Collections.ObjectModel;
+using System.Runtime.CompilerServices;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
 /// The message list: rows projected straight from <see cref="AgentContext.Turns"/>, like the upstream
 /// <c>MessageList</c>. Each turn shows the user's bubble, one row per rendered response block, then a thinking
-/// row, an error row, or a stopped marker, and the app's response footer.
+/// row, an error row, a not-sent marker, or a stopped marker, and the app's response footer.
 /// </summary>
 /// <remarks>
 /// Engine notifications only mark the list dirty. One flush per dispatcher tick (about 50 ms) reconciles the
@@ -17,6 +18,10 @@ internal sealed class ChatMessageList : CollectionView
 {
     private const double UnpinDistance = 32;
 
+    // Turns that failed. The engine commits nothing for a failed turn and forgets the failure once another message
+    // is sent, so the view keeps it, for as long as the turn lives.
+    private static readonly ConditionalWeakTable<ConversationTurn, object> FailedTurns = new();
+
     private readonly AIChatView _owner;
     private readonly ObservableCollection<ChatRow> _rows = [];
     private readonly Dictionary<ContentBlock, BlockRow> _blockRows = new(ReferenceEqualityComparer.Instance);
@@ -25,6 +30,7 @@ internal sealed class ChatMessageList : CollectionView
     private readonly HashSet<ChatRow> _dirtyRows = [];
     private readonly Dictionary<ConversationTurn, UserMessageRow> _userRows = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<ConversationTurn, TurnErrorRow> _errorRows = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<ConversationTurn, TurnNotSentRow> _notSentRows = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<ConversationTurn, TurnStoppedRow> _stoppedRows = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<ConversationTurn, TurnFooterRow> _footerRows = new(ReferenceEqualityComparer.Instance);
     private readonly List<ChatRow> _lastTurnRows = [];
@@ -71,8 +77,11 @@ internal sealed class ChatMessageList : CollectionView
             _sessionSubscriptions.Add(session.RegisterOnTurnAdded(_ => Invalidate()));
             _sessionSubscriptions.Add(session.RegisterOnStatusChanged(_ => OnStatusChanged()));
             _sessionSubscriptions.Add(session.RegisterOnBlockAdded((_, _) => Invalidate()));
-            _sessionSubscriptions.Add(session.RegisterOnResponseBlocksCleared(_ => Invalidate()));
+            _sessionSubscriptions.Add(session.RegisterOnResponseBlocksCleared(OnResponseBlocksCleared));
         }
+
+        // The session may have failed while nothing observed it.
+        RememberFailedTurn();
 
         // Rows kept from before the list was detached missed every change made in the meantime.
         _dirtyRows.UnionWith(_rows);
@@ -199,7 +208,28 @@ internal sealed class ChatMessageList : CollectionView
             return;
         }
 
+        // Remember a failure now: by the next flush another message may already have been sent.
+        RememberFailedTurn();
         _statusChanged = true;
+        Invalidate();
+    }
+
+    private void RememberFailedTurn()
+    {
+        if (_session is { Status: ConversationStatus.Error, Turns: [.., var failed] })
+            FailedTurns.AddOrUpdate(failed, failed);
+    }
+
+    private void OnResponseBlocksCleared(ConversationTurn turn)
+    {
+        if (this.GetDispatcherIfRequired() is { } owner)
+        {
+            owner.Dispatch(() => OnResponseBlocksCleared(turn));
+            return;
+        }
+
+        // A retry sends the turn again.
+        FailedTurns.Remove(turn);
         Invalidate();
     }
 
@@ -256,13 +286,22 @@ internal sealed class ChatMessageList : CollectionView
                     desired.Add(_thinkingRow);
                 }
 
+                var failed = FailedTurns.TryGetValue(turn, out _);
                 if (isLast && status == ConversationStatus.Error)
+                {
+                    failed = true;
                     desired.Add(GetRow(_errorRows, turn, () => new TurnErrorRow(turn, session)));
+                }
+                else if (failed)
+                {
+                    // Only the last turn can be retried; an earlier failed one stays out of the conversation.
+                    desired.Add(GetRow(_notSentRows, turn, () => new TurnNotSentRow(turn)));
+                }
 
                 if (turn.IsStopped)
                     desired.Add(GetRow(_stoppedRows, turn, () => new TurnStoppedRow(turn)));
 
-                var isComplete = !isLast || status == ConversationStatus.Idle;
+                var isComplete = !failed && (!isLast || status == ConversationStatus.Idle);
                 if (footer is not null && isComplete && turn.ResponseBlocks.Count > 0)
                     desired.Add(GetFooterRow(turn, footer));
 
@@ -383,6 +422,7 @@ internal sealed class ChatMessageList : CollectionView
 
         PruneTurns(_userRows, liveTurns);
         PruneTurns(_errorRows, liveTurns);
+        PruneTurns(_notSentRows, liveTurns);
         PruneTurns(_stoppedRows, liveTurns);
         PruneTurns(_footerRows, liveTurns);
     }
@@ -446,6 +486,7 @@ internal sealed class ChatMessageList : CollectionView
         private readonly DataTemplate _user = new(static () => new UserMessageView());
         private readonly DataTemplate _thinking = new(static () => new ThinkingView());
         private readonly DataTemplate _error = new(static () => new TurnErrorView());
+        private readonly DataTemplate _notSent = new(static () => new TurnNotSentView());
         private readonly DataTemplate _stopped = new(static () => new TurnStoppedView());
         private readonly Dictionary<DataTemplate, DataTemplate> _footers = [];
 
@@ -456,6 +497,7 @@ internal sealed class ChatMessageList : CollectionView
                 UserMessageRow => _user,
                 ThinkingRow => _thinking,
                 TurnErrorRow => _error,
+                TurnNotSentRow => _notSent,
                 TurnStoppedRow => _stopped,
                 TurnFooterRow row => GetFooter(row.Template),
                 _ => Empty,

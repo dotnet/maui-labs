@@ -18,7 +18,8 @@ templates, restyle it with resource keys, or replace the whole layout.
   There are also client UI actions, collapsible reasoning, inline images (data or links, with a link chip when
   an image cannot load), and file and link chips.
 - **Turn states:** a stopped response keeps its partial output under a "Stopped" marker. A failed response
-  keeps its partial output and shows the error with Retry. A restored conversation renders without sending.
+  keeps its partial output and shows the error with Retry; if another message is sent instead, the failed one
+  is marked "Not sent". A restored conversation renders without sending.
 - **Composer:** Send and Stop, suggestion chips, attachments (picker, file types, size and count limits),
   audio notes, dictation, and continuous live voice. Errors appear in one place.
 - **Customization:** `BlockTemplate` matches by block type (including `[ToolBlock]` types), tool name, role,
@@ -182,7 +183,7 @@ Generated blocks need `options.AddGeneratedToolBlocks()` on the agent, so assign
 | `EmptyViewTemplate` | Content before the first message. The default shows `WelcomeTitle` and `WelcomeMessage` |
 | `Suggestions` | Prompt chips shown while the conversation is empty. Tapping one sends it |
 | `MessagesHeaderTemplate` | Content at the top of the scrolling list, such as a disclaimer |
-| `ResponseFooterTemplate` | Content after each completed response. The binding context is the `ConversationTurn`, with its final `ModelId`, `Usage`, and `IsStopped` |
+| `ResponseFooterTemplate` | Content after each completed response (not after a failed one). The binding context is the `ConversationTurn`, with its final `ModelId`, `Usage`, and `IsStopped` |
 | `InputHeaderContent` | A view above the message box, such as a status banner. It hides with the message box |
 | `InputLeadingContent`, `InputTrailingContent` | Extra views beside the message box |
 
