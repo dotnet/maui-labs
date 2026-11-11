@@ -6,6 +6,8 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// application's own resources win) the first time a view is created. Merge it yourself in App.xaml
 /// (<c>&lt;chat:AIChatTheme /&gt;</c>) when you want to base your own styles on its keys with
 /// <c>StaticResource</c>; the view then reuses your instance. See <see cref="AIChatThemeKeys"/> for every key.
+/// Besides those keys, the theme holds empty implicit styles for the view's internal element types, which keep the
+/// application's implicit styles away from the view's own parts.
 /// </remarks>
 public partial class AIChatTheme : ResourceDictionary
 {
@@ -21,7 +23,11 @@ public partial class AIChatTheme : ResourceDictionary
     public AIChatTheme()
     {
         InitializeComponent();
+        this[AIChatThemeKeys.FontFamily] = null!;
         this[AIChatThemeKeys.CodeFontFamily] = GetCodeFontFamily(GetPlatform());
+
+        // Keeps the app's implicit styles away from the view's own parts.
+        ChatElements.AddImplicitStyles(this);
 
         var application = Application.Current;
         ApplyTheme(GetRequestedTheme(application));

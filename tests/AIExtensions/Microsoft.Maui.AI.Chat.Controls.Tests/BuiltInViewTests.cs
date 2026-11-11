@@ -13,8 +13,8 @@ public class BuiltInViewTests
         Assert.Same(view.Markdown, view.Content);
         Assert.Collection(
             view.Markdown.BlockViews,
-            heading => Assert.Equal(SemanticHeadingLevel.Level2, SemanticProperties.GetHeadingLevel(Assert.IsType<Label>(heading))),
-            paragraph => Assert.IsType<Label>(paragraph));
+            heading => Assert.Equal(SemanticHeadingLevel.Level2, SemanticProperties.GetHeadingLevel(Assert.IsAssignableFrom<Label>(heading))),
+            paragraph => Assert.IsAssignableFrom<Label>(paragraph));
 
         // The chat theme styles it: body text, the theme's code font, accent links.
         var paragraph = (Label)view.Markdown.BlockViews[1]!;
@@ -38,7 +38,7 @@ public class BuiltInViewTests
 
         Assert.Same(title, view.Markdown.BlockViews[0]);
         Assert.Same(first, view.Markdown.BlockViews[1]);
-        Assert.Equal("Second paragraph", Assert.IsType<Label>(view.Markdown.BlockViews[2]).Text);
+        Assert.Equal("Second paragraph", Assert.IsAssignableFrom<Label>(view.Markdown.BlockViews[2]).Text);
 
         block.AppendText("\n\n- a list");
         Refresh(view);
@@ -74,17 +74,17 @@ public class BuiltInViewTests
         var blocks = view.Markdown.BlockViews;
 
         // Not a web link: a chip with the description and the file, not an empty gap, and nothing to open.
-        var edited = Assert.IsType<Border>(blocks[0]);
+        var edited = Assert.IsAssignableFrom<Border>(blocks[0]);
         Assert.Equal("edited, Image \u00B7 edited_image.png", SemanticProperties.GetDescription(edited));
         Assert.Empty(edited.GestureRecognizers);
-        Assert.Equal("chart.png, Image", SemanticProperties.GetDescription(Assert.IsType<Border>(blocks[1])));
+        Assert.Equal("chart.png, Image", SemanticProperties.GetDescription(Assert.IsAssignableFrom<Border>(blocks[1])));
 
         // A web image loads inline; if it fails, the same chip replaces it and opens the link.
         var image = Assert.IsType<LinkedImageView>(blocks[2]);
         Assert.Equal(new Uri("https://example.com/cat.png"), Assert.IsType<UriImageSource>(image.Image.Source).Uri);
         Assert.Equal("cat", SemanticProperties.GetDescription(image.Image));
         image.ShowFallback();
-        var chip = Assert.IsType<Border>(image.Content);
+        var chip = Assert.IsAssignableFrom<Border>(image.Content);
         Assert.Equal("cat, Image \u00B7 cat.png", SemanticProperties.GetDescription(chip));
         Assert.Single(chip.GestureRecognizers.OfType<TapGestureRecognizer>());
     }
@@ -141,11 +141,11 @@ public class BuiltInViewTests
         Assert.Equal("AIChatRichText", view.AutomationId);
         var blocks = view.Markdown.BlockViews;
         Assert.Equal(10, blocks.Count);
-        var headingLabel = Assert.IsType<Label>(blocks[0]);
+        var headingLabel = Assert.IsAssignableFrom<Label>(blocks[0]);
         Assert.Equal(FontAttributes.Bold, headingLabel.FontAttributes);
         Assert.Equal(SemanticHeadingLevel.Level2, SemanticProperties.GetHeadingLevel(headingLabel));
 
-        var spans = Assert.IsType<Label>(blocks[1]).FormattedText!.Spans;
+        var spans = Assert.IsAssignableFrom<Label>(blocks[1]).FormattedText!.Spans;
         Assert.Contains(spans, span => span.Text == "bold" && span.FontAttributes.HasFlag(FontAttributes.Bold));
         Assert.Contains(spans, span => span.Text == " italic" && span.FontAttributes.HasFlag(FontAttributes.Italic));
         Assert.Contains(spans, span => span.Text == " removed" && span.TextDecorations.HasFlag(TextDecorations.Strikethrough));
@@ -153,16 +153,16 @@ public class BuiltInViewTests
         Assert.Single(spans, span => span.Text == " link").GestureRecognizers.Single();
         Assert.Empty(Assert.Single(spans, span => span.Text == " unsafe").GestureRecognizers);
 
-        var code = Assert.IsType<Border>(blocks[2]);
+        var code = Assert.IsAssignableFrom<Border>(blocks[2]);
         Assert.Equal(Theme(view)[AIChatThemeKeys.CodeBlockStyle], code.Style);
         Assert.Contains(code.Descendants<Label>(), label => label.Text == "var answer = 42;");
-        Assert.IsType<Grid>(blocks[3]);
+        Assert.IsAssignableFrom<Grid>(blocks[3]);
         Assert.Contains(((Element)blocks[4]!).Descendants<Label>(), label => label.Text == "3.");
-        Assert.IsType<ScrollView>(blocks[5]);
+        Assert.IsAssignableFrom<ScrollView>(blocks[5]);
         Assert.IsAssignableFrom<BoxView>(blocks[6]);
-        Assert.Equal("unsafe image, Image \u00B7 bad", SemanticProperties.GetDescription(Assert.IsType<Border>(blocks[7])));
-        Assert.Equal("<b>escaped</b>", Assert.IsType<Label>(blocks[8]).Text);
-        Assert.IsType<Grid>(blocks[9]);
+        Assert.Equal("unsafe image, Image \u00B7 bad", SemanticProperties.GetDescription(Assert.IsAssignableFrom<Border>(blocks[7])));
+        Assert.Equal("<b>escaped</b>", Assert.IsAssignableFrom<Label>(blocks[8]).Text);
+        Assert.IsAssignableFrom<Grid>(blocks[9]);
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public class BuiltInViewTests
 
         var view = Render<RichTextBlockView>(block);
 
-        Assert.Equal("raw fallback", Assert.IsType<Label>(Assert.Single(view.Markdown.BlockViews)).Text);
+        Assert.Equal("raw fallback", Assert.IsAssignableFrom<Label>(Assert.Single(view.Markdown.BlockViews)).Text);
     }
 
     [Theory]
@@ -596,16 +596,16 @@ public class BuiltInViewTests
 
         // An image that cannot be loaded leaves its link.
         image.ShowFallback();
-        Assert.StartsWith("cat.png, ", SemanticProperties.GetDescription(Assert.IsType<Border>(image.Content)));
+        Assert.StartsWith("cat.png, ", SemanticProperties.GetDescription(Assert.IsAssignableFrom<Border>(image.Content)));
 
         var link = Render<MediaBlockView>(Blocks.Media(new UriContent(new Uri("https://example.com/docs/q3%20report.pdf"), "application/pdf"))).MediaView;
-        var chip = Assert.IsType<Border>(link);
+        var chip = Assert.IsAssignableFrom<Border>(link);
         Assert.Equal("q3 report.pdf, PDF · example.com", SemanticProperties.GetDescription(chip));
         Assert.Single(chip.GestureRecognizers.OfType<TapGestureRecognizer>());
 
         // Only web links load as images; other schemes become a chip that does not open.
         var unsafeLink = Render<MediaBlockView>(Blocks.Media(new UriContent(new Uri("file:///etc/cat.png"), "image/png"))).MediaView;
-        Assert.Empty(Assert.IsType<Border>(unsafeLink).GestureRecognizers);
+        Assert.Empty(Assert.IsAssignableFrom<Border>(unsafeLink).GestureRecognizers);
     }
 
     [Fact]
@@ -624,7 +624,7 @@ public class BuiltInViewTests
 
         block.Content = Blocks.Pdf();
         Refresh(view);
-        Assert.IsType<Border>(view.MediaView);
+        Assert.IsAssignableFrom<Border>(view.MediaView);
     }
 
     [Fact]
@@ -647,7 +647,7 @@ public class BuiltInViewTests
 
         // The attachments sit outside the bubble, right-aligned, inset like the bubble.
         Assert.Collection(
-            Assert.IsType<VerticalStackLayout>(view.Content).Children,
+            Assert.IsAssignableFrom<VerticalStackLayout>(view.Content).Children,
             attachments => Assert.Same(view.Attachments, attachments),
             bubble => Assert.Same(view.Bubble, bubble));
         Assert.True(view.Attachments.IsVisible);

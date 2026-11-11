@@ -25,6 +25,7 @@ internal sealed class ChatMessageList : CollectionView
     // is sent, so the view keeps it, for as long as the turn lives.
     private static readonly ConditionalWeakTable<ConversationTurn, object> FailedTurns = new();
 
+    private readonly bool _themed = ChatElements.EnsureTheme();
     private readonly AIChatView _owner;
     private readonly ObservableCollection<ChatRow> _rows = [];
     private readonly Dictionary<ContentBlock, BlockRow> _blockRows = new(ReferenceEqualityComparer.Instance);
@@ -65,7 +66,7 @@ internal sealed class ChatMessageList : CollectionView
         ItemsSource = _rows;
 
         // With the spacing before the end row and the row itself, 8 points under the newest row.
-        Footer = new BoxView { HeightRequest = 3, Color = Colors.Transparent };
+        Footer = new ChatBoxView { HeightRequest = 3, Color = Colors.Transparent };
         Scrolled += OnScrolled;
         SizeChanged += OnSizeChanged;
     }
@@ -609,8 +610,8 @@ internal sealed class ChatMessageList : CollectionView
 
     private sealed class RowTemplateSelector : DataTemplateSelector
     {
-        private static readonly DataTemplate Empty = new(static () => new ContentView());
-        private static readonly DataTemplate End = new(static () => new ContentView { HeightRequest = 1, InputTransparent = true });
+        private static readonly DataTemplate Empty = new(static () => new ChatContentView());
+        private static readonly DataTemplate End = new(static () => new ChatContentView { HeightRequest = 1, InputTransparent = true });
         private readonly DataTemplate _user = new(static () => new UserMessageView());
         private readonly DataTemplate _thinking = new(static () => new ThinkingView());
         private readonly DataTemplate _error = new(static () => new TurnErrorView());

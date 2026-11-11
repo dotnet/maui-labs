@@ -111,6 +111,11 @@ with no platform or device:
 - Test the built-in speech recognizer over `FakeSpeechToText`, which raises updates the way each platform's
   CommunityToolkit.Maui service does (`SayOnApple`, `SayOnWindows`, `SayOnAndroid`), and move its pause timer
   with `ManualTimeProvider`.
+- Build the view's own parts from the internal element types in `Views/ChatElements.cs` (`ChatLabel`,
+  `ChatButton`, ...), never the standard controls, so the app's implicit styles leave them alone. A new built-in
+  type gets the `ChatElements.EnsureTheme()` field initializer and an entry in `ChatElements.Types`.
+  `StyleIsolationTests` renders every part with the default MAUI template's styles and with garish ones and
+  fails on any part that changes; add a scenario there when you add a part.
 
 ### Naming Convention
 

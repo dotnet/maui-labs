@@ -9,6 +9,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </summary>
 internal sealed class ChatImage : Image
 {
+    private readonly bool _themed = ChatElements.EnsureTheme();
     private Size? _pixelSize;
 
     /// <summary>Gets or sets the image's size in pixels, laid out as device-independent units; null when unknown.</summary>

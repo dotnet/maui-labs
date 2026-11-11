@@ -28,6 +28,7 @@ internal sealed class MarkdownView : ContentView
         13d,
         propertyChanged: static (bindable, _, _) => ((MarkdownView)bindable).OnFontSizeChanged());
 
+    private readonly bool _themed = ChatElements.EnsureTheme();
     private readonly VerticalStackLayout _blocks;
     private readonly MarkdownRenderer _renderer;
     private readonly List<View?> _blockViews = new();
@@ -38,7 +39,7 @@ internal sealed class MarkdownView : ContentView
     public MarkdownView()
     {
         _renderer = new MarkdownRenderer(OpenLinkAsync);
-        _blocks = new VerticalStackLayout();
+        _blocks = new ChatVerticalStackLayout();
         _blocks.SetDynamicResource(StackBase.SpacingProperty, AIChatThemeKeys.MarkdownBlockSpacing);
         Content = _blocks;
 

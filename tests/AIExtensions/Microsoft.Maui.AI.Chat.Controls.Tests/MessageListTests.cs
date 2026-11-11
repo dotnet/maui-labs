@@ -48,7 +48,7 @@ public class MessageListTests
         Assert.Collection(
             message.Attachments.Children,
             image => Assert.IsType<ChatImage>(image),
-            chip => Assert.Contains("notes.pdf", Assert.IsType<Border>(chip).Descendants<Label>().Select(l => l.Text)));
+            chip => Assert.Contains("notes.pdf", Assert.IsAssignableFrom<Border>(chip).Descendants<Label>().Select(l => l.Text)));
         Assert.Equal("What is this?", message.TextLabel.Text);
         Assert.Equal(LayoutOptions.End, message.Bubble.HorizontalOptions);
     });
@@ -639,7 +639,7 @@ public class MessageListTests
         var items = (IList<ChatRow>)view.MessageList.ItemsSource;
         Assert.Equal(view.Rows().Count, view.EndIndex());
         Assert.IsType<EndRow>(items[view.EndIndex()]);
-        Assert.Equal(1, Assert.IsType<ContentView>(view.Realize(items[view.EndIndex()])).HeightRequest);
+        Assert.Equal(1, Assert.IsAssignableFrom<ContentView>(view.Realize(items[view.EndIndex()])).HeightRequest);
 
         view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
         Assert.False(view.MessageList.IsPinned);

@@ -38,12 +38,12 @@ public class MarkdownViewTests
         AssertLayoutMatchesBlocks(view);
         Assert.Collection(
             view.BlockViews,
-            block => Assert.Equal(SemanticHeadingLevel.Level2, SemanticProperties.GetHeadingLevel(Assert.IsType<Label>(block))),
-            block => Assert.NotNull(Assert.IsType<Label>(block).FormattedText),
-            block => Assert.IsType<Border>(block),
-            block => Assert.IsAssignableFrom<BoxView>(Assert.IsType<Grid>(block).Children[0]),
-            block => Assert.IsType<Grid>(block),
-            block => Assert.IsType<Border>(Assert.IsType<ScrollView>(block).Content),
+            block => Assert.Equal(SemanticHeadingLevel.Level2, SemanticProperties.GetHeadingLevel(Assert.IsAssignableFrom<Label>(block))),
+            block => Assert.NotNull(Assert.IsAssignableFrom<Label>(block).FormattedText),
+            block => Assert.IsAssignableFrom<Border>(block),
+            block => Assert.IsAssignableFrom<BoxView>(Assert.IsAssignableFrom<Grid>(block).Children[0]),
+            block => Assert.IsAssignableFrom<Grid>(block),
+            block => Assert.IsAssignableFrom<Border>(Assert.IsAssignableFrom<ScrollView>(block).Content),
             block => Assert.IsAssignableFrom<BoxView>(block),
             block => Assert.Equal("A cat", SemanticProperties.GetDescription(Assert.IsType<LinkedImageView>(block).Image)));
 
@@ -95,7 +95,7 @@ public class MarkdownViewTests
 
         Assert.Equal(4, view.BlockViews.Count);
         Assert.Equal(second, view.BlockViews.Take(3));
-        Assert.IsType<Grid>(view.BlockViews[3]);
+        Assert.IsAssignableFrom<Grid>(view.BlockViews[3]);
         AssertLayoutMatchesBlocks(view);
 
         var third = view.BlockViews.ToArray();
@@ -296,18 +296,18 @@ public class MarkdownViewTests
         var view = Themed();
         view.SetMarkdown("```python\nprint('a very long line that must not wrap')\n```\n\n```\nno language\n```");
 
-        var withLanguage = Assert.IsType<Border>(view.BlockViews[0]);
-        var stack = Assert.IsType<VerticalStackLayout>(withLanguage.Content);
-        Assert.Equal("python", Assert.IsType<Label>(stack.Children[0]).Text);
-        var scroller = Assert.IsType<ScrollView>(stack.Children[1]);
+        var withLanguage = Assert.IsAssignableFrom<Border>(view.BlockViews[0]);
+        var stack = Assert.IsAssignableFrom<VerticalStackLayout>(withLanguage.Content);
+        Assert.Equal("python", Assert.IsAssignableFrom<Label>(stack.Children[0]).Text);
+        var scroller = Assert.IsAssignableFrom<ScrollView>(stack.Children[1]);
         Assert.Equal(ScrollOrientation.Horizontal, scroller.Orientation);
-        var code = Assert.IsType<Label>(scroller.Content);
+        var code = Assert.IsAssignableFrom<Label>(scroller.Content);
         Assert.Equal("print('a very long line that must not wrap')", code.Text);
         Assert.Equal(LineBreakMode.NoWrap, code.LineBreakMode);
         Assert.Equal("monospace", code.FontFamily);
 
-        var withoutLanguage = Assert.IsType<Border>(view.BlockViews[1]);
-        var plainScroller = Assert.IsType<ScrollView>(withoutLanguage.Content);
+        var withoutLanguage = Assert.IsAssignableFrom<Border>(view.BlockViews[1]);
+        var plainScroller = Assert.IsAssignableFrom<ScrollView>(withoutLanguage.Content);
         Assert.Equal(ScrollOrientation.Horizontal, plainScroller.Orientation);
         Assert.IsType<RoundRectangle>(withoutLanguage.StrokeShape);
         Assert.All([scroller, plainScroller], s => Assert.Equal(ScrollBarVisibility.Default, s.HorizontalScrollBarVisibility));
@@ -353,14 +353,14 @@ public class MarkdownViewTests
         var view = new MarkdownView();
         view.SetMarkdown("3. three\n4. four\n   - nested\n     - deeper\n\n- [x] done\n- [ ] todo");
 
-        var ordered = Assert.IsType<Grid>(view.BlockViews[0]);
+        var ordered = Assert.IsAssignableFrom<Grid>(view.BlockViews[0]);
         var markers = ordered.Children.OfType<Label>().Where(label => Grid.GetColumn(label) == 0).Select(label => label.Text).ToArray();
         Assert.Equal(["3.", "4."], markers);
 
         var nestedMarkers = Labels(view.BlockViews[0]!).Where(label => label.Text is "•" or "◦" or "▪").Select(label => label.Text).ToArray();
         Assert.Equal(["◦", "▪"], nestedMarkers);
 
-        var tasks = Assert.IsType<Grid>(view.BlockViews[1]);
+        var tasks = Assert.IsAssignableFrom<Grid>(view.BlockViews[1]);
         var taskMarkers = tasks.Children.OfType<Label>().Where(label => Grid.GetColumn(label) == 0).Select(label => label.Text).ToArray();
         Assert.Equal(["\u2611\uFE0E", "\u2610\uFE0E"], taskMarkers);
     }
@@ -371,10 +371,10 @@ public class MarkdownViewTests
         var view = Themed();
         view.SetMarkdown("| Left | Center | Right |\n|:--|:-:|--:|\n| a | **b** | c |\n| d | e |");
 
-        var scroller = Assert.IsType<ScrollView>(view.BlockViews[0]);
+        var scroller = Assert.IsAssignableFrom<ScrollView>(view.BlockViews[0]);
         Assert.Equal(ScrollOrientation.Horizontal, scroller.Orientation);
         Assert.Equal(ScrollBarVisibility.Default, scroller.HorizontalScrollBarVisibility);
-        var grid = Assert.IsType<Grid>(Assert.IsType<Border>(scroller.Content).Content);
+        var grid = Assert.IsAssignableFrom<Grid>(Assert.IsAssignableFrom<Border>(scroller.Content).Content);
         Assert.Equal(5, grid.ColumnDefinitions.Count);
         Assert.Equal(5, grid.RowDefinitions.Count);
         Assert.Equal(4, grid.Children.OfType<BoxView>().Count());
@@ -404,9 +404,9 @@ public class MarkdownViewTests
         Assert.Equal(new Size(0, 1 + 8), ((IView)rule).Measure(500, 500));
 
         // Grid lines fill their track across and do not widen the auto rows and columns they cross.
-        var table = Assert.IsType<Border>(Assert.IsType<ScrollView>(view.BlockViews[2]).Content);
+        var table = Assert.IsAssignableFrom<Border>(Assert.IsAssignableFrom<ScrollView>(view.BlockViews[2]).Content);
         Assert.Collection(
-            Assert.IsType<Grid>(table.Content).Children.OfType<BoxView>(),
+            Assert.IsAssignableFrom<Grid>(table.Content).Children.OfType<BoxView>(),
             row => Assert.Equal(new Size(0, 1), ((IView)row).Measure(500, 500)),
             column => Assert.Equal(new Size(1, 0), ((IView)column).Measure(500, 500)));
     }
@@ -423,9 +423,9 @@ public class MarkdownViewTests
         Assert.Equal(320, image.MaximumHeightRequest);
 
         // Anything else is a chip with the description, never an empty gap.
-        Assert.Equal("Local, Image \u00B7 x.png", SemanticProperties.GetDescription(Assert.IsType<Border>(view.BlockViews[1])));
+        Assert.Equal("Local, Image \u00B7 x.png", SemanticProperties.GetDescription(Assert.IsAssignableFrom<Border>(view.BlockViews[1])));
 
-        var mixed = Assert.IsType<VerticalStackLayout>(view.BlockViews[2]);
+        var mixed = Assert.IsAssignableFrom<VerticalStackLayout>(view.BlockViews[2]);
         Assert.Collection(
             mixed.Children,
             child => Assert.Equal("Text ", ((Label)child).Text),

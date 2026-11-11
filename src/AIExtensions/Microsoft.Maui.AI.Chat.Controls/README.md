@@ -28,8 +28,8 @@ templates, restyle it with resource keys, or replace the whole layout.
 - **Customization:** `BlockTemplate` matches by block type (including `[ToolBlock]` types), tool name, role,
   priority, or a `When` override. There are header, empty, messages-header, and response-footer templates,
   input slots, resource keys, and a replaceable `ControlTemplate`.
-- **Light and dark themes**, accessible names on every action, and services resolved from dependency
-  injection.
+- **Light and dark themes** that your app's implicit styles don't change, accessible names on every action,
+  and services resolved from dependency injection.
 
 ## Platform support
 
@@ -204,8 +204,15 @@ The first `AIChatView` merges `AIChatTheme` into `Application.Resources` at inde
 win. Every visual uses `DynamicResource`, so changes apply at runtime. All keys are constants
 on `AIChatThemeKeys`.
 
+The view's own parts ignore your app's implicit styles (such as the `Button`, `Label`, and `Border` styles of the
+default MAUI template), so the chat looks the same in any app: restyle them with these keys. Content you supply
+(slots, block templates, a replaced `ControlTemplate`) takes your implicit styles as usual. Text uses the platform
+font unless you set `AIChat.FontFamily`.
+
 ```xml
 <Application.Resources>
+    <!-- Your app's font for every text but code. -->
+    <x:String x:Key="AIChat.FontFamily">OpenSansRegular</x:String>
     <!-- One color in both themes. -->
     <Color x:Key="AIChat.Color.Accent">#7C3AED</Color>
     <!-- Or per theme: AIChat.Light.* and AIChat.Dark.* switch with the app theme. -->
@@ -225,7 +232,8 @@ buttons to the view's commands (`SendCommand`, `StopCommand`, `PickAttachmentsCo
 `ToggleAudioCaptureCommand`, `ToggleLiveSpeechCommand`) and its state (`CanSend`, `CanStop`, `IsBusy`,
 `ErrorMessage`, `HasError`, `Attachments`, `IsRecordingAudio`, `IsListening`, and others). The named parts
 `PART_Header`, `PART_Messages`, `PART_EmptyView`, `PART_Suggestions`, `PART_Attachments`, and `PART_Input`
-are optional.
+are optional. The default template is built from internal element types; when you start from a copy, use the
+standard controls instead.
 
 ### Markdown
 

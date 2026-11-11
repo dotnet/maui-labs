@@ -68,6 +68,12 @@ public static class AIChatThemeKeys
     /// <summary>The font size of code (a <see cref="double"/>).</summary>
     public const string CodeFontSize = "AIChat.FontSize.Code";
 
+    /// <summary>
+    /// The font family of every built-in text except code (a <see cref="string"/>). <see langword="null"/> by default,
+    /// which is the platform font; set it to your app's font, for example <c>OpenSansRegular</c>.
+    /// </summary>
+    public const string FontFamily = "AIChat.FontFamily";
+
     /// <summary>The monospace font family used for code (a <see cref="string"/>).</summary>
     public const string CodeFontFamily = "AIChat.FontFamily.Code";
 
@@ -118,6 +124,9 @@ public static class AIChatThemeKeys
 
     /// <summary>The <see cref="Style"/> of secondary actions such as Reject (<see cref="Button"/>).</summary>
     public const string SecondaryButtonStyle = "AIChat.Style.SecondaryButton";
+
+    /// <summary>The <see cref="Style"/> of the button that shows or hides the model's reasoning (<see cref="Button"/>).</summary>
+    public const string ReasoningHeaderStyle = "AIChat.Style.ReasoningHeader";
 
     /// <summary>The <see cref="Style"/> of suggestion chips (<see cref="Button"/>).</summary>
     public const string SuggestionStyle = "AIChat.Style.Suggestion";
