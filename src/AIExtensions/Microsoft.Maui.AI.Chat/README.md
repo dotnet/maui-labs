@@ -190,7 +190,9 @@ there too. Handlers may call back into the session, for example to send the next
 becomes `Idle`. A handler that runs after such a send reads the new send's `Status`; use
 `RegisterOnStatusChanged` when you need the status each change reported. A handler of a turn's addition,
 of a retry's removal of blocks or of the `Turns` reset cannot start a send or retry (the returned task
-fails with `InvalidOperationException`); send from a status change instead.
+fails with `InvalidOperationException`), and nothing can send while a restore runs, including a handler of
+a state change the restore replays; send from a status change instead. `ClearAsync` resets the typed
+state last, so a handler of that change can send the first message of the cleared conversation.
 
 The `OnChanged` and `RegisterOn…` callbacks remain available.
 
@@ -261,7 +263,8 @@ persisted. The engine writes a thread only when a turn commits (`AppendUserMessa
 A stopped turn is committed with its partial output, without tool calls that never got a result;
 its history also leaves out reasoning that the stop cut off, which stays on screen.
 Threads must round-trip `ChatResponseUpdate.AdditionalProperties`, which mark continuation rounds and
-stopped turns. Call `RestoreAsync` to load a thread's turns and message history. Restored approvals
+stopped turns. Call `RestoreAsync` to load a thread's turns and message history; until it has loaded
+them, a send fails and `ClearAsync` waits for it. Restored approvals
 and UI actions are display history, not resumable pending work: they accept no decision or
 invocation, and their `IsAwaitingInput` is false.
 
