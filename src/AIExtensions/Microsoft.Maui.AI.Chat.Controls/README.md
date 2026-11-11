@@ -181,6 +181,7 @@ Generated blocks need `options.AddGeneratedToolBlocks()` on the agent, so assign
 | `Suggestions` | Prompt chips shown while the conversation is empty. Tapping one sends it |
 | `MessagesHeaderTemplate` | Content at the top of the scrolling list, such as a disclaimer |
 | `ResponseFooterTemplate` | Content after each completed response. The binding context is the `ConversationTurn`, with its final `ModelId`, `Usage`, and `IsStopped` |
+| `InputHeaderContent` | A view above the message box, such as a status banner. It hides with the message box |
 | `InputLeadingContent`, `InputTrailingContent` | Extra views beside the message box |
 
 App content in these slots inherits the view's `BindingContext`. Use `Placeholder`, `IsInputEnabled` (for

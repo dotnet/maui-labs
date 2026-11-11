@@ -106,6 +106,37 @@ public class AIChatViewTests
     }
 
     [Fact]
+    public void InputHeaderContent_IsShownAboveTheComposerOnlyWhileSet()
+    {
+        var model = new object();
+        var banner = new Label { Text = "Preparing the model" };
+        var view = ChatHost.Create(v => v.BindingContext = model);
+        var header = view.ByAutomationId<ContentView>("AIChatInputHeader");
+        var inputArea = Assert.IsAssignableFrom<Layout>(header.Parent);
+        var composer = inputArea.Children.OfType<Border>().Single(border => border.Descendants<Editor>().Any());
+
+        Assert.False(header.IsVisible);
+
+        view.InputHeaderContent = banner;
+
+        Assert.True(header.IsVisible);
+        Assert.Same(banner, header.Content);
+        Assert.Same(model, banner.BindingContext);
+        Assert.True(inputArea.IndexOf(header) < inputArea.IndexOf(composer));
+
+        banner.IsVisible = false;
+        Assert.False(header.IsVisible);
+        banner.IsVisible = true;
+        Assert.True(header.IsVisible);
+
+        view.IsInputVisible = false;
+        Assert.False(inputArea.IsVisible);
+
+        view.InputHeaderContent = null;
+        Assert.False(header.IsVisible);
+    }
+
+    [Fact]
     public void HeaderTemplate_IsShownAboveTheMessages()
     {
         var view = ChatHost.Create(v => v.HeaderTemplate = new DataTemplate(() => new Label { Text = "Assistant" }));
