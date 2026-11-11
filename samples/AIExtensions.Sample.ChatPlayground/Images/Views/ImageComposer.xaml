@@ -6,19 +6,10 @@
              x:DataType="local:ImagePlaygroundViewModel">
     <Border Style="{StaticResource ComposerPanel}">
         <VerticalStackLayout Spacing="8">
-            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8"
-                  IsVisible="{Binding HasOriginalImage}">
-                <Image Source="{Binding OriginalImagePreview}" WidthRequest="56" HeightRequest="56"
-                       Aspect="AspectFill" />
-                <Label Grid.Column="1" Text="{Binding OriginalImageName}"
-                       VerticalOptions="Center" LineBreakMode="TailTruncation"
-                       AutomationId="ImageOriginalName" />
-                <ImageButton Grid.Column="2" Source="close.png"
-                             Command="{Binding RemoveOriginalImage}"
-                             Style="{StaticResource AttachmentButton}"
-                             SemanticProperties.Description="Remove original image"
-                             AutomationId="ImageRemoveOriginalButton" />
-            </Grid>
+            <local:AttachmentPreview IsVisible="{Binding HasOriginalImage}"
+                                     PreviewSource="{Binding OriginalImagePreview}" FileName="{Binding OriginalImageName}"
+                                     RemoveCommand="{Binding RemoveOriginalImage}" RemoveDescription="Remove original image"
+                                     NameAutomationId="ImageOriginalName" RemoveAutomationId="ImageRemoveOriginalButton" />
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                 <ImageButton Source="add.png" Style="{StaticResource AttachmentButton}"
                              IsEnabled="{Binding SupportsEdits}"
