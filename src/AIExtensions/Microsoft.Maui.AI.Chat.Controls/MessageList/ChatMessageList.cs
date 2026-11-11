@@ -20,6 +20,12 @@ internal sealed class ChatMessageList : CollectionView
     private static readonly TimeSpan SettleTime = TimeSpan.FromMilliseconds(500);
     private const double SettleDrift = 64;
 
+    // Scroll steps at most this far apart belong to one gesture: a drag, a fling, a bounce at the end.
+    private const long GestureGapMilliseconds = 100;
+
+    // How soon a platform that reports the list's own scroll to the end later (not while scrolling) reports it.
+    private const long ScrollReportMilliseconds = 50;
+
     private readonly bool _themed = ChatElements.EnsureTheme();
     private readonly AIChatView _owner;
     private readonly ObservableCollection<ChatRow> _rows = [];
@@ -47,6 +53,12 @@ internal sealed class ChatMessageList : CollectionView
     private int _settleGeneration;
     private bool _movedOffEndWhileSettling;
     private double _driftWhileSettling;
+    private double _gestureCredit;
+    private long _lastGestureStepAt;
+    private bool _isScrollingToEnd;
+    private bool _scrollReported;
+    private bool _scrollReportPending;
+    private long _scrolledToEndAt;
     private ConversationTurn? _lastTurn;
     private bool _followRequested;
 
@@ -68,6 +80,9 @@ internal sealed class ChatMessageList : CollectionView
 
     /// <summary>Gets or sets how long engine notifications are batched before the rows refresh.</summary>
     internal TimeSpan FlushDelay { get; set; } = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>Gets or sets the clock, in milliseconds, that groups scroll steps into gestures. Replaceable for tests.</summary>
+    internal Func<long> Clock { get; set; } = static () => Environment.TickCount64;
 
     /// <summary>Gets the rows that show the conversation, without the end row.</summary>
     internal IReadOnlyList<ChatRow> Rows => _rows.Where(static row => row is not EndRow).ToList();
@@ -499,8 +514,23 @@ internal sealed class ChatMessageList : CollectionView
 
     private void ScrollToEnd()
     {
-        if (_rows.Count > 0)
+        if (_rows.Count == 0)
+            return;
+
+        // iOS and Mac Catalyst report the scroll while it happens; other platforms report it later, if at all.
+        _isScrollingToEnd = true;
+        _scrollReported = false;
+        try
+        {
             ScrollTo(_rows.Count - 1, position: ScrollToPosition.End, animate: false);
+        }
+        finally
+        {
+            _isScrollingToEnd = false;
+        }
+
+        _scrollReportPending = !_scrollReported;
+        _scrolledToEndAt = Clock();
     }
 
     // Rows added or removed, and content that changed size on its own, keep moving the list for a while after the
@@ -550,32 +580,52 @@ internal sealed class ChatMessageList : CollectionView
 
         // The end row is on screen only while the list is scrolled to its end. The platform's own scrolls leave it
         // there: a list at the end clamping its offset after a row got shorter (an approval collapsing to its
-        // decision, Markdown settling while it streams), rows re-measured, a bounce at the end. The reader scrolling
-        // back moves it off screen within a few points, however slowly they drag, and scrolling down to it again
-        // follows the conversation again. Only while the list settles (see Settle) does the platform take it off
-        // screen too, by a few points.
+        // decision, Markdown settling while it streams), rows re-measured. The reader scrolling back moves it off
+        // screen within a few points, however slowly they drag, and scrolling down to it again follows the
+        // conversation again. Only while the list settles (see Settle) does the platform take it off screen too, by
+        // a few points.
         var atEnd = e.LastVisibleItemIndex >= _rows.Count - 1;
-        if (e.VerticalDelta > 0 && atEnd)
-        {
-            _isPinned = true;
-        }
-        else if (e.VerticalDelta < 0 && !atEnd)
-        {
-            if (_isPinned && e.VerticalOffset <= 0 && -e.VerticalDelta > Height && Height > 0)
-            {
-                // A jump to the top, further than the list is tall in one step, is not the reader dragging: it is
-                // iOS re-estimating rows it has not measured, which can drop a long conversation to its top.
-                _followRequested = true;
-                Invalidate();
-            }
-            else if (!_settling || (_driftWhileSettling -= e.VerticalDelta) > SettleDrift)
-            {
-                _isPinned = false;
-            }
-        }
-
         if (_settling)
             _movedOffEndWhileSettling = !atEnd;
+
+        // The platform reports the list's own scrolls to the end: while scrolling, or (on platforms that report them
+        // later) as the next step forward to the end. They move the list neither for nor against the reader.
+        var now = Clock();
+        var ownScroll = _isScrollingToEnd
+            || (_scrollReportPending && atEnd && e.VerticalDelta > 0 && now - _scrolledToEndAt is >= 0 and <= ScrollReportMilliseconds);
+        _scrollReported |= _isScrollingToEnd;
+        _scrollReportPending = false;
+        if (ownScroll || e.VerticalDelta == 0)
+            return;
+
+        // A gesture is judged by its net movement: steps forward (a fling down, a bounce out past the end) build a
+        // credit that later steps back (the bounce springing back) use up first. Only moving back further than that
+        // is the reader scrolling back, as the answer grows below the screen during a bounce too.
+        if (now - _lastGestureStepAt > GestureGapMilliseconds)
+            _gestureCredit = 0;
+        _lastGestureStepAt = now;
+
+        if (e.VerticalDelta > 0)
+        {
+            _gestureCredit += e.VerticalDelta;
+            if (atEnd)
+                _isPinned = true;
+            return;
+        }
+
+        if (!atEnd && _isPinned && e.VerticalOffset <= 0 && Height > 0 && -e.VerticalDelta > Height)
+        {
+            // A jump to the top, further than the list is tall in one step, is not the reader dragging: it is iOS
+            // re-estimating rows it has not measured, which can drop a long conversation to its top.
+            _followRequested = true;
+            Invalidate();
+            return;
+        }
+
+        var back = -e.VerticalDelta - _gestureCredit;
+        _gestureCredit = Math.Max(0, _gestureCredit + e.VerticalDelta);
+        if (!atEnd && back > 0 && (!_settling || (_driftWhileSettling += back) > SettleDrift))
+            _isPinned = false;
     }
 
     private sealed class RowTemplateSelector : DataTemplateSelector
