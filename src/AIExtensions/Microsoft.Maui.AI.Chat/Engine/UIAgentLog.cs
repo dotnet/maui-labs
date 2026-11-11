@@ -30,4 +30,7 @@ internal static partial class UIAgentLog
 
     [LoggerMessage(107, LogLevel.Error, "The block of UI action '{FunctionName}' (CallId={CallId}) failed to show its result; the result is still returned to the model")]
     internal static partial void UIActionResultNotShown(ILogger logger, string functionName, string callId, Exception exception);
+
+    [LoggerMessage(108, LogLevel.Debug, "UI action '{FunctionName}' (CallId={CallId}) returned after its turn ended; its result is neither shown nor sent to the model")]
+    internal static partial void UIActionResultAfterTurnEnded(ILogger logger, string functionName, string callId);
 }

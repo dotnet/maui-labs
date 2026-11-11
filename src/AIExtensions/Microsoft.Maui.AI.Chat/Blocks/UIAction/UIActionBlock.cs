@@ -98,7 +98,10 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
     public Task<AIContent> GetResultAsync(CancellationToken cancellationToken = default)
         => _resultSource.Task.WaitAsync(cancellationToken);
 
-    /// <summary>Stops waiting for a result because the turn ended; a later invocation does nothing.</summary>
+    /// <summary>
+    /// Stops waiting for a result because the turn ended; a later invocation does nothing, and an
+    /// invocation that returns afterwards does not show its result, which is never sent.
+    /// </summary>
     internal override bool Abandon()
     {
         var wasAwaitingInput = IsAwaitingInput;
@@ -109,6 +112,12 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
     internal void SetResult(FunctionResultContent result)
     {
         ArgumentNullException.ThrowIfNull(result);
+        if (_resultSource.Task.IsCanceled)
+        {
+            UIAgentLog.UIActionResultAfterTurnEnded(_logger, _function.Name, result.CallId);
+            return;
+        }
+
         try
         {
             // A typed inner block, such as a [ToolBlock], maps the result with its own handler.
