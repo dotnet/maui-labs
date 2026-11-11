@@ -27,7 +27,9 @@ namespace Microsoft.Maui.AI.Chat;
 /// <para>
 /// Callbacks run inline. An exception thrown by one before the turn is committed fails the turn; one
 /// thrown while a committed or stopped turn is reported reaches the caller of the send or retry, and the
-/// turn stays committed.
+/// turn stays committed. The status change that reports the end of a turn (<see cref="ConversationStatus.Idle"/>
+/// or <see cref="ConversationStatus.Error"/>) is raised once the turn is no longer active, so its
+/// callback can already send the next message, retry, or clear.
 /// </para>
 /// <para>
 /// This type is single-thread-affine and is not thread-safe. Callers must serialize access and
@@ -309,8 +311,7 @@ public sealed class AgentContext : IDisposable
         }
         finally
         {
-            if (ReferenceEquals(_attempt, attempt))
-                _attempt = null;
+            EndAttempt(attempt);
 
             // Last: CancelAsync and ClearAsync resume once every state change above is done.
             attempt.Complete();
@@ -479,7 +480,7 @@ public sealed class AgentContext : IDisposable
         }
         catch (Exception ex)
         {
-            Fail(message, ex);
+            Fail(attempt, message, ex);
             return AttemptOutcome.Failed;
         }
 
@@ -487,7 +488,7 @@ public sealed class AgentContext : IDisposable
         // caller instead of failing a turn that can no longer be retried.
         _retryMessage = null;
         Status = ConversationStatus.Idle;
-        ReportAttemptEnded();
+        ReportAttemptEnded(attempt);
         return AttemptOutcome.Succeeded;
     }
 
@@ -539,7 +540,7 @@ public sealed class AgentContext : IDisposable
             }
             catch (Exception ex)
             {
-                Fail(pendingTurn.InitialMessage, ex);
+                Fail(attempt, pendingTurn.InitialMessage, ex);
                 return AttemptOutcome.Failed;
             }
 
@@ -549,15 +550,16 @@ public sealed class AgentContext : IDisposable
         _retryMessage = null;
         Error = null;
         Status = ConversationStatus.Idle;
-        ReportAttemptEnded();
+        ReportAttemptEnded(attempt);
         return AttemptOutcome.Stopped;
     }
 
-    private void Fail(ChatMessage? message, Exception exception)
+    private void Fail(Attempt attempt, ChatMessage? message, Exception exception)
     {
         _retryMessage = message;
         Error = exception;
         Status = ConversationStatus.Error;
+        EndAttempt(attempt);
         try
         {
             _agent.RejectPendingPredictiveState();
@@ -571,10 +573,12 @@ public sealed class AgentContext : IDisposable
 
     /// <summary>
     /// Reports that an attempt ended once its outcome is final: rejects a prediction nobody accepted and
-    /// raises the status change. Both run app callbacks; one that throws cannot change the outcome.
+    /// raises the status change. Both run app callbacks, which may already send, retry or clear; one
+    /// that throws cannot change the outcome.
     /// </summary>
-    private void ReportAttemptEnded()
+    private void ReportAttemptEnded(Attempt attempt)
     {
+        EndAttempt(attempt);
         try
         {
             _agent.RejectPendingPredictiveState();
@@ -583,6 +587,13 @@ public sealed class AgentContext : IDisposable
         {
             NotifyStatusChanged();
         }
+    }
+
+    /// <summary>Stops treating an attempt as active once nothing it does can change the conversation.</summary>
+    private void EndAttempt(Attempt attempt)
+    {
+        if (ReferenceEquals(_attempt, attempt))
+            _attempt = null;
     }
 
     private static void AbandonPendingInteractions(List<IInteractiveBlock> interactiveBlocks)
