@@ -171,8 +171,10 @@ public partial class ScrollViewHandler : MacOSViewHandler<IScrollView, NSScrollV
 
     static double ResolveConstraint(double constraint, double explicitSize, double maximum)
     {
+        // An explicit size still goes through the maximum clamp: WidthRequest=400 with
+        // MaximumWidthRequest=200 is arranged at 200, so the content must be measured at 200.
         if (IsExplicitSize(explicitSize))
-            return explicitSize;
+            constraint = explicitSize;
         return IsExplicitSize(maximum) ? Math.Min(constraint, maximum) : constraint;
     }
 

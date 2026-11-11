@@ -10,15 +10,15 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("scrollview-measure", 5, context => new ScrollViewMeasureScenario().CreateDelegate(context),
-            ExpectedAssertions: 11));
+        ScenarioRegistry.Register(new("scrollview-measure", 6, context => new ScrollViewMeasureScenario().CreateDelegate(context),
+            ExpectedAssertions: 14));
 }
 
 /// <summary>
 /// A ScrollView sized by its parent - an Auto row, a stack - used to measure as ~0 because the handler
 /// asked NSScrollView for a fitting size it doesn't have. A horizontal ScrollView in an Auto row
 /// collapsed to nothing (e.g. a toolbar or ribbon body), and MaximumHeightRequest had nothing to clamp.
-/// Content is measured inside the ScrollView's own width request and padding.
+/// Content is measured inside the ScrollView's own width request (clamped by its maximum) and padding.
 /// </summary>
 sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
 {
@@ -32,6 +32,8 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
     View _horizontalContent = null!;
     ScrollView _wrapping = null!;
     Label _wrappingLabel = null!;
+    ScrollView _overMaximum = null!;
+    Label _overMaximumLabel = null!;
     ScrollView _padded = null!;
     View _paddedContent = null!;
 
@@ -52,6 +54,7 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
             capped = new { _capped.Width, _capped.Height },
             fill = new { _fill.Width, _fill.Height },
             wrapping = new { _wrapping.Width, _wrapping.Height, label = new { _wrappingLabel.Width, _wrappingLabel.Height } },
+            overMaximum = new { _overMaximum.Width, _overMaximum.Height, label = new { _overMaximumLabel.Width, _overMaximumLabel.Height } },
             padded = new { _padded.Height, content = new { _paddedContent.X, _paddedContent.Y, _paddedContent.Height } }
         });
 
@@ -98,6 +101,17 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
             $"The ScrollView is tall enough for the text wrapped at that width; scroller {_wrapping.Height}, label {_wrappingLabel.Height}.",
             "scrollview-measure.wrapping-height");
         evidence.Pass("wrapping-width");
+
+        evidence.Assert(_overMaximum.Width <= 201,
+            $"MaximumWidthRequest clamps a larger WidthRequest; scroller width {_overMaximum.Width}.",
+            "scrollview-measure.over-maximum-width");
+        evidence.Assert(_overMaximumLabel.Width <= 201,
+            $"Content is measured at the clamped width, not the WidthRequest; label width {_overMaximumLabel.Width}.",
+            "scrollview-measure.over-maximum-label-width");
+        evidence.Assert(_overMaximum.Height >= _overMaximumLabel.Height - 1 && _overMaximumLabel.Height > 20,
+            $"The ScrollView is tall enough for the text wrapped at the clamped width; scroller {_overMaximum.Height}, label {_overMaximumLabel.Height}.",
+            "scrollview-measure.over-maximum-height");
+        evidence.Pass("explicit-over-maximum");
 
         evidence.Assert(Math.Abs(_padded.Height - (ItemHeight + 20)) < 1,
             $"Padding is part of the measured size; expected {ItemHeight + 20}, actual {_padded.Height}.",
@@ -156,6 +170,20 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
             Content = _wrappingLabel
         };
 
+        _overMaximumLabel = new Label
+        {
+            Text = string.Join(" ", Enumerable.Repeat("Wrapping text measured at the maximum, not the request.", 6)),
+            LineBreakMode = LineBreakMode.WordWrap
+        };
+        _overMaximum = new ScrollView
+        {
+            AutomationId = "OverMaximumScroll",
+            WidthRequest = 400,
+            MaximumWidthRequest = 200,
+            HorizontalOptions = LayoutOptions.Start,
+            Content = _overMaximumLabel
+        };
+
         _paddedContent = new BoxView { WidthRequest = 900, HeightRequest = ItemHeight, Color = Colors.Plum };
         _padded = new ScrollView
         {
@@ -173,6 +201,7 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
                 new RowDefinition(GridLength.Auto),
                 new RowDefinition(GridLength.Auto),
                 new RowDefinition(GridLength.Auto),
+                new RowDefinition(GridLength.Auto),
                 new RowDefinition(GridLength.Star)
             },
             RowSpacing = 8
@@ -180,8 +209,9 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
         grid.Add(_horizontal, 0, 0);
         grid.Add(_capped, 0, 1);
         grid.Add(_wrapping, 0, 2);
-        grid.Add(_padded, 0, 3);
-        grid.Add(_fill, 0, 4);
+        grid.Add(_overMaximum, 0, 3);
+        grid.Add(_padded, 0, 4);
+        grid.Add(_fill, 0, 5);
 
         return new(new ContentPage { Content = grid })
         {

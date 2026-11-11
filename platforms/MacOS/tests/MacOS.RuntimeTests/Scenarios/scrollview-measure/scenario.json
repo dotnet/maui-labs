@@ -1,7 +1,7 @@
 {
   "name": "scrollview-measure",
-  "expectedCases": 5,
-  "expectedAssertions": 11,
+  "expectedCases": 6,
+  "expectedAssertions": 14,
   "evidence": [
     "sizes.json",
     "assertions.txt"
