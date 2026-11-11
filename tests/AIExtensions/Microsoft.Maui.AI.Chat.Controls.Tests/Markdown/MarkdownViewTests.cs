@@ -45,7 +45,7 @@ public class MarkdownViewTests
             block => Assert.IsAssignableFrom<Grid>(block),
             block => Assert.IsAssignableFrom<Border>(Assert.IsAssignableFrom<ScrollView>(block).Content),
             block => Assert.IsAssignableFrom<BoxView>(block),
-            block => Assert.Equal("A cat", SemanticProperties.GetDescription(Assert.IsType<LinkedImageView>(block).Image)));
+            block => Assert.Equal("A cat, Image \u00B7 example.com", SemanticProperties.GetDescription(Assert.IsAssignableFrom<Border>(block))));
 
         var spans = ((Label)view.BlockViews[1]!).FormattedText.Spans;
         Assert.Contains(spans, span => span.Text == "bold" && span.FontAttributes == FontAttributes.Bold);
@@ -421,15 +421,19 @@ public class MarkdownViewTests
     }
 
     [Fact]
-    public void Images_LoadOnlyHttpSourcesAndDescribeThemselves()
+    public void Images_LoadOnlyHttpSourcesWhenAllowedAndDescribeThemselves()
     {
+        var requests = new List<Uri>();
         var view = Themed();
+        view.ImageLoader = TestImages.Loader(TestImages.Png(800, 600), requests);
+        view.AllowRemoteImages = true;
         view.SetMarkdown("![Diagram](https://example.com/d.png \"Title\")\n\n![Local](file:///tmp/x.png)\n\nText ![inline](https://example.com/i.png) after");
 
-        var image = Assert.IsType<LinkedImageView>(view.BlockViews[0]).Image;
-        Assert.Equal(new Uri("https://example.com/d.png"), Assert.IsType<UriImageSource>(image.Source).Uri);
+        var image = Assert.IsType<ChatImage>(Assert.IsType<LinkedImageView>(view.BlockViews[0]).Image);
+        Assert.Equal(new Size(800, 600), image.PixelSize);
         Assert.Equal("Diagram", SemanticProperties.GetDescription(image));
         Assert.Equal(320, image.MaximumHeightRequest);
+        Assert.Equal([new Uri("https://example.com/d.png"), new Uri("https://example.com/i.png")], requests);
 
         // Anything else is a chip with the description, never an empty gap.
         Assert.Equal("Local, Image \u00B7 x.png", SemanticProperties.GetDescription(Assert.IsAssignableFrom<Border>(view.BlockViews[1])));
@@ -460,7 +464,8 @@ public class MarkdownViewTests
     [Fact]
     public void Accessibility_ContainersNeverHideTheirChildren()
     {
-        var view = new MarkdownView();
+        // The answer's web image is allowed (a chip names itself instead, like any chip).
+        var view = new MarkdownView { AllowRemoteImages = true, ImageLoader = TestImages.Pending() };
         view.SetMarkdown(MarkdownStreamingTests.LlmAnswer);
 
         foreach (var element in Descendants(view))

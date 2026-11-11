@@ -122,15 +122,26 @@ internal static class ChatVisuals
     }
 
     /// <summary>
-    /// A chip for an image that is not shown: its source is not a web link (for example <c>attachment://chart.png</c>)
-    /// or it could not be loaded. Web links open when tapped.
+    /// A chip for an image that is not shown: remote images are off, its source is not a web link (for example
+    /// <c>attachment://chart.png</c>), or it could not be loaded. A web link names its site and opens when tapped.
     /// </summary>
     public static Border CreateImageChip(string? source, string? description)
     {
         Uri.TryCreate(source, UriKind.Absolute, out var uri);
-        var file = uri is null ? source : GetLinkName(uri);
-        var name = !string.IsNullOrWhiteSpace(description) ? description! : !string.IsNullOrWhiteSpace(file) ? file! : "Image";
-        var detail = string.IsNullOrWhiteSpace(file) || file == name ? "Image" : $"Image \u00B7 {file}";
+        string name, detail;
+        if (uri is not null && IsWebUri(uri))
+        {
+            // The site rather than the file, so the reader knows where the link goes before opening it.
+            name = !string.IsNullOrWhiteSpace(description) ? description! : "Image";
+            detail = string.IsNullOrWhiteSpace(description) ? uri.Host : $"Image \u00B7 {uri.Host}";
+        }
+        else
+        {
+            var file = uri is null ? source : GetLinkName(uri);
+            name = !string.IsNullOrWhiteSpace(description) ? description! : !string.IsNullOrWhiteSpace(file) ? file! : "Image";
+            detail = string.IsNullOrWhiteSpace(file) || file == name ? "Image" : $"Image \u00B7 {file}";
+        }
+
         var chip = CreateChip("\U0001F5BC", name, detail, alignEnd: false, trailing: null);
         if (uri is not null && IsWebUri(uri))
         {

@@ -65,6 +65,12 @@ internal sealed partial class MarkdownRenderer
     /// <summary>The font size of code in body text; inline code in a heading keeps the same ratio.</summary>
     internal double CodeFontSize { get; set; } = 13;
 
+    /// <summary>Whether web images load inline (see <see cref="AIChatView.AllowRemoteImages"/>); otherwise they show as chips.</summary>
+    internal bool AllowRemoteImages { get; set; }
+
+    /// <summary>Downloads web images when <see cref="AllowRemoteImages"/> is on.</summary>
+    internal RemoteImageLoader ImageLoader { get; set; } = RemoteImageLoader.Shared;
+
     /// <summary>Renders a top-level block.</summary>
     internal Rendering Render(RichTextNode node) => Render(node, s_rootContext);
 
@@ -308,25 +314,57 @@ internal sealed partial class MarkdownRenderer
     private static BoxView RenderThematicBreak() =>
         Styled(new LineView { Margin = new Thickness(0, 4) }, AIChatThemeKeys.MarkdownThematicBreakStyle);
 
-    private static View RenderImage(string url, string? alt, string? title)
+    private View RenderImage(string url, string? alt, string? title)
     {
         var description = string.IsNullOrWhiteSpace(alt) ? title : alt;
 
-        // Only http(s) images load. Any other source (an attachment:// reference, a relative path), or an image that
-        // fails to load, shows as a chip with its description instead of an empty gap.
-        if (!TryCreateImageUri(url, out var uri))
+        // A web image loads only when the app allows it: an answer is untrusted, and loading the image sends a
+        // request to whatever address the answer wrote. Otherwise, and for any other source (an attachment://
+        // reference, a relative path) or an image that cannot be shown, a chip with its description takes its place
+        // instead of an empty gap.
+        if (!AllowRemoteImages || !TryCreateImageUri(url, out var uri))
             return ChatVisuals.CreateImageChip(url, description);
 
         var image = new ChatImage
         {
-            Source = ImageSource.FromUri(uri),
             Aspect = Aspect.AspectFit,
             HorizontalOptions = LayoutOptions.Start,
             MaximumHeightRequest = MaximumImageHeight,
             MaximumWidthRequest = MaximumImageWidth,
         };
         SemanticProperties.SetDescription(image, string.IsNullOrWhiteSpace(description) ? "Image" : description);
-        return new LinkedImageView(image, () => ChatVisuals.CreateImageChip(url, description));
+        var view = new LinkedImageView(image, () => ChatVisuals.CreateImageChip(url, description));
+        ShowWhenLoaded(view, image, ImageLoader.LoadAsync(uri));
+        return view;
+    }
+
+    // Shows the image once it has downloaded (at once when it already has), or the chip when it cannot be shown.
+    private static void ShowWhenLoaded(LinkedImageView view, ChatImage image, Task<RemoteImage?> load)
+    {
+        if (load.IsCompleted)
+        {
+            Show(load.Result);
+            return;
+        }
+
+        _ = load.ContinueWith(
+            loaded => view.RunOnOwnerThread(() => Show(loaded.Result)),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+        void Show(RemoteImage? loaded)
+        {
+            if (loaded is null)
+            {
+                view.ShowFallback();
+                return;
+            }
+
+            // The size from the header, so the row takes its final height before the image is decoded.
+            image.PixelSize = loaded.Size;
+            image.Source = ImageSource.FromStream(() => new MemoryStream(loaded.Bytes, writable: false));
+        }
     }
 
     private View RenderImageReference(ImageReferenceNode reference, BlockContext context) =>

@@ -109,6 +109,15 @@ public partial class AIChatView : TemplatedView
             typeof(AIChatView),
             propertyChanged: static (bindable, _, _) => ((AIChatView)bindable)._messageList.InvalidateTemplates());
 
+    /// <summary>Backing property for <see cref="AllowRemoteImages"/>.</summary>
+    public static readonly BindableProperty AllowRemoteImagesProperty =
+        BindableProperty.Create(
+            nameof(AllowRemoteImages),
+            typeof(bool),
+            typeof(AIChatView),
+            false,
+            propertyChanged: static (bindable, _, _) => ((AIChatView)bindable)._messageList.RefreshRows());
+
     /// <summary>Backing property for <see cref="Suggestions"/>.</summary>
     public static readonly BindableProperty SuggestionsProperty =
         BindableProperty.Create(
@@ -419,6 +428,33 @@ public partial class AIChatView : TemplatedView
         get => (DataTemplate?)GetValue(ResponseFooterTemplateProperty);
         set => SetValue(ResponseFooterTemplateProperty, value);
     }
+
+    /// <summary>
+    /// Gets or sets whether images that answers link to on the web (<c>![chart](https://…)</c> in Markdown, or an image
+    /// in a provider's rich text) load and show inline. The default is <see langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An answer is untrusted: a web page, document, or tool result the model read can make it write an image link
+    /// whose address carries parts of the conversation, and loading the image would send them to that site. While
+    /// this is off, such an image shows as a chip with its description and the site's host, and tapping it opens the
+    /// image in the browser.
+    /// </para>
+    /// <para>
+    /// When on, images load within limits: a download stops at 10 MB or after 30 seconds, and an image larger than
+    /// 16 megapixels, or one whose size cannot be read from its header (PNG, JPEG, GIF, BMP, and WebP can), shows as
+    /// the chip instead of being decoded. Changing this updates the answers already shown. Media that tools and
+    /// providers return (<see cref="MediaContentBlock"/>) is not affected.
+    /// </para>
+    /// </remarks>
+    public bool AllowRemoteImages
+    {
+        get => (bool)GetValue(AllowRemoteImagesProperty);
+        set => SetValue(AllowRemoteImagesProperty, value);
+    }
+
+    /// <summary>Gets or sets the loader of web images; <see langword="null"/> uses the shared one. For tests.</summary>
+    internal RemoteImageLoader? ImageLoader { get; set; }
 
     /// <summary>Gets or sets prompts offered as chips before the first message. Tapping one sends it.</summary>
     public IList<string> Suggestions

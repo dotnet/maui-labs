@@ -23,7 +23,7 @@ public sealed class StyleIsolationTests : IDisposable
         new("AwaitingInput", AwaitingInputAsync),
         new("Streaming", StreamingAsync),
         new("RichText", RichTextAsync),
-        new("Markdown", MarkdownAsync, ShowLostImage),
+        new("Markdown", MarkdownAsync),
     ];
 
     public StyleIsolationTests() => Application.Current = null;
@@ -340,7 +340,6 @@ public sealed class StyleIsolationTests : IDisposable
 
         view.Window!.Parent = app;
         var rows = view.Rows().Select(row => view.Realize(row)).ToList();
-        scenario.Shown?.Invoke(rows.SelectMany(Tree).ToList());
 
         if (placement == Placement.ApplicationLater)
             styles?.Invoke(app.Resources);
@@ -561,19 +560,19 @@ public sealed class StyleIsolationTests : IDisposable
 
     /// <summary>
     /// An answer in Markdown with every construct: headings, a paragraph with emphasis, inline code and a link, nested
-    /// and task lists, a quote, fenced code with its language, a table, a rule, an image, and images shown as chips
-    /// (one that is not a web link, and one that fails to load, see <see cref="ShowLostImage"/>).
+    /// and task lists, a quote, fenced code with its language, a table, a rule, a web image (remote images allowed),
+    /// and images shown as chips (one that is not a web link, and one that fails to load).
     /// </summary>
     private static async Task<(AIChatView, Func<Task>)> MarkdownAsync()
     {
-        var view = ChatHost.Create(ChatHost.Session(new ScriptedChatClient().Reply(MarkdownAnswer)));
+        var view = ChatHost.Create(ChatHost.Session(new ScriptedChatClient().Reply(MarkdownAnswer)), v =>
+        {
+            v.AllowRemoteImages = true;
+            v.ImageLoader = TestImages.Loader(uri => uri.AbsolutePath == "/lost.png" ? null : TestImages.Png(320, 200));
+        });
         await SendAsync(view, "Plan my trip");
         return (view, static () => Task.CompletedTask);
     }
-
-    // Images load on the platform: fail one by hand.
-    private static void ShowLostImage(IReadOnlyList<Element> parts) =>
-        parts.OfType<LinkedImageView>().Single(view => view.Image.Source is UriImageSource { Uri.AbsolutePath: "/lost.png" }).ShowFallback();
 
     private static async Task SendAsync(AIChatView view, string text)
     {
@@ -791,10 +790,7 @@ public sealed class StyleIsolationTests : IDisposable
             _ => null,
         };
 
-    private sealed record Scenario(
-        string Name,
-        Func<Task<(AIChatView View, Func<Task> CleanUp)>> Render,
-        Action<IReadOnlyList<Element>>? Shown = null)
+    private sealed record Scenario(string Name, Func<Task<(AIChatView View, Func<Task> CleanUp)>> Render)
     {
         public override string ToString() => Name;
     }

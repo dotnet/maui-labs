@@ -881,10 +881,34 @@ public class MessageListTests
     });
 
     [Fact]
+    public void RemoteImages_StayChipsUntilTheAppAllowsThem() => UIThread.Run(async () =>
+    {
+        var requests = new List<Uri>();
+        var client = new ScriptedChatClient().Reply("Look: ![logo](https://example.com/logo.png)");
+        var view = ChatHost.Create(ChatHost.Session(client), v => v.ImageLoader = TestImages.Loader(TestImages.Png(64, 48), requests));
+        Assert.False(view.AllowRemoteImages);
+        await SendAsync(view, "Show me the logo");
+
+        var answer = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is TextContentBlock);
+        var shown = view.Realize(answer);
+        Assert.Empty(shown.Descendants<Image>());
+        Assert.Contains("logo", shown.VisibleText(), StringComparison.Ordinal);
+        Assert.Empty(requests);
+
+        // Allowing them updates the answers already shown.
+        view.AllowRemoteImages = true;
+        view.MessageList.Flush();
+
+        var image = Assert.Single(shown.Descendants<ChatImage>());
+        Assert.Equal(new Size(64, 48), image.PixelSize);
+        Assert.Equal([new Uri("https://example.com/logo.png")], requests);
+    });
+
+    [Fact]
     public void ContentThatGrowsOnItsOwn_IsFollowedWhilePinned() => UIThread.Run(async () =>
     {
         var client = new ScriptedChatClient().Reply("Look: ![logo](https://example.com/logo.png)");
-        var view = ChatHost.Create(ChatHost.Session(client));
+        var view = ChatHost.Create(ChatHost.Session(client), AllowPendingImages);
         var requests = new List<int>();
         view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
         await SendAsync(view, "Show me the logo");
@@ -1602,7 +1626,7 @@ public class MessageListTests
     private static async Task<(AIChatView View, LinkedImageView Image, List<int> Requests)> ShowImageAnswerAsync()
     {
         var client = new ScriptedChatClient().Reply("Look: ![logo](https://example.com/logo.png)");
-        var view = ChatHost.Create(ChatHost.Session(client));
+        var view = ChatHost.Create(ChatHost.Session(client), AllowPendingImages);
         var requests = new List<int>();
         view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
         await SendAsync(view, "Show me the logo");
@@ -1615,5 +1639,12 @@ public class MessageListTests
     {
         view.Text = text;
         await view.SendAsync();
+    }
+
+    // Web images that are allowed but still loading: they take their size later, after the row was laid out.
+    private static void AllowPendingImages(AIChatView view)
+    {
+        view.AllowRemoteImages = true;
+        view.ImageLoader = TestImages.Pending();
     }
 }
