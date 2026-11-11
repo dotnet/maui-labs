@@ -123,9 +123,10 @@ internal static class ChatVisuals
 
     /// <summary>
     /// A chip for an image that is not shown: remote images are off, its source is not a web link (for example
-    /// <c>attachment://chart.png</c>), or it could not be loaded. A web link names its site and opens when tapped.
+    /// <c>attachment://chart.png</c>), or it could not be loaded. A web link names its site and opens when tapped,
+    /// with <paramref name="open"/> when given.
     /// </summary>
-    public static Border CreateImageChip(string? source, string? description)
+    public static Border CreateImageChip(string? source, string? description, Func<Uri, Task<bool>>? open = null)
     {
         Uri.TryCreate(source, UriKind.Absolute, out var uri);
         string name, detail;
@@ -145,7 +146,8 @@ internal static class ChatVisuals
         var chip = CreateChip("\U0001F5BC", name, detail, alignEnd: false, trailing: null);
         if (uri is not null && IsWebUri(uri))
         {
-            chip.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(async () => await OpenLinkAsync(uri)) });
+            open ??= link => OpenLinkAsync(link);
+            chip.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(async () => await open(uri)) });
             SemanticProperties.SetHint(chip, "Opens the link");
         }
 
@@ -171,16 +173,25 @@ internal static class ChatVisuals
     private static bool IsWebUri(Uri uri) =>
         uri.IsAbsoluteUri && uri.Scheme is "http" or "https";
 
-    /// <summary>Opens a link in the platform browser or mail app, when the platform has one.</summary>
-    public static async Task OpenLinkAsync(Uri uri)
+    /// <summary>
+    /// Opens a safe link (http, https, mailto) in the platform browser or mail app, with <paramref name="launcher"/>
+    /// when given. Never throws: taps run in commands, where an exception would crash the app.
+    /// </summary>
+    /// <returns>Whether the link opened.</returns>
+    public static async Task<bool> OpenLinkAsync(Uri uri, Func<Uri, Task<bool>>? launcher = null)
     {
+        if (!IsSafeUri(uri))
+            return false;
+
         try
         {
-            await Launcher.Default.OpenAsync(uri);
+            return launcher is not null ? await launcher(uri) : await Launcher.Default.OpenAsync(uri);
         }
-        catch (Exception ex) when (ex is FeatureNotSupportedException or InvalidOperationException or NotImplementedException)
+        catch (Exception)
         {
-            // No browser or launcher on this platform; the link text stays readable.
+            // No browser or mail app (Android throws ActivityNotFoundException on a kiosk or managed device), no UI
+            // context, or no launcher on this platform: the tap does nothing, and the link stays readable.
+            return false;
         }
     }
 

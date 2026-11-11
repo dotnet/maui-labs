@@ -50,12 +50,14 @@ internal sealed partial class MarkdownRenderer
 
     private static readonly ScrollBarVisibility s_sideScrollBarVisibility = GetSideScrollBarVisibility(AIChatTheme.GetPlatform());
 
+    private readonly Func<string?, Task<bool>> _openLink;
     private readonly Command<string> _linkCommand;
     private Dictionary<string, DefinitionNode> _definitions = new(StringComparer.OrdinalIgnoreCase);
 
     internal MarkdownRenderer(Func<string?, Task<bool>> openLink)
     {
         ArgumentNullException.ThrowIfNull(openLink);
+        _openLink = openLink;
         _linkCommand = new Command<string>(url => _ = openLink(url));
     }
 
@@ -323,7 +325,7 @@ internal sealed partial class MarkdownRenderer
         // reference, a relative path) or an image that cannot be shown, a chip with its description takes its place
         // instead of an empty gap.
         if (!AllowRemoteImages || !TryCreateImageUri(url, out var uri))
-            return ChatVisuals.CreateImageChip(url, description);
+            return CreateImageChip(url, description);
 
         var image = new ChatImage
         {
@@ -333,10 +335,14 @@ internal sealed partial class MarkdownRenderer
             MaximumWidthRequest = MaximumImageWidth,
         };
         SemanticProperties.SetDescription(image, string.IsNullOrWhiteSpace(description) ? "Image" : description);
-        var view = new LinkedImageView(image, () => ChatVisuals.CreateImageChip(url, description));
+        var view = new LinkedImageView(image, () => CreateImageChip(url, description));
         ShowWhenLoaded(view, image, ImageLoader.LoadAsync(uri));
         return view;
     }
+
+    // The chip opens its link the way links in the text open, so a failure to open is never an exception.
+    private Border CreateImageChip(string url, string? description) =>
+        ChatVisuals.CreateImageChip(url, description, uri => _openLink(uri.AbsoluteUri));
 
     // Shows the image once it has downloaded (at once when it already has), or the chip when it cannot be shown.
     private static void ShowWhenLoaded(LinkedImageView view, ChatImage image, Task<RemoteImage?> load)

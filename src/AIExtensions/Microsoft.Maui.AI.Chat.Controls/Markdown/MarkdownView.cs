@@ -141,23 +141,10 @@ internal sealed class MarkdownView : ContentView
     }
 
     /// <summary>Opens <paramref name="url"/> when it is an http, https or mailto link. Never throws.</summary>
-    internal async Task<bool> OpenLinkAsync(string? url)
-    {
-        if (!MarkdownRenderer.TryCreateLinkUri(url, out var uri))
-            return false;
-
-        try
-        {
-            return LinkLauncher is { } launcher
-                ? await launcher(uri)
-                : await Launcher.Default.OpenAsync(uri);
-        }
-        catch (Exception)
-        {
-            // No handler for the scheme, no UI context, or a platform failure: ignore the tap.
-            return false;
-        }
-    }
+    internal Task<bool> OpenLinkAsync(string? url) =>
+        MarkdownRenderer.TryCreateLinkUri(url, out var uri)
+            ? ChatVisuals.OpenLinkAsync(uri, LinkLauncher)
+            : Task.FromResult(false);
 
     private void Render(IReadOnlyList<RichTextNode> document)
     {
