@@ -382,6 +382,37 @@ public sealed class PlaygroundChatClientTests
     }
 
     [Fact]
+    public async Task RequireAny_AppliesToTheFirstRequestOfATurnOnly()
+    {
+        // set_theme runs in the app, so its result goes to the model in a request that follows. Requiring a tool there
+        // too would make the model call set_theme again, and again, until the turn ran out of rounds.
+        using var model = new ScriptedChatClient(
+            ScriptedResponse.Stream(new ChatResponseUpdate(ChatRole.Assistant,
+                [new FunctionCallContent("call-1", ThemeAction.ToolName, new Dictionary<string, object?> { ["theme"] = "dark" })])
+            {
+                MessageId = "call",
+            }),
+            ScriptedResponse.Text("It's dark now."));
+        using var live = new FunctionInvokingChatClient(model);
+        using var harness = new PlaygroundChatHarness(live);
+        harness.Settings.ToolMode = ChatToolMode.RequireAny;
+
+        await harness.Session.SendMessageAsync("Switch to dark mode");
+
+        Assert.Equal(ConversationStatus.Idle, harness.Session.Status);
+        Assert.Equal([AppTheme.Dark], harness.AppliedThemes);
+        Assert.Collection(model.Requests,
+            first => Assert.Same(ChatToolMode.RequireAny, first.Options!.ToolMode),
+            followUp =>
+            {
+                Assert.Contains(followUp.Messages[^1].Contents, content => content is FunctionResultContent { CallId: "call-1" });
+                Assert.Null(followUp.Options!.ToolMode);
+                Assert.Contains(followUp.Options.Tools!, tool => tool.Name == ThemeAction.ToolName);
+            });
+        Assert.Same(ChatToolMode.RequireAny, harness.Settings.ToolMode);
+    }
+
+    [Fact]
     public void ApprovalRequiredUIAction_AsksOnlyWhileAskBeforeRunningToolsIsOn()
     {
         using var model = new ScriptedChatClient();
