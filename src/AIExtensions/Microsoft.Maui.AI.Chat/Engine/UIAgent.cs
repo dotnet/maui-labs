@@ -144,7 +144,7 @@ public class UIAgent : IDisposable
             ? requestMessages
             : [.. _history, .. turn.Messages];
 
-        var pipeline = new BlockMappingPipeline(_options, _logger);
+        var pipeline = new BlockMappingPipeline(_options, _logger, turn.Calls);
         try
         {
             foreach (var requestMessage in requestMessages)
@@ -303,6 +303,7 @@ public class UIAgent : IDisposable
         var responseUpdates = new List<ChatResponseUpdate>();
         RestoredTurn? currentTurn = null;
         BlockMappingPipeline? responsePipeline = null;
+        FunctionCallRegistry? calls = null;
         try
         {
             BeginStateRestore();
@@ -321,10 +322,12 @@ public class UIAgent : IDisposable
                         IsStopped(update));
                     turns.Add(currentTurn);
                     history.Add(CreateHistoryMessage(update));
+                    calls = new FunctionCallRegistry();
 
                     var requestPipeline = new BlockMappingPipeline(
                         _options,
-                        _logger);
+                        _logger,
+                        calls);
                     await foreach (var block in requestPipeline.Process(
                         update,
                         cancellationToken))
@@ -334,7 +337,8 @@ public class UIAgent : IDisposable
                     requestPipeline.Finalize();
                     responsePipeline = new BlockMappingPipeline(
                         _options,
-                        _logger);
+                        _logger,
+                        calls);
                     continue;
                 }
 
@@ -346,9 +350,11 @@ public class UIAgent : IDisposable
                             ?? Guid.NewGuid().ToString("N"),
                         isStopped: false);
                     turns.Add(currentTurn);
+                    calls = new FunctionCallRegistry();
                     responsePipeline = new BlockMappingPipeline(
                         _options,
-                        _logger);
+                        _logger,
+                        calls);
                 }
 
                 // Continuation inputs were requests, so like live requests they bypass the state mapper.

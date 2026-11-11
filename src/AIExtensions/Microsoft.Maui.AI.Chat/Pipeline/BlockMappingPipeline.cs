@@ -23,10 +23,15 @@ internal class BlockMappingPipeline
     private readonly List<IHandlerEntry> _handlers = new();
     private readonly List<IActiveEntry> _activeStack = new();
     private readonly ILogger _logger;
+    private readonly FunctionCallRegistry _calls;
 
-    internal BlockMappingPipeline(UIAgentOptions options, ILogger? logger = null)
+    internal BlockMappingPipeline(
+        UIAgentOptions options,
+        ILogger? logger = null,
+        FunctionCallRegistry? calls = null)
     {
         _logger = logger ?? NullLogger.Instance;
+        _calls = calls ?? new FunctionCallRegistry();
         // User-registered handlers go first so they can customize behavior
         foreach (var registration in options.HandlerRegistrations)
         {
@@ -68,7 +73,7 @@ internal class BlockMappingPipeline
         var contentTypes = string.Join(", ", update.Contents.Select(c => c.GetType().Name));
         BlockMappingPipelineLog.ProcessingUpdate(_logger, update.Role?.Value, update.Contents.Count, contentTypes);
 
-        var context = new BlockMappingContext(update, _handlers);
+        var context = new BlockMappingContext(update, _handlers, _calls);
 
         // Phase 1: Active entries get priority (most recent first)
         for (var i = _activeStack.Count - 1; i >= 0; i--)
@@ -98,6 +103,12 @@ internal class BlockMappingPipeline
                     _activeStack.RemoveAt(i);
                     break;
             }
+        }
+
+        // Calls the turn already shows absorb their replays and results instead of emitting duplicates.
+        if (!context.AllHandled)
+        {
+            ApplyKnownCalls(context);
         }
 
         // Phase 2: Inactive handlers try to claim remaining content
@@ -130,6 +141,7 @@ internal class BlockMappingPipeline
                         ThrowIfIdMissing(emitBlock);
                         if (!alreadyComplete)
                             _activeStack.Add(activeEntry);
+                        RegisterCall(emitBlock, activeEntry);
 
                         BlockMappingPipelineLog.EmittingBlock(_logger, emitBlock.GetType().Name, emitBlock.Id, emitBlock.Role?.Value);
 
@@ -169,6 +181,114 @@ internal class BlockMappingPipeline
         _activeStack.Clear();
 
         return Array.Empty<ContentBlock>();
+    }
+
+    private void ApplyKnownCalls(BlockMappingContext context)
+    {
+        HashSet<string>? newCallIds = null;
+        foreach (var content in context.UnhandledContents)
+        {
+            if (content is not FunctionCallContent call)
+                continue;
+
+            if (_calls.TryGet(call.CallId, out var known)
+                && (!known.HasResult || ReferenceEquals(known.Call, call)))
+            {
+                // FunctionInvokingChatClient replays approved and rejected calls before their results.
+                context.MarkHandled(call);
+            }
+            else if (!string.IsNullOrEmpty(call.CallId))
+            {
+                // A provider may reuse the id of a finished call; that call gets its own block.
+                (newCallIds ??= new(StringComparer.Ordinal)).Add(call.CallId);
+            }
+        }
+
+        foreach (var content in context.UnhandledContents)
+        {
+            if (content is FunctionResultContent result
+                && newCallIds?.Contains(result.CallId) != true
+                && _calls.TryGet(result.CallId, out var known))
+            {
+                ApplyKnownResult(context, result, known);
+            }
+        }
+    }
+
+    private void ApplyKnownResult(
+        BlockMappingContext context,
+        FunctionResultContent result,
+        FunctionCallRegistry.Registration known)
+    {
+        if (known.HasResult)
+        {
+            // The result is already shown, for example because it is now sent back as a request.
+            context.MarkHandled(result);
+            return;
+        }
+
+        if (known.ResultEntry is { } entry)
+        {
+            if (_activeStack.Contains(entry))
+                return;
+
+            var handled = entry.Invoke(context);
+            BlockMappingPipelineLog.ActiveHandlerResult(
+                _logger,
+                entry.Block.GetType().Name,
+                handled.Kind.ToString(),
+                entry.Block.Id);
+            if (handled.Kind == HandleResult.ResultKind.Pass)
+                return;
+
+            if (handled.Kind == HandleResult.ResultKind.Complete)
+                entry.Block.LifecycleState = BlockLifecycleState.Inactive;
+            entry.Block.InvokeNotifyChanged();
+            if (!ReferenceEquals(entry.Block, known.Block))
+                known.Block.InvokeNotifyChanged();
+            return;
+        }
+
+        switch (known.Block)
+        {
+            case UIActionBlock uiAction:
+                uiAction.SetResult(result);
+                break;
+            case InteractiveFunctionBlock interactive:
+                interactive.InnerBlock.Result = result;
+                interactive.InnerBlock.InvokeNotifyChanged();
+                interactive.InvokeNotifyChanged();
+                break;
+            case FunctionInvocationContentBlock functionBlock:
+                functionBlock.Result = result;
+                functionBlock.InvokeNotifyChanged();
+                break;
+            default:
+                return;
+        }
+
+        context.MarkHandled(result);
+    }
+
+    private void RegisterCall(ContentBlock block, IActiveEntry entry)
+    {
+        switch (block)
+        {
+            case UIActionBlock { Call: { } call }:
+                _calls.Register(call, block, entry);
+                break;
+            case InteractiveFunctionBlock { Call: { } call } interactive:
+                // A wrapped call's result is claimed by the handler that created the inner block.
+                var resultEntry = _calls.TryGet(call.CallId, out var inner)
+                    && ReferenceEquals(inner.Block, interactive.InnerBlock)
+                        ? inner.ResultEntry
+                        : null;
+                _calls.Register(call, block, resultEntry);
+                break;
+            case FunctionInvocationContentBlock { Call: { } call }:
+                _calls.Register(call, block, entry);
+                break;
+        }
     }
 
     private static void ThrowIfIdMissing(ContentBlock block)

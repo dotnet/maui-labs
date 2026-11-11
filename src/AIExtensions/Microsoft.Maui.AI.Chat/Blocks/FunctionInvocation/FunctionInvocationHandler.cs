@@ -6,7 +6,11 @@ using Microsoft.Extensions.AI;
 namespace Microsoft.Maui.AI.Chat;
 
 /// <summary>Built-in handler mapping M.E.AI tool calls/results into a <see cref="FunctionInvocationContentBlock"/>.</summary>
-/// <remarks>Matches a <c>FunctionCallContent</c>, then its <c>FunctionResultContent</c> by <c>CallId</c>.</remarks>
+/// <remarks>
+/// Matches a <c>FunctionCallContent</c>, then its <c>FunctionResultContent</c> by <c>CallId</c>.
+/// Informational calls, which another component already handled, are shown the same way; the engine
+/// never invokes server tools.
+/// </remarks>
 internal sealed class FunctionInvocationHandler : ContentBlockHandler<FunctionInvocationContentBlock>
 {
     public override BlockMappingResult<FunctionInvocationContentBlock> Handle(
@@ -18,10 +22,7 @@ internal sealed class FunctionInvocationHandler : ContentBlockHandler<FunctionIn
             FunctionCallContent? callContent = null;
             foreach (var content in context.UnhandledContents)
             {
-                if (content is FunctionCallContent
-                    {
-                        InformationalOnly: false,
-                    } fc)
+                if (content is FunctionCallContent fc)
                 {
                     callContent = fc;
                     break;
