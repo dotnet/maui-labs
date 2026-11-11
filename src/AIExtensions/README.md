@@ -7,7 +7,7 @@ AI integration packages for .NET MAUI, built on [`Microsoft.Extensions.AI`](http
 | Package | Description |
 |---------|-------------|
 | [`Microsoft.Maui.AI.Attributes`](Microsoft.Maui.AI.Attributes/) | Source-generated AI tool contexts — `[ExportAIFunction]`, DI binding, AOT-safe |
-| [`Microsoft.Maui.AI.Chat`](Microsoft.Maui.AI.Chat/) | Headless chat engine — streaming blocks, tools/approval/UI actions, typed state, thread restore/retry, reasoning, media, and `[ToolBlock]` generation |
+| [`Microsoft.Maui.AI.Chat`](Microsoft.Maui.AI.Chat/) | Headless chat engine — streaming blocks, tools/approval/UI actions, activities, typed shared and predictive state, thread restore/retry, reasoning, media, and `[ToolBlock]` generation |
 | [`Microsoft.Maui.AI.Chat.Controls`](Microsoft.Maui.AI.Chat.Controls/) | Drop-in MAUI chat control. `AIChatView` binds to the engine session and covers streaming Markdown answers, tool cards and approvals, attachments, audio notes, dictation, live voice, XAML block templates, and themes |
 
 `Microsoft.Maui.AI.Chat` supports caller-provided `IConversationThread` persistence, history
@@ -28,7 +28,7 @@ thread.
 | [`AIExtensions.Sample.Hello`](../../samples/AIExtensions.Sample.Hello/) | Minimal end-to-end usage |
 | [`AIExtensions.Sample.DIParameters`](../../samples/AIExtensions.Sample.DIParameters/) | DI parameter binding with `[FromServices]` |
 | [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI chat app with navigation, cart, approval flow |
-| [`AIExtensions.Sample.ChatPlayground`](../../samples/AIExtensions.Sample.ChatPlayground/) | Azure/Apple `IChatClient` requests, images and tools, automatic recording, and offline replay with portable tests |
+| [`AIExtensions.Sample.ChatPlayground`](../../samples/AIExtensions.Sample.ChatPlayground/) | `AIChatView` over Azure and Apple `IChatClient`s with images, tools and approvals; agentic scenarios (cards that update, several calls in one card, frontend tools, activities, shared and predictive state, persistence); automatic recording and offline replay with portable tests |
 
 ## CI
 
