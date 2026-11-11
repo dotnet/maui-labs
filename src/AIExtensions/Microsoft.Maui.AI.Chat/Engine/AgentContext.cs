@@ -345,13 +345,13 @@ public sealed class AgentContext : IDisposable
                 var uiActionBlocks = new List<UIActionBlock>();
                 var toolCallBlocks = new List<FunctionInvocationContentBlock>();
 
+                // The round stops between updates, so every update it recorded is shown in full, and a stop
+                // before the request is sent still shows the request.
                 await foreach (var block in _agent.SendRoundAsync(
                     pendingTurn,
                     currentMessages,
                     cancellationToken).WithCancellation(cancellationToken))
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-
                     switch (block)
                     {
                         case UIActionBlock { IsComplete: true }:

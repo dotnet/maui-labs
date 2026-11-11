@@ -96,6 +96,11 @@ These match upstream so that upstream fixes apply directly:
   `Microsoft.Maui.AI.Chat.Persistence.IsStopped.v1`. A stopped turn does not advance a stateful
   provider's conversation id. Upstream main only requests cancellation, and the stopped round is never
   written.
+- **What a stopped turn shows is what it keeps.** A round records and shows its request before it
+  checks for a stop, so a turn stopped before its request was sent still shows and commits the
+  request, and every update a round recorded is shown in full. Reasoning that the stop cut off
+  (reasoning that ends the turn's last message) is still shown and stored in the thread, but left out
+  of the history, live and restored, because providers can reject reasoning that no output follows.
 - **Errors discard the turn, retry resends all of it.** A failed turn commits nothing and keeps its
   partial blocks on screen. `RetryAsync` clears the turn's response blocks
   (`RegisterOnResponseBlocksCleared` tells a list to drop them) and sends the whole turn again. #68672
@@ -140,7 +145,8 @@ These match upstream so that upstream fixes apply directly:
   `FunctionInvokingChatClient` sends an approved call again, a rejected call comes back as
   informational, or a replayed conversation repeats a call, the existing block (for an approval, its
   inner block) is updated and receives the result. Upstream shows such repeats as extra blocks. A call
-  id reused after its result is a new call.
+  id reused after its result is a new call with its own block; both blocks have the call id as their
+  `Id`, so key views by block instance.
 - **UI actions run in the engine.** An `Automatic` UI action is invoked by the engine on the caller's
   thread; a `Manual` one waits for the app to call `InvokeAsync`
   (`ConversationStatus.AwaitingInput`). Upstream always leaves invocation to the renderer. A UI action
