@@ -310,6 +310,19 @@ public class MarkdownViewTests
         var plainScroller = Assert.IsType<ScrollView>(withoutLanguage.Content);
         Assert.Equal(ScrollOrientation.Horizontal, plainScroller.Orientation);
         Assert.IsType<RoundRectangle>(withoutLanguage.StrokeShape);
+        Assert.All([scroller, plainScroller], s => Assert.Equal(ScrollBarVisibility.Default, s.HorizontalScrollBarVisibility));
+    }
+
+    [Theory]
+    [InlineData("Android", ScrollBarVisibility.Never)]
+    [InlineData("iOS", ScrollBarVisibility.Default)]
+    [InlineData("MacCatalyst", ScrollBarVisibility.Default)]
+    [InlineData("WinUI", ScrollBarVisibility.Default)]
+    [InlineData("Unknown", ScrollBarVisibility.Default)]
+    public void SidewaysScrollBars_AreHiddenOnlyOnAndroid(string platform, ScrollBarVisibility expected)
+    {
+        // Android flashes a new scroller's bar across the last line of code; a mouse needs the bar elsewhere.
+        Assert.Equal(expected, MarkdownRenderer.GetSideScrollBarVisibility(DevicePlatform.Create(platform)));
     }
 
     [Theory]
@@ -360,6 +373,7 @@ public class MarkdownViewTests
 
         var scroller = Assert.IsType<ScrollView>(view.BlockViews[0]);
         Assert.Equal(ScrollOrientation.Horizontal, scroller.Orientation);
+        Assert.Equal(ScrollBarVisibility.Default, scroller.HorizontalScrollBarVisibility);
         var grid = Assert.IsType<Grid>(Assert.IsType<Border>(scroller.Content).Content);
         Assert.Equal(5, grid.ColumnDefinitions.Count);
         Assert.Equal(5, grid.RowDefinitions.Count);

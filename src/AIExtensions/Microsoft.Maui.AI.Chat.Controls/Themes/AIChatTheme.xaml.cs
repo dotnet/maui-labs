@@ -139,7 +139,7 @@ public partial class AIChatTheme : ResourceDictionary
         return "monospace";
     }
 
-    private static DevicePlatform GetPlatform()
+    internal static DevicePlatform GetPlatform()
     {
         try
         {
