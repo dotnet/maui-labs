@@ -86,6 +86,9 @@ These match upstream so that upstream fixes apply directly:
     name ("every property") from `NotifyChanged`, which runs when its handler updates or completes it,
     because the engine cannot see which of its properties changed. Block authors get
     `OnPropertyChanged` and `SetProperty`.
+  - `AgentState<T>` implements `INotifyPropertyChanged` for `Value` and `HasPendingPredictiveState`,
+    raised before its `OnChanged` callbacks; assigning `Value` raises it even for the current instance,
+    so assigning a value changed in place refreshes bindings.
   - `AgentContext.Turns`, `ConversationTurn.RequestBlocks` and `ResponseBlocks` are
     `ReadOnlyObservableCollection<T>` instead of `IReadOnlyList<T>`: an `Add` per turn or block, and one
     `Reset` for a restore, a clear, and a retry's removal of response blocks.

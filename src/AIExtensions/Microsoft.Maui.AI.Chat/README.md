@@ -105,13 +105,14 @@ and receives the action's result, and the action still runs. The block must deri
 - Turn transactions: `CancelAsync` stops a response and keeps its partial output
   (`ConversationTurn.IsStopped`), failed turns commit nothing, are marked `ConversationTurn.IsFailed`
   and can be retried, and `ClearAsync` discards the active response before clearing.
-- A bindable model: the session, its turns and their blocks implement `INotifyPropertyChanged`, and
-  `Turns`, `RequestBlocks` and `ResponseBlocks` are observable collections.
+- A bindable model: the session, its turns, their blocks and the typed state implement
+  `INotifyPropertyChanged`, and `Turns`, `RequestBlocks` and `ResponseBlocks` are observable collections.
 
 ## Binding from XAML
 
-The session, its turns and their blocks raise the standard .NET change events, so a XAML list can bind to
-them directly: a `CollectionView` with a `DataTemplateSelector`, `BindableLayout`, or a third-party list.
+The session, its turns, their blocks and the typed state raise the standard .NET change events, so a XAML
+list can bind to them directly: a `CollectionView` with a `DataTemplateSelector`, `BindableLayout`, or a
+third-party list.
 
 - `AgentContext` raises `PropertyChanged` for `Status` and `Error`. `Turns` raises `CollectionChanged`:
   an `Add` when a send adds a turn, and one `Reset` once a restore loaded every turn or `ClearAsync`
@@ -124,6 +125,9 @@ them directly: a `CollectionView` with a `DataTemplateSelector`, `BindableLayout
   `Status`, a UI action's `IsComplete`, and `IsAwaitingInput`. A block of your own type, including a
   `[ToolBlock]`, raises it with an empty name (every property may have changed) whenever its handler
   updates it; raise specific names with `SetProperty` or `OnPropertyChanged`.
+- `UIAgent<TState>.State` raises `PropertyChanged` for `Value` and `HasPendingPredictiveState`, so a view
+  can bind to `State.Value` and show a pending prediction. Assigning `Value` raises it even for the current
+  instance, so assign the value again after changing it in place.
 
 `Turns`, `RequestBlocks` and `ResponseBlocks` are `ReadOnlyObservableCollection<T>`; cast one to
 `INotifyCollectionChanged` to subscribe from code. A page whose `BindingContext` is the session can list

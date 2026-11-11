@@ -23,6 +23,7 @@ Microsoft.Maui.AI.Chat.AgentState<T>
 Microsoft.Maui.AI.Chat.AgentState<T>.AcceptPredictiveState() -> void
 Microsoft.Maui.AI.Chat.AgentState<T>.HasPendingPredictiveState.get -> bool
 Microsoft.Maui.AI.Chat.AgentState<T>.OnChanged(System.Action! callback) -> System.IDisposable!
+Microsoft.Maui.AI.Chat.AgentState<T>.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
 Microsoft.Maui.AI.Chat.AgentState<T>.RejectPredictiveState() -> void
 Microsoft.Maui.AI.Chat.AgentState<T>.Value.get -> T!
 Microsoft.Maui.AI.Chat.AgentState<T>.Value.set -> void
