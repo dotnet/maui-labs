@@ -39,6 +39,8 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.Extensions.DataIngestion.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.DocumentExtraction" />
+    <PackageReference Include="CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence" />
+    <PackageReference Include="CommunityToolkit.DocumentExtraction.Mistral" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     <PackageReference Include="Microsoft.Maui.Controls" />
     <PackageReference Include="OpenAI" />
@@ -46,8 +48,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
-    <ProjectReference Include="..\..\src\Libraries\CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence\CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence.csproj" />
-    <ProjectReference Include="..\..\src\Libraries\CommunityToolkit.DocumentExtraction.Mistral\CommunityToolkit.DocumentExtraction.Mistral.csproj" />
     <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
   </ItemGroup>
 

@@ -2,7 +2,7 @@
 
 **Status:** Non-shipping prototype in #450.
 **Contract:** [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) at
-official daily `11.0.0-preview.1.26560.1`, repository commit `f8ee27151b21e33793164b39de5bcebfdced81a4`.
+official NuGet.org `11.0.0-preview.1.26560.3`, repository commit `c60d72e7973a90cd4e4300d9153e97b93315e4b7`.
 **Native API:** Swift Vision `RecognizeDocumentsRequest`, iOS/Mac Catalyst/macOS 26+.
 
 ## Pipeline

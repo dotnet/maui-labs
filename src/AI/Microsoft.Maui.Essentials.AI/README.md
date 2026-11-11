@@ -156,8 +156,8 @@ async tool code inherit any active chat trace/span, including one created by
 ### Merged document extraction experiment
 
 This checkout evaluates [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) at
-using official daily packages `11.0.0-preview.1.26560.1` from the public `dotnet-libraries` feed.
-Their repository commit is `f8ee27151b21e33793164b39de5bcebfdced81a4`; the copied Microsoft sources and build shims are removed.
+using official packages `11.0.0-preview.1.26560.3`, published on NuGet.org.
+Their repository commit is `c60d72e7973a90cd4e4300d9153e97b93315e4b7`; all copied Microsoft/Toolkit sources and build shims are removed.
 The prototype library remains non-shipping/non-packable pending provider acceptance.
 
 On iOS/Mac Catalyst/macOS 26+, the native `RecognizeDocumentsRequest` client implements the merged abstract client:

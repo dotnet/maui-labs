@@ -1,6 +1,46 @@
 # Document extraction adoption
 
-## Official packages and Toolkit provider reuse - 2026-11-10
+## Published packages only - 2026-11-11
+
+Microsoft Documents/Extraction packages now use NuGet.org version `11.0.0-preview.1.26560.3` (repository commit
+`c60d72e7973a90cd4e4300d9153e97b93315e4b7`). The Azure and Mistral Toolkit providers now use published `1.0.0-preview`
+packages (repository commit `74935f4e20490889ae051b4bb8f4bc32959ab3bd`).
+All remaining copied source, local provider projects/adapters, manifests and source-verification scripts are removed.
+No provider mapping, app limits, caller ownership or Apple implementation changes are needed.
+
+The published Documents package requires stable MEAI abstractions `11.0.0`; net10 middleware requires DI/logging abstractions
+`10.0.15`. These pins remain scoped to document consumers. The obsolete daily feed is removed.
+The user explicitly approved adding NuGet.org while mirroring catches up: configured dnceng feeds did not expose these versions.
+There is no silent command-line restore workaround or reliance on the previous local build assemblies.
+
+### Package mirror list
+
+The migration introduces or updates these exact packages, including the newly required transitive contract/middleware dependencies:
+
+- Microsoft.Extensions.Documents.Abstractions/11.0.0-preview.1.26560.3
+- Microsoft.Extensions.DocumentExtraction.Abstractions/11.0.0-preview.1.26560.3
+- Microsoft.Extensions.DocumentExtraction/11.0.0-preview.1.26560.3
+- CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence/1.0.0-preview
+- CommunityToolkit.DocumentExtraction.Mistral/1.0.0-preview
+- Microsoft.Extensions.AI.Abstractions/11.0.0
+- Microsoft.Extensions.DependencyInjection.Abstractions/10.0.15
+- Microsoft.Extensions.Logging.Abstractions/10.0.15
+
+Existing Azure SDK dependencies are unchanged (`Azure.AI.DocumentIntelligence/1.0.0`, `Azure.Core/1.53.0`).
+
+### Publication validation
+
+The full portable integration suite passes 479 tests; Chat/Embeddings/Images/settings passes 158 tests against actual published assemblies.
+The complete Catalyst and Android playgrounds build without warnings/errors. The restored Xcode 27.2 installation is usable;
+the installed packs support 26.0 and 27.2 rather than the repository's explicit 27.0 preview target, so Catalyst validation uses the
+normal `net10.0-maccatalyst` target with command-line `ValidateXcodeVersion=false`, without changing repository TFMs or workloads.
+Actual Release Catalyst execution against the published contracts passes all 11 Apple document client/reader cases.
+A session-only smoke harness using the published Toolkit assemblies and exact sample policy sources also succeeds against both
+existing configured cloud resources with the bundled synthetic image: Azure returns one page/five elements and Mistral one page,
+with native results retained and caller input streams open. No credentials or source content are logged.
+The existing test-only AngleSharp 1.4.0 moderate advisory remains unrelated and unchanged.
+
+## Official daily packages and source-backed Toolkit reuse - 2026-11-10 (superseded)
 
 The Microsoft source bridge is removed: all three document packages are available from the public **`dotnet-libraries` feed**.
 Earlier package checks omitted that feed; their conclusions about non-publication were incomplete.
@@ -11,7 +51,7 @@ only for document-consuming projects.
 Azure/Mistral extraction now reuses the Toolkit providers rather than our own transport/mapping implementations.
 Toolkit packages are not published on NuGet.org or `dotnet-libraries`, so those two providers temporarily file-link exact upstream
 sources at `CommunityToolkit/AI` commit `e8bcbf47ffdcfcd89f9624d60797322b4e73417e`.
-Their source/provenance/license and non-shipping adapters are [documented here](../../src/Libraries/CommunityToolkit.DocumentExtraction/README.md).
+Their source/provenance/license and non-shipping adapters were recorded in the source bridge, removed after package publication.
 No unrelated provider, cloud fallback or new resource is added. Our Apple Vision provider remains in Essentials.AI.
 
 ### Provider integration and deliberate differences

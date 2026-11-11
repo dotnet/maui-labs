@@ -14,6 +14,8 @@
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Extensions.DocumentExtraction" />
+    <PackageReference Include="CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence" />
+    <PackageReference Include="CommunityToolkit.DocumentExtraction.Mistral" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="xunit" />
@@ -21,8 +23,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
-    <ProjectReference Include="..\..\..\src\Libraries\CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence\CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence.csproj" />
-    <ProjectReference Include="..\..\..\src\Libraries\CommunityToolkit.DocumentExtraction.Mistral\CommunityToolkit.DocumentExtraction.Mistral.csproj" />
     <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Internal\DocumentExtraction\AppleVisionRecognizeDocumentsClient.cs"
              Link="Documents\AppleVisionRecognizeDocumentsClient.cs" />
   </ItemGroup>
