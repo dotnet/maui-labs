@@ -54,7 +54,9 @@ Actions that must run in the app, such as reading the current location or asking
 something, are registered with `options.RegisterUIAction(function, mode)`. `Automatic` actions are
 invoked by the engine on the caller's thread; `Manual` actions wait until the app calls
 `UIActionBlock.InvokeAsync()`. An action that throws sends an error result to the model instead of
-failing the turn. A UI action requested together with a tool that needs approval still runs as a UI
+failing the turn. Canceling the token passed to `InvokeAsync` cancels only that invocation; the
+action can be invoked again. Once a turn stops or fails, its approvals and UI actions accept no
+decision or invocation. A UI action requested together with a tool that needs approval still runs as a UI
 action. A UI action wrapped in `ApprovalRequiredAIFunction` needs `FunctionInvokingChatClient` too
 (sending throws without it, because nothing would ask for the approval). It shows a
 `ToolApprovalBlock` and runs once approved, whatever its mode; edit the approval's `Call.Arguments`
@@ -159,7 +161,8 @@ persisted. The engine writes a thread only when a turn commits (`AppendUserMessa
 A stopped turn is committed with its partial output, without tool calls that never got a result.
 Threads must round-trip `ChatResponseUpdate.AdditionalProperties`, which mark continuation rounds and
 stopped turns. Call `RestoreAsync` to load a thread's turns and message history. Restored approvals
-and UI actions are display history, not resumable pending work.
+and UI actions are display history, not resumable pending work: they accept no decision or
+invocation.
 
 To show and continue a conversation that no thread wrote, such as a recording or an import, pass its
 messages to `AgentContext.RestoreAsync(messages)` (or `UIAgent.RestoreAsync(messages)`) on a context

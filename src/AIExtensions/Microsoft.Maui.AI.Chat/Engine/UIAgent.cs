@@ -467,6 +467,14 @@ public class UIAgent : IDisposable
             _history.AddRange(history ?? replayedHistory);
             _historyVersion++;
             CompleteStateRestore();
+
+            // Restored approvals and UI actions are history: a decision or result could not be sent.
+            foreach (var turn in turns)
+            {
+                foreach (var block in turn.RequestBlocks.Concat(turn.ResponseBlocks))
+                    (block as InteractiveFunctionBlock)?.Abandon();
+            }
+
             return turns;
         }
         catch
