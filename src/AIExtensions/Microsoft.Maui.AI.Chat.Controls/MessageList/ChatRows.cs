@@ -49,6 +49,14 @@ internal sealed class ThinkingRow : ChatRow
 {
 }
 
+/// <summary>
+/// The list's last item, a point tall, under the newest row. It is on screen only while the list is scrolled to its
+/// end, which tells the reader scrolling back apart from the platform correcting its layout.
+/// </summary>
+internal sealed class EndRow : ChatRow
+{
+}
+
 /// <summary>Shown under a turn that failed, with a retry action.</summary>
 internal sealed class TurnErrorRow(ConversationTurn turn, AgentContext session) : ChatRow
 {

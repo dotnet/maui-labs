@@ -16,16 +16,6 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </remarks>
 internal sealed class ChatMessageList : CollectionView
 {
-    // A backwards scroll is the user's when it is a drag: a few steps, each soon after the one before, adding up to more
-    // than rounding. The platform's own corrections (a row measured after the list scrolled to it, a list at the end
-    // clamping its offset after a row got shorter) arrive as single steps.
-    private const int DragSteps = 2;
-    private const double DragDistance = 4;
-    private const long DragStepGapMilliseconds = 120;
-
-    // How long after a row that can get shorter changes backwards scrolls are taken for the platform's.
-    private const long SettleMilliseconds = 250;
-
     // Turns that failed. The engine commits nothing for a failed turn and forgets the failure once another message
     // is sent, so the view keeps it, for as long as the turn lives.
     private static readonly ConditionalWeakTable<ConversationTurn, object> FailedTurns = new();
@@ -43,6 +33,7 @@ internal sealed class ChatMessageList : CollectionView
     private readonly Dictionary<ConversationTurn, TurnFooterRow> _footerRows = new(ReferenceEqualityComparer.Instance);
     private readonly List<ChatRow> _lastTurnRows = [];
     private readonly ThinkingRow _thinkingRow = new();
+    private readonly EndRow _endRow = new();
     private readonly List<IDisposable> _sessionSubscriptions = [];
     private AgentContext? _session;
     private bool _isAttached;
@@ -51,11 +42,6 @@ internal sealed class ChatMessageList : CollectionView
     private bool _isPinned = true;
     private bool _isUpdatingRows;
     private bool _statusChanged;
-    private long _settleUntil;
-    private long _lastBackwardAt;
-    private int _backwardSteps;
-    private double _backwardDistance;
-    private double _awayDistance;
     private ConversationTurn? _lastTurn;
     private bool _followRequested;
 
@@ -68,7 +54,9 @@ internal sealed class ChatMessageList : CollectionView
         ItemsLayout = new LinearItemsLayout(ItemsLayoutOrientation.Vertical) { ItemSpacing = 4 };
         ItemTemplate = new RowTemplateSelector();
         ItemsSource = _rows;
-        Footer = new BoxView { HeightRequest = 8, Color = Colors.Transparent };
+
+        // With the spacing before the end row and the row itself, 8 points under the newest row.
+        Footer = new BoxView { HeightRequest = 3, Color = Colors.Transparent };
         Scrolled += OnScrolled;
         SizeChanged += OnSizeChanged;
     }
@@ -76,10 +64,11 @@ internal sealed class ChatMessageList : CollectionView
     /// <summary>Gets or sets how long engine notifications are batched before the rows refresh.</summary>
     internal TimeSpan FlushDelay { get; set; } = TimeSpan.FromMilliseconds(50);
 
-    /// <summary>Gets or sets the clock, in milliseconds, that times how long rows take to settle. Replaceable for tests.</summary>
-    internal Func<long> Clock { get; set; } = static () => Environment.TickCount64;
+    /// <summary>Gets the rows that show the conversation, without the end row.</summary>
+    internal IReadOnlyList<ChatRow> Rows => _rows.Where(static row => row is not EndRow).ToList();
 
-    internal IReadOnlyList<ChatRow> Rows => _rows;
+    /// <summary>Gets the index of the end row, which the list scrolls to while it follows the conversation.</summary>
+    internal int EndIndex => _rows.Count - 1;
 
     internal bool IsPinned => _isPinned;
 
@@ -147,7 +136,6 @@ internal sealed class ChatMessageList : CollectionView
 
         bool structureChanged;
         var refreshed = false;
-        var mayShrink = false;
 
         // Removing a row (the thinking row, a cleared response) shrinks the content, and a list scrolled to the end
         // reports the clamped offset as a scroll back through the history. Those scrolls are ours, not the user's.
@@ -178,9 +166,6 @@ internal sealed class ChatMessageList : CollectionView
                 {
                     row.NotifyChanged();
                     refreshed = true;
-
-                    // Streaming text only grows; other rows (an approval or a tool card settling) can get shorter.
-                    mayShrink |= row is not BlockRow { Block: RichContentBlock };
                 }
             }
             _dirtyRows.Clear();
@@ -189,9 +174,6 @@ internal sealed class ChatMessageList : CollectionView
         {
             _isUpdatingRows = false;
         }
-
-        if (structureChanged || mayShrink)
-            _settleUntil = Clock() + SettleMilliseconds;
 
         // An empty list has nothing to read back through, and a new turn (sent from the composer or by the app, or
         // restored) is what the user wants to see: follow the end again.
@@ -365,6 +347,9 @@ internal sealed class ChatMessageList : CollectionView
             }
         }
 
+        if (desired.Count > 0)
+            desired.Add(_endRow);
+
         Prune(liveBlocks, liveTurns);
         return desired;
     }
@@ -522,13 +507,7 @@ internal sealed class ChatMessageList : CollectionView
         return true;
     }
 
-    private void Pin()
-    {
-        _isPinned = true;
-        _backwardSteps = 0;
-        _backwardDistance = 0;
-        _awayDistance = 0;
-    }
+    private void Pin() => _isPinned = true;
 
     private void ScrollToEnd()
     {
@@ -537,13 +516,12 @@ internal sealed class ChatMessageList : CollectionView
     }
 
     // The space for the list changes with the composer (staged attachments, a long draft) and the window: keep the
-    // newest row in view while following. The list reports the offset it clamps as scrolls; those are not the user's.
+    // newest row in view while following.
     private void OnSizeChanged(object? sender, EventArgs e)
     {
         if (!_isPinned || _rows.Count == 0)
             return;
 
-        _settleUntil = Clock() + SettleMilliseconds;
         _followRequested = true;
         Invalidate();
     }
@@ -553,51 +531,22 @@ internal sealed class ChatMessageList : CollectionView
         if (_isUpdatingRows)
             return;
 
-        var now = Clock();
-        var newestVisible = e.LastVisibleItemIndex >= _rows.Count - 1;
-        var delta = e.VerticalDelta;
-
-        if (delta < 0)
-        {
-            // Right after a row that can get shorter changed (an approval collapsing to its decision), a list at the
-            // end clamps its offset in the next layout pass, after the flush has finished. That is not the user.
-            if (newestVisible && now < _settleUntil)
-                return;
-
-            if (now - _lastBackwardAt > DragStepGapMilliseconds)
-            {
-                _backwardSteps = 0;
-                _backwardDistance = 0;
-            }
-
-            _lastBackwardAt = now;
-            _backwardSteps++;
-            _backwardDistance -= delta;
-
-            if (!_isPinned)
-            {
-                _awayDistance -= delta;
-            }
-            else if ((_backwardSteps >= DragSteps && _backwardDistance >= DragDistance) || (delta < -1 && !newestVisible))
-            {
-                // A drag back, however slow, even while a tall answer keeps the newest row on screen; or the newest
-                // row scrolled out of view. A single step with the newest row on screen is a layout correction.
-                _isPinned = false;
-                _awayDistance = _backwardDistance;
-            }
-        }
-        else if (delta > 0 && !_isPinned)
-        {
-            // Following resumes once the user scrolls back down to where it stopped.
-            _awayDistance -= delta;
-            if (newestVisible && _awayDistance <= 1)
-                _isPinned = true;
-        }
+        // The end row is on screen only while the list is scrolled to its end. The platform's own scrolls leave it
+        // there: a list at the end clamping its offset after a row got shorter (an approval collapsing to its
+        // decision, Markdown settling while it streams), rows re-measured, a bounce at the end. The reader scrolling
+        // back moves it off screen within a few points, however slowly they drag, and scrolling down to it again
+        // follows the conversation again.
+        var atEnd = e.LastVisibleItemIndex >= _rows.Count - 1;
+        if (e.VerticalDelta < 0 && !atEnd)
+            _isPinned = false;
+        else if (e.VerticalDelta > 0 && atEnd)
+            _isPinned = true;
     }
 
     private sealed class RowTemplateSelector : DataTemplateSelector
     {
         private static readonly DataTemplate Empty = new(static () => new ContentView());
+        private static readonly DataTemplate End = new(static () => new ContentView { HeightRequest = 1, InputTransparent = true });
         private readonly DataTemplate _user = new(static () => new UserMessageView());
         private readonly DataTemplate _thinking = new(static () => new ThinkingView());
         private readonly DataTemplate _error = new(static () => new TurnErrorView());
@@ -615,6 +564,7 @@ internal sealed class ChatMessageList : CollectionView
                 TurnNotSentRow => _notSent,
                 TurnStoppedRow => _stopped,
                 TurnFooterRow row => GetFooter(row.Template),
+                EndRow => End,
                 _ => Empty,
             };
 

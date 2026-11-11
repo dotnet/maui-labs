@@ -31,6 +31,9 @@ internal static class ChatHost
 
     public static IReadOnlyList<ChatRow> Rows(this AIChatView view) => view.MessageList.Rows;
 
+    /// <summary>Gets the index of the list's end row (after <see cref="Rows"/>): where following scrolls to.</summary>
+    public static int EndIndex(this AIChatView view) => view.MessageList.EndIndex;
+
     public static T ByAutomationId<T>(this Element root, string automationId)
         where T : VisualElement =>
         root.Descendants<T>().FirstOrDefault(element => element.AutomationId == automationId)
