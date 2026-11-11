@@ -655,6 +655,126 @@ public class MessageListTests
     });
 
     [Fact]
+    public void ScrollsRaisedAfterARowGetsShorter_DoNotUnpinTheList() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient()
+            .Reply(new FunctionCallContent("c1", "delete_file", new Dictionary<string, object?> { ["path"] = "a.txt" }));
+        var answer = client.ReplyLive();
+        var view = ChatHost.Create(v =>
+        {
+            v.ChatClient = client;
+            v.Tools = [new ApprovalRequiredAIFunction(AIFunctionFactory.Create((string path) => $"removed {path}", "delete_file"))];
+        });
+        var now = 1_000L;
+        view.MessageList.Clock = () => now;
+        var requests = new List<int>();
+        view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
+
+        view.Text = "Delete a.txt";
+        var send = view.SendAsync();
+        await UIThread.Until(() => view.EffectiveSession!.Status == ConversationStatus.AwaitingInput);
+        var row = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is ToolApprovalBlock);
+        var approval = Assert.IsType<ToolApprovalView>(((BlockHost)view.Realize(row)).HostedView);
+
+        // Approving collapses the card. A list at the end clamps its offset in the next layout pass and reports that
+        // as a scroll back, with the newest row still on screen.
+        approval.ApproveCommand.Execute(null);
+        await UIThread.Until(() => !approval.Buttons.IsVisible);
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -71, LastVisibleItemIndex = view.Rows().Count - 1 });
+        Assert.True(view.MessageList.IsPinned);
+
+        // So the answer that follows still scrolls into view.
+        answer.Text("Deleted.");
+        await UIThread.Until(() => view.Rows()[^1] is BlockRow { Block: TextContentBlock });
+        Assert.Equal(view.Rows().Count - 1, requests[^1]);
+
+        // Once the rows have settled, a drag back is the user reading back.
+        now += 1_000;
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -10, LastVisibleItemIndex = view.Rows().Count - 1 });
+        now += 16;
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -10, LastVisibleItemIndex = view.Rows().Count - 1 });
+        Assert.False(view.MessageList.IsPinned);
+
+        answer.Complete();
+        await send;
+    });
+
+    [Fact]
+    public void ASlowDragBackWhileAnAnswerStreams_UnpinsAndStaysUnpinned() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient();
+        var stream = client.ReplyLive();
+        var view = ChatHost.Create(ChatHost.Session(client));
+        using var dispatcher = TestDispatcher.Install();
+        var now = 1_000L;
+        view.MessageList.Clock = () => now;
+        var requests = new List<int>();
+        view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
+
+        view.Text = "Hi";
+        var send = view.SendAsync();
+        stream.Text("An answer");
+        await UIThread.Until(() => view.Session!.Turns.Count == 1 && view.Session.Turns[0].ResponseBlocks.Count == 1);
+        dispatcher.RunPending();
+        var block = (TextContentBlock)Assert.IsType<BlockRow>(view.Rows()[^1]).Block;
+        var last = view.Rows().Count - 1;
+
+        async Task StreamAsync(string text)
+        {
+            var expected = block.RawText + text;
+            requests.Clear();
+            stream.Text(text);
+            await UIThread.Until(() => block.RawText == expected);
+            dispatcher.RunPending();
+        }
+
+        void Scroll(double delta)
+        {
+            now += 16;
+            view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = delta, LastVisibleItemIndex = last });
+        }
+
+        // The answer is taller than the screen, so its row stays the newest one on screen throughout. A single step
+        // back is the platform correcting its layout: the list keeps following.
+        now += 1_000;
+        Scroll(-12);
+        await StreamAsync(" that");
+        Assert.True(view.MessageList.IsPinned);
+        Assert.Equal(last, Assert.Single(requests));
+
+        // Nor is rounding while rows re-measure.
+        now += 1_000;
+        Scroll(-0.5);
+        Scroll(-0.5);
+        Assert.True(view.MessageList.IsPinned);
+
+        // A slow drag back is the user: small steps, with the answer on screen the whole time.
+        now += 1_000;
+        Scroll(-3);
+        Scroll(-3);
+        Assert.False(view.MessageList.IsPinned);
+
+        // The answer keeps streaming without pulling the reader back down, even when the finger wavers.
+        await StreamAsync(" keeps");
+        Scroll(-3);
+        Scroll(2);
+        await StreamAsync(" growing");
+        Assert.False(view.MessageList.IsPinned);
+        Assert.Empty(requests);
+
+        // Scrolling back down to where following stopped follows the answer again.
+        Scroll(7);
+        Assert.True(view.MessageList.IsPinned);
+        await StreamAsync(".");
+        Assert.Equal(last, Assert.Single(requests));
+
+        stream.Complete();
+        await UIThread.Until(() => dispatcher.PendingCount > 0 || !view.IsBusy);
+        dispatcher.RunPending();
+        await send;
+    });
+
+    [Fact]
     public void SwappingSessions_ProjectsTheNewSession() => UIThread.Run(async () =>
     {
         var first = ChatHost.Session(new ScriptedChatClient().Reply("From first"));
