@@ -29,7 +29,9 @@ internal sealed class ReasoningHandler : ContentBlockHandler<ReasoningContentBlo
 
         if (reasoningContent is null)
         {
-            return state.TextLength > 0 || state.ProtectedData is not null
+            // Other output ends the reasoning; an update without output, such as metadata, does not, so the
+            // item's protected data that follows still reaches it.
+            return (state.TextLength > 0 || state.ProtectedData is not null) && context.HasOutput
                 ? BlockMappingResult<ReasoningContentBlock>.Complete()
                 : BlockMappingResult<ReasoningContentBlock>.Pass();
         }

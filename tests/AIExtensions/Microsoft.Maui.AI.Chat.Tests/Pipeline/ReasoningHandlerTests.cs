@@ -164,6 +164,25 @@ public class ReasoningHandlerTests
         Assert.Equal(["first-item", "second-item"], blocks.Cast<ReasoningContentBlock>().Select(block => block.ProtectedData));
     }
 
+    [Fact]
+    public async Task UpdatesWithoutContents_KeepTheItemOpenForItsProtectedData()
+    {
+        // The shape of an OpenAI Responses reasoning summary: deltas, updates without contents, then the
+        // item's encrypted content.
+        var pipeline = CreatePipeline();
+        var block = Assert.IsType<ReasoningContentBlock>(
+            Assert.Single(await ProcessAsync(pipeline, CreateReasoningUpdate("Summary ", messageId: null))));
+        Assert.Empty(await ProcessAsync(pipeline, CreateReasoningUpdate("text", messageId: null)));
+        Assert.Empty(await ProcessAsync(pipeline, new ChatResponseUpdate()));
+        Assert.Empty(await ProcessAsync(pipeline, new ChatResponseUpdate()));
+
+        Assert.Empty(await ProcessAsync(pipeline, CreateProtectedUpdate("encrypted")));
+
+        Assert.Equal("Summary text", block.Text);
+        Assert.Equal("encrypted", block.ProtectedData);
+        Assert.False(block.IsEncrypted);
+    }
+
     private static ChatResponseUpdate CreateReasoningUpdate(string text, string? messageId) =>
         new()
         {

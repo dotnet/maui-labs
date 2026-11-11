@@ -178,6 +178,20 @@ public class RichTextContentHandlerTests
         await Task.CompletedTask;
     }
 
+    [Fact]
+    public async Task Process_UpdateWithoutContents_KeepsTheSnapshotBlock()
+    {
+        var pipeline = new BlockMappingPipeline(new UIAgentOptions());
+        var block = Assert.IsAssignableFrom<RichContentBlock>(Assert.Single(
+            await ProcessAsync(pipeline, CreateRichTextUpdate("msg-1", "Partial"))));
+
+        Assert.Empty(await ProcessAsync(pipeline, new ChatResponseUpdate { MessageId = "msg-1" }));
+        Assert.Empty(await ProcessAsync(pipeline, CreateRichTextUpdate("msg-1", "Complete")));
+
+        Assert.Equal("Complete", block.RawText);
+        Assert.Equal(BlockLifecycleState.Active, block.LifecycleState);
+    }
+
     private static ChatResponseUpdate CreateRichTextUpdate(string messageId, string text) => new()
     {
         Role = ChatRole.Assistant,

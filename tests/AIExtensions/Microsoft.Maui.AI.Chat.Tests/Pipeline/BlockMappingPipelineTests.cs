@@ -76,7 +76,7 @@ public class BlockMappingPipelineTests
     }
 
     [Fact]
-    public async Task Process_UpdateWithoutText_CompletesActiveBlock()
+    public async Task Process_UpdateWithOtherContent_CompletesActiveBlock()
     {
         var pipeline = CreatePipelineWithTextHandler();
         var blocks = await ProcessAsync(pipeline, new ChatResponseUpdate
@@ -90,10 +90,59 @@ public class BlockMappingPipelineTests
         {
             Role = ChatRole.Assistant,
             MessageId = "msg-1",
-            Contents = [],
+            Contents = [new FunctionCallContent("call-1", "GetWeather")],
         });
 
         Assert.Equal(BlockLifecycleState.Inactive, blocks[0].LifecycleState);
+    }
+
+    [Fact]
+    public async Task Process_UpdateWithoutContents_KeepsTheMessageInOneBlock()
+    {
+        // Upstream completes the block on any update without text, so a metadata-only update in the
+        // middle of a message (such as a late model id) split it into two blocks with the same id.
+        var pipeline = CreatePipelineWithTextHandler();
+        var block = Assert.IsType<TextContentBlock>(Assert.Single(await ProcessAsync(pipeline, new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "msg-1",
+            Contents = [new TextContent("First ")],
+        })));
+
+        Assert.Empty(await ProcessAsync(pipeline, new ChatResponseUpdate { MessageId = "msg-1", ModelId = "model" }));
+        Assert.Empty(await ProcessAsync(pipeline, new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "msg-1",
+            Contents = [new TextContent("second")],
+        }));
+
+        Assert.Equal("First second", block.RawText);
+        Assert.Equal(BlockLifecycleState.Active, block.LifecycleState);
+    }
+
+    [Fact]
+    public async Task Process_UsageOnlyUpdate_KeepsTheMessageInOneBlock()
+    {
+        var pipeline = CreatePipelineWithTextHandler();
+        var block = Assert.IsType<TextContentBlock>(Assert.Single(await ProcessAsync(pipeline, new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new TextContent("First ")],
+        })));
+
+        Assert.Empty(await ProcessAsync(pipeline, new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new UsageContent(new UsageDetails { InputTokenCount = 3 })],
+        }));
+        Assert.Empty(await ProcessAsync(pipeline, new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new TextContent("second")],
+        }));
+
+        Assert.Equal("First second", block.RawText);
     }
 
     [Fact]

@@ -64,6 +64,24 @@ public class BlockMappingContext
         _updateHandled = true;
     }
 
+    /// <summary>
+    /// Gets whether the update carries output: any content other than usage. An update without output,
+    /// such as one that only reports a model id or usage, does not end the message a block is streaming.
+    /// </summary>
+    internal bool HasOutput
+    {
+        get
+        {
+            foreach (var content in Update.Contents)
+            {
+                if (content is not UsageContent)
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
     public bool AllHandled =>
         _handledCount >= Update.Contents.Count && (Update.Contents.Count > 0 || _updateHandled);
 

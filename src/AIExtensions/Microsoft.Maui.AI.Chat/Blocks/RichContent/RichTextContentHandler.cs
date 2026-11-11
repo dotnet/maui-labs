@@ -27,7 +27,8 @@ internal sealed class RichTextContentHandler : ContentBlockHandler<RichContentBl
 
         if (snapshot is null)
         {
-            return state.Id.Length > 0
+            // Other output ends the message; an update without output, such as metadata, does not.
+            return state.Id.Length > 0 && context.HasOutput
                 ? BlockMappingResult<RichContentBlock>.Complete()
                 : BlockMappingResult<RichContentBlock>.Pass();
         }
