@@ -163,8 +163,21 @@ These match upstream so that upstream fixes apply directly:
   an approval response: `FunctionInvokingChatClient` removes approval requests and skips responses
   whose call already has a result, so the result would otherwise reach the model without its call. A
   rejected UI action is answered by the approval response alone, and `FunctionInvokingChatClient`
-  returns the rejection. Upstream nests the UI action's block in the approval and answers only with
-  the approval response, which `FunctionInvokingChatClient` cannot carry out for a declaration.
+  returns the rejection. The rewrite happens for every request, so the history and the thread keep the
+  approval as it was shown. Requests are matched with results in message order rather than by id:
+  providers that number their calls per response reuse call ids, and `FunctionInvokingChatClient`
+  derives the request id from the call id (`ficc_<callId>`), so a request counts as answered by the
+  client when a result for its call id arrives before the call itself is sent again. Upstream nests the
+  UI action's block in the approval and answers only with the approval response, which
+  `FunctionInvokingChatClient` cannot carry out for a declaration.
+- **Reused call ids and the approvals `FunctionInvokingChatClient` carries out** (its limitation, not a
+  port difference). `FunctionInvokingChatClient` (10.7, unchanged on dotnet/extensions main) skips an
+  approval response whose call id has a result anywhere in the request, and keys approval requests by
+  `ficc_<callId>`. With a provider that reuses call ids, an approved server tool or a rejection (of a
+  server tool or a UI action) whose id was answered earlier in the conversation is never carried out,
+  and a later request that holds another approval for that id fails with `ArgumentException`. Approved
+  UI actions are not affected because the client answers them. The engine cannot correct this from
+  above the function invoking client; such providers need unique call ids when they use approvals.
 - **Pending approvals and UI actions end with their turn.** Once a turn stops or fails, and for
   approvals and UI actions shown by a restore, `Approve()` and `Reject()` do nothing and
   `InvokeAsync()` and `GetResultAsync()` return canceled tasks, because nothing could send the

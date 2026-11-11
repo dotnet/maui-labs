@@ -65,6 +65,12 @@ action. A UI action wrapped in `ApprovalRequiredAIFunction` needs `FunctionInvok
 `ToolApprovalBlock` and runs once approved, whatever its mode; edit the approval's `Call.Arguments`
 before approving to supply input.
 
+Providers that number their calls per response reuse call ids. Blocks, UI actions and approved UI
+actions handle that, but `FunctionInvokingChatClient` matches the approvals it carries out by call id
+across the whole history: an approval whose call id already has a result earlier in the conversation
+is skipped, and a later approval for the same id fails the request. Give such providers unique call ids (for example with a
+middleware below `UseFunctionInvocation()` that rewrites them) when they use approvals.
+
 A block handler or `[ToolBlock]` registered for a UI action's name shows the action's call instead of
 replacing the action: its block becomes the `UIActionBlock.InnerBlock` (or the approval's inner block)
 and receives the action's result, and the action still runs. The block must derive from
