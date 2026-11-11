@@ -131,6 +131,7 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
     MacOSToolbarManager? _toolbarManager;
     MacOSModalManager? _modalManager;
     MacOSWindowDelegate? _windowDelegate;
+    MacOSFocusTracker? _focusTracker;
     readonly WindowCloseCoordinator _closeCoordinator = new();
     static int _windowCascadeOffset;
 
@@ -170,6 +171,9 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
 
     protected override void DisconnectHandler(NSWindow platformView)
     {
+        _focusTracker?.Dispose();
+        _focusTracker = null;
+
         if (platformView.Delegate == _windowDelegate)
             platformView.Delegate = null;
         _windowDelegate = null;
@@ -206,7 +210,7 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
             false);
 
         window.Center();
-        window.ReleasedWhenClosed = false;
+        window.ReleaseWhenClosed(false);
 
         // Cascade additional windows so they don't stack on top of each other
         if (_windowCascadeOffset > 0)
@@ -230,6 +234,9 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
 
         // Create the modal manager
         _modalManager = new MacOSModalManager(_contentContainer, window);
+
+        // Keep IView.IsFocused (Focused/Unfocused events, Focused visual state) in step with the first responder
+        _focusTracker = new MacOSFocusTracker(window);
 
         // Set the window delegate to handle close events
         _windowDelegate = new MacOSWindowDelegate(this);
@@ -297,7 +304,10 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
             // Recreate modal manager with the new content view
             var contentView = handler.PlatformView.ContentView;
             if (contentView != null)
+            {
+                handler._modalManager?.ClearModalStack();
                 handler._modalManager = new MacOSModalManager(contentView, handler.PlatformView);
+            }
 
             handler.SubscribeModalEvents(window);
             handler.ObservePageChanges(page);

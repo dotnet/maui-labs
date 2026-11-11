@@ -1267,7 +1267,8 @@ internal static partial class LayoutDiagnosticsEngine
 
         var runtimeIdentity = string.Join(
             "|",
-            fingerprint,
+            // Keep the discriminator input stable for saved, shortened finding IDs.
+            fingerprint[..16],
             finding.Element.Id,
             string.Join(
                 ",",
@@ -1276,7 +1277,7 @@ internal static partial class LayoutDiagnosticsEngine
                     .ThenBy(related => related.Element.Id, StringComparer.Ordinal)
                     .Select(related => $"{related.Relation}:{related.Element.Id}")));
         var disambiguated = Convert.ToHexString(
-            SHA256.HashData(Encoding.UTF8.GetBytes(runtimeIdentity)))[..16]
+            SHA256.HashData(Encoding.UTF8.GetBytes(runtimeIdentity)))[..32]
             .ToLowerInvariant();
         var candidate = $"{fingerprint}-{disambiguated}";
         var occurrence = 2;
@@ -1305,14 +1306,11 @@ internal static partial class LayoutDiagnosticsEngine
             && !suppression.ElementType.Equals(finding.Element.Type, StringComparison.OrdinalIgnoreCase))
             return false;
         if (suppression.Fingerprint is not null
-            && !suppression.Fingerprint.Equals(
+            && !MatchesFingerprint(suppression.Fingerprint,
                 string.IsNullOrWhiteSpace(finding.SuppressionKey)
                     ? finding.Id
-                    : finding.SuppressionKey,
-                StringComparison.OrdinalIgnoreCase)
-            && !suppression.Fingerprint.Equals(
-                finding.Id,
-                StringComparison.OrdinalIgnoreCase))
+                    : finding.SuppressionKey)
+            && !MatchesFingerprint(suppression.Fingerprint, finding.Id))
             return false;
         if (suppression.SourceFile is not null
             && !SourcePathMatches(suppression.SourceFile, finding.Element.SourceFile))
@@ -1342,6 +1340,25 @@ internal static partial class LayoutDiagnosticsEngine
         return true;
     }
 
+    private static bool MatchesFingerprint(string expected, string actual)
+    {
+        if (expected.Equals(actual, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var oldParts = expected.Split('-');
+        var newParts = actual.Split('-');
+        if (oldParts.Length != newParts.Length || oldParts.Length > 3)
+            return false;
+        for (var i = 0; i < Math.Min(2, oldParts.Length); i++)
+        {
+            if (oldParts[i].Length != 16 || newParts[i].Length != 32 ||
+                !oldParts[i].All(Uri.IsHexDigit) || !newParts[i].All(Uri.IsHexDigit) ||
+                !newParts[i].StartsWith(oldParts[i], StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        return oldParts.Length < 3 || oldParts[2].Equals(newParts[2], StringComparison.Ordinal);
+    }
+
     private static bool SourcePathMatches(string requested, string? actual)
     {
         if (actual is null)
@@ -1366,7 +1383,7 @@ internal static partial class LayoutDiagnosticsEngine
             FingerprintIdentity(finding.Element),
             related,
             FingerprintGeometryCause(finding.Evidence));
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source)))[..16]
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source)))[..32]
             .ToLowerInvariant();
     }
 

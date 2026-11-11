@@ -20,6 +20,7 @@ public abstract class ChatClientUsageTestsBase<T>(ITestOutputHelper output)
 	/// Gets whether the provider is expected to report usage in the current environment.
 	/// </summary>
 	protected virtual bool IsUsageAvailable => true;
+	protected virtual bool IsOutputUsageAvailable => true;
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
@@ -119,11 +120,16 @@ public abstract class ChatClientUsageTestsBase<T>(ITestOutputHelper output)
 		{
 			AssertExpectedUsage(usage);
 			Assert.Equal(usage.InputTokenCount, (long)Assert.IsType<int>(span.GetTagItem("gen_ai.usage.input_tokens")));
-			Assert.Equal(usage.OutputTokenCount, (long)Assert.IsType<int>(span.GetTagItem("gen_ai.usage.output_tokens")));
+			if (usage.OutputTokenCount is { } outputTokens)
+				Assert.Equal(outputTokens, (long)Assert.IsType<int>(span.GetTagItem("gen_ai.usage.output_tokens")));
+			else
+				Assert.Null(span.GetTagItem("gen_ai.usage.output_tokens"));
 			if (usage.CachedInputTokenCount is { } cachedInput)
 				Assert.Equal(cachedInput, (long)Assert.IsType<int>(span.GetTagItem("gen_ai.usage.cache_read.input_tokens")));
-			Assert.Equal(2, tokenMetrics.Length);
-			foreach (var (tokenType, count) in new[] { ("input", usage.InputTokenCount), ("output", usage.OutputTokenCount) })
+			var counts = new[] { ("input", usage.InputTokenCount), ("output", usage.OutputTokenCount) }
+				.Where(item => item.Item2 is not null).ToArray();
+			Assert.Equal(counts.Length, tokenMetrics.Length);
+			foreach (var (tokenType, count) in counts)
 			{
 				var metric = Assert.Single(tokenMetrics,
 					metric => metric.Tags.Single(tag => tag.Key == "gen_ai.token.type").Value as string == tokenType);
@@ -161,12 +167,20 @@ public abstract class ChatClientUsageTestsBase<T>(ITestOutputHelper output)
 
 		Assert.NotNull(usage);
 		Assert.NotNull(usage.InputTokenCount);
-		Assert.NotNull(usage.OutputTokenCount);
-		Assert.NotNull(usage.TotalTokenCount);
 		Assert.True(usage.InputTokenCount.Value >= 1);
-		Assert.True(usage.OutputTokenCount.Value >= 1);
-		Assert.True(usage.TotalTokenCount.Value >= usage.InputTokenCount.Value);
-		Assert.True(usage.TotalTokenCount.Value >= usage.OutputTokenCount.Value);
+		if (IsOutputUsageAvailable)
+		{
+			Assert.NotNull(usage.OutputTokenCount);
+			Assert.NotNull(usage.TotalTokenCount);
+			Assert.True(usage.OutputTokenCount.Value >= 1);
+			Assert.True(usage.TotalTokenCount.Value >= usage.InputTokenCount.Value);
+			Assert.True(usage.TotalTokenCount.Value >= usage.OutputTokenCount.Value);
+		}
+		else
+		{
+			Assert.Null(usage.OutputTokenCount);
+			Assert.Null(usage.TotalTokenCount);
+		}
 
 		if (usage.CachedInputTokenCount is { } cachedInputTokenCount)
 			Assert.True(cachedInputTokenCount >= 0);

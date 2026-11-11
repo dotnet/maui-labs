@@ -21,13 +21,19 @@ public partial class ChatViewModel : ObservableObject
 
     /// <summary>Initializes the child view models and request orchestration.</summary>
     public ChatViewModel(PlaygroundTools tools, ChatSessionService recording, SettingsPaneViewModel settings,
-        ChatAreaViewModel chat, DiagnosticsViewModel diagnostics)
+        ChatAreaViewModel chat, DiagnosticsViewModel diagnostics, ModelReadinessViewModel readiness)
     {
         _tools = tools;
         _recording = recording;
         Settings = settings;
         Chat = chat;
         Diagnostics = diagnostics;
+        Readiness = readiness;
+        Readiness.PropertyChanged += (_, _) =>
+        {
+            Settings.ModelStatus = Readiness.Status;
+            UpdateChatCanSend();
+        };
         _replayClient = settings.Clients.Single(option => option.Descriptor.IsReplay).Client;
         Chat.SendCommand = new AsyncRelayCommand(SendAsync, () => Chat.CanSend);
         Chat.CancelCommand = new RelayCommand(Cancel, () => Chat.IsBusy);
@@ -44,6 +50,8 @@ public partial class ChatViewModel : ObservableObject
     public ChatAreaViewModel Chat { get; }
 
     public DiagnosticsViewModel Diagnostics { get; }
+
+    public ModelReadinessViewModel Readiness { get; }
 
     public IAsyncRelayCommand NewChatAction => NewChatCommand;
     public IAsyncRelayCommand ImportFileAction => ImportChatFileCommand;
@@ -226,6 +234,11 @@ public partial class ChatViewModel : ObservableObject
 
     private async Task SendAsync()
     {
+        if (Readiness.IsSendBlocked)
+        {
+            Chat.StatusMessage = Readiness.Message;
+            return;
+        }
         var client = _selectedClient;
         var attachment = Chat.SelectedImage;
         if (client is null)
@@ -275,7 +288,7 @@ public partial class ChatViewModel : ObservableObject
         var prompt = Chat.Prompt;
         var userMessage = CreateUserMessage(prompt, attachment);
         var userText = string.IsNullOrWhiteSpace(prompt) ? $"Attached {attachment!.FileName}" : prompt.Trim();
-        var useStructuredJson = Settings.UseStructuredJson;
+        var useStructuredJson = options.ResponseFormat is ChatResponseFormatJson;
         Chat.Prompt = string.Empty;
         Chat.ClearSelectedImage();
 
@@ -418,7 +431,7 @@ public partial class ChatViewModel : ObservableObject
     private List<AITool> CreateEnabledTools()
     {
         var tools = new List<AITool>();
-        if (SelectedDescriptor?.SupportsToolCalling != true)
+        if (!Settings.SupportsToolCalling)
             return tools;
         if (Settings.UseDateTimeTool)
             tools.Add(_tools.CurrentLocalDateTime);
@@ -444,7 +457,7 @@ public partial class ChatViewModel : ObservableObject
     private bool CanSend()
     {
         var descriptor = SelectedDescriptor;
-        if (Chat.IsBusy || Settings.IsBusy || _recording.RestoreError is not null ||
+        if (Chat.IsBusy || Settings.IsBusy || Readiness.IsSendBlocked || _recording.RestoreError is not null ||
             descriptor is null ||
             string.IsNullOrWhiteSpace(Chat.Prompt) && !Chat.HasSelectedImage)
         {
@@ -458,7 +471,7 @@ public partial class ChatViewModel : ObservableObject
             return false;
         }
 
-        return !descriptor.SupportsToolCalling ||
+        return !Settings.SupportsToolCalling ||
             Settings.ToolMode != ChatToolMode.RequireAny ||
             Settings.UseDateTimeTool ||
             Settings.UseCalculatorTool ||
@@ -477,6 +490,7 @@ public partial class ChatViewModel : ObservableObject
         var wasReplay = ReferenceEquals(_selectedClient, _replayClient);
         _selectedClient = client;
         var descriptor = SelectedDescriptor;
+        Readiness.SetClient(descriptor, Settings.RequestModelId);
         if (descriptor is null)
         {
             Chat.IsReplayClient = false;
@@ -521,6 +535,9 @@ public partial class ChatViewModel : ObservableObject
     {
         if (e.PropertyName == nameof(SettingsPaneViewModel.SelectedClient))
             ApplyClientSelection(Settings.SelectedClient);
+        else if (e.PropertyName == nameof(SettingsPaneViewModel.SelectedModelId) &&
+            ReferenceEquals(_selectedClient, Settings.SelectedClient))
+            Readiness.SetClient(SelectedDescriptor, Settings.RequestModelId);
         else if (e.PropertyName == nameof(SettingsPaneViewModel.IsBusy))
             RefreshOperationCommands();
         else if (e.PropertyName is nameof(SettingsPaneViewModel.ToolMode) or
@@ -544,6 +561,7 @@ public partial class ChatViewModel : ObservableObject
 
     private void RefreshOperationCommands()
     {
+        Readiness.IsInteractionBusy = Chat.IsBusy || Settings.IsBusy;
         // Composer commands refresh in ChatAreaViewModel; these depend on recording and busy state.
         UpdateChatCanSend();
         NewChatCommand.NotifyCanExecuteChanged();

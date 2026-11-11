@@ -44,17 +44,19 @@ public sealed class InputFileTests
         Assert.True(source.CanRead);
     }
 
-    [Theory]
-    [InlineData(20 * 1024 * 1024)]
-    [InlineData(20 * 1024 * 1024 + 1)]
-    public async Task ReadAsync_EnforcesTheExactSharedFileLimit(int length)
+    [Fact]
+    public async Task ReadAsync_LoadsFilesLargerThanTwentyMegabytesInFull()
     {
-        using var source = new MemoryStream(new byte[length], writable: false);
-        if (length == 20 * 1024 * 1024)
-            Assert.Equal(length, (await InputFile.ReadAsync(source, "scan.pdf")).Bytes.Length);
-        else
-            Assert.Contains("20 MB", (await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                InputFile.ReadAsync(source, "scan.pdf"))).Message);
+        var bytes = new byte[21 * 1024 * 1024];
+        bytes[0] = 1;
+        bytes[^1] = 2;
+        using var source = new MemoryStream(bytes, writable: false);
+
+        var file = await InputFile.ReadAsync(source, "scan.pdf");
+
+        Assert.Equal(bytes.Length, file.Bytes.Length);
+        Assert.True(bytes.AsSpan().SequenceEqual(file.Bytes));
+        Assert.Equal(source.Length, source.Position);
         Assert.True(source.CanRead);
     }
 }

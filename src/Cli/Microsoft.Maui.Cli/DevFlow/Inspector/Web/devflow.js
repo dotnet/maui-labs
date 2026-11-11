@@ -18,6 +18,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   const vpWrap = document.getElementById('df-viewport-wrap');
   const disconnectedOverlay = document.getElementById('df-disconnected-overlay');
   const retryConnectionBtn = document.getElementById('df-retry-connection');
+  const previewPending = document.getElementById('df-preview-pending');
   let fitMode = true;   // default: scale down to fit (never upscale past 1:1)
   let scaleRaf = 0;
   let rootOffsetX = parseFloat(viewport.dataset.rootOffsetX) || 0;
@@ -94,6 +95,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   let isGesturing = false;
   let isDragging = false;
   let refreshPromise = null;
+  const STATE_FETCH_TIMEOUT_MS = 10000;
 
   // Inspector selection and tree state. Declared early so the event
   // handlers registered below can read them (they only run after init has set them).
@@ -196,24 +198,61 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     return null;
   }
 
+  function previewStateSignature() {
+    return JSON.stringify([...viewport.querySelectorAll('.devflow-element')].map(element =>
+      ['data-id', 'style', 'data-isVisible', 'data-isEnabled', 'data-opacity', 'data-text', 'data-value']
+        .map(attribute => element.getAttribute(attribute))));
+  }
+
+  function loadDecodedImage(url, signal) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      const finish = (callback, value) => {
+        signal.removeEventListener('abort', onAbort);
+        callback(value);
+      };
+      const onAbort = () => {
+        image.removeAttribute('src');
+        finish(reject, signal.reason || new DOMException('Image load aborted.', 'AbortError'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      image.src = url;
+      image.decode().then(
+        () => finish(resolve, image),
+        error => finish(reject, error));
+    });
+  }
+
   // Refresh state via AJAX (no full page reload — avoids flash)
   async function refreshState(force = false) {
     if (refreshPromise) {
       if (!force) return refreshPromise;
       await refreshPromise;
+      // Another forced caller may already have started the fresh refresh; share it.
+      if (refreshPromise) return refreshPromise;
     }
 
     const currentRefresh = (async () => {
+      const tap = latestTap;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), STATE_FETCH_TIMEOUT_MS);
+      disconnectedOverlay?.setAttribute('aria-busy', 'true');
       try {
-        const resp = await fetch(`${basePath}/api/state${diagnosticsWanted() ? '?diagnostics=1' : ''}`);
+        const resp = await fetch(`${basePath}/api/state${diagnosticsWanted() ? '?diagnostics=1' : ''}`, { signal: controller.signal });
         if (!resp.ok) { markConnected(false); return null; }
         const state = await resp.json();
-        markConnected(true);
 
-        // Update screenshot without flash
+        // Keep the previous frame intact until its replacement image is ready.
         if (screenshot && state.screenshotUrl) {
-          screenshot.src = state.screenshotUrl;
+          const image = await loadDecodedImage(state.screenshotUrl, controller.signal);
+          if (!navigator.onLine) return null;
+          screenshot.src = image.src;
         }
+        markConnected(true);
 
         // Update viewport size if changed
         if (state.viewportWidth && state.viewportHeight) {
@@ -242,11 +281,24 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           ['data-id', 'style', 'data-isVisible', 'data-isEnabled', 'data-opacity', 'data-text', 'data-value']
             .map(attribute => element.getAttribute(attribute)));
         layoutPanel?.frameChanged(JSON.stringify([treeRevision, diagnosticInputsRevision, renderedState]));
+        if (tap !== null && tap === latestTap) {
+          const renderedStateSignature = JSON.stringify(renderedState);
+          if (renderedStateSignature !== tap.previewStateSignature || tap.unchangedCaptures > 0) {
+            latestTap = null;
+            renderPreviewPending();
+          } else {
+            tap.unchangedCaptures++;
+            scheduleRefresh(300);
+          }
+        }
         return state;
       } catch (err) {
         markConnected(false);
         console.error('State refresh failed:', err);
         return null;
+      } finally {
+        clearTimeout(timeout);
+        disconnectedOverlay?.removeAttribute('aria-busy');
       }
     })();
     refreshPromise = currentRefresh;
@@ -260,6 +312,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   // Reachability of the live app, derived from /api/state. Toggling it re-evaluates the drive-action
   // buttons so they disable when the agent goes away (and re-enable when it returns).
   const disconnectedStatus = 'App disconnected — waiting for DevFlow to reconnect.';
+  const checkingStatus = 'Checking for the running app…';
   let disconnectReturnFocus = null;
   function markConnected(value) {
     if (connected === value) return;
@@ -287,17 +340,18 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     updateFlowButtons();
   }
   if (retryConnectionBtn) retryConnectionBtn.addEventListener('click', async () => {
-    if (refreshInProgress) {
-      setStatus('Reconnect check queued…');
-      scheduleRefresh(100);
-      return;
-    }
+    const label = retryConnectionBtn.querySelector('span');
     retryConnectionBtn.disabled = true;
-    setStatus('Checking for the running app…');
+    if (label) label.textContent = 'Checking…';
+    setStatus(checkingStatus);
     try {
-      await refreshState();
+      // Forced: wait for any in-flight poll, then check again rather than reusing its result.
+      await refreshState(true);
     } finally {
       retryConnectionBtn.disabled = false;
+      if (label) label.textContent = 'Retry now';
+      // markConnected() ignores an unchanged state, so settle our own status here unless something newer replaced it.
+      if (tb.status?.textContent === checkingStatus) setStatus(connected ? '' : disconnectedStatus);
     }
   });
 
@@ -409,12 +463,19 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // Debounced refresh — coalesce rapid calls
   let refreshTimer = null;
-  function scheduleRefresh(delayMs) {
+  let latestTap = null; // newest accepted tap the Preview does not reflect yet
+  let pendingTapRequests = 0;
+  function renderPreviewPending() {
+    previewPending.classList.toggle('df-hidden', pendingTapRequests === 0 && latestTap === null);
+  }
+  function scheduleRefresh(delayMs = 300) {
     if (refreshTimer) clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => {
+    refreshTimer = setTimeout(async () => {
       refreshTimer = null;
-      refreshState();
-    }, delayMs || 300);
+      // A refresh already in flight may predate the tap, so wait for it and capture again.
+      const state = await refreshState(latestTap !== null);
+      if (!state && latestTap !== null) scheduleRefresh(3000);
+    }, delayMs);
   }
   if (screenshot) screenshot.addEventListener('error', () => scheduleRefresh(3000));
 
@@ -683,22 +744,39 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     const targetLabel = targetEl ? elementLabel(targetEl) : null;
     const payload = { x, y, ...getElementCaptureMetadata(targetEl) };
     if (targetId) payload.elementId = targetId;
+    const previewSignature = previewStateSignature();
 
-    const response = await inspectorApi.postDetailed('/api/tap', payload);
-    const result = response.body;
-    if (!response.ok || !result || result.ok !== true) {
-      const reason = result && typeof result.reason === 'string'
-        ? result.reason
-        : 'The app did not accept the tap.';
-      setStatus(`Tap did not run — ${reason}`);
-      return { ok: false, result, target: targetEl };
+    pendingTapRequests++;
+    renderPreviewPending();
+    try {
+      const response = await inspectorApi.postDetailed('/api/tap', payload);
+      const result = response.body;
+      if (!response.ok || !result || result.ok !== true) {
+        const reason = result && typeof result.reason === 'string'
+          ? result.reason
+          : 'The app did not accept the tap.';
+        setStatus(`Tap did not run — ${reason}`);
+        return { ok: false, result, target: targetEl };
+      }
+
+      const actual = result.elementId ? (elById(result.elementId) || targetEl) : targetEl;
+      pulseActionTarget(actual);
+      const label = actual ? elementLabel(actual) : targetLabel;
+      setStatus(label ? `Tap sent to ${label}.` : 'Tap sent to the app.');
+      const tap = {
+        ok: true,
+        result,
+        target: actual || targetEl,
+        previewStateSignature: previewSignature,
+        unchangedCaptures: 0,
+      };
+      latestTap = tap;
+      return tap;
+    } finally {
+      pendingTapRequests--;
+      renderPreviewPending();
+      scheduleRefresh(0);
     }
-
-    const actual = result.elementId ? (elById(result.elementId) || targetEl) : targetEl;
-    pulseActionTarget(actual);
-    const label = actual ? elementLabel(actual) : targetLabel;
-    setStatus(label ? `Tap sent to ${label}.` : 'Tap sent to the app.');
-    return { ok: true, result, target: actual || targetEl };
   }
 
   viewport.addEventListener('click', async (e) => {
@@ -746,7 +824,6 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         if (tap.ok && tap.target) await recordStep('tap', tap.target);
         else if (!tap.target) setStatus('Tap not recorded — no element under the cursor.');
       }
-      scheduleRefresh(400);
     } catch (err) {
       console.error('Tap failed:', err);
       setStatus('Tap did not run — the Inspector could not reach the app.');
@@ -843,8 +920,9 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // ── Live updates: a WebSocket to the broker-proxied /ws/events makes the mirror react instantly
   // to app-side changes. The 3s poll below stays as a zero-regression fallback and only refreshes
-  // when the socket is NOT live (wsLive), or Layout is visible: an open event stream does not
-  // guarantee every native scroll or layout change emits an event. This poll never analyzes layout.
+  // when the socket is NOT live (wsLive), the app is disconnected, or Layout is visible: an open
+  // event stream does not guarantee app reachability or every native layout change emits an event.
+  // This poll never analyzes layout.
   let wsLive = false;
   let eventsWs = null;
   let eventConnectTimer = null;
@@ -920,11 +998,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   });
 
   // ── Periodic safety refresh for app-side changes (AJAX, no flash) ──
-  let pollInterval = setInterval(() => {
-    if (!document.hidden && !refreshTimer && (!wsLive || isDiagnosticsPaneVisible())) {
+  function pollState() {
+    if (!document.hidden && !replaying && !refreshTimer && (!wsLive || !connected || isDiagnosticsPaneVisible())) {
       refreshState();
     }
-  }, 3000);
+  }
+  let pollInterval = setInterval(pollState, 3000);
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
@@ -932,9 +1011,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       pollInterval = null;
     } else if (!pollInterval) {
       if (!replaying) scheduleRefresh(0);
-      pollInterval = setInterval(() => {
-        if (!refreshTimer && (!wsLive || isDiagnosticsPaneVisible())) refreshState();
-      }, 3000);
+      pollInterval = setInterval(pollState, 3000);
     }
   });
 
@@ -1158,9 +1235,9 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     const propsOpen = !!propsPaneEl && !propsPaneEl.classList.contains('df-hidden');
     const treeOpen = !document.body.classList.contains('df-tree-hidden');
     const dockOpen = document.body.classList.contains('df-dock-open');
+    // Compact docks Properties beside the screenshot, so only the drawer layouts dim it for them.
     const showScrim =
-      (isTreeDrawerLayout() && treeOpen) ||
-      (isTransientPaneLayout() && propsOpen) ||
+      (isTreeDrawerLayout() && (treeOpen || propsOpen)) ||
       (hostLayout !== 'wide' && dockOpen);
     document.body.classList.toggle('df-props-open', propsOpen);
     if (paneScrim) paneScrim.classList.toggle('df-hidden', !showScrim);
@@ -1340,6 +1417,8 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     return badgeEl;
   }
   function setHover(el) {
+    // Off-screen overlays aren't drawn, so a hover box/badge for one would only mislead.
+    if (el?.dataset.offscreen === 'true') el = null;
     if (hoveredEl === el) return;
     if (hoveredEl) hoveredEl.classList.remove('df-hover', 'df-hover-noninteractive', 'df-hover-interactive');
     hoveredEl = el;
@@ -1386,6 +1465,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   viewport.addEventListener('pointerleave', () => setHover(null));
 
   // ── Selection: screenshot ↔ tree ↔ property grid ──
+  // Status last written for the selection. A refresh rewrites the line only while it still shows
+  // this, so messages from other actions (tap, recording, mode) are never overwritten.
+  let selectionStatus = '';
+  function selectionStatusFor(el) {
+    return elementLabel(el) + (el.dataset.offscreen === 'true' ? ' (off-screen)' : '');
+  }
   function selectElement(id) {
     viewport.querySelectorAll('.devflow-element.df-selected').forEach((el) => el.classList.remove('df-selected'));
     const previousId = selectedId;
@@ -1396,7 +1481,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     if (el) el.classList.add('df-selected');
     elementTree.updateSelection();
     elementTree.reveal(id);
-    if (el) { propertyGrid.open(el); setStatus(elementLabel(el)); }
+    if (el) { propertyGrid.open(el); setStatus(selectionStatus = selectionStatusFor(el)); }
     updateHostButtons();
     updateFlowButtons();
     postSelectionToHost(el);
@@ -1408,9 +1493,13 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     elementTree.syncStructure();
     if (selectedId) {
       const el = elById(selectedId);
-      if (el) el.classList.add('df-selected'); else selectElement(null);
+      if (el) {
+        el.classList.add('df-selected');
+        const status = selectionStatusFor(el);
+        if (status !== selectionStatus && tb.status?.textContent === selectionStatus) setStatus(selectionStatus = status);
+      } else selectElement(null);
     }
-    if (hoveredEl && !hoveredEl.isConnected) { hoveredEl = null; if (badgeEl) badgeEl.style.display = 'none'; }
+    if (hoveredEl && (!hoveredEl.isConnected || hoveredEl.dataset.offscreen === 'true')) setHover(null);
   }
 
   // ── Workflow recording: capture interactions into the shared Flow format, then
@@ -1858,7 +1947,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     updateFlowButtons();
     // Pause the 3s poll while replaying so the screenshot doesn't churn under the driven app.
     if (on && pollInterval) { clearInterval(pollInterval); pollInterval = null; }
-    else if (!on && !pollInterval) { pollInterval = setInterval(() => { if (!refreshTimer && (!wsLive || isDiagnosticsPaneVisible())) refreshState(); }, 3000); }
+    else if (!on && !pollInterval) { pollInterval = setInterval(pollState, 3000); }
   }
 
   async function captureCheckpoint(label) {

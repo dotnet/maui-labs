@@ -26,7 +26,8 @@ export function createElementTreeController(options) {
         name: automationId || text,
         context: '',
         hasSource: element.getAttribute('data-hasSource') === 'true',
-        visible: element.getAttribute('data-isVisible') !== 'false',
+        visible: element.getAttribute('data-isVisible') !== 'false'
+          && element.getAttribute('data-offscreen') !== 'true',
       });
     });
 

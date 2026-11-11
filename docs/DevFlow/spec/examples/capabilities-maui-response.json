@@ -36,7 +36,7 @@
     },
     "webview": {
       "version": 1,
-      "features": ["evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot"]
+      "features": ["evaluate", "contexts", "source", "dom", "dom-query", "console", "screenshot"]
     },
     "network": {
       "version": 1,

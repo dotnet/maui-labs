@@ -101,6 +101,9 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// <summary>Device type ("Physical" / "Virtual") reported to clients.</summary>
     protected virtual string DeviceTypeName => "Unknown";
 
+    /// <summary>Platform-specific device identifier when the app can report one safely.</summary>
+    protected virtual string? DeviceIdentifier => null;
+
     /// <summary>Device idiom ("Phone" / "Tablet" / "Desktop") reported to clients.</summary>
     protected virtual string IdiomName => "Unknown";
 
@@ -217,6 +220,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 },
                 ["device"] = new Dictionary<string, object?>
                 {
+                    ["id"] = DeviceIdentifier,
                     ["platform"] = PlatformName,
                     ["deviceType"] = DeviceTypeName,
                     ["idiom"] = IdiomName,
@@ -359,7 +363,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         // Listed unconditionally so clients can discover the group and see *why* it is unavailable,
         // per the capability protocol: unsupported groups report supported:false rather than vanish.
         capabilities["webview"] = Capability(1, cdpWebViews.Length > 0,
-            ["evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot"],
+            ["evaluate", "contexts", "source", "dom", "dom-query", "console", "screenshot"],
             "No WebView has registered a CDP endpoint with this agent.");
 
         capabilities["profiler"] = Capability(1, IsProfilerFeatureAvailable, BuildProfilerFeatureList(), "Profiler collector is unavailable on this platform.");
@@ -537,7 +541,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             switch (actionName)
             {
                 case "tap":
-                    response = await HandleTap(new HttpRequest { Method = "POST", Body = AgentJson.Serialize(new ActionRequest { ElementId = action.ElementId }) });
+                    response = await HandleTap(new HttpRequest { Method = "POST", Body = AgentJson.Serialize(new TapRequest { ElementId = action.ElementId, X = action.X, Y = action.Y }) });
                     break;
                 case "fill":
                     response = await HandleFill(new HttpRequest
@@ -605,6 +609,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                             DeltaY = action.DeltaY,
                             OriginX = action.OriginX,
                             OriginY = action.OriginY,
+                            X = action.X,
+                            Y = action.Y,
+                            ToX = action.ToX,
+                            ToY = action.ToY,
+                            ToElementId = action.ToElementId,
+                            HoldMs = action.HoldMs,
                             Steps = action.Steps
                         })
                     });

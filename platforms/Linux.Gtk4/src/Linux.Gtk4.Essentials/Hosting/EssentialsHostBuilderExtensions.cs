@@ -39,7 +39,6 @@ public static class EssentialsHostBuilderExtensions
 		// Tier 3 — DBus
 		builder.Services.TryAddSingleton<Microsoft.Maui.Devices.IBattery, LinuxBattery>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Networking.IConnectivity, LinuxConnectivity>();
-		builder.Services.TryAddSingleton<Microsoft.Maui.Storage.ISecureStorage, LinuxSecureStorage>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Devices.Sensors.IGeolocation, LinuxGeolocation>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Media.ITextToSpeech, LinuxTextToSpeech>();
 
@@ -49,6 +48,7 @@ public static class EssentialsHostBuilderExtensions
 		builder.Services.TryAddSingleton<Microsoft.Maui.Authentication.IWebAuthenticator, LinuxWebAuthenticator>();
 
 		// Tier 5 — Stubs
+		builder.Services.TryAddSingleton<Microsoft.Maui.Storage.ISecureStorage, LinuxSecureStorage>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Devices.IFlashlight, LinuxFlashlight>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Devices.IHapticFeedback, LinuxHapticFeedback>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Devices.IVibration, LinuxVibration>();

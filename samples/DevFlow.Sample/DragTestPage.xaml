@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="DevFlow.Sample.DragTestPage"
+             Title="Drag and Drop"
+             Shell.FlyoutBehavior="Disabled">
+    <!-- Shell's flyout pan takes any touch in the leading tenth of the window, which on a wide
+         Mac Catalyst window covers the slider and the card; a real-touch drag there is refused
+         as contested. The flyout is off here so the drags below test only their own controls. -->
+    <ContentPage.BackgroundColor>
+        <AppThemeBinding Light="#F5F5F5" Dark="#1C1B1F" />
+    </ContentPage.BackgroundColor>
+
+    <!-- The page scrolls vertically on purpose: a drag on a child of a scroller is where the
+         scroller can steal the touch, and a real-touch drag has to show that. -->
+    <ScrollView Padding="16">
+        <VerticalStackLayout Spacing="16">
+
+            <Label Text="Drag from a point (maui_gesture drag with x/y). Each status label reports what the touch did, so a test can tell a drag that moved the thumb from one that merely returned 200."
+                   FontSize="13"
+                   AutomationId="DragIntroLabel">
+                <Label.TextColor>
+                    <AppThemeBinding Light="#49454F" Dark="#CAC4D0" />
+                </Label.TextColor>
+            </Label>
+
+            <!-- A custom slider built the way many control libraries build theirs: one layout
+                 holding the track and thumb, with a pan to drag the thumb and a tap to jump it.
+                 A drag must move the thumb and must not also fire the tap. -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#E8DEF8" Dark="#4A4458" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Track slider (pan + tap on one layout)" FontAttributes="Bold" FontSize="16" />
+                    <AbsoluteLayout x:Name="SliderTrack"
+                                    AutomationId="DragSliderTrack"
+                                    HeightRequest="40"
+                                    BackgroundColor="Transparent">
+                        <BoxView x:Name="SliderRail"
+                                 Color="#79747E"
+                                 CornerRadius="2"
+                                 AbsoluteLayout.LayoutBounds="0,18,1,4"
+                                 AbsoluteLayout.LayoutFlags="WidthProportional"
+                                 InputTransparent="True" />
+                        <BoxView x:Name="SliderThumb"
+                                 AutomationId="DragSliderThumb"
+                                 Color="#6750A4"
+                                 CornerRadius="12"
+                                 AbsoluteLayout.LayoutBounds="0,8,24,24"
+                                 InputTransparent="True" />
+                        <AbsoluteLayout.GestureRecognizers>
+                            <PanGestureRecognizer PanUpdated="OnSliderPanUpdated" />
+                            <TapGestureRecognizer Tapped="OnSliderTapped" />
+                        </AbsoluteLayout.GestureRecognizers>
+                    </AbsoluteLayout>
+                    <Label x:Name="SliderStatusLabel"
+                           Text="slider: value=0 pans=0 taps=0 commits=0"
+                           FontSize="14"
+                           AutomationId="DragSliderStatus" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Drag and drop built on a pan, as libraries do where MAUI's Drag/DropGestureRecognizer
+                 is unavailable: the card follows the finger and reports the zone it is released over. -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#E3F2FD" Dark="#0D2A3F" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Pan drag and drop" FontAttributes="Bold" FontSize="16" />
+                    <AbsoluteLayout x:Name="DropArea" HeightRequest="140">
+                        <Border x:Name="DropZone"
+                                AutomationId="DropZone"
+                                StrokeShape="RoundRectangle 8"
+                                Stroke="#1E88E5"
+                                StrokeThickness="2"
+                                AbsoluteLayout.LayoutBounds="1,0,140,140"
+                                AbsoluteLayout.LayoutFlags="XProportional">
+                            <Label Text="Drop here" HorizontalOptions="Center" VerticalOptions="Center" />
+                        </Border>
+                        <BoxView x:Name="DragCard"
+                                 AutomationId="DragCard"
+                                 Color="#E53935"
+                                 CornerRadius="8"
+                                 AbsoluteLayout.LayoutBounds="0,40,60,60">
+                            <BoxView.GestureRecognizers>
+                                <PanGestureRecognizer PanUpdated="OnCardPanUpdated" />
+                            </BoxView.GestureRecognizers>
+                        </BoxView>
+                    </AbsoluteLayout>
+                    <Label x:Name="DropStatusLabel"
+                           Text="drop: none drops=0"
+                           FontSize="14"
+                           AutomationId="DropStatus" />
+                    <Button Text="Reset"
+                            AutomationId="DragResetButton"
+                            Clicked="OnResetClicked" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Room to scroll on any screen, so the ScrollView above always competes for a
+                 vertical drag. -->
+            <BoxView HeightRequest="1200" Color="Transparent" InputTransparent="True" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

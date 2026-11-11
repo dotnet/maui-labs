@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 #if WINDOWS_BUILD
 using Interop.UIAutomationClient;
 using Microsoft.Maui.DevFlow.Driver.Windows;
-using SkiaSharp;
 #endif
 
 namespace Microsoft.Maui.DevFlow.Driver;
@@ -257,6 +256,47 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
         return Task.CompletedTask;
     }
 
+    public Task<AlertActionResult> PressAlertButtonSafelyAsync(AlertInfo reviewedDialog, string buttonLabel)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
+        EnsureWindows();
+        var candidate = FindDialogCandidate(ResolveTargetWindows());
+        var info = candidate == null ? null : CreateDialogInfo(candidate);
+        if (candidate == null || info == null || !NativeDialogIdentity.CreateFingerprint(Platform, string.Empty, info)
+            .Equals(NativeDialogIdentity.CreateFingerprint(Platform, string.Empty, reviewedDialog), StringComparison.Ordinal))
+        {
+            return Task.FromResult(new AlertActionResult(
+                false,
+                true,
+                "The reviewed Windows dialog changed or disappeared. Detect it again before acting.",
+                info));
+        }
+
+        var buttons = candidate.Buttons;
+        var matches = buttons
+            .Where(button => button.name.Equals(buttonLabel, StringComparison.Ordinal))
+            .ToArray();
+        if (matches.Length != 1)
+        {
+            return Task.FromResult(new AlertActionResult(
+                false,
+                true,
+                matches.Length == 0
+                    ? $"Button '{buttonLabel}' was not found by exact label."
+                    : $"More than one button has the exact label '{buttonLabel}'.",
+                info));
+        }
+
+        var pressed = UIAutomationInterop.InvokeElement(matches[0].element);
+        return Task.FromResult(new AlertActionResult(
+            pressed,
+            !pressed,
+            pressed
+                ? $"Pressed '{buttonLabel}' using UI Automation Invoke without synthesizing pointer input."
+                : $"UI Automation could not invoke '{buttonLabel}'. Ask the user to respond manually.",
+            info));
+    }
+
     public Task<AlertInfo?> HandleAlertIfPresentAsync(string? buttonLabel = null)
     {
         EnsureWindows();
@@ -267,7 +307,11 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
 
         var alertButtons = buttons.Select(ToAlertButton).ToList();
         var texts = FindDialogTextsCore(windows);
-        var info = new AlertInfo(texts.FirstOrDefault(), alertButtons);
+        var info = new AlertInfo(texts.FirstOrDefault(), alertButtons)
+        {
+            InstanceId = FindDialogCandidate(windows)?.InstanceId,
+            Text = texts
+        };
 
         var target = PickButton(buttons, buttonLabel);
         if (!UIAutomationInterop.InvokeElement(target.element))
@@ -288,14 +332,16 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
 
     private static AlertInfo? DetectDialog(IReadOnlyList<IUIAutomationElement> windows)
     {
-        var buttons = FindDialogButtonsCore(windows);
-        if (buttons.Count == 0)
-            return null;
-
-        var alertButtons = buttons.Select(ToAlertButton).ToList();
-        var texts = FindDialogTextsCore(windows);
-        return new AlertInfo(texts.FirstOrDefault(), alertButtons);
+        var candidate = FindDialogCandidate(windows);
+        return candidate == null ? null : CreateDialogInfo(candidate);
     }
+
+    private static AlertInfo CreateDialogInfo(DialogCandidate candidate)
+        => new(candidate.Texts.FirstOrDefault(), candidate.Buttons.Select(ToAlertButton).ToList())
+        {
+            InstanceId = candidate.InstanceId,
+            Text = candidate.Texts
+        };
 
     private static List<(IUIAutomationElement element, string name)> FindDialogButtonsCore(IReadOnlyList<IUIAutomationElement> windows)
     {
@@ -318,20 +364,27 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
             UIAutomationInterop.FindTexts);
         return candidate is null
             ? null
-            : new DialogCandidate(candidate.Buttons.ToList(), candidate.Texts.ToList());
+            : new DialogCandidate(
+                candidate.Buttons.ToList(),
+                candidate.Texts.ToList(),
+                UIAutomationInterop.GetNativeWindowHandle(candidate.Window).ToInt64().ToString("X"));
     }
 
     private static AlertButton ToAlertButton((IUIAutomationElement element, string name) button)
     {
         var rect = UIAutomationInterop.GetBoundingRectangle(button.element);
-        return rect is null
+        return (rect is null
             ? new AlertButton(button.name, 0, 0, 0, 0)
-            : new AlertButton(button.name, rect.Value.X, rect.Value.Y, rect.Value.Width, rect.Value.Height);
+            : new AlertButton(button.name, rect.Value.X, rect.Value.Y, rect.Value.Width, rect.Value.Height)) with
+        {
+            Identifier = UIAutomationInterop.GetAutomationId(button.element)
+        };
     }
 
     private sealed record DialogCandidate(
         List<(IUIAutomationElement element, string name)> Buttons,
-        List<string> Texts);
+        List<string> Texts,
+        string InstanceId);
 
     private static (IUIAutomationElement element, string name) PickButton(
         List<(IUIAutomationElement element, string name)> buttons, string? buttonLabel)
@@ -358,6 +411,7 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
     public Task<AlertInfo?> DetectAlertAsync() => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task DismissAlertAsync(string? buttonLabel = null) => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task<AlertInfo?> HandleAlertIfPresentAsync(string? buttonLabel = null) => throw new PlatformNotSupportedException("Windows operations require Windows.");
+    public Task<AlertActionResult> PressAlertButtonSafelyAsync(AlertInfo reviewedDialog, string buttonLabel) => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task<string> GetAccessibilityTreeAsync() => throw new PlatformNotSupportedException("Windows operations require Windows.");
 #endif
 
@@ -377,7 +431,7 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
 
                 var texts = findTexts(childWindow);
                 if (texts.Count > 0)
-                    return new DialogCandidateData<TElement>(buttons, texts);
+                    return new DialogCandidateData<TElement>(buttons, texts, childWindow);
             }
         }
 
@@ -386,7 +440,8 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
 
     internal sealed record DialogCandidateData<TElement>(
         IReadOnlyList<(TElement element, string name)> Buttons,
-        IReadOnlyList<string> Texts);
+        IReadOnlyList<string> Texts,
+        TElement Window);
 
     private int ResolveProcessId()
     {
@@ -586,7 +641,14 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
                 ? CaptureScreenRectangle(rect)
                 : null;
         }
-        catch { return null; }
+        catch (Exception ex) when (ex is ExternalException
+            or IOException or UnauthorizedAccessException or InvalidOperationException
+            or ArgumentException or OverflowException or DllNotFoundException or EntryPointNotFoundException
+            or InvalidCastException or NotSupportedException)
+        {
+            Console.Error.WriteLine($"Warning: Windows host screenshot failed: {ex.Message}");
+            return null;
+        }
     }
 
     private bool TryResolveTargetRectangle(out CaptureRect rect)
@@ -676,11 +738,7 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
             if (scanLines == 0)
                 return null;
 
-            using var skBitmap = new SKBitmap(rect.Width, rect.Height, SKColorType.Bgra8888, SKAlphaType.Opaque);
-            Marshal.Copy(bytes, 0, skBitmap.GetPixels(), bytes.Length);
-            using var image = SKImage.FromBitmap(skBitmap);
-            using var png = image.Encode(SKEncodedImageFormat.Png, 100);
-            return png.ToArray();
+            return WindowsPngEncoder.Encode(bytes, rect.Width, rect.Height);
         }
         finally
         {

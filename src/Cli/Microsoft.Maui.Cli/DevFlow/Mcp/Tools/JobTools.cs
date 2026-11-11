@@ -18,7 +18,7 @@ public sealed class JobTools
 		return result.ValueKind == JsonValueKind.Undefined ? "Failed to list jobs." : result.ToString();
 	}
 
-	[McpServerTool(Name = "maui_jobs_run"), Description("Trigger a supported background job by identifier. Android jobs can be listed but cannot be safely re-run; iOS submits a BGTaskRequest for the given identifier.")]
+	[McpServerTool(Name = "maui_jobs_run"), Description("Request a BGTask launch on physical iOS devices using a Debug-built agent library. Success acknowledges the launch request, not handler execution or completion; verify the handler's own outcome. Release-built NuGet agents cannot trigger it. Android forcing is available only through 'maui devflow ui jobs run' via host-side adb, not this tool.")]
 	public static async Task<string> RunJob(
 		McpAgentSession session,
 		[Description("Job identifier returned by maui_jobs_list (Android WorkManager id or iOS BGTask identifier)")] string identifier,

@@ -39,7 +39,11 @@ internal class MacOSMauiAssetFileProvider : IFileProvider
             return new BundleFileInfo(bundlePath);
 
         // Try direct path in bundle resources
-        var directRoot = Path.GetFullPath(Path.Combine(NSBundle.MainBundle.ResourcePath, _contentRoot));
+        var resourceRoot = NSBundle.MainBundle.ResourcePath;
+        if (string.IsNullOrEmpty(resourceRoot))
+            return new NotFoundFileInfo(subpath);
+
+        var directRoot = Path.GetFullPath(Path.Combine(resourceRoot, _contentRoot));
         var directPath = Path.GetFullPath(Path.Combine(directRoot, subpath));
         if (IsPathUnderRoot(directPath, directRoot) && File.Exists(directPath))
             return new BundleFileInfo(directPath);

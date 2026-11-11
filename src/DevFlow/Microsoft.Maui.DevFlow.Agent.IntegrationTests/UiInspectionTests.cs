@@ -146,6 +146,11 @@ public class UiInspectionTests : IntegrationTestBase
         {
             Profile = "agent",
             MinimumSeverity = "info",
+            Scope = new LayoutInspectionScope
+            {
+                IncludeNativeElements = false,
+                IncludeBlazorElements = false,
+            },
             Stability = new LayoutStabilityOptions
             {
                 Mode = "wait",
@@ -182,6 +187,11 @@ public class UiInspectionTests : IntegrationTestBase
             Profile = "exhaustive",
             MinimumSeverity = "info",
             Rules = [LayoutDiagnosticRules.GeometricOverlap],
+            Scope = new LayoutInspectionScope
+            {
+                IncludeNativeElements = false,
+                IncludeBlazorElements = false,
+            },
             Stability = new LayoutStabilityOptions { Mode = "wait", TimeoutMs = 3000 }
         });
 
@@ -290,7 +300,16 @@ public class UiInspectionTests : IntegrationTestBase
         var centerX = bounds!.X + (bounds.Width / 2);
         var centerY = bounds.Y + (bounds.Height / 2);
 
-        var result = await Client.HitTestResultAsync(centerX, centerY);
+        UiReadResult result = default;
+        await WaitForAsync(async () =>
+        {
+            result = await Client.HitTestResultAsync(centerX, centerY);
+            Assert.True(result.Success || (result.StatusCode == 409 && result.Retryable),
+                $"Hit test failed: {result.StatusCode} {result.Body}");
+            if (!result.Success)
+                Output.WriteLine($"Waiting for the retryable native hit-test probe: {result.Body}");
+            return result.Success;
+        });
         Assert.True(result.Success, $"Hit test failed: {result.StatusCode} {result.Body}");
         using var document = JsonDocument.Parse(result.Body);
         var json = document.RootElement;

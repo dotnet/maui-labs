@@ -51,7 +51,7 @@ class GeolocationImplementation : IGeolocation
 		{
 			registration.Dispose();
 			manager.StopUpdatingLocation();
-			manager.Delegate = null;
+			manager.Delegate = null!;
 			manager.Dispose();
 		}
 	}
@@ -79,7 +79,7 @@ class GeolocationImplementation : IGeolocation
 			return;
 
 		manager.StopUpdatingLocation();
-		manager.Delegate = null;
+		manager.Delegate = null!;
 		manager.Dispose();
 	}
 

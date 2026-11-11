@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageType>Template</PackageType>
+    <PackageId>Microsoft.Maui.Testing.Templates</PackageId>
+    <Description>Project templates for MTP-based Android, iOS, and Mac Catalyst tests.</Description>
+    <PackageTags>$(PackageTags) dotnet-new templates testing mtp android ios maccatalyst</PackageTags>
+    <TargetFramework>net11.0</TargetFramework>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <ContentTargetFolders>content</ContentTargetFolders>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <Content Include="mauitest\**\*"
+             Exclude="mauitest\**\bin\**;mauitest\**\obj\**;mauitest\MauiTest1.csproj" />
+    <Content Include="$(IntermediateOutputPath)MauiTest1.csproj"
+             Pack="true"
+             PackagePath="content\mauitest\MauiTest1.csproj" />
+    <Compile Remove="**\*" />
+  </ItemGroup>
+
+  <UsingTask TaskName="StampMauiTestingPackageVersion"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <InputFile ParameterType="System.String" Required="true" />
+      <OutputFile ParameterType="System.String" Required="true" />
+      <PackageVersion ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+        var content = File.ReadAllText(InputFile)
+            .Replace("MAUI_TESTING_PACKAGE_VERSION", PackageVersion);
+        Directory.CreateDirectory(Path.GetDirectoryName(OutputFile)!);
+        File.WriteAllText(OutputFile, content);
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="StampMauiTestingTemplatePackageVersion" BeforeTargets="GenerateNuspec">
+    <StampMauiTestingPackageVersion
+        InputFile="$(MSBuildProjectDirectory)\mauitest\MauiTest1.csproj"
+        OutputFile="$(IntermediateOutputPath)MauiTest1.csproj"
+        PackageVersion="$(PackageVersion)" />
+  </Target>
+
+</Project>

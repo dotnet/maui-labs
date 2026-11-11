@@ -27,14 +27,14 @@
     },
     "TapRequest": {
       "type": "object",
-      "description": "Request to perform a tap/click action on an element or at coordinates.",
+      "description": "Request to tap an element, or a point inside it when x and y are given.",
       "properties": {
         "elementId": {
           "type": [
             "string",
             "null"
           ],
-          "description": "Target element identifier. Either elementId or coordinates must be provided."
+          "description": "Target element identifier. Required; x and y, when given, are relative to this element."
         },
         "captureEpoch": {
           "$ref": "#/$defs/CaptureEpoch"
@@ -47,14 +47,14 @@
             "number",
             "null"
           ],
-          "description": "X coordinate for the tap. Used when tapping by position rather than element."
+          "description": "Tap at this X inside the element, in device-independent units from its left edge. Given together with y; the tap is then delivered as a real touch at that point, which is how content drawn on a canvas (SkiaSharp, GraphicsView, Syncfusion charts) is reached. On iOS and Mac Catalyst this needs AgentOptions.EnableSyntheticTouch (capabilities.syntheticTouch)."
         },
         "y": {
           "type": [
             "number",
             "null"
           ],
-          "description": "Y coordinate for the tap. Used when tapping by position rather than element."
+          "description": "Tap at this Y inside the element, in device-independent units from its top edge. Given together with x."
         },
         "include": {
           "$ref": "#/$defs/IncludeOption",
@@ -298,10 +298,11 @@
         "longpress",
         "swipe",
         "pan",
+        "drag",
         "pinch",
         "rotate"
       ],
-      "description": "The kind of gesture to perform."
+      "description": "The kind of gesture to perform. 'drag' is 'pan' unless a start point is given, when it is a real touch from that point."
     },
     "GestureRequest": {
       "type": "object",
@@ -393,6 +394,51 @@
           "default": 0.5,
           "minimum": 0,
           "maximum": 1
+        },
+        "x": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "For 'tap', and the start of a 'drag': X inside the element, in device-independent units from its left edge. Given together with y."
+        },
+        "y": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "For 'tap', and the start of a 'drag': Y inside the element, in device-independent units from its top edge. Given together with x."
+        },
+        "toX": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "For 'drag': where the touch is released, X in device-independent units from the left edge of toElementId when given, otherwise of the element (where it may lie past the edge). Given together with toY."
+        },
+        "toY": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "For 'drag': where the touch is released, Y in device-independent units from the top edge of toElementId when given, otherwise of the element. Given together with toX."
+        },
+        "toElementId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "For 'drag': the element to drop onto, from the same capture as elementId. Released at its centre unless toX/toY are given."
+        },
+        "holdMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "For 'drag': how long the touch is held still before it moves, for long-press-to-drag.",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 10000
         },
         "steps": {
           "type": [
@@ -561,14 +607,44 @@
             "number",
             "null"
           ],
-          "description": "X coordinate (for tap and gesture actions)."
+          "description": "For tap, and the start of a gesture drag: X inside the element, in device-independent units from its left edge. Given together with y."
         },
         "y": {
           "type": [
             "number",
             "null"
           ],
-          "description": "Y coordinate (for tap and gesture actions)."
+          "description": "For tap, and the start of a gesture drag: Y inside the element, in device-independent units from its top edge. Given together with x."
+        },
+        "toX": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Release X for gesture drag, from the left edge of toElementId when given, otherwise of the element."
+        },
+        "toY": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Release Y for gesture drag, from the top edge of toElementId when given, otherwise of the element."
+        },
+        "toElementId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Drop target for gesture drag; validated against the batch capture like elementId."
+        },
+        "holdMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Press-and-hold before a gesture drag moves, in milliseconds.",
+          "minimum": 0,
+          "maximum": 10000
         },
         "text": {
           "type": [

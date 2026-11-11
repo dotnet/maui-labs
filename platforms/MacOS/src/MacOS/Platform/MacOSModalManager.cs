@@ -104,6 +104,24 @@ internal class MacOSModalManager
 
 		return entry.Page;
 	}
+    
+    public void ClearModalStack()
+    {
+        if (!HasModals)
+        {
+            return;
+        }
+
+        foreach (var modalEntry in _modalStack.Where(modalEntry => modalEntry.ModalWindow is not null))
+        {
+            modalEntry.ModalWindow?.OrderOut(null);
+        }
+
+        while (HasModals)
+        {
+            PopModal(false);
+        }
+    }
 
 	public void LayoutAllModals()
 	{
@@ -136,7 +154,7 @@ internal class MacOSModalManager
 			NSWindowStyle.Titled | NSWindowStyle.Closable | NSWindowStyle.Resizable,
 			NSBackingStore.Buffered,
 			deferCreation: false);
-		sheetWindow.ReleasedWhenClosed = false;
+		sheetWindow.ReleaseWhenClosed(false);
 
 		// Apply min size constraints to the sheet window
 		var minWidth = MacOSPage.GetModalSheetMinWidth(page);
@@ -269,7 +287,7 @@ internal class MacOSModalManager
 			NSWindowStyle.Titled | NSWindowStyle.Resizable,
 			NSBackingStore.Buffered,
 			deferCreation: false);
-		modalWindow.ReleasedWhenClosed = false;
+		modalWindow.ReleaseWhenClosed(false);
 
 		var minWidth = MacOSPage.GetModalSheetMinWidth(page);
 		var minHeight = MacOSPage.GetModalSheetMinHeight(page);

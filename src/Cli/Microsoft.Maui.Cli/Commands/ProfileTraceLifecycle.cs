@@ -40,7 +40,8 @@ internal static class ProfileTraceLifecycle
 		bool useJson,
 		bool verbose,
 		CancellationToken cancellationToken,
-		TimeSpan? traceStopInterruptDelay = null)
+		TimeSpan? traceStopInterruptDelay = null,
+		Func<CancellationToken, Task<bool>>? beforeCollectorStop = null)
 	{
 		ProfileCommandProcessHelpers.WriteVerbose(
 			formatter,
@@ -75,17 +76,33 @@ internal static class ProfileTraceLifecycle
 		else if (stopReason is StopSignalReason.Manual or StopSignalReason.Timed)
 		{
 			if (!useJson)
-				formatter.WriteInfo("Stopping trace and finalizing output...");
+				formatter.WriteInfo(beforeCollectorStop is null
+					? "Stopping trace and finalizing output..."
+					: "Stopping the profiled app and finalizing output...");
 			stopRequested = true;
-			collectorInterrupted = await StopAndWaitForFinalizationAsync(
-				traceProcess,
-				processWaitTask,
-				finalizationStartedTask,
-				traceStopTimeout,
-				formatter,
-				useJson,
-				verbose,
-				traceStopInterruptDelay);
+			var collectorFinalizedAfterAppExit = beforeCollectorStop is not null
+				&& await beforeCollectorStop(cancellationToken)
+				&& await WaitForAppExitFinalizationAsync(
+					traceProcess,
+					processWaitTask,
+					finalizationStartedTask,
+					traceStopTimeout,
+					formatter,
+					useJson,
+					verbose);
+
+			if (!collectorFinalizedAfterAppExit)
+			{
+				collectorInterrupted = await StopAndWaitForFinalizationAsync(
+					traceProcess,
+					processWaitTask,
+					finalizationStartedTask,
+					traceStopTimeout,
+					formatter,
+					useJson,
+					verbose,
+					traceStopInterruptDelay);
+			}
 		}
 		else if (stopReason == StopSignalReason.CollectorFinalizing)
 		{
@@ -122,6 +139,49 @@ internal static class ProfileTraceLifecycle
 		}
 
 		return stopRequested;
+	}
+
+	static async Task<bool> WaitForAppExitFinalizationAsync(
+		MonitoredProcess traceProcess,
+		Task processWaitTask,
+		Task finalizationStartedTask,
+		TimeSpan traceStopTimeout,
+		IOutputFormatter formatter,
+		bool useJson,
+		bool verbose)
+	{
+		ProfileCommandProcessHelpers.WriteVerbose(
+			formatter,
+			useJson,
+			verbose,
+			"Waiting for the profiled app to exit so shutdown-time PGO data remains in the trace.");
+
+		var appExitTimeoutTask = Task.Delay(ProfileCommand.s_exitControlCommandTimeout);
+		var completedTask = await Task.WhenAny(processWaitTask, finalizationStartedTask, appExitTimeoutTask);
+		if (completedTask == appExitTimeoutTask)
+		{
+			ProfileCommandProcessHelpers.WriteVerbose(
+				formatter,
+				useJson,
+				verbose,
+				"The collector did not begin finalizing after the app exit request; falling back to a direct trace stop.");
+			return false;
+		}
+
+		if (completedTask == finalizationStartedTask)
+		{
+			await WaitForFinalizationAsync(
+				traceProcess,
+				processWaitTask,
+				traceStopTimeout,
+				"after the profiled app exited");
+		}
+		else
+		{
+			await processWaitTask;
+		}
+
+		return true;
 	}
 
 	internal static async Task<bool> StopAndWaitForFinalizationAsync(

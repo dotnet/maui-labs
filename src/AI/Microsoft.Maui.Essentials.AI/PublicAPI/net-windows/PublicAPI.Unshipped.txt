@@ -1,1 +1,29 @@
 ﻿#nullable enable
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability.Available = 0 -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability.Disabled = 3 -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability.NotReady = 1 -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability.NotSupported = 2 -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability.RequirementsNotMet = 4 -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability.Unknown = 5 -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.ImageInput = 2 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.Reasoning = 6 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.Streaming = 1 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.StructuredOutput = 4 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.Text = 0 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.TokenUsage = 5 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.ToolCalling = 3 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus.Availability.get -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus.Capabilities.get -> System.Collections.Generic.IReadOnlyCollection<Microsoft.Maui.Essentials.AI.ChatModelCapability>?
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus.UnavailableReason.get -> string?
+[MAUIAI0001]Microsoft.Extensions.AI.WindowsAIExtensions
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIChatClient
+[MAUIAI0001]static Microsoft.Maui.Essentials.AI.WindowsAIChatClient.EnsureReadyAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+[MAUIAI0001]static Microsoft.Maui.Essentials.AI.WindowsAIChatClient.GetModelStatusAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Maui.Essentials.AI.ChatModelStatus!>!
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIChatClient.GetResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! chatMessages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ChatResponse!>!
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIChatClient.GetStreamingResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! chatMessages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIChatClient.WindowsAIChatClient() -> void
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIChatClient.WindowsAIChatClient(Microsoft.Windows.AI.Text.LanguageModel! model) -> void
+[MAUIAI0001]static Microsoft.Extensions.AI.WindowsAIExtensions.AsIChatClient(this Microsoft.Windows.AI.Text.LanguageModel! model) -> Microsoft.Extensions.AI.IChatClient!

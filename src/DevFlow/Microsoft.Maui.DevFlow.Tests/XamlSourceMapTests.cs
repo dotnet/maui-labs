@@ -5,6 +5,23 @@ namespace Microsoft.Maui.DevFlow.Tests;
 
 public class XamlSourceMapTests
 {
+    [Theory]
+    [InlineData("<ContentPage />")]
+    [InlineData("<Label Text=\"日本語\" />\r\n")]
+    public void ContentHash_Uses128BitsAndMatchesInspector(string xaml)
+    {
+        var hash = XamlSourceMap.ComputeContentHash(xaml);
+        var expected = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(xaml)), 0, 16).ToLowerInvariant();
+
+        Assert.Matches("^[0-9a-f]{32}$", hash);
+        Assert.Equal(expected, hash);
+        Assert.Equal(hash, XamlSourceMap.ComputeContentHash(xaml));
+        Assert.Equal(hash, Microsoft.Maui.Cli.DevFlow.Inspector.XamlSourcePropertyEditor.ComputeSourceHash(xaml));
+        Assert.Equal(hash, XamlSourceMap.Parse(xaml, "Page.xaml")!.ContentHash);
+        Assert.NotEqual(hash, XamlSourceMap.ComputeContentHash(xaml + "\n"));
+    }
+
     [Fact]
     public void ApplySourceMap_AttachesRootAndUniqueChildLocations()
     {

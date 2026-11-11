@@ -3,6 +3,7 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Text.Json;
 using Microsoft.Maui.Cli;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
@@ -530,6 +531,114 @@ public class AndroidCommandsTests
 
 		Assert.Contains(installCommand.Options, o => o.Name == "--sdk-install-path");
 		Assert.DoesNotContain(installCommand.Options, o => o.Name == "--sdk-path");
+	}
+
+	// --- Handler-level tests for 'android sdk update-tools' (cmdline-tools resolver API) ---
+
+	[Fact]
+	public void SdkCommand_HasUpdateToolsSubcommand()
+	{
+		var androidCommand = AndroidCommands.Create();
+		var sdkCommand = androidCommand.Subcommands.First(c => c.Name == "sdk");
+
+		Assert.Contains(sdkCommand.Subcommands, c => c.Name == "update-tools");
+	}
+
+	[Theory]
+	[InlineData("19.0")]
+	[InlineData(null)]
+	public async Task SdkUpdateToolsCommand_Json_ReportsReady_WithResolvedSdkPath(string? revision)
+	{
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			SdkPath = Path.Combine(Path.GetTempPath(), "sdk-update-tools-test"),
+			EnsureLatestSdkToolsRevision = revision
+		};
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		using var output = new StringWriter();
+		var originalOut = Console.Out;
+		try
+		{
+			Program.Services = testProvider;
+			Console.SetOut(output);
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse("android sdk update-tools --json");
+			var exitCode = await parseResult.InvokeAsync();
+
+			Assert.Equal(0, exitCode);
+			Assert.Single(fakeAndroid.EnsureLatestSdkToolsCalls);
+			Assert.Equal(fakeAndroid.SdkPath, fakeAndroid.EnsureLatestSdkToolsCalls[0]);
+			using var json = JsonDocument.Parse(output.ToString());
+			Assert.True(json.RootElement.GetProperty("success").GetBoolean());
+			Assert.Equal("ready", json.RootElement.GetProperty("status").GetString());
+			Assert.Equal(fakeAndroid.SdkPath, json.RootElement.GetProperty("path").GetString());
+			Assert.Equal(revision is null ? "Command-line tools are ready" : $"Command-line tools {revision} are ready",
+				json.RootElement.GetProperty("message").GetString());
+		}
+		finally
+		{
+			Console.SetOut(originalOut);
+			Program.ResetServices();
+		}
+	}
+
+	[Fact]
+	public async Task SdkUpdateToolsCommand_DryRun_DoesNotInvokeProvider()
+	{
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			SdkPath = Path.Combine(Path.GetTempPath(), "sdk-update-tools-dryrun-test")
+		};
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		try
+		{
+			Program.Services = testProvider;
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse("android sdk update-tools --json --dry-run");
+			var exitCode = await parseResult.InvokeAsync();
+
+			Assert.Equal(0, exitCode);
+			Assert.Empty(fakeAndroid.EnsureLatestSdkToolsCalls);
+		}
+		finally
+		{
+			Program.ResetServices();
+		}
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task SdkUpdateToolsCommand_EmptySdkPath_ReturnsActionableError(bool dryRun)
+	{
+		var fakeAndroid = new FakeAndroidProvider { SdkPath = "" };
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		using var output = new StringWriter();
+		var originalOut = Console.Out;
+		try
+		{
+			Program.Services = testProvider;
+			Console.SetOut(output);
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse($"android sdk update-tools --json{(dryRun ? " --dry-run" : "")}");
+
+			Assert.NotEqual(0, await parseResult.InvokeAsync());
+			Assert.Empty(fakeAndroid.EnsureLatestSdkToolsCalls);
+			using var json = JsonDocument.Parse(output.ToString());
+			Assert.Equal("E2101", json.RootElement.GetProperty("code").GetString());
+			Assert.Equal("maui android install",
+				json.RootElement.GetProperty("remediation").GetProperty("command").GetString());
+		}
+		finally
+		{
+			Console.SetOut(originalOut);
+			Program.ResetServices();
+		}
 	}
 
 	// --- Handler-level tests for 'android sdk accept-licenses' exit code behaviour ---

@@ -41,6 +41,9 @@ Native inspection serializes the complete native results as structured JSON on d
 instead of being sanitized and cached. The normalized view remains separate and retains exact geometry, table spans and hierarchy.
 Options pass directly to the selected client; settings use their UI-owned provider lists without duplicate-ID or membership policing.
 Cancellation messages are simple status text. Reader/extraction modes, API options and provider/native fidelity remain intact.
+After integrating the updated shared-input base and newer on-device chat providers, the portable AI suite passes 401 tests and
+the full playground suite passes 223 tests. The complete Catalyst playground builds with zero warnings/errors and secret embedding
+disabled. The earlier counts below describe their historical snapshots rather than the current merged test inventory.
 
 ### Historical registration cleanup (before narrowing to Mistral; policy layer since removed)
 

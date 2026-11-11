@@ -26,6 +26,7 @@
   <!-- macOS AppKit backend -->
   <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'">
     <ProjectReference Include="..\..\..\platforms\MacOS\src\MacOS\MacOS.csproj" />
+    <Compile Include="..\Shared.AppKit\AppKitWindowCapture.cs" Link="AppKit\AppKitWindowCapture.cs" />
   </ItemGroup>
 
   <ItemGroup>

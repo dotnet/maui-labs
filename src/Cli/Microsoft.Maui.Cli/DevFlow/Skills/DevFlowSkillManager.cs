@@ -960,12 +960,39 @@ internal static class DevFlowSkillManager
     static InstallTarget CreateInstallTarget(string scope, string targetKind, string targetDirectory, string workspaceRoot)
     {
         var root = scope == "user" ? GetUserRoot() : workspaceRoot;
+        if (targetKind.StartsWith("path-", StringComparison.Ordinal))
+            targetKind = CreateCustomTargetKind(targetDirectory);
+        var stateFilePath = ResolveStateFilePath(workspaceRoot, scope, targetKind);
+        if (targetKind.StartsWith("path-", StringComparison.Ordinal) && targetKind.Length == 37)
+        {
+            var legacyTarget = targetKind[..21];
+            var legacyPath = ResolveStateFilePath(workspaceRoot, scope, legacyTarget);
+            if (File.Exists(legacyPath))
+            {
+                var state = ReadSkillState(legacyPath);
+                var pathComparison = OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal;
+                if (File.Exists(stateFilePath) ||
+                    !string.Equals(GetString(state, "targetRoot"), root, pathComparison) ||
+                    !string.Equals(GetString(state, "relativeSkillDirectory"),
+                        targetDirectory.Replace(Path.DirectorySeparatorChar, '/'), StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot reuse legacy DevFlow skill state '{legacyPath}': the target differs or both old and new state files exist. Resolve the state conflict before continuing.");
+                }
+
+                // Keep the persisted key and its lock file; only new targets get longer IDs.
+                targetKind = legacyTarget;
+                stateFilePath = legacyPath;
+            }
+        }
         return new InstallTarget(
             scope,
             targetKind,
             root,
             targetDirectory,
-            ResolveStateFilePath(workspaceRoot, scope, targetKind),
+            stateFilePath,
             workspaceRoot);
     }
 
@@ -973,9 +1000,20 @@ internal static class DevFlowSkillManager
     {
         var stateRoot = GetDevFlowStateRoot();
         var fileName = $"{target.ToLowerInvariant()}.json";
-        return scope == "user"
-            ? Path.Combine(stateRoot, "user", "skills", fileName)
-            : Path.Combine(stateRoot, "workspaces", GetWorkspaceStateId(workspaceRoot), "skills", fileName);
+        if (scope == "user")
+            return Path.Combine(stateRoot, "user", "skills", fileName);
+
+        var workspaceId = GetWorkspaceStateId(workspaceRoot);
+        var directory = Path.Combine(stateRoot, "workspaces", workspaceId);
+        var legacyDirectory = Path.Combine(stateRoot, "workspaces", workspaceId[..24]);
+        if (Directory.Exists(legacyDirectory))
+        {
+            if (Directory.Exists(directory))
+                throw new InvalidOperationException(
+                    $"Both old and new DevFlow workspace state directories exist for '{workspaceRoot}'. Resolve the state conflict before continuing.");
+            directory = legacyDirectory;
+        }
+        return Path.Combine(directory, "skills", fileName);
     }
 
     static IReadOnlyList<string> ResolveScopes(string scope, bool allowAll)
@@ -1019,7 +1057,7 @@ internal static class DevFlowSkillManager
     static string CreateCustomTargetKind(string targetDirectory)
     {
         var normalized = targetDirectory.Replace(Path.DirectorySeparatorChar, '/');
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[..16].ToLowerInvariant();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[..32].ToLowerInvariant();
         return $"path-{hash}";
     }
 
@@ -1070,7 +1108,7 @@ internal static class DevFlowSkillManager
         var normalized = Path.GetFullPath(workspaceRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
-        return Convert.ToHexString(bytes)[..24].ToLowerInvariant();
+        return Convert.ToHexString(bytes)[..32].ToLowerInvariant();
     }
 
     static string GetSkillDirectory(InstallTarget installTarget, string skillId)

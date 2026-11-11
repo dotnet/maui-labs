@@ -125,7 +125,9 @@ internal static class ProfileTargetResolver
 				{
 					var version = string.IsNullOrWhiteSpace(device.VersionName) ? device.Version : device.VersionName;
 					return $"simulator {version ?? string.Empty}".TrimEnd();
-				}),
+				},
+				// `maui device list` also reports connected physical iOS devices, but profiling them is not supported yet.
+				emulatorsOnly: true),
 			_ => Task.FromException<Device>(new MauiToolException(
 				ErrorCodes.PlatformNotSupported,
 				$"Startup profiling is not implemented yet for platform '{platform}'.")),
@@ -191,10 +193,11 @@ internal static class ProfileTargetResolver
 		IReadOnlyList<string> notFoundSuggestions,
 		Func<string, string> missingRequestedMessage,
 		string selectionTitle,
-		Func<Device, string> descriptionFactory)
+		Func<Device, string> descriptionFactory,
+		bool emulatorsOnly = false)
 	{
 		var runningDevices = (await deviceManager.GetDevicesByPlatformAsync(platform, cancellationToken))
-			.Where(d => d.IsRunning)
+			.Where(d => d.IsRunning && (!emulatorsOnly || d.IsEmulator))
 			.ToList();
 
 		if (!runningDevices.Any())

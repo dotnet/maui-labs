@@ -35,6 +35,23 @@ The separate `ci-devflow.yml` workflow runs host, browser, JavaScript and AOT te
 
 ## Quick Start
 
+### WebView failures
+
+WebView HTTP and CDP failures are reported as errors, not successful evaluation
+results. JavaScript exceptions include their description; when a bridge returns
+only a stack, the agent reads the original error object's `message` property
+without re-evaluating the failed expression. CLI evaluation exits nonzero on
+failure, and MCP evaluation/source tools report an error (including empty source).
+
+**Breaking behavior change:** `AgentClient.SendCdpCommandAsync` now throws on HTTP,
+CDP, JavaScript, invalid JSON/non-object responses, and explicit `success: false`.
+`NavigateWebViewAsync`, `ClickWebViewAsync`, `FillWebViewAsync`, and
+`InsertWebViewTextAsync` retain their `Task<bool>` signatures but throw on failure
+or a missing/non-true success flag instead of returning `false`. HTTP failures
+throw `HttpRequestException` with the response body; protocol/JavaScript failures
+throw `InvalidOperationException`, and invalid JSON throws `JsonException`.
+`GetCdpSourceAsync` includes the response body in HTTP exceptions.
+
 ### NativeAOT and trimming
 
 The agent's built-in HTTP requests/responses, broker registration and lease/recording
@@ -352,7 +369,7 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Layout Diagnostics** — detect clipping, lost overflow, text truncation, overlap, and interaction occlusion with platform-specific evidence and confidence
 - **Element Interaction** — tap, fill, scroll, navigate, focus, resize, and mutate properties
 - **Application Menus** — inspect and invoke the app menu bar: the cross-platform MAUI `MenuBarItems` tree plus the native macOS AppKit `NSMenu` and active Mac Catalyst responder-chain key commands. Disabled items and disabled ancestors are respected; unhandled native actions report failure.
-- **Screenshots** — capture PNG screenshots from any platform (full window or per-element)
+- **Screenshots** — capture PNG screenshots from any platform (full window or per-element); AppKit window capture includes native chrome and attached sheets without activating the app
 - **Screen Recording** — start/stop video recording of app sessions
 - **Network Monitoring** — intercept and inspect HTTP requests/responses
 - **Performance Profiling** — CPU, memory, GC, and jank detection with markers and spans
@@ -366,10 +383,58 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Real-time Streaming** — WebSocket channels for logs, network, sensors, profiler, and UI events
 - **Storage Access** — read/write app preferences, secure storage, discover file storage roots, and manage sandboxed app files remotely
 - **Device Introspection** — battery, connectivity, geolocation, display, permissions, and sensor data
-- **Dialog Handling** — detect and dismiss alerts/action sheets programmatically
+- **Dialog Handling** — detect and dismiss alerts/action sheets programmatically; `maui_native_dialog_detect` / `maui_native_dialog_respond` require an exact, user-confirmed choice and a one-time prompt token
 - **Batch Operations** — execute command sequences from stdin for scripting
 - **Agent Extensions** — expose app-specific diagnostic tools under `/api/v1/ext/{namespace}/...` with self-describing metadata for CLI and MCP discovery
 - **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK
+
+## Focus-safe capture and native dialogs
+
+iOS Simulator full-screen screenshots use `simctl`, including system dialogs. CLI and
+Driver share resizing through macOS's built-in `/usr/bin/sips`, preserving logical sizing,
+aspect-ratio rounding and no-upscaling. The CLI supports `--max-width`; `--scale native`
+and `--scale full` bypass resizing. Resize failures warn on stderr and return the original
+PNG. Resampling and compression can differ from earlier SkiaSharp output.
+
+Windows host fallback uses GDI for capture and built-in GDI+ for PNG encoding, preserving
+bounds, top-down BGRA order and opaque alpha. Temporary files and native resources are
+released after capture. Neither host path bundles SkiaSharp; in-app agents are unchanged.
+
+AppKit screenshots prefer ScreenCaptureKit and fall back to CoreGraphics or in-process
+rendering without activating or reordering windows. On macOS 14.0–14.1, an attached sheet
+forces a parent/sheet CoreGraphics composite because ScreenCaptureKit cannot include child
+windows until macOS 14.2. Capture does not request screen-recording permission automatically.
+
+The MCP native-dialog workflow detects the visible prompt, then receives `promptId` and
+`buttonLabel`. Before acting, the server sends a form elicitation request to the MCP host,
+which must present the exact app, dialog and button to the user and return explicit approval.
+The former caller-supplied `confirmedByUser` flag has been removed; it cannot prove consent.
+Declines, cancellations, malformed approval responses and hosts without form elicitation
+support result in no action. As with other MCP elicitation, the host is trusted to show the
+request to a human rather than approve it automatically.
+Tokens expire after two minutes, are scoped to the detecting MCP session, and can be used only
+once. Responses revalidate the target and prompt and respect the app's global mutation lease.
+Dialog fingerprints retain 128 bits of SHA-256 and format geometry independently of the
+host's locale; the one-time response token is separate from the fingerprint.
+macOS uses AXPress, Windows uses UI Automation Invoke, Linux uses the connected agent, and
+Android/iOS Simulator input is restricted to the device associated with that agent. Physical
+iOS and unattributed system dialogs require manual interaction. macOS requires Accessibility
+permission for native dialog automation.
+
+Android verifies the hierarchy package against the focused dialog window's package and
+WindowManager owner UID, as resolved by the device's package manager. Before tapping, it
+re-reads the dialog and rejects visible windows above it that overlap its response buttons.
+This includes non-focusable overlays even when `mFocusedApp` still names the target app.
+Missing ownership, visibility or geometry information and non-default displays require
+manual interaction. This minimizes stale coordinate risks; device input is not an atomic
+window-targeted invocation, so callers must not use it while another actor is manipulating
+the device UI.
+
+**Behavior change:** `MacCatalystAppDriver.DismissAlertAsync` and
+`HandleAlertIfPresentAsync` no longer choose a button implicitly: a null or empty label throws.
+The `IAlertDriver` signatures remain compatible with other platforms. Use an exact detected
+label with `maui devflow ui alert dismiss` on macOS; ASCII and typographic quotes are treated
+equivalently, and ambiguous labels are rejected.
 
 ## Agent API
 
@@ -413,6 +478,7 @@ All DevFlow commands are available under `maui devflow`. Run `maui devflow <comm
 | Command Group | Description |
 |---------------|-------------|
 | `ui` | Visual tree, element interaction, screenshots, alerts, assertions, application menus |
+| `device fold` | Host-side fold/hinge capabilities, state, and verified controls for Android emulators and experimental iOS simulators |
 | `recording` | Start, stop, and manage screen recordings of app sessions |
 | `webview` | Blazor WebView automation — DOM, JS eval, navigation, input, screenshots |
 | `logs` | Fetch and stream application logs |
@@ -634,6 +700,55 @@ User-wide suppressions use the same `suppressions` shape in
 `~/.mauidevflow/layout-diagnostics.json`. CLI, MCP, and the Web Inspector merge
 user and project policies before requesting a scan.
 
+### Background jobs
+
+```bash
+maui devflow ui jobs list --agent-port <port>
+maui devflow ui jobs run <work-spec-uuid> --serial <android-serial> --timeout 30 --agent-port <port>
+maui devflow ui jobs run com.example.sync --type processing --agent-port <port>
+```
+
+| Surface | Android WorkManager | iOS BGTaskScheduler |
+|---------|---------------------|---------------------|
+| Listing (HTTP, CLI, MCP) | Requires WorkManager in the app; includes states and exact JobScheduler mappings | Lists pending requests; physical device required for scheduling |
+| CLI `jobs run` | Forces enqueued one-time work through host-side adb and polls the exact UUID | Requests a debug launch, not verified execution or completion |
+| HTTP/MCP run | Unsupported; no host-side adb in the agent | Requires a Debug-built agent library and a physical device |
+
+Android `jobs run` matches the JobScheduler id to `EXTRA_WORK_SPEC_ID` read through the app's
+public JobScheduler API. Worker names and tags are not unique identities: shorthand is accepted
+only when it resolves to one WorkSpec generation. Duplicate backing jobs for that same generation
+(WorkManager's Android API 23 workaround) are equivalent, not ambiguous. An explicit UUID never
+falls back to another request, and generation changes fail instead of reporting a different run.
+Use `--serial` when multiple Android devices are connected. Before triggering, the host runner
+pins that serial, temporarily forwards the device-side agent port, and compares the running
+agent's opaque instance identity. A different device, app restart, or unavailable probe fails
+closed; matching package names or numeric job IDs alone are not accepted.
+
+Host execution claims the app's mutation lease and holds a renewable transaction through adb
+triggering and outcome polling. Another owner, failed renewal, missing mappings, ambiguous
+identifiers, query errors, failed/cancelled work, and
+timeouts fail the command. Exit 0 means the resolved WorkSpec reached `SUCCEEDED`; periodic work
+returns to `ENQUEUED` rather than a terminal success, so it needs an app-specific outcome assertion.
+`--timeout` bounds target verification, triggering, and observation; cancellation releases the
+transaction and temporary forward, but does not cancel a worker that has already started.
+Older agents without identity, generation, scheduler mapping, or mutation-transaction support
+must be updated before the CLI can safely force work.
+
+iOS triggering uses Apple's private debugger selector, compiled only into **Debug builds of the
+agent library**. The shipped Release-built NuGet agent does not support it, even when the consuming
+app is built in Debug. Release trigger requests return unsupported **before scheduling work**;
+use your app's own scheduling API if you only want to schedule. Keep source-built Debug agents and sample trigger actions out of App Store
+builds. Configure `BGTaskSchedulerPermittedIdentifiers`, the appropriate background mode, and a
+launch handler before app launch completes; scheduling requires a physical device and enabled
+Background App Refresh. The simulator cannot schedule these tasks.
+
+On iOS, exit 0 and `success: true` acknowledge only the launch request. The response reports
+`launchRequested: true`, `executionVerified: false`, and `completionVerified: false`. Verify
+execution and completion using state recorded by your handler. Pending-request disappearance is
+not used as an outcome: a handler can immediately reschedule the same identifier. The iOS sample's
+Debug-only `bgtask-simulate-launch` action accepts `reschedule: true` to exercise that pattern;
+inspect `bgtask-run-count` and the next pending request to verify it.
+
 ### DevFlow Global Options
 
 These options apply to all `maui devflow` subcommands:
@@ -657,6 +772,7 @@ These options apply to all `maui devflow` subcommands:
 
 ## Documentation
 
+- [Foldable and hinge commands, support, and limitations](../../docs/DevFlow/foldables.md)
 - [MAUI DevFlow Inspector setup and host selection](../../docs/DevFlow/inspector.md)
 - [MAUI DevFlow Inspector internals](../../docs/DevFlow/inspector-internals.md)
 - [Broker Architecture](../../docs/DevFlow/broker.md)
