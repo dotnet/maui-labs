@@ -335,7 +335,9 @@ public sealed class PlaygroundChatClientTests
         Assert.Equal("84", CalculatorDisplay.FormatResult(approval.Result, CultureInfo.InvariantCulture));
         Assert.Equal("12 \u00D7 7 = 84.", harness.LastTurn.ResponseBlocks.OfType<TextContentBlock>().Single().RawText);
 
-        // The approval card shows the call; the worksheet doesn't show it again once it runs.
+        // The approval shows the call as a worksheet of its own, and no other worksheet shows it again.
+        var worksheet = Assert.IsType<CalculatorWorksheetBlock>(approval.InnerBlock);
+        Assert.Equal("84", CalculatorDisplay.FormatResult(Assert.Single(worksheet.Rows).Result, CultureInfo.InvariantCulture));
         Assert.DoesNotContain(harness.LastTurn.ResponseBlocks, block => block is CalculatorWorksheetBlock);
 
         // The model saw the call's result, sent with the same instructions and tools as the request that made the call.
@@ -368,6 +370,12 @@ public sealed class PlaygroundChatClientTests
         var approval = Assert.Single(harness.LastTurn.ResponseBlocks.OfType<ToolApprovalBlock>());
         Assert.Equal(ApprovalStatus.Rejected, approval.Status);
         Assert.DoesNotContain(harness.LastTurn.ResponseBlocks, block => block is CalculatorWorksheetBlock);
+
+        // The approval's worksheet shows no answer for the rejected calculation, but the rejection the model heard.
+        var row = Assert.Single(Assert.IsType<CalculatorWorksheetBlock>(approval.InnerBlock).Rows);
+        Assert.False(row.IsPending);
+        Assert.False(row.HasAnswer);
+        Assert.Contains("Not now", row.Message, StringComparison.Ordinal);
         Assert.Equal("Okay, I will not calculate it.", harness.LastTurn.ResponseBlocks.OfType<TextContentBlock>().Single().RawText);
         var rejection = model.Requests[1].Messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>().Single();
         Assert.Equal("call-1", rejection.CallId);

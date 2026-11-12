@@ -220,6 +220,60 @@ public sealed class SharedNotesTests
         Assert.Equal("Pack boots.", harness.Notes.Text);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Proposal_InAResponseWithACallThatNeedsApproval_WaitsInTheBarBesideTheApproval(bool streaming)
+    {
+        // With "Ask before running tools", function invocation asks about every call of a response that has a call
+        // needing approval. The proposal is still the app's own action: it waits in the bar for the user, beside the
+        // approval of the other call, and the model hears both outcomes, each after its call.
+        using var model = new ScriptedChatClient(
+            new ScriptedResponse(new ChatResponse(new ChatMessage(ChatRole.Assistant,
+            [
+                new FunctionCallContent("call-1", "get_connection_status", new Dictionary<string, object?>()),
+                new FunctionCallContent("call-2", SharedNotes.ProposeToolName, new Dictionary<string, object?> { ["text"] = "Hello" }),
+            ]))),
+            ScriptedResponse.Text("Done."));
+        using var live = new FunctionInvokingChatClient(model);
+        using var harness = new PlaygroundChatHarness(live);
+        harness.Settings.UseStreaming = streaming;
+        harness.Settings.RequireToolApproval = true;
+        var waiting = new List<string>();
+        var barHadProposal = false;
+        using var decide = harness.Session.OnStatusChanged(status =>
+        {
+            if (status != ConversationStatus.AwaitingInput)
+                return;
+
+            waiting.AddRange(harness.LastTurn.ResponseBlocks.Select(block => block.GetType().Name));
+            barHadProposal = harness.NotesBar.HasProposal;
+            harness.LastTurn.ResponseBlocks.OfType<ToolApprovalBlock>().Single().Approve();
+            _ = harness.Notes.DecideAsync(harness.LastTurn.ResponseBlocks.OfType<UIActionBlock>().Single(), accept: true);
+        });
+
+        await harness.Session.SendMessageAsync("Check my connection and note hello");
+
+        Assert.Equal(ConversationStatus.Idle, harness.Session.Status);
+        Assert.Equal([nameof(ToolApprovalBlock), nameof(UIActionBlock)], waiting);
+        Assert.True(barHadProposal);
+        Assert.Equal("Hello", harness.Notes.Text);
+        var approval = Assert.Single(harness.LastTurn.ResponseBlocks.OfType<ToolApprovalBlock>());
+        Assert.Equal(("get_connection_status", ApprovalStatus.Approved), (approval.ToolName, approval.Status));
+        Assert.True(Assert.IsType<ConnectionStatusBlock>(approval.InnerBlock).HasResult);
+        var proposal = Assert.Single(harness.LastTurn.ResponseBlocks.OfType<UIActionBlock>());
+        Assert.Equal(SharedNotes.ProposeToolName, proposal.ToolName);
+        Assert.True(proposal.HasResult);
+        Assert.Equal("Done.", Assert.IsType<TextContentBlock>(harness.LastTurn.ResponseBlocks[^1]).RawText);
+
+        var sent = model.Requests[1].Messages.SelectMany(message => message.Contents).ToList();
+        Assert.DoesNotContain(sent, content => content is ToolApprovalRequestContent or ToolApprovalResponseContent);
+        var results = sent.OfType<FunctionResultContent>().ToList();
+        Assert.Equal(["call-1", "call-2"], results.Select(result => result.CallId).Order());
+        Assert.All(results, result => Assert.True(
+            sent.FindIndex(content => content is FunctionCallContent call && call.CallId == result.CallId) < sent.IndexOf(result)));
+    }
+
     [Fact]
     public async Task UserEdits_AreIgnoredWhileAProposalWaits()
     {

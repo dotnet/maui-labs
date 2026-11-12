@@ -92,6 +92,55 @@ public sealed class CalculatorWorksheetTests
     }
 
     [Fact]
+    public async Task CalculationsThatNeedApproval_EachShowAOneRowWorksheetInsideTheirApproval()
+    {
+        // With "Ask before running tools", function invocation asks about each call of the batch, and each approval
+        // shows its call as the handlers would without it: a calculation as a worksheet of its own, whose row fills in
+        // once the call is approved and runs.
+        using var model = new ScriptedChatClient(
+            new ScriptedResponse(new ChatResponse(new ChatMessage(ChatRole.Assistant,
+            [
+                Calculate("call-1", 12, "multiply", 7),
+                Calculate("call-2", 84, "add", 16),
+                new FunctionCallContent("call-3", "get_connection_status", new Dictionary<string, object?>()),
+            ]))),
+            ScriptedResponse.Text("Done."));
+        using var live = new FunctionInvokingChatClient(model);
+        using var harness = new PlaygroundChatHarness(live);
+        harness.Settings.RequireToolApproval = true;
+        var pendingWhileWaiting = new List<bool>();
+        using var decide = harness.Session.OnStatusChanged(status =>
+        {
+            if (status != ConversationStatus.AwaitingInput)
+                return;
+
+            var approvals = harness.LastTurn.ResponseBlocks.OfType<ToolApprovalBlock>().ToList();
+            pendingWhileWaiting.AddRange(
+                approvals.Select(approval => approval.InnerBlock).OfType<CalculatorWorksheetBlock>().Select(sheet => sheet.Rows.Single().IsPending));
+            foreach (var approval in approvals)
+                approval.Approve();
+        });
+
+        await harness.Session.SendMessageAsync("Work out 12 × 7, add 16, and check my connection.");
+
+        Assert.Equal(ConversationStatus.Idle, harness.Session.Status);
+        Assert.Equal([true, true], pendingWhileWaiting);
+        var approvals = harness.LastTurn.ResponseBlocks.OfType<ToolApprovalBlock>().ToList();
+        Assert.Equal(["calculate", "calculate", "get_connection_status"], approvals.Select(approval => approval.ToolName));
+        Assert.All(approvals, approval => Assert.Equal(ApprovalStatus.Approved, approval.Status));
+        var worksheets = approvals.Take(2).Select(approval => Assert.IsType<CalculatorWorksheetBlock>(approval.InnerBlock)).ToList();
+        Assert.Equal(["call-1", "call-2"], worksheets.Select(sheet => Assert.Single(sheet.Rows).CallId));
+        Assert.Equal(["84", "100"],
+            worksheets.Select(sheet => CalculatorDisplay.FormatResult(sheet.Rows[0].Result, CultureInfo.InvariantCulture)));
+        Assert.Equal(["84", "100"],
+            approvals.Take(2).Select(approval => CalculatorDisplay.FormatResult(approval.Result, CultureInfo.InvariantCulture)));
+        var connection = Assert.IsType<ConnectionStatusBlock>(approvals[2].InnerBlock);
+        Assert.True(connection.HasResult);
+        Assert.DoesNotContain(harness.LastTurn.ResponseBlocks, block => block is CalculatorWorksheetBlock);
+        Assert.Equal("Done.", Assert.IsType<TextContentBlock>(harness.LastTurn.ResponseBlocks[^1]).RawText);
+    }
+
+    [Fact]
     public async Task OtherResults_AreLeftToTheirOwnCards()
     {
         using var model = new ScriptedChatClient(ScriptedResponse.Stream(
