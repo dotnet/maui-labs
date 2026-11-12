@@ -7,8 +7,10 @@ engine. The engine turns a chat client's streamed responses into conversation tu
 calls, approvals, reasoning, media, and your own `[ToolBlock]` cards), and every one of them is bindable. This
 package picks the view that shows each block, so you can build a chat UI from a plain `CollectionView`:
 
-- **`BlockTemplateSelector`**, a `DataTemplateSelector` for any list of blocks: the first `BlockTemplate` whose
-  condition matches a block wins.
+- **`ConversationItems`**, the rows of a conversation as one flat list that a `CollectionView` can virtualize:
+  for each turn, its request blocks, its response blocks, and then the turn itself once it ended.
+- **`BlockTemplateSelector`**, a `DataTemplateSelector` for a list of blocks or `ConversationItems`: the first
+  `BlockTemplate` whose condition matches a block wins, and `TurnTemplate` shows a turn's own row.
 - **`BlockMatch`** conditions: a block's type, its tool, its role, and `All`, `Any`, and `Not` to combine them, with
   markup extensions for the common ones (`{chat:Is chat:TextContentBlock}`, `{chat:Tool calculate}`,
   `{chat:Role user}`). A new kind of condition is a new `BlockMatch` type.
@@ -22,8 +24,9 @@ package picks the view that shows each block, so you can build a chat UI from a 
 
 The package draws no chat UI of its own. The ChatPlayground sample,
 [`samples/AIExtensions.Sample.ChatPlayground`](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground),
-builds a complete chat with it: a list of turns, a composer, tool cards and approvals, a calculator worksheet that
-folds several tool calls into one card, and notes that the user and the model edit together.
+builds a complete chat with it: a virtualized list of conversation rows, a composer, tool cards and approvals, a
+calculator worksheet that folds several tool calls into one card, and notes that the user and the model edit
+together.
 
 ## Install
 
@@ -39,16 +42,26 @@ xmlns:chat="http://schemas.microsoft.com/dotnet/2026/maui/ai/chat"
 
 ## Quick start
 
-A session (`AgentContext`) holds the conversation. Its `Turns`, and each turn's `RequestBlocks` (what the user sent)
-and `ResponseBlocks` (the answer), are observable collections, so a `CollectionView` of turns with a
-`BindableLayout` of blocks shows the conversation as it streams:
+A session (`AgentContext`) holds the conversation. `ConversationItems` exposes the conversation's rows as one flat
+observable list—for each turn, its request blocks, its response blocks, and then the turn itself once it no longer
+responds—so a single `CollectionView` creates, measures, and recycles each block on its own:
 
 ```csharp
-public sealed class ChatViewModel(IChatClient chatClient)
+public sealed class ChatViewModel : IDisposable
 {
-    public AgentContext Session { get; } = new(new UIAgent(chatClient));
+    public ChatViewModel(IChatClient chatClient)
+    {
+        Session = new AgentContext(new UIAgent(chatClient));
+        Items = new ConversationItems(Session);
+    }
+
+    public AgentContext Session { get; }
+
+    public ConversationItems Items { get; }
 
     public Task SendAsync(string text) => Session.SendMessageAsync(text);
+
+    public void Dispose() => Items.Dispose();
 }
 ```
 
@@ -76,6 +89,13 @@ public sealed class ChatViewModel(IChatClient chatClient)
                 </chat:ApprovalWrapper>
             </chat:BlockTemplateSelector.Wrappers>
 
+            <!-- The end of a turn, shown once the turn no longer responds. -->
+            <chat:BlockTemplateSelector.TurnTemplate>
+                <DataTemplate x:DataType="chat:ConversationTurn">
+                    <Label Text="Stopped" IsVisible="{Binding IsStopped}" FontSize="12" Margin="0,0,0,8" />
+                </DataTemplate>
+            </chat:BlockTemplateSelector.TurnTemplate>
+
             <!-- A card of your own for one tool, created through the app's services. -->
             <chat:BlockTemplate When="{chat:Tool get_weather}" Template="{chat:ViewTemplate local:WeatherCard}" />
 
@@ -95,19 +115,9 @@ public sealed class ChatViewModel(IChatClient chatClient)
         </chat:BlockTemplateSelector>
     </ContentPage.Resources>
 
-    <CollectionView ItemsSource="{Binding Session.Turns}">
-        <CollectionView.ItemTemplate>
-            <DataTemplate x:DataType="chat:ConversationTurn">
-                <VerticalStackLayout Padding="16,8" Spacing="8">
-                    <VerticalStackLayout HorizontalOptions="End"
-                                         BindableLayout.ItemsSource="{Binding RequestBlocks}"
-                                         BindableLayout.ItemTemplateSelector="{StaticResource Blocks}" />
-                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding ResponseBlocks}"
-                                         BindableLayout.ItemTemplateSelector="{StaticResource Blocks}" />
-                </VerticalStackLayout>
-            </DataTemplate>
-        </CollectionView.ItemTemplate>
-    </CollectionView>
+    <CollectionView ItemsSource="{Binding Items}"
+                    ItemTemplate="{StaticResource Blocks}"
+                    ItemsUpdatingScrollMode="KeepLastItemInView" />
 </ContentPage>
 ```
 
@@ -124,6 +134,25 @@ private void OnReject(object? sender, EventArgs e) =>
 Drive the session from the UI thread, as you would any collection a view is bound to: the engine changes the turns
 and blocks on the thread that calls it (`SendMessageAsync` continues on the caller's context), and raises its
 events there.
+
+## Virtualize a conversation
+
+A list of turns that lays out each turn's blocks with a `BindableLayout` creates and measures every block of a
+turn, including blocks that scrolled off screen, and measures the whole turn again whenever one of its blocks
+grows. `ConversationItems` flattens the session into one row per block, plus a row for each turn once
+`ConversationTurn.IsResponding` is `false`:
+
+- Each block added to `RequestBlocks` or `ResponseBlocks` raises one `NotifyCollectionChangedAction.Add` at its
+  row index.
+- When a turn finishes (it completed, stopped or failed), the `ConversationTurn` itself is added after its
+  blocks, and `BlockTemplateSelector.TurnTemplate` renders it (for example a retry card on failure, or the model
+  and token count). Restored turns already have their end row.
+- On `RetryAsync`, the rows of the failed response (last first) and the turn's row are removed before the new
+  response adds its blocks.
+- On `RestoreAsync` or `ClearAsync`, `ConversationItems` raises one `Reset`.
+- Every `ContentBlock` still points to its owning turn through `ContentBlock.Turn` (including an approval's
+  `InnerBlock`).
+- Dispose `ConversationItems` when the view that owns it goes away while the `AgentContext` lives on.
 
 ## Match blocks
 

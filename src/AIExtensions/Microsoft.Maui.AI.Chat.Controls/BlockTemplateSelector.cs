@@ -8,15 +8,17 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Use it as the item template of any list of blocks, such as a <see cref="CollectionView"/> or a
+/// Use it as the item template of any list of blocks, such as a <see cref="CollectionView"/> bound to
+/// <see cref="ConversationItems"/>, which also has a row for each turn that <see cref="TurnTemplate"/> shows, or a
 /// <see cref="BindableLayout"/> bound to a turn's <see cref="ConversationTurn.ResponseBlocks"/>. Templates are tried
 /// in order, so put the most specific first and a catch-all (a template without <see cref="BlockTemplate.When"/>)
 /// last.
 /// </para>
 /// <para>
-/// A block that no template matches, a matching template without a <see cref="BlockTemplate.Template"/>, and an item
-/// that is not a block all get the same empty template (an empty <see cref="ContentView"/>), because a list needs a
-/// template for every item. Add a catch-all template to show every block.
+/// A block that no template matches, a matching template without a <see cref="BlockTemplate.Template"/>, a turn without
+/// a <see cref="TurnTemplate"/>, and an item that is neither a block nor a turn all get the same empty template (an
+/// empty <see cref="ContentView"/>), because a list needs a template for every item. Add a catch-all template to show
+/// every block.
 /// </para>
 /// <para>
 /// The selector returns the templates it holds, never copies, so a list that caches its item views by template
@@ -43,9 +45,26 @@ public sealed class BlockTemplateSelector : DataTemplateSelector
     /// </summary>
     public IList<BlockWrapper> Wrappers { get; } = new List<BlockWrapper>();
 
+    /// <summary>
+    /// Gets or sets the template of a turn's own row in <see cref="ConversationItems"/>, which follows the turn's blocks
+    /// once the turn no longer responds: how the turn ended, such as stopped or failed with a Retry button, and the
+    /// model and tokens that answered it. Its binding context is the <see cref="ConversationTurn"/>. A
+    /// <see cref="DataTemplateSelector"/> is evaluated against the turn. Without a template, the turn's row is empty.
+    /// </summary>
+    public DataTemplate? TurnTemplate { get; set; }
+
     /// <inheritdoc />
-    protected override DataTemplate OnSelectTemplate(object item, BindableObject container)
-        => item is ContentBlock block ? Select(block, container) : Empty;
+    protected override DataTemplate OnSelectTemplate(object item, BindableObject container) => item switch
+    {
+        ContentBlock block => Select(block, container),
+        ConversationTurn turn => TurnTemplate switch
+        {
+            null => Empty,
+            DataTemplateSelector selector => selector.SelectTemplate(turn, container) ?? Empty,
+            var template => template,
+        },
+        _ => Empty,
+    };
 
     private DataTemplate Select(ContentBlock block, BindableObject container)
     {

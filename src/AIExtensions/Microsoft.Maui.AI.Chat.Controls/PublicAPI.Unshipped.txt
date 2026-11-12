@@ -18,6 +18,8 @@ Microsoft.Maui.AI.Chat.Controls.BlockTemplate.When.set -> void
 Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector
 Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.BlockTemplateSelector() -> void
 Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.Templates.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.BlockTemplate!>!
+Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.TurnTemplate.get -> Microsoft.Maui.Controls.DataTemplate?
+Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.TurnTemplate.set -> void
 Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.Wrappers.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.BlockWrapper!>!
 Microsoft.Maui.AI.Chat.Controls.BlockTypeMatch
 Microsoft.Maui.AI.Chat.Controls.BlockTypeMatch.BlockTypeMatch() -> void
@@ -35,6 +37,13 @@ Microsoft.Maui.AI.Chat.Controls.BlockWrapper.Template.get -> Microsoft.Maui.Cont
 Microsoft.Maui.AI.Chat.Controls.BlockWrapper.Template.set -> void
 Microsoft.Maui.AI.Chat.Controls.BlockWrapper.When.get -> Microsoft.Maui.AI.Chat.Controls.BlockMatch?
 Microsoft.Maui.AI.Chat.Controls.BlockWrapper.When.set -> void
+Microsoft.Maui.AI.Chat.Controls.ConversationItems
+Microsoft.Maui.AI.Chat.Controls.ConversationItems.CollectionChanged -> System.Collections.Specialized.NotifyCollectionChangedEventHandler?
+Microsoft.Maui.AI.Chat.Controls.ConversationItems.ConversationItems(Microsoft.Maui.AI.Chat.AgentContext! context) -> void
+Microsoft.Maui.AI.Chat.Controls.ConversationItems.Count.get -> int
+Microsoft.Maui.AI.Chat.Controls.ConversationItems.Dispose() -> void
+Microsoft.Maui.AI.Chat.Controls.ConversationItems.GetEnumerator() -> System.Collections.Generic.IEnumerator<object!>!
+Microsoft.Maui.AI.Chat.Controls.ConversationItems.this[int index].get -> object!
 Microsoft.Maui.AI.Chat.Controls.IsExtension
 Microsoft.Maui.AI.Chat.Controls.IsExtension.IsExtension() -> void
 Microsoft.Maui.AI.Chat.Controls.IsExtension.ProvideValue(System.IServiceProvider! serviceProvider) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
