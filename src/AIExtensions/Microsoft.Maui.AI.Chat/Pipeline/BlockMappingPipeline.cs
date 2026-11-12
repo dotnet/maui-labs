@@ -76,6 +76,7 @@ internal class BlockMappingPipeline
         BlockMappingPipelineLog.ProcessingUpdate(_logger, update.Role?.Value, update.Contents.Count, contentTypes);
 
         var context = new BlockMappingContext(update, _handlers, _calls);
+        NoteArrivedResults(update, mapped: false);
 
         // Phase 1: Active entries get priority (most recent first)
         for (var i = _activeStack.Count - 1; i >= 0; i--)
@@ -116,9 +117,9 @@ internal class BlockMappingPipeline
         }
 
         // Phase 2: Inactive handlers try to claim remaining content
+        List<(int Position, ContentBlock Block)>? emitted = null;
         if (!context.AllHandled)
         {
-            List<(int Position, ContentBlock Block)>? emitted = null;
             for (var i = 0; i < _handlers.Count; i++)
             {
                 if (context.AllHandled)
@@ -168,22 +169,24 @@ internal class BlockMappingPipeline
                     }
                 }
             }
-
-            if (emitted is not null)
-            {
-                // Handlers run in registration order, but the blocks follow the order of the contents they
-                // show, so a message with reasoning, text and a call reads in that order. A block that
-                // claimed no content goes last. OrderBy is a stable sort.
-                foreach (var (_, emitBlock) in emitted.OrderBy(static emission => emission.Position))
-                {
-                    BlockMappingPipelineLog.EmittingBlock(_logger, emitBlock.GetType().Name, emitBlock.Id, emitBlock.Role?.Value);
-                    yield return emitBlock;
-                }
-            }
         }
         else
         {
             BlockMappingPipelineLog.AllContentHandledAfterPhase1(_logger);
+        }
+
+        NoteArrivedResults(update, mapped: true);
+
+        if (emitted is not null)
+        {
+            // Handlers run in registration order, but the blocks follow the order of the contents they
+            // show, so a message with reasoning, text and a call reads in that order. A block that
+            // claimed no content goes last. OrderBy is a stable sort.
+            foreach (var (_, emitBlock) in emitted.OrderBy(static emission => emission.Position))
+            {
+                BlockMappingPipelineLog.EmittingBlock(_logger, emitBlock.GetType().Name, emitBlock.Id, emitBlock.Role?.Value);
+                yield return emitBlock;
+            }
         }
 
         await Task.CompletedTask;
@@ -212,7 +215,7 @@ internal class BlockMappingPipeline
                 continue;
 
             if (_calls.TryGet(call.CallId, out var known)
-                && (!known.HasResult || ReferenceEquals(known.Call, call)))
+                && (!known.IsAnswered || ReferenceEquals(known.Call, call)))
             {
                 // FunctionInvokingChatClient replays approved and rejected calls before their results.
                 context.MarkHandled(call);
@@ -335,8 +338,60 @@ internal class BlockMappingPipeline
 
         foreach (var call in claimed)
         {
-            if (!_calls.TryGet(call.CallId, out var known) || !ReferenceEquals(known.Block, entry.Block))
+            // A call that the block already shows is a replay, unless that call is answered: then the provider reused
+            // its id for a new call, which the block shows too and whose result must reach it.
+            if (!_calls.TryGet(call.CallId, out var known)
+                || !ReferenceEquals(known.Block, entry.Block)
+                || (known.IsAnswered && !ReferenceEquals(known.Call, call)))
+            {
                 _calls.Register(call, entry.Block, entry);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Records the results of an update that answer a call shown before them, whether or not a handler shows the
+    /// result, so a later call that reuses the id is a new call, as <see cref="UnansweredCalls.FindOpen"/> counts it.
+    /// </summary>
+    /// <param name="update">The update.</param>
+    /// <param name="mapped">
+    /// <see langword="false"/> before the update is mapped: a result answers the call an earlier update showed when
+    /// no call of this update with the same id comes first, so a call of the update after the result is a new call.
+    /// <see langword="true"/> once it is mapped: a result answers the call that is registered for its id when that
+    /// call came before it, in an earlier update or in this one, for example as a replay.
+    /// </param>
+    private void NoteArrivedResults(ChatResponseUpdate update, bool mapped)
+    {
+        var contents = update.Contents;
+        for (var i = 0; i < contents.Count; i++)
+        {
+            if (contents[i] is not FunctionResultContent result || !_calls.TryGet(result.CallId, out var known))
+                continue;
+
+            if (mapped ? IndexOf(contents, known.Call) < i : !HasCallBefore(contents, result.CallId, i))
+                known.ResultArrived = true;
+        }
+
+        static int IndexOf(IList<AIContent> contents, AIContent content)
+        {
+            for (var i = 0; i < contents.Count; i++)
+            {
+                if (ReferenceEquals(contents[i], content))
+                    return i;
+            }
+
+            return -1;
+        }
+
+        static bool HasCallBefore(IList<AIContent> contents, string callId, int end)
+        {
+            for (var i = 0; i < end; i++)
+            {
+                if (contents[i] is FunctionCallContent call && string.Equals(call.CallId, callId, StringComparison.Ordinal))
+                    return true;
+            }
+
+            return false;
         }
     }
 

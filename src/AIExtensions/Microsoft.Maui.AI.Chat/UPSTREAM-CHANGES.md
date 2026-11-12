@@ -222,7 +222,10 @@ These match upstream so that upstream fixes apply directly:
   result more than once in one message, the existing block (for an approval, its inner block) is
   updated and receives the result. Upstream shows such repeats as extra blocks. A call
   id reused after its result is a new call with its own block; both blocks have the call id as their
-  `Id`, so key views by block instance.
+  `Id`, so key views by block instance. A call is answered once a result for its id follows it, as the
+  engine's own check for unanswered calls counts it, even when no handler shows the result (a handler
+  of the app's own may show only calls); a block of the app's own that claims a reused id gets the new
+  call registered, so the new call's result reaches it instead of being taken for the earlier one's.
 - **UI actions run in the engine.** An `Automatic` UI action is invoked by the engine on the caller's
   thread; a `Manual` one waits for the app to call `InvokeAsync`
   (`ConversationStatus.AwaitingInput`). Upstream always leaves invocation to the renderer. A UI action
