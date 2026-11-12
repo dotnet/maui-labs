@@ -2,7 +2,8 @@
 <!--
     How each block of a conversation looks. The chat area lays out every turn's request and response blocks with the
     BlockTemplateSelector below, which uses the first template whose When matches a block: the specific templates come
-    first. A block that no template matches shows nothing.
+    first. A block that no template matches shows nothing. An approval shows the card of its call, picked the same way,
+    inside the approval wrapper's Approve and Reject.
 
     The templates bind to their block, which raises PropertyChanged as it streams and as its call runs, so they update in
     place. Buttons call the chat's view model, found with RelativeSource.
@@ -21,6 +22,39 @@
     <local:BoldTextConverter x:Key="BoldText" />
 
     <chat:BlockTemplateSelector x:Key="BlockTemplates">
+
+        <!--
+            A call that waits for approval: the call's own card, from the templates below, then Approve and Reject
+            while the call waits, or the decision once it no longer does. The chrome binds to the approval, and the
+            card in its ContentPresenter to the call; a card finds the approval around it with RelativeSource.
+        -->
+        <chat:BlockTemplateSelector.Wrappers>
+            <chat:ApprovalWrapper>
+                <ControlTemplate x:DataType="chat:ToolApprovalBlock">
+                    <VerticalStackLayout Spacing="6" Margin="0,0,0,4" AutomationId="ApprovalCard">
+                        <ContentPresenter />
+                        <HorizontalStackLayout Spacing="8" IsVisible="{Binding IsAwaitingInput}">
+                            <Button Text="Approve" HeightRequest="36" Padding="14,0"
+                                    Command="{Binding ApproveAction, Source={RelativeSource AncestorType={x:Type local:ChatViewModel}}, x:DataType=local:ChatViewModel}"
+                                    CommandParameter="{Binding .}"
+                                    AutomationId="ApproveButton" />
+                            <Button Text="Reject" Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding RejectAction, Source={RelativeSource AncestorType={x:Type local:ChatViewModel}}, x:DataType=local:ChatViewModel}"
+                                    CommandParameter="{Binding .}"
+                                    AutomationId="RejectButton" />
+                        </HorizontalStackLayout>
+                        <Label Text="{Binding Status, Converter={StaticResource ApprovalStatus}}"
+                               Style="{StaticResource CardCaption}" AutomationId="ApprovalStatus">
+                            <Label.Triggers>
+                                <DataTrigger TargetType="Label" Binding="{Binding IsAwaitingInput}" Value="True">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+                    </VerticalStackLayout>
+                </ControlTemplate>
+            </chat:ApprovalWrapper>
+        </chat:BlockTemplateSelector.Wrappers>
 
         <!-- What the user typed: a bubble on the right. -->
         <chat:BlockTemplate>
@@ -247,37 +281,6 @@
                                IsVisible="{Binding IsAbandoned}" Style="{StaticResource CardDetail}" />
                     </VerticalStackLayout>
                 </Border>
-            </DataTemplate>
-        </chat:BlockTemplate>
-
-        <!--
-            A call that waits for approval: the call's own card, from these templates, then Approve and Reject while
-            the call waits, or the decision once it no longer does.
-        -->
-        <chat:BlockTemplate When="{chat:Is chat:ToolApprovalBlock}">
-            <DataTemplate x:DataType="chat:ToolApprovalBlock">
-                <VerticalStackLayout Spacing="6" Margin="0,0,0,4" AutomationId="ApprovalCard">
-                    <local:BlockPresenter Block="{Binding InnerBlock}"
-                                          TemplateSelector="{DynamicResource BlockTemplates}" />
-                    <HorizontalStackLayout Spacing="8" IsVisible="{Binding IsAwaitingInput}">
-                        <Button Text="Approve" HeightRequest="36" Padding="14,0"
-                                Command="{Binding ApproveAction, Source={RelativeSource AncestorType={x:Type local:ChatViewModel}}, x:DataType=local:ChatViewModel}"
-                                CommandParameter="{Binding .}"
-                                AutomationId="ApproveButton" />
-                        <Button Text="Reject" Style="{StaticResource SecondaryButtonStyle}"
-                                Command="{Binding RejectAction, Source={RelativeSource AncestorType={x:Type local:ChatViewModel}}, x:DataType=local:ChatViewModel}"
-                                CommandParameter="{Binding .}"
-                                AutomationId="RejectButton" />
-                    </HorizontalStackLayout>
-                    <Label Text="{Binding Status, Converter={StaticResource ApprovalStatus}}"
-                           Style="{StaticResource CardCaption}" AutomationId="ApprovalStatus">
-                        <Label.Triggers>
-                            <DataTrigger TargetType="Label" Binding="{Binding IsAwaitingInput}" Value="True">
-                                <Setter Property="IsVisible" Value="False" />
-                            </DataTrigger>
-                        </Label.Triggers>
-                    </Label>
-                </VerticalStackLayout>
             </DataTemplate>
         </chat:BlockTemplate>
 

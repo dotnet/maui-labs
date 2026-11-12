@@ -1,11 +1,13 @@
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>Matches the calls, approvals, and UI actions of a tool.</summary>
+/// <summary>Matches the calls and UI actions of a tool: the blocks that show the tool's calls.</summary>
 /// <remarks>
 /// <para>
-/// A tool call is a <see cref="FunctionInvocationContentBlock"/>; an approval (<see cref="ToolApprovalBlock"/>) and a
-/// UI action (<see cref="UIActionBlock"/>) are <see cref="InteractiveFunctionBlock"/>s. To pick only one of them,
-/// combine this match with a <see cref="BlockTypeMatch"/> in an <see cref="AllMatch"/>.
+/// A tool call is a <see cref="FunctionInvocationContentBlock"/>, including a typed block for the tool, and a UI action
+/// is a <see cref="UIActionBlock"/>. To pick only one of them, combine this match with a <see cref="BlockTypeMatch"/> in
+/// an <see cref="AllMatch"/>. An approval (<see cref="ToolApprovalBlock"/>) doesn't match, so a template for a tool's
+/// card never takes the approval in its place: an <see cref="ApprovalWrapper"/> shows the approval around the card that
+/// this match picks for its call, and its own <see cref="BlockWrapper.When"/> can be a tool match.
 /// </para>
 /// <para>In XAML, <c>{chat:Tool calculate}</c> creates one. Without a <see cref="Name"/>, no block matches.</para>
 /// </remarks>
@@ -21,7 +23,7 @@ public sealed class ToolMatch : BlockMatch
         var tool = block switch
         {
             FunctionInvocationContentBlock call => call.ToolName,
-            InteractiveFunctionBlock interactive => interactive.ToolName,
+            UIActionBlock action => action.ToolName,
             _ => null,
         };
         return !string.IsNullOrEmpty(Name) && string.Equals(tool, Name, StringComparison.OrdinalIgnoreCase);

@@ -51,9 +51,10 @@ Sending throws `InvalidOperationException` when `ChatOptions.Tools` contains an 
 `ApprovalRequiredAIFunction` show a `ToolApprovalBlock` and wait for `Approve()` or `Reject()`.
 The approval's `InnerBlock` is the block that the registered handlers create for the call, as they
 would without the approval: the built-in call block, a typed block or `[ToolBlock]`, or a block of the
-app's own type, which receives the call's result through its handler. When one call of a response
-needs approval, `FunctionInvokingChatClient` turns every call of the response into an approval
-request, and marks the requests of tools that need none with
+app's own type, which receives the call's result through its handler. In XAML, the `ApprovalWrapper`
+of `Microsoft.Maui.AI.Chat.Controls` shows an approval as Approve and Reject around the view of its
+`InnerBlock`. When one call of a response needs approval, `FunctionInvokingChatClient` turns every
+call of the response into an approval request, and marks the requests of tools that need none with
 `RequiresConfirmation` false. The engine shows those requests as the calls they carry and approves
 them itself, so only the calls that need approval wait for the user. The others run with the batch
 once those are decided, also when they are rejected.

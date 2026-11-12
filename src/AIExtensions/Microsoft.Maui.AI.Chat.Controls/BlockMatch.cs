@@ -39,7 +39,7 @@ public abstract class BlockMatch
         where TBlock : ContentBlock =>
         new BlockTypeMatch { Type = typeof(TBlock) };
 
-    /// <summary>Matches the calls, approvals, and UI actions of a tool (case-insensitive).</summary>
+    /// <summary>Matches the calls and UI actions of a tool (case-insensitive), but not its approvals.</summary>
     /// <param name="name">The tool name.</param>
     /// <returns>A <see cref="ToolMatch"/>.</returns>
     public static BlockMatch Tool(string name)
