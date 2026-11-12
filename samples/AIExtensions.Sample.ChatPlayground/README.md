@@ -80,17 +80,18 @@ You and the model share notes, which are the agent's typed state
 
 #### How the chat is built
 
-The chat is a plain `CollectionView` over the engine's turns
-(`Microsoft.Maui.AI.Chat`) with block templates from
-`Microsoft.Maui.AI.Chat.Controls`:
+The chat is a plain `CollectionView` over `ConversationItems`
+(`Microsoft.Maui.AI.Chat.Controls`), which flattens the engine's turns
+(`Microsoft.Maui.AI.Chat`) into one virtualizable row per block plus a row for
+each finished turn:
 
 | Piece | Where | What it does |
 |-------|-------|--------------|
-| Session | `ChatViewModel` | One `AgentContext` for the page over a `UIAgent<NotesState>` with the worksheet handler, the generated tool blocks, the `set_theme` and `propose_notes` UI actions, and the saved thread. **New chat** clears it; it is never recreated. |
+| Session | `ChatViewModel` | One `AgentContext` for the page over a `UIAgent<NotesState>` with the worksheet handler, the generated tool blocks, the `set_theme` and `propose_notes` UI actions, and the saved thread, plus `ConversationItems` over it. **New chat** clears it; it is never recreated. |
 | Router client | `PlaygroundChatClient` | The one `IChatClient` the engine talks to. It sends each request to the client selected in settings, with `ChatOptions` built from the settings and the engine's UI actions, and the notes. With **Streaming** off it asks for the whole response. **Require any** applies to an answer's first request only, as in `FunctionInvokingChatClient`, so the model can answer the results of the app's UI actions instead of calling a tool again. Requests the client cannot take, such as images for a text-only client or an invalid setting, fail before anything is sent, and the chat shows the error with **Retry**. |
-| Conversation | `Chat/Views/ChatArea.xaml` | Each turn lays out its request and response blocks with a `BindableLayout` and a `BlockTemplateSelector`, then says whether it was stopped or why it failed. |
-| Templates | `Chat/Views/Templates/` | `ChatTemplates.xaml` has a `BlockTemplate` per kind of block, and the first that matches wins: your message, the answer, reasoning, images, the structured response, the worksheet, the connection card, the notes proposal, UI actions, and the generic tool card. An `ApprovalWrapper` puts Approve and Reject around the card of the call that an approval asks about. The custom matches and views those templates use live next to it. |
-| Custom blocks | `Chat/Services/Blocks/` | The calculator worksheet (an `ActivityHandler` that folds a response's `calculate` calls into one block) and the connection status card (a generated `[ToolBlock]`). |
+| Conversation | `Chat/Views/ChatArea.xaml` | One `CollectionView` bound to `Items` (`ConversationItems`) with `BlockTemplates` as its `ItemTemplate`, so each block and finished turn is virtualized on its own. |
+| Templates | `Chat/Views/Templates/` | `ChatTemplates.xaml` has a `BlockTemplate` per kind of block, and the first that matches wins: your message, the answer, reasoning, images, the structured response, the worksheet, the connection card, the notes proposal, UI actions, and the generic tool card. An `ApprovalWrapper` puts Approve and Reject around the card of the call that an approval asks about, and `TurnTemplate` shows a finished turn's error with **Retry** and its model and token footer. The custom matches and views those templates use live next to it. |
+| Custom blocks | `Chat/Services/Blocks/` | The calculator worksheet (an `ActivityHandler` that folds a response's `calculate` calls into one block, and overrides `Abandon()` to mark unfinished rows when a turn ends) and the connection status card (a generated `[ToolBlock]`). |
 | Composer | `ChatComposer.xaml` | An editor, **Attach** for clients that accept images, and **Send**, or **Stop** while an answer runs. |
 | Saved conversation | `FileConversationThread` | The engine's thread (`UIAgentOptions.Thread`): it writes each finished turn's updates to a JSON file, and `RestoreAsync` shows them again when the app starts. |
 

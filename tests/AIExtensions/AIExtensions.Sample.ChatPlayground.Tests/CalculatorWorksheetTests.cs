@@ -174,11 +174,13 @@ public sealed class CalculatorWorksheetTests
         await harness.Session.CancelAsync().WaitAsync(TimeSpan.FromSeconds(5));
         await send.WaitAsync(TimeSpan.FromSeconds(5));
 
-        // The worksheet shows "No result" for a row that is still pending once its turn stopped or failed.
+        // The worksheet abandons the row that had no result once its turn stopped or failed.
         Assert.True(harness.LastTurn.IsStopped);
         Assert.False(harness.LastTurn.IsFailed);
         var worksheet = Assert.Single(harness.LastTurn.ResponseBlocks.OfType<CalculatorWorksheetBlock>());
-        Assert.Equal([false, true], worksheet.Rows.Select(row => row.IsPending));
+        Assert.Same(harness.LastTurn, worksheet.Turn);
+        Assert.Equal([false, false], worksheet.Rows.Select(row => row.IsPending));
+        Assert.Equal([false, true], worksheet.Rows.Select(row => row.IsAbandoned));
         Assert.Equal(BlockLifecycleState.Inactive, worksheet.LifecycleState);
     }
 
@@ -197,7 +199,42 @@ public sealed class CalculatorWorksheetTests
         Assert.Equal(ConversationStatus.Error, harness.Session.Status);
         Assert.True(harness.LastTurn.IsFailed);
         var worksheet = Assert.Single(harness.LastTurn.ResponseBlocks.OfType<CalculatorWorksheetBlock>());
-        Assert.True(Assert.Single(worksheet.Rows).IsPending);
+        var row = Assert.Single(worksheet.Rows);
+        Assert.False(row.IsPending);
+        Assert.True(row.IsAbandoned);
+    }
+
+    [Fact]
+    public async Task StoppedWhileApprovalWaits_AbandonsTheRowInsideTheApproval()
+    {
+        using var model = new ScriptedChatClient(
+            new ScriptedResponse(new ChatResponse(new ChatMessage(ChatRole.Assistant, [Calculate("call-1", 12, "multiply", 7)]))));
+        using var live = new FunctionInvokingChatClient(model);
+        using var harness = new PlaygroundChatHarness(live);
+        harness.Settings.RequireToolApproval = true;
+        var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var onStatus = harness.Session.OnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.AwaitingInput)
+                waiting.TrySetResult();
+        });
+
+        var send = harness.Session.SendMessageAsync("What is 12 \u00D7 7?");
+        await waiting.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var approval = Assert.Single(harness.LastTurn.ResponseBlocks.OfType<ToolApprovalBlock>());
+        var worksheet = Assert.IsType<CalculatorWorksheetBlock>(approval.InnerBlock);
+        var row = Assert.Single(worksheet.Rows);
+        Assert.Same(harness.LastTurn, worksheet.Turn);
+        Assert.True(row.IsPending);
+        Assert.False(row.IsAbandoned);
+
+        await harness.Session.CancelAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await send.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(approval.IsAwaitingInput);
+        Assert.True(approval.IsAbandoned);
+        Assert.False(row.IsPending);
+        Assert.True(row.IsAbandoned);
     }
 
     [Theory]

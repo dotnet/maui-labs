@@ -17,6 +17,19 @@ public sealed class CalculatorWorksheetBlock : ActivityContentBlock
     /// <summary>Gets a row per call, in the order the calls arrived. Views bind to it, so it is observable.</summary>
     public ObservableCollection<CalculationRow> Rows { get; } = [];
 
+    /// <inheritdoc />
+    protected override bool Abandon()
+    {
+        var abandoned = false;
+        foreach (var row in Rows)
+        {
+            if (row.Abandon())
+                abandoned = true;
+        }
+
+        return abandoned;
+    }
+
     internal CalculationRow? Find(string callId) =>
         Rows.FirstOrDefault(row => string.Equals(row.CallId, callId, StringComparison.Ordinal));
 }
@@ -26,6 +39,7 @@ public sealed class CalculatorWorksheetBlock : ActivityContentBlock
 public sealed class CalculationRow(FunctionCallContent call) : ObservableObject
 {
     private FunctionResultContent? _result;
+    private bool _abandoned;
 
     /// <summary>Gets the call the row shows.</summary>
     public FunctionCallContent Call { get; } = call;
@@ -46,6 +60,7 @@ public sealed class CalculationRow(FunctionCallContent call) : ObservableObject
                 return;
 
             OnPropertyChanged(nameof(HasResult));
+            OnPropertyChanged(nameof(IsAbandoned));
             OnPropertyChanged(nameof(IsPending));
             OnPropertyChanged(nameof(Answer));
             OnPropertyChanged(nameof(HasAnswer));
@@ -58,8 +73,11 @@ public sealed class CalculationRow(FunctionCallContent call) : ObservableObject
     /// <summary>Gets whether the result arrived.</summary>
     public bool HasResult => Result is not null;
 
+    /// <summary>Gets whether the row will never get a result, because its turn ended without one.</summary>
+    public bool IsAbandoned => _abandoned && !HasResult;
+
     /// <summary>Gets whether the row still waits for its result.</summary>
-    public bool IsPending => Result is null;
+    public bool IsPending => !HasResult && !_abandoned;
 
     /// <summary>Gets the answer, such as <c>= 84</c>, once a number arrived.</summary>
     public string? Answer => CalculatorDisplay.FormatResult(Result) is { } number ? $"= {number}" : null;
@@ -78,6 +96,17 @@ public sealed class CalculationRow(FunctionCallContent call) : ObservableObject
 
     /// <summary>Gets whether the calculation failed, such as a division by zero.</summary>
     public bool IsError => Result is not null && CalculatorDisplay.FormatError(Result) is not null;
+
+    internal bool Abandon()
+    {
+        if (_abandoned || HasResult)
+            return false;
+
+        _abandoned = true;
+        OnPropertyChanged(nameof(IsAbandoned));
+        OnPropertyChanged(nameof(IsPending));
+        return true;
+    }
 }
 
 /// <summary>

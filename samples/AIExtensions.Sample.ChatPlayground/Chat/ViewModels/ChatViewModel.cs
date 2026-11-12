@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.AI.Chat;
+using Microsoft.Maui.AI.Chat.Controls;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
@@ -44,6 +45,7 @@ public partial class ChatViewModel : ObservableObject
             notes.Register(options);
         }, loggerFactory));
         Notes = new NotesViewModel(notes, Session);
+        Items = new ConversationItems(Session);
 
         Session.PropertyChanged += SessionPropertyChanged;
         Readiness.PropertyChanged += (_, _) =>
@@ -57,6 +59,12 @@ public partial class ChatViewModel : ObservableObject
 
     /// <summary>Gets the chat session. It lives as long as the tab; New chat clears it.</summary>
     public AgentContext Session { get; }
+
+    /// <summary>
+    /// Gets the conversation's rows, which the chat area lists: each turn's blocks, and then the turn itself once it
+    /// ended. It follows the session for as long as both live.
+    /// </summary>
+    public ConversationItems Items { get; }
 
     /// <summary>Gets the settings-pane state.</summary>
     public SettingsPaneViewModel Settings { get; }
