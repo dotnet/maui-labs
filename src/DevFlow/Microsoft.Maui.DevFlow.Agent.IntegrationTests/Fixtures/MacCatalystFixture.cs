@@ -7,8 +7,6 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 /// </summary>
 public sealed class MacCatalystFixture : AppFixtureBase
 {
-    readonly object _outputLock = new();
-    readonly List<string> _output = [];
     Process? _appProcess;
     bool _disposing;
     bool _weOwnTheProcess;
@@ -80,22 +78,44 @@ public sealed class MacCatalystFixture : AppFixtureBase
 
         var executablePath = executables[0];
 
-        var psi = new ProcessStartInfo(executablePath)
+        var launch = new ProcessStartInfo("/usr/bin/open")
         {
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+        launch.ArgumentList.Add("--env");
+        launch.ArgumentList.Add($"DEVFLOW_TEST_PORT={AgentPort}");
+        launch.ArgumentList.Add("-n");
+        launch.ArgumentList.Add(appBundlePath);
 
-        psi.Environment["DEVFLOW_TEST_PORT"] = AgentPort.ToString();
-
-        var process = new Process
+        using var launcher = Process.Start(launch)
+            ?? throw new InvalidOperationException($"Failed to launch {appBundlePath} with LaunchServices.");
+        var stdout = launcher.StandardOutput.ReadToEnd();
+        var stderr = launcher.StandardError.ReadToEnd();
+        launcher.WaitForExit();
+        if (launcher.ExitCode != 0)
         {
-            StartInfo = psi,
-            EnableRaisingEvents = true,
-        };
-        process.OutputDataReceived += (_, e) => CaptureOutput("stdout", e.Data);
-        process.ErrorDataReceived += (_, e) => CaptureOutput("stderr", e.Data);
+            throw new InvalidOperationException(
+                $"LaunchServices failed to launch {appBundlePath} with code {launcher.ExitCode}.{Environment.NewLine}" +
+                $"STDOUT:{Environment.NewLine}{stdout}{Environment.NewLine}" +
+                $"STDERR:{Environment.NewLine}{stderr}");
+        }
+
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        Process? process = null;
+        while (process == null && DateTime.UtcNow < deadline)
+        {
+            process = FindProcess(executablePath);
+
+            if (process == null)
+                Thread.Sleep(100);
+        }
+
+        if (process == null)
+            throw new InvalidOperationException($"LaunchServices started {appBundlePath}, but its process was not found.");
+
+        process.EnableRaisingEvents = true;
         process.Exited += (_, _) =>
         {
             if (!_disposing)
@@ -103,36 +123,17 @@ public sealed class MacCatalystFixture : AppFixtureBase
         };
 
         _appProcess = process;
-        if (!process.Start())
-            throw new InvalidOperationException($"Failed to launch {executablePath}");
-
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
     }
 
-    void CaptureOutput(string stream, string? line)
+    static Process? FindProcess(string executablePath)
     {
-        if (line == null)
-            return;
-
-        lock (_outputLock)
-        {
-            _output.Add($"[{stream}] {line}");
-            if (_output.Count > 200)
-                _output.RemoveAt(0);
-        }
-    }
-
-    string FormatCapturedOutput()
-    {
-        lock (_outputLock)
-        {
-            return _output.Count == 0
-                ? "\nThe app produced no captured output."
-                : $"\nCaptured app output:\n{string.Join(Environment.NewLine, _output)}";
-        }
+        var candidates = Process.GetProcessesByName(Path.GetFileName(executablePath));
+        var process = candidates.FirstOrDefault();
+        foreach (var extra in candidates.Skip(1))
+            extra.Dispose();
+        return process;
     }
 
     string FormatProcessExit(Process process, string context)
-        => $"Mac Catalyst app exited with code {process.ExitCode} {context}." + FormatCapturedOutput();
+        => $"Mac Catalyst app exited with code {process.ExitCode} {context}.";
 }
