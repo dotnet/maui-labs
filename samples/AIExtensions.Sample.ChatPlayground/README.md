@@ -147,3 +147,31 @@ when at least one Azure deployment is configured.
 or commit credentials.** Azure prompts, images, and indexed text may leave the
 device and incur charges. Recordings may also contain sensitive data; review
 them before sharing.
+
+## Shared file input
+
+Chat attachments and image edits share root-level `FileInputService` and `InputFile`.
+Callers supply their picker options and use the shared `FileInputService.ImageFiles`
+(JPEG, PNG, GIF, WebP) or `FileInputService.DocumentFiles` (PDF, JPEG, PNG, HEIC, TIFF)
+presets rather than defining private file-type lists. The document preset is available
+for future callers; it does not add a document feature to the playground.
+Packaged sample names are also supplied by the caller.
+
+```csharp
+var file = await files.PickAsync(new PickOptions
+{
+    PickerTitle = "Select an image",
+    FileTypes = FileInputService.ImageFiles,
+}, cancellationToken);
+
+var sample = await files.LoadSampleAsync("playground_sample.png", cancellationToken);
+```
+
+For already-opened input, `InputFile.ReadAsync(stream, fileName, contentType, cancellationToken)`
+copies the remaining input from the current stream position using standard stream copying
+and leaves the caller's stream open. Feature-specific format support is still respected:
+image chat/edit callers continue to accept only JPEG, PNG, GIF, and WebP.
+
+Both composers use the shared `AttachmentPreview` view for the thumbnail, file name,
+and removal command, retaining their existing automation IDs and accessible removal
+descriptions. Future callers can reuse the same bindings and customize the preview aspect.

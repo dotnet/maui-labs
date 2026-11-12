@@ -8,14 +8,14 @@ namespace AIExtensions.Sample.ChatPlayground;
 /// <summary>Owns chat presentation, attachment selection, and composer commands.</summary>
 public sealed partial class ChatAreaViewModel : ObservableObject
 {
-    private readonly ImageInputService _imageInput;
+    private readonly FileInputService _fileInput;
     private readonly Dictionary<long, ChatMessageViewModel> _entriesById = [];
-    private ImageAttachment? _selectedImage;
+    private InputFile? _selectedImage;
 
     /// <summary>Initializes chat presentation and attachment state.</summary>
-    public ChatAreaViewModel(ImageInputService imageInput)
+    public ChatAreaViewModel(FileInputService fileInput)
     {
-        _imageInput = imageInput;
+        _fileInput = fileInput;
         Messages.CollectionChanged += MessagesCollectionChanged;
     }
 
@@ -45,7 +45,7 @@ public sealed partial class ChatAreaViewModel : ObservableObject
     public bool IsLiveClient => !IsReplayClient;
 
     /// <summary>Gets the selected image bytes for request orchestration.</summary>
-    public ImageAttachment? SelectedImage => _selectedImage;
+    public InputFile? SelectedImage => _selectedImage;
 
     /// <summary>Gets or sets the request command coordinated by the parent view model.</summary>
     public IAsyncRelayCommand? SendCommand
@@ -90,7 +90,11 @@ public sealed partial class ChatAreaViewModel : ObservableObject
     {
         try
         {
-            var image = await _imageInput.PickImageAsync();
+            var image = await _fileInput.PickAsync(new PickOptions
+            {
+                PickerTitle = "Select an image",
+                FileTypes = FileInputService.ImageFiles,
+            });
             if (image is not null)
                 SetSelectedImage(image);
         }
@@ -105,7 +109,7 @@ public sealed partial class ChatAreaViewModel : ObservableObject
     {
         try
         {
-            SetSelectedImage(await _imageInput.LoadSampleImageAsync());
+            SetSelectedImage(await _fileInput.LoadSampleAsync("playground_sample.png"));
         }
         catch (Exception exception)
         {
@@ -113,8 +117,10 @@ public sealed partial class ChatAreaViewModel : ObservableObject
         }
     }
 
-    private void SetSelectedImage(ImageAttachment image)
+    private void SetSelectedImage(InputFile image)
     {
+        if (image.MediaType is not ("image/jpeg" or "image/png" or "image/gif" or "image/webp"))
+            throw new NotSupportedException("The selected file is not a supported image type.");
         _selectedImage = image;
         var previewBytes = image.Bytes;
         SelectedImageName = image.FileName;
