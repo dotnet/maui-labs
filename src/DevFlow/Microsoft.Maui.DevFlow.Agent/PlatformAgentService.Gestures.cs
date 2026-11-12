@@ -308,8 +308,14 @@ public partial class PlatformAgentService
             || (OperatingSystem.IsAndroidVersionAtLeast(23) && view.ContextClickable))
             return false;
 
-        if (!PassThroughViewTypes.Contains(view.GetType()) || gestureViews.Contains(view))
+        var viewType = view.GetType();
+        if (!PassThroughViewTypes.Contains(viewType) || gestureViews.Contains(view))
             return false;
+
+        // MAUI 11 inserts this passive graphics surface above several controls. Its internal
+        // listener does not consume downs; the touch continues to the real target underneath.
+        if (viewType == typeof(global::Microsoft.Maui.Graphics.Platform.PlatformGraphicsView))
+            return true;
 
         if (HasTouchListener(view) != false)
             return false;

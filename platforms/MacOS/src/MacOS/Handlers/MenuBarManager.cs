@@ -28,10 +28,7 @@ public static class MenuBarManager
 
     static void ClearWindowMenu()
     {
-        // AppKit accepts nil here, but the .NET property setter rejects it.
-        using var key = new NSString("windowsMenu");
-        using var values = NSDictionary.FromObjectAndKey(NSNull.Null, key);
-        NSApplication.SharedApplication.SetValuesForKeysWithDictionary(values);
+        NSApplication.SharedApplication.WindowsMenu = null;
     }
 
     /// <summary>
