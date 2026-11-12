@@ -116,7 +116,8 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   `Downloading`; unavailable maps to `Unavailable`; unrecognized values map to
   `Unknown`. Advertise
   Text, Streaming, ImageInput, and input TokenUsage; add Reasoning only after
-  the runtime thinking-capability check. `PrepareModelAsync` explicitly awaits
+  the runtime thinking-capability check and StructuredOutput only when the native
+  model advertises it. `PrepareModelAsync` explicitly awaits
   ML Kit download/status `Flow` completion and is never called by generation.
   `DownloadModelAsync` remains available when callers need native progress.
 
@@ -421,9 +422,13 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   disallowing additional properties as required by the native model. Reject
   schema-free JSON/prompt fallback before native work and malformed native JSON
   on completion.
-- **Android:** the reviewed ML Kit Prompt provider does not expose structured
-  output. Reject JSON, JSON-schema, and typed structured-output requests before
-  native inference; do not emulate them through prompts or parsing.
+- **Android:** use the native typed API and runtime `GenerableProvider` metadata.
+  Require an explicit object schema and check the model's structured capability.
+  Normalize required/additional properties through MEAI, validate projected
+  results, and preserve caller history and native input usage. Reject schema-free
+  JSON or unrepresentable constraints before inference. Structured streaming
+  emits complete validated JSON at completion; active tools and full thinking
+  output cannot be combined with this path.
 
 ## Response behavior
 
@@ -483,7 +488,9 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - **Android:** serialize native callbacks through a per-request queue, preserve
   text/thought order, and reconcile the final candidate against accumulated
   additional-text deltas with the same equal/suffix/divergence contract. Finish
-  admitted callbacks before releasing the managed JNI callback.
+  admitted callbacks before releasing the managed JNI callback. The typed-schema
+  API has no progress overload, so structured requests emit one complete,
+  validated JSON update and then terminal metadata.
 
 ### Token usage
 
@@ -513,7 +520,8 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - **Windows:** advertise no TokenUsage capability and report no usage metadata
   because the native API exposes no token counts.
 - **Android:** map native input tokens from `countTokens`; do not estimate output
-  or total counts. Emit streaming input usage once with the terminal update.
+  or total counts. For structured requests, count the complete typed request
+  including its schema. Emit streaming input usage once with the terminal update.
 
 ### Telemetry and timing
 

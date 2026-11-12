@@ -28,6 +28,7 @@ class NativeChatOptions(
     val modelId: String?,
 ) {
     var toolsJson: String? = null
+    var responseSchemaJson: String? = null
 }
 
 class NativeChatRequest(
@@ -63,6 +64,7 @@ class NativeModelStatus(
     val modelName: String?,
 ) {
     var toolCallingAvailable: Boolean = false
+    var structuredOutputAvailable: Boolean = false
 }
 
 interface NativeCheckStatusCallback {

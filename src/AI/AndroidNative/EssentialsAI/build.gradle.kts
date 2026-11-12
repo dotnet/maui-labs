@@ -37,6 +37,7 @@ val mlKitRuntime by configurations.creating {
 
 dependencies {
     compileOnly("com.google.mlkit:genai-prompt:1.0.0-beta5")
+    compileOnly("com.google.mlkit:genai-schema:1.0.0-alpha2")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     mlKitRuntime("com.google.mlkit:genai-prompt:1.0.0-beta5")
     mlKitRuntime("com.google.mlkit:genai-common:1.0.0-beta5")

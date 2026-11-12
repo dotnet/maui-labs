@@ -3,6 +3,7 @@ package com.microsoft.maui.essentials.ai
 import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.ModelPreference
 import com.google.mlkit.genai.prompt.ModelReleaseStage
+import com.google.mlkit.genai.prompt.GenerateContentRequest
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -15,6 +16,21 @@ class NativeChatRequestTest {
         vararg messages: NativeChatMessage,
         options: NativeChatOptions = NativeChatOptions(null, null, null, null, false, null),
     ) = NativeChatRequest(arrayOf(*messages), options)
+
+    @Test
+    fun structuredOutputDefaultBudgetDoesNotOverrideAnExplicitLimitOrTextDefaults() {
+        val options = NativeChatOptions(null, null, null, null, false, null).apply {
+            responseSchemaJson = """{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}"""
+        }
+        assertEquals(512, request(message("user", "hello"), options = options).toNative().maxOutputTokens)
+        assertEquals(128, request(message("user", "hello"),
+            options = NativeChatOptions(null, null, null, 128, false, null).apply {
+                responseSchemaJson = options.responseSchemaJson
+            }).toNative().maxOutputTokens)
+        val withoutSchema = request(message("user", "hello")).toNative()
+        assertEquals(GenerateContentRequest.Builder(TextPart("hello")).apply { maxOutputTokens = null }.build().maxOutputTokens,
+            withoutSchema.maxOutputTokens)
+    }
 
     @Test
     fun modelConfigurationUsesTheRequestedStageAndPreference() {

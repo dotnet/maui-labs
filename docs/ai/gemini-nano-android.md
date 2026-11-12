@@ -208,6 +208,16 @@ Responses report the actual SDK model name, such as `nano-v4-fast`, rather than
 the selection alias. Preview support depends on the device and AICore enrollment.
 Status queries propagate errors if ML Kit cannot resolve the selected model.
 
+## Structured output
+
+Explicit MEAI JSON schemas use ML Kit's typed generation API through public
+runtime schema providers. The selected model must advertise
+`ChatModelCapability.StructuredOutput`. Both response methods support the
+schema path; streaming delivers one complete validated JSON update, not token
+deltas. Active tools and full thinking output cannot be combined with it.
+See [structured output](gemini-nano-structured-output.md) for schema limits,
+examples, and the Java service-provider packaging rules.
+
 ## Explicit download
 
 For an explicit download without progress reporting, await preparation and then
