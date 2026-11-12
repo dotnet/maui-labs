@@ -90,6 +90,7 @@ public class TurnFailureTests
                 {
                     nameof(ConversationTurn.Error) =>
                         $"turn.Error={turn.Error?.Message ?? "none"} (IsFailed={turn.IsFailed}, {context.Status}, context.Error={context.Error?.Message ?? "none"})",
+                    nameof(ConversationTurn.IsResponding) => $"turn.IsResponding={turn.IsResponding}",
                     _ => $"turn.{e.PropertyName}={turn.IsFailed}",
                 });
             }
@@ -101,10 +102,11 @@ public class TurnFailureTests
             [
                 "turn.Error=provider failed (IsFailed=True, Error, context.Error=provider failed)",
                 "turn.IsFailed=True",
+                "turn.IsResponding=False",
                 "context.Error=provider failed",
                 "context.Status=Error",
             ],
-            log[^4..]);
+            log[^5..]);
 
         log.Clear();
         await context.RetryAsync();
@@ -113,10 +115,12 @@ public class TurnFailureTests
             [
                 "turn.Error=none (IsFailed=False, Streaming, context.Error=none)",
                 "turn.IsFailed=False",
+                "turn.IsResponding=True",
                 "context.Error=none",
                 "context.Status=Streaming",
                 "turn.Error=provider failed again (IsFailed=True, Error, context.Error=provider failed again)",
                 "turn.IsFailed=True",
+                "turn.IsResponding=False",
                 "context.Error=provider failed again",
                 "context.Status=Error",
             ],

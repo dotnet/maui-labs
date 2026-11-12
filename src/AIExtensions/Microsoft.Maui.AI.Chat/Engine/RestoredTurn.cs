@@ -10,25 +10,30 @@ internal sealed class RestoredTurn
 {
     internal RestoredTurn(string id, bool isStopped)
     {
-        Id = id;
-        IsStopped = isStopped;
+        Turn = new ConversationTurn
+        {
+            Id = id,
+            IsStopped = isStopped,
+        };
     }
 
-    internal string Id { get; }
+    internal ConversationTurn Turn { get; }
 
-    internal bool IsStopped { get; }
+    internal string Id => Turn.Id;
 
-    internal List<ContentBlock> RequestBlocks { get; } = new();
+    internal bool IsStopped => Turn.IsStopped;
 
-    internal List<ContentBlock> ResponseBlocks { get; } = new();
+    internal string? ModelId => Turn.ModelId;
 
-    internal string? ModelId { get; private set; }
+    internal UsageDetails? Usage => Turn.Usage;
 
-    internal UsageDetails? Usage { get; private set; }
+    internal IReadOnlyList<ContentBlock> RequestBlocks => Turn.RequestBlocks;
 
-    internal void ObserveResponse(ChatResponseUpdate update)
-    {
-        ModelId = ResponseMetadata.GetModelId(update, ModelId);
-        Usage = ResponseMetadata.AddUsage(update, Usage);
-    }
+    internal IReadOnlyList<ContentBlock> ResponseBlocks => Turn.ResponseBlocks;
+
+    internal void AddRequestBlock(ContentBlock block) => Turn.AddRequestBlock(block);
+
+    internal void AddResponseBlock(ContentBlock block) => Turn.AddResponseBlock(block);
+
+    internal void ObserveResponse(ChatResponseUpdate update) => Turn.ObserveResponse(update);
 }

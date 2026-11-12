@@ -27,10 +27,11 @@ public class BindableConversationTests
 
         Assert.Equal(
             [
-                "Turns Add 0 (1 turns)",
+                "Turns Add 0 (1 turns, responding)",
                 "Status=Streaming",
                 "RequestBlocks Add 0 TextContentBlock",
                 "ResponseBlocks Add 0 TextContentBlock",
+                "turn.IsResponding=False (Idle)",
                 "Status=Idle",
             ],
             log);
@@ -78,7 +79,7 @@ public class BindableConversationTests
 
         Assert.Equal(
             [
-                "Turns Add 0 (1 turns)",
+                "Turns Add 0 (1 turns, responding)",
                 "Status=Streaming",
                 "RequestBlocks Add 0 TextContentBlock",
                 "turn.ModelId=model-a (Streaming)",
@@ -86,6 +87,7 @@ public class BindableConversationTests
                 "turn.ModelId=model-b (Streaming)",
                 "turn.Usage=40 (Streaming)",
                 "turn.Usage=42 (Streaming)",
+                "turn.IsResponding=False (Idle)",
                 "Status=Idle",
             ],
             log);
@@ -111,7 +113,7 @@ public class BindableConversationTests
         await context.CancelAsync();
         await send;
 
-        Assert.Equal(["turn.IsStopped=True (Idle)", "Status=Idle"], log);
+        Assert.Equal(["turn.IsStopped=True (Idle)", "turn.IsResponding=False (Idle)", "Status=Idle"], log);
     }
 
     [Fact]
@@ -127,12 +129,13 @@ public class BindableConversationTests
 
         Assert.Equal(
             [
-                "Turns Add 0 (1 turns)",
+                "Turns Add 0 (1 turns, responding)",
                 "Status=Streaming",
                 "RequestBlocks Add 0 TextContentBlock",
                 "ResponseBlocks Add 0 TextContentBlock",
                 "turn.Error=offline (Error)",
                 "turn.IsFailed=True (Error)",
+                "turn.IsResponding=False (Error)",
                 "Error=offline",
                 "Status=Error",
             ],
@@ -146,9 +149,11 @@ public class BindableConversationTests
                 "ResponseBlocks Reset",
                 "turn.Error=none (Streaming)",
                 "turn.IsFailed=False (Streaming)",
+                "turn.IsResponding=True (Streaming)",
                 "Error=none",
                 "Status=Streaming",
                 "ResponseBlocks Add 0 TextContentBlock",
+                "turn.IsResponding=False (Idle)",
                 "Status=Idle",
             ],
             log);
@@ -178,7 +183,9 @@ public class BindableConversationTests
                 "ModelId (0 blocks, no model)",
                 "Error (0 blocks, no model)",
                 "IsFailed (0 blocks, no model)",
+                "IsResponding (0 blocks, no model)",
                 "Add (1 blocks, no model)",
+                "IsResponding (1 blocks, no model)",
             ],
             log);
     }
@@ -223,6 +230,43 @@ public class BindableConversationTests
         }
 
         Assert.Equal(["Reset (2 turns, 4 blocks)"], log);
+        Assert.All(context.Turns, turn => Assert.False(turn.IsResponding));
+    }
+
+    [Fact]
+    public async Task TurnsHandlerThatThrows_FailsTheSend_AndTheTurnNoLongerResponds()
+    {
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Two", ct));
+        using var context = new AgentContext(new UIAgent(model));
+        var changes = new List<string>();
+        Observe(context.Turns).CollectionChanged += (_, e) =>
+        {
+            var turn = (ConversationTurn)e.NewItems![0]!;
+            changes.Add($"added, responding={turn.IsResponding}");
+            turn.PropertyChanged += (_, p) => changes.Add($"{p.PropertyName}={turn.IsResponding} ({context.Status})");
+        };
+        var throwing = true;
+        Observe(context.Turns).CollectionChanged += (_, _) =>
+        {
+            if (throwing)
+                throw new InvalidOperationException("handler");
+        };
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SendMessageAsync("first"));
+
+        Assert.Equal("handler", exception.Message);
+        Assert.Equal(["added, responding=True", "IsResponding=False (Idle)"], changes);
+        Assert.False(Assert.Single(context.Turns).IsResponding);
+        Assert.Empty(model.Requests);
+
+        // The send that threw left nothing running.
+        throwing = false;
+        await context.SendMessageAsync("second");
+
+        Assert.Equal(2, context.Turns.Count);
+        Assert.False(context.Turns[1].IsResponding);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
     }
 
     [Fact]
@@ -491,7 +535,7 @@ public class BindableConversationTests
         {
             log.Add(e.Action == NotifyCollectionChangedAction.Reset
                 ? $"Turns Reset ({context.Turns.Count} turns, {context.Status}, {context.Error?.Message ?? "no error"})"
-                : $"Turns {e.Action} {e.NewStartingIndex} ({context.Turns.Count} turns)");
+                : $"Turns {e.Action} {e.NewStartingIndex} ({context.Turns.Count} turns{(context.Turns[e.NewStartingIndex].IsResponding ? ", responding" : "")})");
             foreach (ConversationTurn turn in e.NewItems ?? Array.Empty<ConversationTurn>())
                 WatchTurn(context, turn, log);
         };
@@ -508,6 +552,7 @@ public class BindableConversationTests
             nameof(ConversationTurn.Error) => $"turn.Error={turn.Error?.Message ?? "none"} ({context.Status})",
             nameof(ConversationTurn.IsFailed) => $"turn.IsFailed={turn.IsFailed} ({context.Status})",
             nameof(ConversationTurn.IsStopped) => $"turn.IsStopped={turn.IsStopped} ({context.Status})",
+            nameof(ConversationTurn.IsResponding) => $"turn.IsResponding={turn.IsResponding} ({context.Status})",
             nameof(ConversationTurn.ModelId) => $"turn.ModelId={turn.ModelId} ({context.Status})",
             nameof(ConversationTurn.Usage) => $"turn.Usage={turn.Usage?.TotalTokenCount} ({context.Status})",
             _ => $"turn.{e.PropertyName}",

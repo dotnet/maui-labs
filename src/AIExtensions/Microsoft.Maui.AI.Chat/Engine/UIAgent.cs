@@ -421,7 +421,7 @@ public class UIAgent : IDisposable
                         update,
                         cancellationToken))
                     {
-                        currentTurn.RequestBlocks.Add(block);
+                        currentTurn.AddRequestBlock(block);
                     }
                     requestPipeline.Finalize();
                     responsePipeline = new BlockMappingPipeline(
@@ -482,7 +482,7 @@ public class UIAgent : IDisposable
                         processUpdate,
                         cancellationToken))
                     {
-                        currentTurn.ResponseBlocks.Add(block);
+                        currentTurn.AddResponseBlock(block);
                     }
                 }
 
@@ -496,21 +496,19 @@ public class UIAgent : IDisposable
             CompleteStateRestore();
 
             // Restored approvals and UI actions are history: a decision or result could not be sent, and a call
-            // without a recorded result never gets one. Nothing shows these blocks yet, so the change needs no
-            // notification.
+            // or block that still waited for a result never gets one. Nothing shows these blocks yet, so the
+            // change needs no notification.
             foreach (var turn in turns)
             {
                 foreach (var block in turn.RequestBlocks.Concat(turn.ResponseBlocks))
                 {
+                    block.InvokeAbandon();
                     if (block is InteractiveFunctionBlock interactive)
                     {
-                        interactive.Abandon();
                         interactive.CaptureAwaitingInput();
-                        interactive.CallBlock.Abandon();
-                    }
-                    else if (block is FunctionInvocationContentBlock call)
-                    {
-                        call.Abandon();
+                        interactive.CallBlock.InvokeAbandon();
+                        if (!ReferenceEquals(interactive.InnerBlock, interactive.CallBlock))
+                            interactive.InnerBlock.InvokeAbandon();
                     }
                 }
             }

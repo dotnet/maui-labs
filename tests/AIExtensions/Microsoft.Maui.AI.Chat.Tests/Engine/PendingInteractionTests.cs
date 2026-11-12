@@ -127,12 +127,12 @@ public class PendingInteractionTests
 
         // A decision that can no longer be sent leaves nothing to answer either.
         var abandoned = CreateApproval();
-        Assert.True(abandoned.Abandon());
+        Assert.True(abandoned.InvokeAbandon());
         Assert.False(abandoned.IsAwaitingInput);
-        Assert.False(abandoned.Abandon());
+        Assert.False(abandoned.InvokeAbandon());
         abandoned.Approve();
         Assert.Equal(ApprovalStatus.Pending, abandoned.Status);
-        Assert.False(approved.Abandon());
+        Assert.False(approved.InvokeAbandon());
     }
 
     [Fact]

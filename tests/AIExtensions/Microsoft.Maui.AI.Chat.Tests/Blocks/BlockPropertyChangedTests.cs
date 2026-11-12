@@ -102,8 +102,8 @@ public class BlockPropertyChangedTests
         var seen = new List<string>();
         call.PropertyChanged += (_, e) => seen.Add($"{e.PropertyName}:{call.IsAbandoned}");
 
-        Assert.True(call.Abandon());
-        Assert.False(call.Abandon());
+        Assert.True(call.InvokeAbandon());
+        Assert.False(call.InvokeAbandon());
         Assert.True(call.IsAbandoned);
         Assert.Empty(seen);
         call.ReportAbandonedChanged();
@@ -122,7 +122,7 @@ public class BlockPropertyChangedTests
             Result = new FunctionResultContent("search-1", "Found it."),
         };
 
-        Assert.False(call.Abandon());
+        Assert.False(call.InvokeAbandon());
         Assert.False(call.IsAbandoned);
     }
 
@@ -133,7 +133,7 @@ public class BlockPropertyChangedTests
         var seen = new List<string>();
         approval.PropertyChanged += (_, e) => seen.Add($"{e.PropertyName}:{approval.IsAbandoned}");
 
-        Assert.True(approval.CallBlock.Abandon());
+        Assert.True(approval.CallBlock.InvokeAbandon());
         approval.CallBlock.ReportAbandonedChanged();
 
         Assert.Equal(["IsAbandoned:True"], seen);
@@ -170,7 +170,7 @@ public class BlockPropertyChangedTests
         var approval = CreateApproval();
         var names = Record(approval);
 
-        Assert.True(approval.Abandon());
+        Assert.True(approval.InvokeAbandon());
         Assert.Empty(names);
         approval.ReportAwaitingInputChanged();
         approval.ReportAwaitingInputChanged();

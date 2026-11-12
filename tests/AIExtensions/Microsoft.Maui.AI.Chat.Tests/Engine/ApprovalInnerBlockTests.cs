@@ -74,9 +74,15 @@ public class ApprovalInnerBlockTests
 
         var send = context.SendMessageAsync("Weather in Paris");
         await scenario.AwaitingInput.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        var approval = Assert.Single(context.Turns[^1].ResponseBlocks.OfType<ToolApprovalBlock>());
+        var turn = context.Turns[^1];
+        var approval = Assert.Single(turn.ResponseBlocks.OfType<ToolApprovalBlock>());
+        var card = Assert.IsType<WeatherCard>(approval.InnerBlock);
+        Assert.Same(turn, approval.Turn);
+        Assert.Same(turn, card.Turn);
         var changes = new List<string?>();
         approval.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+        var cardChanges = new List<string?>();
+        card.PropertyChanged += (_, e) => cardChanges.Add(e.PropertyName);
 
         await context.CancelAsync();
         await send.WaitAsync(TimeSpan.FromSeconds(10));
@@ -85,8 +91,11 @@ public class ApprovalInnerBlockTests
         Assert.False(approval.IsAwaitingInput);
         Assert.True(approval.IsAbandoned);
         Assert.False(approval.HasResult);
+        Assert.True(card.IsAbandoned);
+        Assert.False(card.TurnWasRespondingWhenAbandoned);
         Assert.Contains(nameof(ToolApprovalBlock.IsAbandoned), changes);
         Assert.Contains(nameof(ToolApprovalBlock.IsAwaitingInput), changes);
+        Assert.Equal([string.Empty], cardChanges);
         Assert.Empty(scenario.Weather);
     }
 
@@ -106,9 +115,13 @@ public class ApprovalInnerBlockTests
 
         var turn = Assert.Single(restored.Turns);
         var approval = Assert.Single(turn.ResponseBlocks.OfType<ToolApprovalBlock>());
+        var card = Assert.IsType<WeatherCard>(approval.InnerBlock);
+        Assert.Same(turn, approval.Turn);
+        Assert.Same(turn, card.Turn);
         Assert.Equal(ApprovalStatus.Approved, approval.Status);
         Assert.False(approval.IsAwaitingInput);
-        Assert.Equal("Sunny in Paris", Assert.IsType<WeatherCard>(approval.InnerBlock).Forecast);
+        Assert.Equal("Sunny in Paris", card.Forecast);
+        Assert.False(card.IsAbandoned);
         Assert.Equal("Sunny in Paris", approval.Result?.Result?.ToString());
         Assert.False(approval.IsAbandoned);
 
@@ -226,6 +239,20 @@ public class ApprovalInnerBlockTests
         public string? City { get; set; }
 
         public string? Forecast { get; set; }
+
+        public bool IsAbandoned { get; private set; }
+
+        public bool? TurnWasRespondingWhenAbandoned { get; private set; }
+
+        protected override bool Abandon()
+        {
+            if (IsAbandoned || Forecast is not null)
+                return false;
+
+            IsAbandoned = true;
+            TurnWasRespondingWhenAbandoned = Turn?.IsResponding;
+            return true;
+        }
     }
 
     private sealed class WeatherCardHandler(bool showsResult) : ContentBlockHandler<WeatherCard>

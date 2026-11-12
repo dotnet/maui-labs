@@ -163,12 +163,16 @@ These match upstream so that upstream fixes apply directly:
   `Reset`, which tells a list to drop them) and sends the whole turn again. #68672
   instead retries only the failed round and truncates that round's blocks; that would resend an
   approval and run its tool again without asking.
-- **`ConversationTurn.IsFailed` and `ConversationTurn.Error`.** Not in upstream. A turn whose attempt
-  failed is marked, and keeps the exception that failed it, until `RetryAsync` runs it again, so a view
+- **`ConversationTurn.IsResponding`, `IsFailed` and `Error`.** Not in upstream. A turn joins `Turns`
+  already responding (`IsResponding` is true while the turn streams or waits for input, and false once
+  it ended; a restored turn never responds), so a flat list such as `ConversationItems` in
+  `Microsoft.Maui.AI.Chat.Controls` can show the turn's own row once it ended. A turn whose attempt
+  failed is marked `IsFailed`, and keeps the exception that failed it in `Error`, until `RetryAsync`
+  runs it again, so a view
   can tell the failed turn (and an earlier one that was never retried because another message was sent)
   and show why it failed, without catching the status change that reported it. `AgentContext.Error`
   only reports the last attempt, and the next send clears it. The turn raises `Error` before
-  `IsFailed`, both before the context's `Error` and `Status`.
+  `IsFailed`, then `IsResponding`, all before the context's `Error` and `Status`.
 - **`ClearAsync`.** Not in upstream. It waits for the active response to stop, and for a restore in
   progress to finish, then clears the turns, the history, the thread and the typed state, so a response
   that was still running cannot change the cleared conversation.
@@ -282,13 +286,17 @@ These match upstream so that upstream fixes apply directly:
   `PropertyChanged` for it and its change notification when the value changes, after the turn's outcome
   is final. Upstream has no
   equivalent, so a restored pending approval looks answerable.
-- **A call says whether it can still get a result.**
+- **A call or block says whether it can still get a result.**
+  When a turn ends (it completed, stopped or failed, or was restored), the engine calls
+  `ContentBlock.Abandon()` (`protected virtual bool Abandon() => false`) on every block of the turn and on
+  the `InnerBlock` of each approval or UI action, once the turn's outcome is set; when it returns true,
+  `NotifyChanged` is raised once the turn's and the context's changes have been raised.
   `FunctionInvocationContentBlock.IsAbandoned`, which `InteractiveFunctionBlock` forwards, turns true
   when the call's turn ends without a result for it: the turn completed, stopped or failed, or left the
   call's approval or UI action unanswered. A restore sets it for a call without a recorded result. Once
   a turn ended, each of its calls has a result or is abandoned, as in the history, which leaves out
-  calls without a result. The change is raised once the turn's outcome is final, after the turn's and
-  the context's changes, with one change notification per block. A rejected call is not abandoned: it
+  calls without a result. A block of the app's own type that folds several calls into rows overrides
+  `Abandon()` to mark the rows that still have no result. A rejected call is not abandoned: it
   keeps the rejection that `FunctionInvokingChatClient` returns as its result, unless the turn ended
   before that arrived. Upstream has none, so a card bound to its call cannot tell a stopped call from a
   running one.
@@ -326,8 +334,11 @@ These match upstream so that upstream fixes apply directly:
   completes the block on any update without its content, so such an update in the middle of a message
   split it into two blocks with the same id, and the encrypted content that follows an OpenAI Responses
   reasoning summary after empty updates became a separate block.
-- **`ContentBlock.Id` has a public setter** so blocks defined outside the engine can be given ids, and
-  **`ContentBlock.CreatedAt`** records when a block was created. Upstream's `Id` setter is internal.
+- **`ContentBlock.Id` has a public setter** so blocks defined outside the engine can be given ids,
+  **`ContentBlock.CreatedAt`** records when a block was created, and **`ContentBlock.Turn`** is the
+  `ConversationTurn` that owns the block (also set on an approval's or UI action's `InnerBlock`), so a
+  block in a flat virtualized list still knows its turn. Upstream's `Id` setter is internal and blocks
+  have no link to their turn.
 - **`TextContentBlock`** marks plain streamed text so a renderer can tell it from a provider's rich
   text. A new block starts when the update's message id changes; upstream appends consecutive
   messages' text to one block. Paragraphs are built only when `Content` is read, and finished
