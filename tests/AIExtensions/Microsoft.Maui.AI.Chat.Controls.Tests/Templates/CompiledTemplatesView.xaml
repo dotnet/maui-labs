@@ -7,7 +7,30 @@
              x:Class="Microsoft.Maui.AI.Chat.Controls.Tests.CompiledTemplatesView">
     <ContentView.Resources>
         <chat:BlockTemplateSelector x:Key="Blocks">
+            <chat:BlockTemplateSelector.Wrappers>
+                <chat:ApprovalWrapper When="{chat:Tool delete_file}">
+                    <ControlTemplate>
+                        <VerticalStackLayout>
+                            <Label Text="Delete the file?" />
+                            <ContentPresenter />
+                        </VerticalStackLayout>
+                    </ControlTemplate>
+                </chat:ApprovalWrapper>
+                <chat:ApprovalWrapper>
+                    <ControlTemplate x:DataType="chat:ToolApprovalBlock">
+                        <VerticalStackLayout>
+                            <ContentPresenter />
+                            <Label Text="{Binding Status}" />
+                        </VerticalStackLayout>
+                    </ControlTemplate>
+                </chat:ApprovalWrapper>
+            </chat:BlockTemplateSelector.Wrappers>
             <chat:BlockTemplate When="{chat:Tool search}" Template="{chat:ViewTemplate local:ToolNameView}" />
+            <chat:BlockTemplate When="{chat:Tool delete_file}">
+                <DataTemplate x:DataType="chat:FunctionInvocationContentBlock">
+                    <Label Text="{Binding IsAwaitingInput, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}" />
+                </DataTemplate>
+            </chat:BlockTemplate>
             <chat:BlockTemplate When="{chat:Role user}">
                 <DataTemplate x:DataType="chat:TextContentBlock">
                     <Label Text="{Binding RawText}" />

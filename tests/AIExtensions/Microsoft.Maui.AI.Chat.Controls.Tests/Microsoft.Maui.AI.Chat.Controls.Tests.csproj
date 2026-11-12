@@ -5,6 +5,8 @@
     <IsPackable>false</IsPackable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <NoWarn>$(NoWarn);MEAI001</NoWarn>
+    <!-- Compile bindings with a Source, such as RelativeSource, as the MAUI app template does. -->
+    <MauiEnableXamlCBindingWithSourceCompilation>true</MauiEnableXamlCBindingWithSourceCompilation>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="xunit" />

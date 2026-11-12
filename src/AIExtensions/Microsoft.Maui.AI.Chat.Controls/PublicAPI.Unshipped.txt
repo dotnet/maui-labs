@@ -5,6 +5,8 @@ Microsoft.Maui.AI.Chat.Controls.AllMatch.Conditions.get -> System.Collections.Ge
 Microsoft.Maui.AI.Chat.Controls.AnyMatch
 Microsoft.Maui.AI.Chat.Controls.AnyMatch.AnyMatch() -> void
 Microsoft.Maui.AI.Chat.Controls.AnyMatch.Conditions.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.BlockMatch!>!
+Microsoft.Maui.AI.Chat.Controls.ApprovalWrapper
+Microsoft.Maui.AI.Chat.Controls.ApprovalWrapper.ApprovalWrapper() -> void
 Microsoft.Maui.AI.Chat.Controls.BlockMatch
 Microsoft.Maui.AI.Chat.Controls.BlockMatch.BlockMatch() -> void
 Microsoft.Maui.AI.Chat.Controls.BlockTemplate
@@ -16,6 +18,7 @@ Microsoft.Maui.AI.Chat.Controls.BlockTemplate.When.set -> void
 Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector
 Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.BlockTemplateSelector() -> void
 Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.Templates.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.BlockTemplate!>!
+Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.Wrappers.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.BlockWrapper!>!
 Microsoft.Maui.AI.Chat.Controls.BlockTypeMatch
 Microsoft.Maui.AI.Chat.Controls.BlockTypeMatch.BlockTypeMatch() -> void
 Microsoft.Maui.AI.Chat.Controls.BlockTypeMatch.Type.get -> System.Type?
@@ -26,6 +29,12 @@ Microsoft.Maui.AI.Chat.Controls.BlockView.BlockView() -> void
 Microsoft.Maui.AI.Chat.Controls.BlockView<TBlock>
 Microsoft.Maui.AI.Chat.Controls.BlockView<TBlock>.Block.get -> TBlock?
 Microsoft.Maui.AI.Chat.Controls.BlockView<TBlock>.BlockView() -> void
+Microsoft.Maui.AI.Chat.Controls.BlockWrapper
+Microsoft.Maui.AI.Chat.Controls.BlockWrapper.BlockWrapper() -> void
+Microsoft.Maui.AI.Chat.Controls.BlockWrapper.Template.get -> Microsoft.Maui.Controls.ControlTemplate?
+Microsoft.Maui.AI.Chat.Controls.BlockWrapper.Template.set -> void
+Microsoft.Maui.AI.Chat.Controls.BlockWrapper.When.get -> Microsoft.Maui.AI.Chat.Controls.BlockMatch?
+Microsoft.Maui.AI.Chat.Controls.BlockWrapper.When.set -> void
 Microsoft.Maui.AI.Chat.Controls.IsExtension
 Microsoft.Maui.AI.Chat.Controls.IsExtension.IsExtension() -> void
 Microsoft.Maui.AI.Chat.Controls.IsExtension.ProvideValue(System.IServiceProvider! serviceProvider) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
@@ -62,8 +71,10 @@ Microsoft.Maui.AI.Chat.Controls.ViewTemplateExtension.ViewTemplateExtension() ->
 Microsoft.Maui.AI.Chat.Controls.ViewTemplateExtension.ViewType.get -> System.Type?
 Microsoft.Maui.AI.Chat.Controls.ViewTemplateExtension.ViewType.set -> void
 abstract Microsoft.Maui.AI.Chat.Controls.BlockMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
+abstract Microsoft.Maui.AI.Chat.Controls.BlockWrapper.GetWrappedBlock(Microsoft.Maui.AI.Chat.ContentBlock! block) -> Microsoft.Maui.AI.Chat.ContentBlock?
 override Microsoft.Maui.AI.Chat.Controls.AllMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
 override Microsoft.Maui.AI.Chat.Controls.AnyMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
+override Microsoft.Maui.AI.Chat.Controls.ApprovalWrapper.GetWrappedBlock(Microsoft.Maui.AI.Chat.ContentBlock! block) -> Microsoft.Maui.AI.Chat.ContentBlock?
 override Microsoft.Maui.AI.Chat.Controls.BlockTypeMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
 override Microsoft.Maui.AI.Chat.Controls.BlockView.OnBindingContextChanged() -> void
 override Microsoft.Maui.AI.Chat.Controls.NotMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
@@ -78,5 +89,7 @@ static Microsoft.Maui.AI.Chat.Controls.BlockMatch.Tool(string! name) -> Microsof
 static Microsoft.Maui.AI.Chat.Controls.BlockMatch.When(System.Func<Microsoft.Maui.AI.Chat.ContentBlock!, bool>! predicate) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
 static readonly Microsoft.Maui.AI.Chat.Controls.BlockTemplate.TemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.BlockTemplate.WhenProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.AI.Chat.Controls.BlockWrapper.TemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.AI.Chat.Controls.BlockWrapper.WhenProperty -> Microsoft.Maui.Controls.BindableProperty!
 virtual Microsoft.Maui.AI.Chat.Controls.BlockView.OnBlockChanged() -> void
 virtual Microsoft.Maui.AI.Chat.Controls.BlockView.OnBlockPropertyChanged(string? propertyName) -> void

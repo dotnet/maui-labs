@@ -13,7 +13,30 @@ public class MarkupExtensionTests
                      xmlns:local="clr-namespace:Microsoft.Maui.AI.Chat.Controls.Tests;assembly=Microsoft.Maui.AI.Chat.Controls.Tests">
             <ContentView.Resources>
                 <chat:BlockTemplateSelector x:Key="Blocks">
+                    <chat:BlockTemplateSelector.Wrappers>
+                        <chat:ApprovalWrapper When="{chat:Tool delete_file}">
+                            <ControlTemplate>
+                                <VerticalStackLayout>
+                                    <Label Text="Delete the file?" />
+                                    <ContentPresenter />
+                                </VerticalStackLayout>
+                            </ControlTemplate>
+                        </chat:ApprovalWrapper>
+                        <chat:ApprovalWrapper>
+                            <ControlTemplate x:DataType="chat:ToolApprovalBlock">
+                                <VerticalStackLayout>
+                                    <ContentPresenter />
+                                    <Label Text="{Binding Status}" />
+                                </VerticalStackLayout>
+                            </ControlTemplate>
+                        </chat:ApprovalWrapper>
+                    </chat:BlockTemplateSelector.Wrappers>
                     <chat:BlockTemplate When="{chat:Tool search}" Template="{chat:ViewTemplate local:ToolNameView}" />
+                    <chat:BlockTemplate When="{chat:Tool delete_file}">
+                        <DataTemplate x:DataType="chat:FunctionInvocationContentBlock">
+                            <Label Text="{Binding IsAwaitingInput, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}" />
+                        </DataTemplate>
+                    </chat:BlockTemplate>
                     <chat:BlockTemplate When="{chat:Role user}">
                         <DataTemplate>
                             <Label Text="{Binding RawText}" />
@@ -61,7 +84,7 @@ public class MarkupExtensionTests
         var match = Provide(new ToolExtension { Name = "search" });
 
         Assert.Equal("search", Assert.IsType<ToolMatch>(match).Name);
-        Assert.True(match.Matches(Blocks.Approval("search")));
+        Assert.True(match.Matches(Blocks.ToolCall("search")));
     }
 
     [Fact]
@@ -110,11 +133,29 @@ public class MarkupExtensionTests
 
     private static void AssertSelector(BlockTemplateSelector selector)
     {
-        Assert.Equal(5, selector.Templates.Count);
+        Assert.Equal(2, selector.Wrappers.Count);
+        Assert.Equal(6, selector.Templates.Count);
 
         var search = Assert.IsType<ToolNameView>(Create(selector, Blocks.ToolCall("search")));
         Assert.Equal("search", search.Label.Text);
-        Assert.IsType<ToolNameView>(Create(selector, Blocks.Approval("search")));
+
+        // An approval shows the card of its call inside the chrome of the first wrapper whose When matches the call.
+        var approval = Blocks.Approval("search");
+        var approvalView = Assert.IsAssignableFrom<ContentView>(Create(selector, approval));
+        Assert.Same(approval.InnerBlock, Assert.IsType<ToolNameView>(approvalView.Content).Block);
+        var status = Assert.Single(approvalView.GetVisualTreeDescendants().OfType<Label>(), label => label.Parent is not ToolNameView);
+        Assert.Equal(nameof(ApprovalStatus.Pending), status.Text);
+        approval.Approve();
+        Assert.Equal(nameof(ApprovalStatus.Approved), status.Text);
+
+        // The card of a call can follow the approval around it.
+        var deletion = Blocks.Approval("delete_file");
+        var deletionView = Assert.IsAssignableFrom<ContentView>(Create(selector, deletion));
+        Assert.Contains(deletionView.GetVisualTreeDescendants().OfType<Label>(), label => label.Text == "Delete the file?");
+        var awaiting = Assert.IsType<Label>(deletionView.Content);
+        Assert.Equal("True", awaiting.Text);
+        deletion.Reject();
+        Assert.Equal("False", awaiting.Text);
 
         var user = Assert.IsType<Label>(Create(selector, Blocks.Text("Hi", ChatRole.User)));
         Assert.Equal("Hi", user.Text);

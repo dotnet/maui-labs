@@ -12,6 +12,9 @@ package picks the view that shows each block, so you can build a chat UI from a 
 - **`BlockMatch`** conditions: a block's type, its tool, its role, and `All`, `Any`, and `Not` to combine them, with
   markup extensions for the common ones (`{chat:Is chat:TextContentBlock}`, `{chat:Tool calculate}`,
   `{chat:Role user}`). A new kind of condition is a new `BlockMatch` type.
+- **`ApprovalWrapper`**, chrome (a `ControlTemplate`) around the view of the block that another block wraps: Approve
+  and Reject around the card of the call that an approval asks about. A new kind of wrapping block is a new
+  `BlockWrapper` type.
 - **`ViewTemplate`** (`{chat:ViewTemplate local:CalculatorCard}`), a `DataTemplate` that creates a view through the
   app's services.
 - **`BlockView`**, a base view that updates itself when its block changes, once per dispatcher pass however many
@@ -58,6 +61,21 @@ public sealed class ChatViewModel(IChatClient chatClient)
              x:DataType="local:ChatViewModel">
     <ContentPage.Resources>
         <chat:BlockTemplateSelector x:Key="Blocks">
+            <!-- A call that needs approval: its card, with Approve and Reject while it waits. -->
+            <chat:BlockTemplateSelector.Wrappers>
+                <chat:ApprovalWrapper>
+                    <ControlTemplate x:DataType="chat:ToolApprovalBlock">
+                        <VerticalStackLayout Spacing="4">
+                            <ContentPresenter />
+                            <HorizontalStackLayout Spacing="8" IsVisible="{Binding IsAwaitingInput}">
+                                <Button Text="Approve" Clicked="OnApprove" />
+                                <Button Text="Reject" Clicked="OnReject" />
+                            </HorizontalStackLayout>
+                        </VerticalStackLayout>
+                    </ControlTemplate>
+                </chat:ApprovalWrapper>
+            </chat:BlockTemplateSelector.Wrappers>
+
             <!-- A card of your own for one tool, created through the app's services. -->
             <chat:BlockTemplate When="{chat:Tool get_weather}" Template="{chat:ViewTemplate local:WeatherCard}" />
 
@@ -93,6 +111,16 @@ public sealed class ChatViewModel(IChatClient chatClient)
 </ContentPage>
 ```
 
+The buttons' binding context is the approval:
+
+```csharp
+private void OnApprove(object? sender, EventArgs e) =>
+    ((ToolApprovalBlock)((Button)sender!).BindingContext).Approve();
+
+private void OnReject(object? sender, EventArgs e) =>
+    ((ToolApprovalBlock)((Button)sender!).BindingContext).Reject();
+```
+
 Drive the session from the UI thread, as you would any collection a view is bound to: the engine changes the turns
 and blocks on the thread that calls it (`SendMessageAsync` continues on the caller's context), and raises its
 events there.
@@ -102,14 +130,14 @@ events there.
 | Condition | XAML | Code | Matches |
 |---|---|---|---|
 | `BlockTypeMatch` | `{chat:Is chat:TextContentBlock}` | `BlockMatch.Is<TextContentBlock>()` | The type and derived types, including `[ToolBlock]` types |
-| `ToolMatch` | `{chat:Tool calculate}` | `BlockMatch.Tool("calculate")` | The tool's calls, approvals, and UI actions (case-insensitive) |
+| `ToolMatch` | `{chat:Tool calculate}` | `BlockMatch.Tool("calculate")` | The tool's calls and UI actions (case-insensitive), not its approvals |
 | `RoleMatch` | `{chat:Role user}` | `BlockMatch.Role(ChatRole.User)` | Blocks with the role (case-insensitive) |
 | `AllMatch` | `<chat:AllMatch>…</chat:AllMatch>` | `BlockMatch.All(…)` | Blocks that satisfy every condition |
 | `AnyMatch` | `<chat:AnyMatch>…</chat:AnyMatch>` | `BlockMatch.Any(…)` | Blocks that satisfy one condition |
 | `NotMatch` | `<chat:NotMatch>…</chat:NotMatch>` | `BlockMatch.Not(…)` | Blocks that don't satisfy the condition |
 | | | `BlockMatch.When(block => …)` | Blocks the predicate accepts |
 
-Combine them as elements. This template shows a tool's calls but not its approvals:
+Combine them as elements. This template shows a tool's calls but not its UI actions:
 
 ```xml
 <chat:BlockTemplate Template="{chat:ViewTemplate local:CalculatorCard}">
@@ -163,6 +191,86 @@ content that streams in.
   every block needs its own view. Without app services (before the app starts), the view's public parameterless
   constructor creates it.
 
+## Wrap blocks
+
+Some blocks wrap another: a `ToolApprovalBlock` asks about a call, and its `InnerBlock` is the block that shows that
+call, as the engine shows it without the approval (the built-in call block, a `[ToolBlock]` type, or a block of the
+app's own type). A wrapper shows the wrapping block as chrome around the view of the wrapped block, so a tool's card
+looks the same with or without approval, and the approval adds only what it needs:
+
+```xml
+<chat:BlockTemplateSelector.Wrappers>
+    <!-- Deleting asks louder. When matches the wrapped block: the call. -->
+    <chat:ApprovalWrapper When="{chat:Tool delete_file}">
+        <ControlTemplate x:DataType="chat:ToolApprovalBlock">
+            <Border Stroke="Red" Padding="8">
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Delete this file?" FontAttributes="Bold" />
+                    <ContentPresenter />
+                    <HorizontalStackLayout Spacing="8" IsVisible="{Binding IsAwaitingInput}">
+                        <Button Text="Delete" Clicked="OnApprove" />
+                        <Button Text="Keep" Clicked="OnReject" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+        </ControlTemplate>
+    </chat:ApprovalWrapper>
+
+    <!-- Every other approval. -->
+    <chat:ApprovalWrapper>
+        <ControlTemplate x:DataType="chat:ToolApprovalBlock">
+            <VerticalStackLayout Spacing="4">
+                <ContentPresenter />
+                <HorizontalStackLayout Spacing="8" IsVisible="{Binding IsAwaitingInput}">
+                    <Button Text="Approve" Clicked="OnApprove" />
+                    <Button Text="Reject" Clicked="OnReject" />
+                </HorizontalStackLayout>
+                <Label Text="{Binding Status}" />
+            </VerticalStackLayout>
+        </ControlTemplate>
+    </chat:ApprovalWrapper>
+</chat:BlockTemplateSelector.Wrappers>
+```
+
+- **Wrappers first.** The selector tries its wrappers before its templates, and uses the first that wraps the block
+  and whose `When` matches the wrapped block. It picks the wrapped block's view from the same templates and wrappers
+  as any block's. A wrapping block that no wrapper applies to gets a template like any block, so a template for
+  `{chat:Is chat:ToolApprovalBlock}` still works.
+- **Two binding contexts.** The chrome binds to the wrapping block (`Status`, `IsAwaitingInput`, `ToolName`), and the
+  wrapped block's view binds to the wrapped block. A wrapper without a `ControlTemplate` shows the wrapped block's
+  view alone, still bound to the wrapped block.
+- **A card can follow its approval.** A view inside the wrapped block's view finds the wrapping block as the ancestor
+  whose binding context has its type, such as a call's card that hides its spinner while the call waits for a
+  decision:
+
+  ```xml
+  <ActivityIndicator IsRunning="True">
+      <ActivityIndicator.Triggers>
+          <DataTrigger TargetType="ActivityIndicator" Value="True"
+                       Binding="{Binding IsAwaitingInput, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}">
+              <Setter Property="IsRunning" Value="False" />
+          </DataTrigger>
+      </ActivityIndicator.Triggers>
+  </ActivityIndicator>
+  ```
+
+  Outside an approval there is no such ancestor, and the trigger doesn't apply.
+- **Reused views.** The selector creates one template for each pair of chrome and wrapped block template, and
+  returns that template every time, so a `CollectionView` reuses the whole view, chrome and card, for the next
+  approval of a call with the same card.
+- **Show every approval.** An approval that nothing shows can't be answered, and its turn waits until it is stopped.
+  `ToolMatch` doesn't match approvals, so a template for a tool's calls never takes an approval's place: add an
+  approval wrapper (or a template for `ToolApprovalBlock`).
+
+A block of your own that wraps another gets its own wrapper type:
+
+```csharp
+public sealed class QuoteWrapper : BlockWrapper
+{
+    public override ContentBlock? GetWrappedBlock(ContentBlock block) => (block as QuoteBlock)?.Quoted;
+}
+```
+
 ## Views and bindings
 
 A view's `BindingContext` is its block, and stays the block while the response streams. Bindings follow the standard
@@ -214,7 +322,7 @@ public sealed class WeatherCard : BlockView<WeatherBlock>
   raised it.
 - The block holds the view only weakly, like a binding, so a session that outlives a page doesn't keep its views.
 - Generated `[ToolBlock]` blocks need `options.AddGeneratedToolBlocks()` on the agent.
-- In a template for a `ToolApprovalBlock` or `UIActionBlock`, bind the buttons to `IsAwaitingInput`
+- In an approval wrapper's chrome, or a template for a `UIActionBlock`, bind the buttons to `IsAwaitingInput`
   (`IsVisible="{Binding IsAwaitingInput}"`): it turns false once the block is answered, while the action runs, and
   when the turn stops, fails, or is restored, after which answers are ignored.
 
@@ -278,7 +386,8 @@ to bind the rows instead (`BindableLayout.ItemsSource="{Binding Rows}"`), make `
 `ObservableCollection<T>`, which raises `CollectionChanged` for each row added or replaced. Mark the results handled
 as well as the calls: a custom block is not one of the engine's function blocks, so an unclaimed result is dropped.
 With `ChatOptions.AllowMultipleToolCalls = false` the card fills in one row at a time; with parallel calls, a
-batch's results arrive together. The ChatPlayground sample's calculator worksheet works this way: an
+batch's results arrive together. A call that needs approval is decided on its own, so the handler gets one call at
+a time for each approval, and each approval shows its own card with that call's row. The ChatPlayground sample's calculator worksheet works this way: an
 `ActivityHandler` folds every `calculate` call of a response into one worksheet, with a row per calculation.
 
 ## Requirements

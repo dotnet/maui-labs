@@ -31,16 +31,25 @@ public class BlockMatchTests
         Assert.Throws<ArgumentException>(() => new BlockTypeMatch { Type = typeof(string) });
 
     [Fact]
-    public void Tool_MatchesCallsApprovalsAndActionsCaseInsensitively()
+    public void Tool_MatchesCallsAndActionsCaseInsensitively()
     {
         var match = BlockMatch.Tool("GET_WEATHER");
 
         Assert.True(match.Matches(Blocks.ToolCall("get_weather")));
         Assert.True(match.Matches(Blocks.ToolCall("get_weather", result: "sunny")));
-        Assert.True(match.Matches(Blocks.Approval("get_weather")));
         Assert.True(match.Matches(Blocks.UIAction("get_weather", UIActionInvocationMode.Manual)));
         Assert.False(match.Matches(Blocks.ToolCall("search")));
         Assert.False(match.Matches(Blocks.Text("get_weather")));
+    }
+
+    [Fact]
+    public void Tool_DoesNotMatchAnApproval()
+    {
+        // An approval shows through a wrapper, around the view that this match picks for the call it asks about.
+        var approval = Blocks.Approval("get_weather");
+
+        Assert.False(BlockMatch.Tool("get_weather").Matches(approval));
+        Assert.True(BlockMatch.Tool("get_weather").Matches(approval.InnerBlock));
     }
 
     [Fact]
@@ -73,7 +82,7 @@ public class BlockMatchTests
 
         Assert.True(match.Matches(Blocks.ToolCall("search")));
         Assert.False(match.Matches(Blocks.ToolCall("other")));
-        Assert.False(match.Matches(Blocks.Approval("search")));
+        Assert.False(match.Matches(Blocks.UIAction("search", UIActionInvocationMode.Manual)));
     }
 
     [Fact]
@@ -82,7 +91,7 @@ public class BlockMatchTests
         var match = BlockMatch.Any(BlockMatch.Is<ReasoningContentBlock>(), BlockMatch.Tool("search"));
 
         Assert.True(match.Matches(Blocks.Reasoning("why")));
-        Assert.True(match.Matches(Blocks.Approval("search")));
+        Assert.True(match.Matches(Blocks.ToolCall("search")));
         Assert.False(match.Matches(Blocks.Text("hi")));
     }
 
@@ -140,16 +149,16 @@ public class BlockMatchTests
     [Fact]
     public void Matches_Compose()
     {
-        // A failed search call or a search approval, unless the user's.
+        // A failed search call or a search UI action, unless the user's.
         var match = BlockMatch.All(
             BlockMatch.Tool("search"),
             BlockMatch.Any(
                 BlockMatch.When(block => block is FunctionInvocationContentBlock { Result.Exception: not null }),
-                BlockMatch.Is<ToolApprovalBlock>()),
+                BlockMatch.Is<UIActionBlock>()),
             BlockMatch.Not(BlockMatch.Role(ChatRole.User)));
 
         Assert.True(match.Matches(Blocks.ToolCall("search", exception: new InvalidOperationException())));
-        Assert.True(match.Matches(Blocks.Approval("search")));
+        Assert.True(match.Matches(Blocks.UIAction("search", UIActionInvocationMode.Manual)));
         Assert.False(match.Matches(Blocks.ToolCall("search", result: "ok")));
         Assert.False(match.Matches(Blocks.ToolCall("other", exception: new InvalidOperationException())));
     }
