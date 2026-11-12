@@ -46,7 +46,7 @@ on:
       workloads:
         required: false
         type: string
-        default: 'maui ios maccatalyst macos maui-tizen'
+        default: 'maui ios maccatalyst macos'
         description: 'Space-separated list of workloads to install (only used when install-workloads is true)'
       os:
         required: false

@@ -113,7 +113,7 @@ extends:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
             # DevFlow packages are built on Windows, including Apple library TFMs.
-            - pwsh: $(Build.SourcesDirectory)/eng/install-workloads.ps1 -DotNet $(Build.SourcesDirectory)/eng/common/dotnet.cmd -Workloads 'maui maui-android ios maccatalyst macos maui-tizen'
+            - pwsh: $(Build.SourcesDirectory)/eng/install-workloads.ps1 -DotNet $(Build.SourcesDirectory)/eng/common/dotnet.cmd -Workloads 'maui maui-android ios maccatalyst macos'
               displayName: Install MAUI and Apple workloads
             - pwsh: |
                 $arguments = @(
@@ -260,7 +260,7 @@ extends:
                 printf '%s\n' "$version" | grep -Eq '^Xcode 27([.[:space:]]|$)'
                 echo "##vso[task.setvariable variable=DEVELOPER_DIR]$DEVELOPER_DIR"
               displayName: Select and verify Xcode 27
-            - pwsh: $(Build.SourcesDirectory)/eng/install-workloads.ps1 -DotNet $(Build.SourcesDirectory)/.dotnet/dotnet -Workloads 'maui ios maccatalyst macos maui-tizen'
+            - pwsh: $(Build.SourcesDirectory)/eng/install-workloads.ps1 -DotNet $(Build.SourcesDirectory)/.dotnet/dotnet -Workloads 'maui ios maccatalyst macos'
               displayName: Install MAUI workloads
             - script: |
                 set -euo pipefail
@@ -334,7 +334,7 @@ extends:
                 path: '$(Build.SourcesDirectory)/artifacts/bin'
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - pwsh: $(Build.SourcesDirectory)/eng/install-workloads.ps1 -DotNet $(Build.SourcesDirectory)/eng/common/dotnet.cmd -Workloads 'maui maui-android macos maui-tizen'
+            - pwsh: $(Build.SourcesDirectory)/eng/install-workloads.ps1 -DotNet $(Build.SourcesDirectory)/eng/common/dotnet.cmd -Workloads 'maui maui-android macos'
               displayName: Install MAUI workloads
             - pwsh: |
                 $ErrorActionPreference = 'Stop'

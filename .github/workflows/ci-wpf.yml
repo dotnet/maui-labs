@@ -340,7 +340,7 @@ jobs:
         shell: pwsh
         run: |
           $dotnet = Join-Path $env:DOTNET_ROOT 'dotnet.exe'
-          & "$env:GITHUB_WORKSPACE/eng/install-workloads.ps1" -DotNet $dotnet -Workloads 'maui maui-tizen'
+          & "$env:GITHUB_WORKSPACE/eng/install-workloads.ps1" -DotNet $dotnet -Workloads maui
       - name: Restore and build the normal source consumer
         id: source-font-build
         shell: pwsh

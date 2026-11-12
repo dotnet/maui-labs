@@ -81,7 +81,7 @@ jobs:
             maui-version: ''
           - scenario: bundle-resources
             maui-version: ''
-            workloads: 'macos maui maui-tizen'
+            workloads: 'macos maui'
             packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages
