@@ -22,6 +22,9 @@
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <!-- SDK 11's optimized AOT publish skips copying the XML documentation
+         that this tool includes in its publish output. Keep the full build path. -->
+    <UseOptimizedPublish Condition="'$(PublishAot)' == 'true'">false</UseOptimizedPublish>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">

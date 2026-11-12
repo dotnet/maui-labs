@@ -88,7 +88,7 @@ public static class ItineraryWorkflowExtensions
 							Return the exact name of the best matching destination from the candidates.
 							"""
 					},
-					AIContextProviders = [searchProvider],
+					AIContextProviders = new[] { searchProvider },
 				},
 				loggerFactory);
 		});
@@ -180,8 +180,8 @@ public static class ItineraryWorkflowExtensions
 				.AddEdge(travelPlannerExecutor, researcherExecutor)
 				.AddEdge(researcherExecutor, itineraryPlannerExecutor)
 				.AddSwitch(itineraryPlannerExecutor, switch_ => switch_
-					.AddCase<ItineraryResult>(r => r is not null && !string.Equals(r.TargetLanguage, "English", StringComparison.OrdinalIgnoreCase), translatorExecutor)
-					.WithDefault(outputExecutor))
+					.AddCase<ItineraryResult>(r => r is not null && !string.Equals(r.TargetLanguage, "English", StringComparison.OrdinalIgnoreCase), (ExecutorBinding[])[translatorExecutor])
+					.WithDefault((ExecutorBinding[])[outputExecutor]))
 				.AddEdge(translatorExecutor, outputExecutor)
 				.WithOutputFrom(outputExecutor)
 				.Build();

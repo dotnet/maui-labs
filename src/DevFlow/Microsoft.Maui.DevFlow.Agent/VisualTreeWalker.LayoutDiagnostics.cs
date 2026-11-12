@@ -758,12 +758,13 @@ public partial class PlatformVisualTreeWalker
     {
         var transform = source.TransformToVisual(target);
         return LayoutRegionMath.FromPoints(
-        [
+        new[]
+        {
             ToPoint(transform.TransformPoint(new global::Windows.Foundation.Point(rect.Left, rect.Top))),
             ToPoint(transform.TransformPoint(new global::Windows.Foundation.Point(rect.Right, rect.Top))),
             ToPoint(transform.TransformPoint(new global::Windows.Foundation.Point(rect.Right, rect.Bottom))),
             ToPoint(transform.TransformPoint(new global::Windows.Foundation.Point(rect.Left, rect.Bottom)))
-        ], "exactPolygon");
+        }, "exactPolygon");
     }
 
     private static bool IsWinUIDescendant(UIElement ancestor, UIElement element)

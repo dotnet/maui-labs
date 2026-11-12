@@ -17,7 +17,7 @@ public abstract class ChatClientResponseTestsBase<T>
 	{
 		using var client = new T();
 		var response = await client.GetResponseAsync(
-			[new ChatMessage(ChatRole.User, "Say hello in one sentence.")]);
+			(ChatMessage[])[new ChatMessage(ChatRole.User, "Say hello in one sentence.")]);
 
 		Assert.False(string.IsNullOrWhiteSpace(response.ModelId),
 			"A successful response must identify the model that produced it.");

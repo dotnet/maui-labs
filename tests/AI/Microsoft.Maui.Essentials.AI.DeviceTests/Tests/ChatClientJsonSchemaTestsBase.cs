@@ -121,7 +121,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		using var client = new T();
 		var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
 			client.GetResponseAsync<SimpleResponse>(
-				[new ChatMessage(ChatRole.User, "Return exactly hello in the message field.")],
+				(ChatMessage[])[new ChatMessage(ChatRole.User, "Return exactly hello in the message field.")],
 				useJsonSchemaResponseFormat: false));
 		if (RequiresExplicitJsonSchema is true)
 			Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
@@ -267,7 +267,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		using var client = new T();
 
 		var response = await client.GetResponseAsync<SimpleResponse>(
-			[new ChatMessage(ChatRole.User, "Return exactly hello in the message field.")],
+			(ChatMessage[])[new ChatMessage(ChatRole.User, "Return exactly hello in the message field.")],
 			useJsonSchemaResponseFormat: false);
 
 		Assert.Equal("hello", response.Result.Message, ignoreCase: true);

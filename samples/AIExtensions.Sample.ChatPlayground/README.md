@@ -74,10 +74,10 @@ Apple builds require Xcode 27. For Mac Catalyst:
 
 ```sh
 dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst27.0 -p:UseXcode27Preview=true
 ```
 
-Use `net10.0-ios27.0` for iOS and select a device with `--device <device-id>`.
+Use `net11.0-ios27.0` for iOS and select a device with `--device <device-id>`.
 Use `--list-devices` to list available targets. Enable Apple Intelligence and
 install the English sentence-embedding asset for the corresponding features;
 the asset may be absent on simulators.

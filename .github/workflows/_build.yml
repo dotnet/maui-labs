@@ -42,17 +42,17 @@ on:
         required: false
         type: boolean
         default: true
-        description: 'Install MAUI workloads and Android SDK (not needed for net10.0-only projects)'
+        description: 'Install MAUI workloads and Android SDK (not needed for framework-only projects)'
       workloads:
         required: false
         type: string
         default: 'maui ios maccatalyst macos maui-tizen'
         description: 'Space-separated list of workloads to install (only used when install-workloads is true)'
-      workload-version:
+      workload-rollback-file:
         required: false
         type: string
-        default: '10.0.203'
-        description: 'Workload version to install (pinned for reproducibility)'
+        default: 'eng/workloads/dotnet11-rc2.json'
+        description: 'Pinned workload rollback file matching the exact repository SDK.'
       os:
         required: false
         type: string
@@ -115,7 +115,17 @@ jobs:
 
       - name: Select Xcode
         if: inputs.xcode-version != '' && runner.os == 'macOS'
-        run: sudo xcode-select -s /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer
+        run: |
+          developer_dir="$(cd /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer && pwd -P)"
+          sudo xcode-select -s "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+          echo "MD_APPLE_SDK_ROOT=$(cd "$developer_dir/../.." && pwd -P)" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcodebuild -showsdks
+          ls -l "$(xcode-select -p)/Platforms/MacOSX.platform/Developer/SDKs"
+          sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
+          test -d "$sdk_path"
+          xcrun --sdk macosx --find install_name_tool
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -128,14 +138,14 @@ jobs:
 
       # Use Arcade's dotnet wrapper for workload-related setup so SDK resolution
       # matches the later cibuild invocation.
-      - name: Install workloads (Windows)
+      - name: Install workloads from rollback file (Windows)
         if: inputs.install-workloads && runner.os == 'Windows'
-        run: eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
+        run: eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --from-rollback-file ${{ inputs.workload-rollback-file }}
         shell: cmd
 
-      - name: Install workloads (Unix)
+      - name: Install workloads from rollback file (Unix)
         if: inputs.install-workloads && runner.os != 'Windows'
-        run: ./eng/common/dotnet.sh workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
+        run: ./eng/common/dotnet.sh workload install ${{ inputs.workloads }} --from-rollback-file ${{ inputs.workload-rollback-file }}
 
       - name: Install Android SDK dependencies (Windows)
         if: inputs.install-workloads && runner.os == 'Windows' && inputs.android-project != ''
