@@ -90,7 +90,6 @@ concurrency:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   DOTNET_NOLOGO: 1
-  DOTNET_WORKLOAD_VERSION: 11.0.100-servicing.26530.3
   TEST_PROJECT: src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
 
 jobs:
@@ -185,7 +184,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workloads
-        run: dotnet workload install maui-android android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        run: dotnet workload install maui-android android wasm-tools --skip-manifest-update
 
       - name: Cache AVD
         uses: actions/cache@v4
@@ -288,7 +287,7 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # Keep Xcode aligned with DOTNET_WORKLOAD_VERSION; newer Apple workloads can require newer Xcode.
+          # Keep Xcode aligned with the pinned SDK's workload manifests.
           COMPATIBLE="${COMPATIBLE:-}"
           for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
             if [[ -d "$candidate" ]]; then
@@ -321,10 +320,9 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
-        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
-        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        # Keep this list to workloads the repo actually targets; unused workloads can hard-fail
+        # when their runtime packs rotate out of the feeds.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --skip-manifest-update
 
       - name: Install Apple simulator automation tool
         if: matrix.framework == 'maui'
@@ -374,7 +372,7 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # Keep Xcode aligned with DOTNET_WORKLOAD_VERSION; newer Apple workloads can require newer Xcode.
+          # Keep Xcode aligned with the pinned SDK's workload manifests.
           COMPATIBLE="${COMPATIBLE:-}"
           for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
             if [[ -d "$candidate" ]]; then
@@ -407,10 +405,9 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
-        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
-        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        # Keep this list to workloads the repo actually targets; unused workloads can hard-fail
+        # when their runtime packs rotate out of the feeds.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --skip-manifest-update
 
       - name: Run DevFlow integration tests (maccatalyst)
         run: >
@@ -453,7 +450,7 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # Keep Xcode aligned with DOTNET_WORKLOAD_VERSION; newer Apple workloads can require newer Xcode.
+          # Keep Xcode aligned with the pinned SDK's workload manifests.
           COMPATIBLE="${COMPATIBLE:-}"
           for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
             if [[ -d "$candidate" ]]; then
@@ -482,10 +479,9 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
-        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
-        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        # Keep this list to workloads the repo actually targets; unused workloads can hard-fail
+        # when their runtime packs rotate out of the feeds.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --skip-manifest-update
 
       - name: Run DevFlow integration tests (macos)
         run: >
@@ -607,10 +603,9 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workloads
-        # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
-        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
-        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        # Keep this list to workloads the repo actually targets; unused workloads can hard-fail
+        # when their runtime packs rotate out of the feeds.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --skip-manifest-update
 
       - name: Run DevFlow integration tests (windows)
         shell: pwsh
@@ -709,7 +704,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workload
-        run: dotnet workload install maui --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        run: dotnet workload install maui --skip-manifest-update
 
       - name: Run DevFlow integration tests (WPF)
         shell: pwsh
