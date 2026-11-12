@@ -55,14 +55,14 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **Native GTK4 rendering** — Every control maps to a real GTK4 widget, styled via GTK CSS.
 - **UI synchronization context** — Async UI event handlers resume on the GTK main thread after `await` (unless they explicitly opt out with `ConfigureAwait(false)`).
 - **Blazor Hybrid** — Host Blazor components inside a native GTK window via WebKitGTK.
-- **Gestures** — Tap, Pan, Swipe, Pinch, and Pointer gesture recognizers via GTK4 event controllers.
+- **Gestures** — Tap, Pan, Swipe, Pinch, and Pointer gesture recognizers via GTK4 event controllers, integrated through MAUI 11's public `IGesturePlatformManagerFactory`.
 - **Animations** — `TranslateTo`, `FadeTo`, `ScaleTo`, `RotateTo` via `GtkPlatformTicker` + `Gsk.Transform` at ~60fps.
 - **Transforms** — TranslationX/Y, Rotation, Scale via `Gsk.Transform`; Shadow (CSS `box-shadow`), Clip, ZIndex.
 - **VisualStateManager** — Normal, PointerOver, Pressed, Disabled, Focused states via GTK4 event controllers.
 - **ControlTemplate** — Full ContentPresenter and TemplatedView support via `IContentView` handler mapping.
-- **Font icons** — Embedded font registration with fontconfig/Pango, FontImageSource rendering via Cairo. FontAwesome and custom icon fonts work out of the box.
+- **Font icons** — Embedded fonts are registered process-locally with fontconfig/Pango (no persistent user-font copy), with FontImageSource rendering via Cairo.
 - **FormattedText** — Rich text via Pango markup: Span colors, fonts, sizes, bold/italic, underline/strikethrough, character spacing.
-- **Alerts & Dialogs** — `DisplayAlert`, `DisplayActionSheet`, `DisplayPromptAsync` via native GTK4 modal windows. Registration supports both the nested MAUI 10.0.41–10.0.60 subscription interface and the top-level 10.0.70+ interface; an unrecognized contract fails during registration instead of leaving dialog tasks pending.
+- **Alerts & Dialogs** — `DisplayAlert`, `DisplayActionSheet`, `DisplayPromptAsync` via native GTK4 modal windows and MAUI 11's public typed `IAlertManagerSubscription` contract.
 - **Modal Pages** — `PushModalAsync` presents pages as native GTK4 dialog windows by default, with attached properties for custom sizing, content-fit sizing, and inline (legacy) presentation via `GtkPage`.
 - **Brushes & Gradients** — SolidColorBrush, LinearGradientBrush, RadialGradientBrush via CSS gradients.
 - **MenuBar** — `MenuBarItem` / `MenuFlyoutItem` via `Gtk.PopoverMenuBar`, integrated into Window and NavigationPage handlers via `GtkMenuBarManager` (not a standalone handler).
@@ -115,7 +115,10 @@ MAUI_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo xvfb-run -a \
   --logger "console;verbosity=detailed"
 ```
 
-The test uses its own GTK application and does not require a DevFlow broker.
+The test uses a process-specific GTK application ID so concurrent net10/net11
+test hosts cannot forward activation to each other on the shared D-Bus session.
+It asserts that its own application completes with exactly one activation and
+does not require a DevFlow broker.
 
 ### Handler styling
 
@@ -166,20 +169,44 @@ Do not call its native `Free()` method after passing it to `Gsk.Transform.Transl
 the handle still owns the allocation and will free it again during finalization.
 This applies to layout-position points as well as anchor points.
 
-### Essentials (20 of 36 services)
+### Essentials
 
 | Status | Services |
 |--------|----------|
-| ✅ **Done** (20) | AppInfo, AppActions, Battery (UPower), Browser (`xdg-open`), Clipboard (`Gdk.Clipboard`), Connectivity (NetworkManager), DeviceDisplay, DeviceInfo, Email (`xdg-open mailto:`), FilePicker (`Gtk.FileDialog`), FileSystem (XDG dirs), Launcher, Map, MediaPicker, Preferences (JSON), Screenshot, SemanticScreenReader (AT-SPI), Share (XDG Portal), TextToSpeech (`espeak-ng`), VersionTracking |
-| ⚠️ **Partial** (2) | Geolocation (GeoClue — basic location only), WebAuthenticator (basic OAuth via system browser) |
+| ✅ **Done** | AppInfo, AppActions, Battery (UPower), Browser (`xdg-open`), Clipboard (`Gdk.Clipboard`), Connectivity (NetworkManager), DeviceDisplay, DeviceInfo, Email (`xdg-open mailto:`), FilePicker (`Gtk.FileDialog`), FileSystem (XDG dirs), Launcher, Map, MediaPicker selection and GStreamer photo/video capture, Preferences (JSON), Screenshot, SecretStorage (Secret Service), SemanticScreenReader (`Gtk.Accessible`), Share (XDG Portal), TextToSpeech (`speech-dispatcher`/`espeak`), VersionTracking |
+| ⚠️ **Partial** | Geolocation (GeoClue `where-am-i` one-shot and foreground polling; no long-lived D-Bus subscription), WebAuthenticator (basic OAuth via system browser) |
 | ❌ **Stub** (13) | Accelerometer, Barometer, Compass, Contacts, Flashlight, Geocoding, Gyroscope, HapticFeedback, Magnetometer, OrientationSensor, PhoneDialer, SMS, Vibration — sensors and phone-specific APIs not applicable to desktop Linux |
-| ❌ **Unsupported** (1) | SecureStorage — all storage operations throw `PlatformNotSupportedException` |
 
-**Behavior change:** Linux SecureStorage no longer uses libsecret or encrypted files.
-`GetAsync`, `SetAsync`, `Remove`, `RemoveAll`, and `LinuxSecureStorage.Backend`
-throw `PlatformNotSupportedException` immediately. The public type, method signatures,
-and service registration remain available. `Dispose` has no effect. Existing secrets
-and files are not read, migrated, or deleted.
+Linux SecureStorage uses libsecret's `secret-tool` client and an unlocked
+freedesktop.org Secret Service provider. Values are passed over standard input,
+not command-line arguments, and this backend never falls back to plaintext files.
+A missing `secret-tool` throws `FeatureNotSupportedException`; locked or unavailable
+providers return an explicit operation error. Install the distribution's libsecret
+tools package and configure a provider such as GNOME Keyring or KWallet.
+
+Linux camera capture requires `gst-launch-1.0`, `gst-inspect-1.0`, and the
+GStreamer `v4l2src`, `videoconvert`, `jpegenc`, `vp8enc`, and `webmmux`
+plugins. Photo capture writes JPEG and video capture writes VP8/WebM. The native
+capture window supports cancellation and graceful video Stop; partial files are
+deleted after cancellation, failure, empty output, or finalization timeout.
+Capture opens candidates read/write and queries V4L2 capabilities, skipping inaccessible,
+metadata-only and output-only nodes. Per-device capabilities take precedence over
+aggregate capabilities. Capture selects the first usable `/dev/video*` device and never uses
+`autovideosrc`, because that element can silently substitute `videotestsrc`
+when no camera is available. Portal-only cameras without a V4L2 device are
+therefore reported as unsupported. Missing tools/plugins, absent devices,
+permission failures, and pipeline failures are explicit rather than an empty or
+synthetic successful result.
+
+Media selection recognizes GTK's cancellation/dismissal error domain and code before
+GirCore wraps the error, so translated messages do not affect cancellation. Other
+dialog errors propagate rather than being treated as an empty selection.
+
+Semantic announcements use the active GTK window's accessibility context, not a
+separate speech process. Nonblank announcements without an active application window
+throw `InvalidOperationException`; call after activation, on the application dispatcher.
+Blank announcements are ignored. This explicit precondition is not a best-effort
+speech fallback and does not guarantee delivery by an assistive technology.
 
 #### Use your own ISecureStorage implementation
 
@@ -228,15 +255,22 @@ store an encryption key beside the encrypted data.
 | Base View Properties | 100% | Opacity, visibility, transforms, shadow, clip, automation |
 | FormattedText | 100% | All Span properties via Pango markup |
 | MenuBar | 100% | MenuBarItem, MenuFlyoutItem, popover menus — integrated into Window and NavigationPage handlers |
-| Essentials | 61% | 20 done + 2 partial of 36 total; 13 stubs (sensors/phone N/A on desktop), 1 unsupported |
+| Essentials | Partial desktop coverage | Secure storage, media selection/capture, speech, battery, accessibility and desktop integration are implemented; location uses foreground GeoClue polling, while sensors and phone APIs remain limited or unsupported. |
 
 ## Prerequisites
 
 | Requirement | Version |
 |---|---|
-| .NET SDK | 10.0+ |
+| .NET SDK | 11.0.100-rc.2.26504.105 or newer .NET 11 build |
 | GTK 4 libraries | 4.12+ (system package) |
 | WebKitGTK *(Blazor only)* | 6.x (system package) |
+| GStreamer *(camera capture only)* | 1.0 command-line tools plus base/good plugins |
+
+The templates and default documentation target `net11.0`. The shipping platform,
+Essentials, BlazorWebView, and test projects retain `net10.0` assets for the
+intentional MAUI 10 compatibility lane. A .NET 11 SDK can build both targets.
+Private/reflection compatibility shims are compiled only into the `net10.0`
+assets; the `net11.0` assets use public MAUI contracts exclusively.
 
 ### Install GTK4 & WebKitGTK (Debian / Ubuntu)
 
@@ -275,7 +309,8 @@ The packaged template pins its GTK4 package references to the package version pr
 by the same build. Essentials is enabled by default: the generated `MauiProgram.cs`
 calls `AddLinuxGtk4Essentials()` to register Linux services and static API defaults,
 including `SemanticScreenReader`. Use `--essentials false` to omit both the package
-and registration, or `--blazor true` to include the BlazorWebView package.
+and registration, or `--blazor true` to include the BlazorWebView package and its
+`AddMauiBlazorWebView().UsePlatformHandler<BlazorWebViewHandler>()` registration.
 
 ### Option 2: Add to an existing project manually
 
@@ -337,6 +372,18 @@ configuring the builder. Unsupported desktop capabilities retain their existing
 stub behavior. Facades are process-wide: the most recently built app sets their
 instances, and callers must not use them after disposing that app.
 
+The `net11.0` GTK package only registers services in DI. MAUI 11's built-in
+Essentials DI bridge connects those services to the static facades during
+`Build()`; that asset does not link or invoke MAUI's private initializer
+implementation. The linked compatibility initializer remains isolated to the
+`net10.0` asset because MAUI 10 has no public equivalent.
+
+`DeviceInfo.Platform` reports `DevicePlatform.Create("GTK")`. On MAUI 11,
+screenshot support implements both `IScreenshot` and `IViewScreenshot`;
+whole-window failures throw instead of returning a null value, while view capture
+returns null only when the supplied platform object is not a GTK widget. PNG
+results are reusable. The MAUI 10 asset retains `IScreenshot`.
+
 `FileSystem.AppDataDirectory` and `CacheDirectory` use `XDG_DATA_HOME` and
 `XDG_CACHE_HOME`, falling back to `~/.local/share` and `~/.cache`, respectively,
 with the application name appended. Both getters create the directory before
@@ -365,8 +412,34 @@ Linux head projects can use MAUI resource item groups for common `Resources/*` p
 - `MauiAsset` from `Resources/Raw/**` (with `LogicalName` defaulting to `%(RecursiveDir)%(Filename)%(Extension)`)
 - `MauiIcon` from explicit items, or default `Resources/AppIcon/appicon.{svg|png|ico}`
 
-These are copied into build/publish output so image/file lookups can resolve at runtime.
-When `MauiIcon` is present, Linux builds emit `hicolor` icon-theme files in output and runtime sets the GTK window default icon name from that icon.
+The `net11.0` asset opts into MAUI 11's Resizetizer with
+`ResizetizerPlatformType=linux`, selects the neutral-TFM backend with
+`MauiActiveBackend=linux`, and consumes the public `MauiProcessedImage`,
+`MauiProcessedFont`, and `MauiProcessedAsset` outputs. Processed target paths are
+preserved, including `MauiAsset` logical names under `Resources/Raw`. `MauiIcon`
+continues to emit the Linux `hicolor` icon-theme layout, and runtime sets the GTK
+window default icon name from that icon.
+
+`Platforms/Linux/**` is registered through the public
+`MauiPlatformSpecificFolder`/`BackendIdentity` contract, so a Linux head can keep
+platform-only source and resources in that folder without affecting other heads.
+The `net10.0` asset retains the established raw-copy resource path because MAUI 10
+does not publish these external-backend processed-item contracts.
+
+GTK uses portable SDK projects and MAUI NuGet build assets, not `UseMaui=true`
+or a platform workload. The `maui` workload is not supported on Linux.
+
+The package-only consumer fixture exercises .NET 10 and .NET 11 referenced-library raw assets,
+logical names (including Unicode and empty files), incremental changes and
+removal, no-build publish, and collision failures:
+
+```powershell
+./eng/smoke-tests/community-resource-acceptance.ps1 -Backend gtk
+```
+
+GTK is the harness default while the community backend migration is being
+landed in layers. Its explicit AppKit, WPF, and backend-switch modes are reserved
+for their later platform layers; GTK CI does not invoke them.
 
 ## Adding Linux to a Multi-Targeted MAUI App
 
@@ -374,7 +447,7 @@ Since there is no official `-linux` TFM (Target Framework Moniker) from Microsof
 
 ```
 MyApp/                              ← Your existing multi-targeted MAUI project
-├── MyApp.csproj                       (net10.0-android;net10.0-ios;...)
+├── MyApp.csproj                       (net11.0-android;net11.0-ios;...)
 ├── App.cs
 ├── MainPage.xaml
 ├── ViewModels/
@@ -385,7 +458,7 @@ MyApp/                              ← Your existing multi-targeted MAUI projec
     └── ...
 
 MyApp.Linux/                        ← New Linux-specific project
-├── MyApp.Linux.csproj                 (net10.0, references Microsoft.Maui.Platforms.Linux.Gtk4)
+├── MyApp.Linux.csproj                 (net11.0, references Microsoft.Maui.Platforms.Linux.Gtk4)
 ├── Program.cs                         (GtkMauiApplication entry point)
 └── MauiProgram.cs                     (builder.UseMauiAppLinuxGtk4<App>())
 ```
@@ -415,7 +488,7 @@ dotnet run --project MyApp.Linux
 
 ### Why a separate project?
 
-The platform-specific TFMs (`net10.0-android`, `net10.0-ios`, etc.) are powered by .NET workloads that Microsoft ships. Creating a custom `net10.0-linux` TFM would require building and distributing a full .NET workload — complex infrastructure that's unnecessary for most use cases.
+The platform-specific TFMs (`net11.0-android`, `net11.0-ios`, etc.) are powered by .NET workloads that Microsoft ships. Creating a custom `net11.0-linux` TFM would require building and distributing a full .NET workload — complex infrastructure that's unnecessary for most use cases.
 
 The separate project approach works with standard `dotnet build`/`dotnet run`, is NuGet-distributable, and keeps your existing MAUI project unchanged.
 
@@ -471,10 +544,9 @@ From `platforms/Linux.Gtk4`, run:
 dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
 ```
 
-The `ci-linux-gtk4.yml` compatibility matrix runs `AlertManagerSubscriptionTests`
-in this existing project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
-through the shared build workflow's targeted test mode. These managed registration
-checks do not require GTK initialization and do not claim native UI coverage.
+The Linux GTK4 CI build uses .NET 11 and runs the managed registration, public
+build-contract, handler-selection, and Essentials DI-bridge tests. These checks
+do not require GTK initialization and do not claim native UI coverage.
 
 ### Native regression tests in the shared test host
 
@@ -525,18 +597,21 @@ From the repository root on Linux, use the shared class runner (PowerShell 7,
 ```bash
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass CollectionViewHandlerTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkBlazorWebViewLifetimeTests
-pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSignalLifetimeTests -MauiVersion 10.0.70
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSignalLifetimeTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass PickerSelectionTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSynchronizationContextTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass ContentViewRootLayoutTests
-pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass StartupLayoutTests -MauiVersion 10.0.70
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass StartupLayoutTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkTransformTests
 ```
 
-The runner creates a private DBus session and display, requires nonzero executed
+The runner requires a .NET 11 SDK, creates a private DBus session and display, requires nonzero executed
 tests with no failures or skips in the TRX, and rejects missing/empty filtered
 classes. Use a fresh `-ResultsDirectory` when repeating a run to preserve prior
 evidence. Use `-TestProject` and `-TestNamespace` to select tests in another project.
+For a project with a different target framework, pass `-TestFramework` explicitly:
+the DevFlow GTK snapshot project targets `net10.0`, even under the .NET 11 SDK.
+Without an override, the runner selects `net11.0`, or `net10.0` for a MAUI 10 version.
 CI's `runtime` matrix runs one existing native class per process; retain
 the union of native class entries when integrating other platform changes.
 

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Controls;
 using Microsoft.Maui.Graphics;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Platform;

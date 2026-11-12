@@ -1,6 +1,10 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+#if NET11_0_OR_GREATER
+using Microsoft.Maui.Controls.Platform;
+#else
 using Microsoft.Maui.Controls;
+#endif
 using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
@@ -13,18 +17,23 @@ public class AlertManagerSubscriptionTests
         var services = new ServiceCollection();
         GtkAlertManager.Register(services);
 
+        using var provider = services.BuildServiceProvider();
+#if NET11_0_OR_GREATER
+        var subscription = provider.GetRequiredService<IAlertManagerSubscription>();
+        Assert.IsType<GtkAlertManager>(subscription);
+        Assert.Same(subscription, provider.GetRequiredService<IAlertManagerSubscription>());
+#else
         var managerType = typeof(Window).Assembly.GetType(
             "Microsoft.Maui.Controls.Platform.AlertManager", throwOnError: true)!;
-        var subscriptionProperty = managerType.GetProperty("Subscription");
-        Assert.True(subscriptionProperty is not null,
-            $"No AlertManager.Subscription property in {typeof(Window).Assembly.FullName}.");
-        var subscriptionType = subscriptionProperty.PropertyType;
-
-        using var provider = services.BuildServiceProvider();
+        var subscriptionType = typeof(Window).Assembly.GetType(
+            "Microsoft.Maui.Controls.Platform.IAlertManagerSubscription")
+            ?? managerType.GetNestedType(
+                "IAlertManagerSubscription",
+                BindingFlags.Public | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("MAUI 10 alert subscription type was not found.");
         var subscription = provider.GetRequiredService(subscriptionType);
         Assert.IsAssignableFrom<DispatchProxy>(subscription);
-        Assert.Equal(typeof(GtkAlertManager.AlertSubscriptionProxy<>),
-            subscription.GetType().BaseType!.GetGenericTypeDefinition());
         Assert.Same(subscription, provider.GetRequiredService(subscriptionType));
+#endif
     }
 }

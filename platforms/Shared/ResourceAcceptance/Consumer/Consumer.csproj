@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>__TARGET_FRAMEWORK__</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <EnableDefaultMauiResourceItems>false</EnableDefaultMauiResourceItems>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <SelfContained>false</SelfContained>
+    __PLATFORM_PROPERTIES__
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="__MAUI_VERSION__" />
+    <PackageReference Include="__BACKEND_PACKAGE__" Version="__BACKEND_VERSION__" />
+    <ProjectReference Include="../ReferencedAssets/ReferencedAssets.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <MauiAsset Include="Resources/Raw/local.txt" LogicalName="App/local.txt" />
+  </ItemGroup>
+
+  <Target Name="WriteResourceAcceptanceBackendIdentity" AfterTargets="Build">
+    <WriteLinesToFile File="$(OutputPath)resource-acceptance-backend.txt"
+                      Lines="$(MauiActiveBackend)"
+                      Overwrite="true" />
+  </Target>
+</Project>

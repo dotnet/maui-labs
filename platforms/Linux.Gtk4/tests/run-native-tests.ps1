@@ -6,7 +6,9 @@ param(
     [string] $ResultsDirectory = 'artifacts/TestResults/gtk-runtime',
     [string] $TestProject = 'platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj',
     [ValidatePattern('^[A-Za-z_][A-Za-z0-9_.]*$')]
-    [string] $TestNamespace = 'Microsoft.Maui.Platforms.Linux.Gtk4.Tests'
+    [string] $TestNamespace = 'Microsoft.Maui.Platforms.Linux.Gtk4.Tests',
+    [ValidateSet('net10.0', 'net11.0')]
+    [string] $TestFramework
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,6 +18,10 @@ if (-not $IsLinux) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $project = (Resolve-Path -LiteralPath (Join-Path $repoRoot $TestProject)).Path
+$dotnetVersion = (& dotnet --version).Trim()
+if ($LASTEXITCODE -ne 0 -or $dotnetVersion -notmatch '^11\.') {
+    throw "Linux GTK4 CI requires the .NET 11 SDK; found '$dotnetVersion'."
+}
 $resultsName = if ($MauiVersion) { "$TestClass-maui-$MauiVersion" } else { $TestClass }
 $results = [IO.Path]::GetFullPath($ResultsDirectory, $repoRoot)
 $trxPath = Join-Path $results "$resultsName.trx"
@@ -36,9 +42,15 @@ $filter = "FullyQualifiedName~$TestNamespace.$TestClass."
 if ($MauiVersion) {
     $mauiArgs = @("-p:MauiVersion=$MauiVersion")
 }
+if (-not $TestFramework) {
+    $TestFramework = 'net11.0'
+    if ($MauiVersion -and $MauiVersion.StartsWith('10.')) {
+        $TestFramework = 'net10.0'
+    }
+}
 
 & dbus-run-session -- xvfb-run --auto-servernum dotnet test $project `
-    --configuration Release --filter $filter @mauiArgs `
+    --configuration Release --framework $TestFramework --filter $filter @mauiArgs `
     --logger 'console;verbosity=detailed' `
     --logger "trx;LogFileName=$resultsName.trx" `
     --results-directory $results --blame-hang-timeout 3m '-m:1' '-nr:false'

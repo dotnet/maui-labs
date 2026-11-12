@@ -9,6 +9,7 @@ on:
       - 'src/DevFlow/**'
       - 'platforms/Linux.Gtk4/**'
       - 'platforms/Shared/Essentials*/**'
+      - 'platforms/Shared/ResourceAcceptance/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -17,13 +18,14 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
+    branches: [main, redth-net11-foundation-pr]
     paths:
       - '.github/workflows/ci-linux-gtk4.yml'
       - '.github/workflows/_build.yml'
       - 'src/DevFlow/**'
       - 'platforms/Linux.Gtk4/**'
       - 'platforms/Shared/Essentials*/**'
+      - 'platforms/Shared/ResourceAcceptance/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -61,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110']
+        maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110', '11.0.0-rc.2.26505.5']
     uses: ./.github/workflows/_build.yml
     permissions:
       contents: read
@@ -86,7 +88,12 @@ jobs:
         with:
           global-json-file: global.json
       - name: Install GTK runtime and virtual display
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libgtk-4-1 xvfb
+          gstreamer1.0-tools
+          gstreamer1.0-plugins-base
+          gstreamer1.0-plugins-good
       - name: Exercise static facades inside GTK
         env:
           ESSENTIALS_NATIVE_GTK: '1'
@@ -94,14 +101,18 @@ jobs:
         run: >-
           xvfb-run -a dotnet test
           platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj
-          --configuration Release --logger "trx;LogFileName=essentials-native.trx"
+          --configuration Release --logger "trx;LogFilePrefix=essentials-native"
           --results-directory artifacts/TestResults/essentials
+      - name: Verify GStreamer capture codecs and containers
+        run: ./eng/smoke-tests/gtk-media-capture-smoke-test.sh
       - name: Upload runtime results
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: essentials-native-gtk-results
-          path: artifacts/TestResults/essentials/*.trx
+          path: |
+            artifacts/TestResults/essentials/*.trx
+            artifacts/TestResults/gtk-media-capture/
 
   build:
     uses: ./.github/workflows/_build.yml
@@ -136,6 +147,56 @@ jobs:
         shell: pwsh
         run: ./eng/smoke-tests/gtk-template-smoke-test.ps1 -BuildApps
 
+  resource-acceptance:
+    name: Package-only GTK resource acceptance
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Verify referenced-library assets, mutation, publish, and collisions
+        shell: pwsh
+        run: ./eng/smoke-tests/community-resource-acceptance.ps1 -Backend gtk
+
+  media-primitives:
+    name: Headless Linux media contracts
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      # GLib errors and V4L2 rejection do not require GTK, a display, or a camera.
+      - name: Verify native cancellation errors and V4L2 probing
+        shell: pwsh
+        env:
+          ESSENTIALS_NATIVE_GTK: '1'
+        run: |
+          dotnet test platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj `
+            --configuration Release --framework net11.0 `
+            --filter FullyQualifiedName~Essentials.Tests.MediaPickerTests. `
+            --logger 'trx;LogFileName=media-primitives.trx' `
+            --results-directory artifacts/TestResults/media-primitives
+          if ($LASTEXITCODE -ne 0) { throw 'Linux media contracts failed.' }
+          [xml] $trx = Get-Content artifacts/TestResults/media-primitives/media-primitives.trx -Raw
+          $counts = $trx.TestRun.ResultSummary.Counters
+          if ([int] $counts.total -le 0 -or [int] $counts.executed -ne [int] $counts.total -or
+              [int] $counts.passed -ne [int] $counts.total -or [int] $counts.notExecuted -ne 0) {
+            throw "Linux media contracts must all execute and pass: $($counts.OuterXml)"
+          }
+      - name: Upload headless Linux results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gtk-media-primitives
+          path: artifacts/TestResults/media-primitives/
+          if-no-files-found: error
+
   runtime:
     name: Native GTK runtime (${{ matrix.test-class }}${{ matrix.maui && format(', MAUI {0}', matrix.maui) || '' }})
     runs-on: ubuntu-24.04
@@ -146,13 +207,14 @@ jobs:
       fail-fast: false
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [CollectionViewHandlerTests, GtkBlazorWebViewLifetimeTests, PickerSelectionTests, GtkSignalLifetimeTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests, WindowSizingTests, GtkTransformTests, StartupLayoutTests]
+        test-class: [CollectionViewHandlerTests, GtkBlazorWebViewLifetimeTests, PickerSelectionTests, GtkSignalLifetimeTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests, WindowSizingTests, GtkTransformTests, StartupLayoutTests, ResourceImageRuntimeTests]
         maui: ['']
         include:
           - test-class: GtkSignalLifetimeTests
             maui: '10.0.70'
           - test-class: GtkWebViewSnapshotRuntimeTests
             maui: ''
+            test-framework: net10.0
             test-project: src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/Microsoft.Maui.DevFlow.Agent.Gtk.Tests.csproj
             test-namespace: Microsoft.Maui.DevFlow.Agent.Gtk.Tests
           - test-class: WindowSizingTests
@@ -161,6 +223,8 @@ jobs:
             maui: '10.0.110'
           - test-class: StartupLayoutTests
             maui: '10.0.70'
+          - test-class: ModernizationRegistrationTests
+            maui: '11.0.0-rc.2.26505.5'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
@@ -181,6 +245,7 @@ jobs:
           -TestClass '${{ matrix.test-class }}'
           -TestProject '${{ matrix.test-project || 'platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj' }}'
           -TestNamespace '${{ matrix.test-namespace || 'Microsoft.Maui.Platforms.Linux.Gtk4.Tests' }}'
+          ${{ matrix.test-framework && format('-TestFramework {0}', matrix.test-framework) || '' }}
           ${{ matrix.maui && format('-MauiVersion {0}', matrix.maui) || '' }}
       - name: Build DevFlow sample
         if: matrix.test-class == 'CollectionViewHandlerTests'
@@ -192,7 +257,7 @@ jobs:
         run: >-
           dbus-run-session -- xvfb-run -a python3
           platforms/Linux.Gtk4/tests/devflow_collectionview_smoke.py
-          --sample artifacts/bin/Linux.Gtk4.Sample/Debug/net10.0/Linux.Gtk4.Sample.dll
+          --sample artifacts/bin/Linux.Gtk4.Sample/Debug/net11.0/Linux.Gtk4.Sample.dll
           --output artifacts/TestResults/gtk-devflow
       - name: Upload native runtime test results
         if: always()

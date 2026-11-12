@@ -36,7 +36,7 @@
             <Border Stroke="LightGray"
                     Padding="12"
                     BackgroundColor="#EEF8FF">
-                <Image Source="dotnet_bot.svg"
+                <Image Source="dotnet_bot_vector.svg"
                        HeightRequest="140"
                        Aspect="AspectFit" />
             </Border>

@@ -1,8 +1,11 @@
 using System.Reflection;
+using System.Collections.Specialized;
 using System.Text;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using WebKit;
 using WebView = WebKit.WebView;
@@ -49,6 +52,8 @@ public sealed class GtkBlazorWebView : IDisposable
 	private readonly IServiceProvider _serviceProvider;
 	private GtkWebViewManager? _webViewManager;
 	private UserContentManager? _userContentManager;
+	private readonly RootComponentReconciler _rootComponentReconciler = new();
+	private RootComponent[] _desiredRootComponents = [];
 	private bool _disposed;
 	private string? _hostPage;
 	private static int _moduleInitialized;
@@ -78,6 +83,7 @@ public sealed class GtkBlazorWebView : IDisposable
 		_serviceProvider = serviceProvider;
 		WebKitWebView = CreateWebView();
 		RootComponents = new RootComponentsCollection();
+		RootComponents.CollectionChanged += OnRootComponentsCollectionChanged;
 	}
 
 	internal WebView WebKitWebView { get; }
@@ -106,6 +112,7 @@ public sealed class GtkBlazorWebView : IDisposable
 		if (_disposed)
 			return;
 		_disposed = true;
+		RootComponents.CollectionChanged -= OnRootComponentsCollectionChanged;
 
 		if (_userContentManager != null)
 		{
@@ -127,7 +134,6 @@ public sealed class GtkBlazorWebView : IDisposable
 				catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"GtkBlazorWebView: DisposeAsync failed: {ex.Message}"); }
 			}).Wait(TimeSpan.FromSeconds(5));
 		}
-
 		WebKitWebView.Dispose();
 	}
 
@@ -238,15 +244,56 @@ public sealed class GtkBlazorWebView : IDisposable
 			contentRootDir,
 			hostPageRelativePath);
 
-		foreach (var rootComponent in RootComponents)
-		{
-			_ = rootComponent.AddToWebViewManagerAsync(_webViewManager);
-		}
-
-		_webViewManager.Navigate(StartPath);
+		SynchronizeRootComponents(navigate: true);
 	}
 
-	private static IFileProvider CreateFileProvider(string contentRootDir)
+	private void OnRootComponentsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs eventArgs)
+		=> SynchronizeRootComponents();
+
+	internal void SetRootComponents(IEnumerable<RootComponent> components)
+	{
+		RootComponents.CollectionChanged -= OnRootComponentsCollectionChanged;
+		try
+		{
+			RootComponents.Clear();
+			foreach (var component in components)
+				RootComponents.Add(component);
+		}
+		finally
+		{
+			RootComponents.CollectionChanged += OnRootComponentsCollectionChanged;
+		}
+		SynchronizeRootComponents();
+	}
+
+	private async void SynchronizeRootComponents(bool navigate = false)
+	{
+		var manager = _webViewManager;
+		if (manager == null || _disposed)
+			return;
+
+		Volatile.Write(ref _desiredRootComponents, RootComponents.ToArray());
+		try
+		{
+			await manager.Dispatcher.InvokeAsync(async () =>
+			{
+				await _rootComponentReconciler.SynchronizeAsync(
+					() => _disposed ? [] : Volatile.Read(ref _desiredRootComponents),
+					item => item.AddToWebViewManagerAsync(manager),
+					item => item.RemoveFromWebViewManagerAsync(manager));
+				if (navigate && !_disposed)
+					manager.Navigate(StartPath);
+			});
+		}
+		catch (Exception ex)
+		{
+			_serviceProvider.GetService<ILogger<GtkBlazorWebView>>()?
+				.LogError(ex, "GTK Blazor root component synchronization failed.");
+			System.Diagnostics.Trace.TraceError($"GTK Blazor root component synchronization failed: {ex}");
+		}
+	}
+
+	internal static IFileProvider CreateFileProvider(string contentRootDir)
 	{
 		string contentRoot = System.IO.Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!;
 		string bundleRootDir = System.IO.Path.Combine(contentRoot, contentRootDir);
@@ -256,6 +303,14 @@ public sealed class GtkBlazorWebView : IDisposable
 
 		return new NullFileProvider();
 	}
+
+#if NET11_0_OR_GREATER
+	internal Task<bool> TryDispatchAsync(Action<IServiceProvider> workItem)
+	{
+		ArgumentNullException.ThrowIfNull(workItem);
+		return _webViewManager?.TryDispatchAsync(workItem) ?? Task.FromResult(false);
+	}
+#endif
 
 	private static void FinishUriSchemeRequest(URISchemeRequest request, uint statusCode, string statusText, string message)
 	{

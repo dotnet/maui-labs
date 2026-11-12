@@ -6,6 +6,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Maui;
 using Microsoft.Maui.Animations;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Controls.Hosting;
+using Microsoft.Maui.Controls.Platform;
 using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Hosting;
@@ -91,13 +93,21 @@ public static partial class AppHostBuilderExtensions
 
 	static MauiAppBuilder SetupDefaults(this MauiAppBuilder builder)
 	{
-		// Register AppInfo so AppInfo.RequestedTheme returns GTK's system theme
+		// MAUI 10 has no public DI-to-static-facade bridge. Keep its reflection
+		// compatibility path out of the net11 asset.
+#if NET10_0
 		GtkAppInfoImplementation.Register();
+#else
+		builder.Services.TryAddSingleton<Microsoft.Maui.ApplicationModel.IAppInfo, GtkAppInfoImplementation>();
+#endif
 
 		builder.Services.AddSingleton<IDispatcherProvider>(svc => new GtkDispatcherProvider());
 
 		// Register GTK alert/dialog handler for DisplayAlert/ActionSheet/Prompt
 		GtkAlertManager.Register(builder.Services);
+#if NET11_0_OR_GREATER
+		builder.Services.AddSingleton<IGesturePlatformManagerFactory, GtkGesturePlatformManagerFactory>();
+#endif
 
 		builder.Services.AddScoped(svc =>
 		{

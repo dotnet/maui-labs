@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>$(LinuxGtk4TargetFrameworks)</TargetFrameworks>
     <RootNamespace>Microsoft.Maui.Platforms.Linux.Gtk4.Essentials</RootNamespace>
     <AssemblyName>Microsoft.Maui.Platforms.Linux.Gtk4.Essentials</AssemblyName>
     <PackageId>Microsoft.Maui.Platforms.Linux.Gtk4.Essentials</PackageId>
@@ -13,8 +13,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Tests" />
     <PackageReference Include="GirCore.Gtk-4.0" Version="0.7.0" />
-    <PackageReference Include="Microsoft.Maui.Essentials" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.Maui.Essentials" Version="$(LinuxGtk4Maui10Version)" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Microsoft.Maui.Essentials" Version="$(LinuxGtk4Maui11Version)" Condition="'$(TargetFramework)' == 'net11.0'" />
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.92.0" />
   </ItemGroup>
 
@@ -23,7 +25,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\..\Shared\Essentials\EssentialsInitializer.cs" Link="Hosting\EssentialsInitializer.cs" />
+    <Compile Include="..\..\..\Shared\Essentials\EssentialsInitializer.cs"
+             Link="Hosting\EssentialsInitializer.cs"
+             Condition="'$(TargetFramework)' == 'net10.0'" />
     <None Include="../../README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>

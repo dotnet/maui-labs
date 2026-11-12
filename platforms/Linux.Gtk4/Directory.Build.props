@@ -5,7 +5,13 @@
     <LangVersion>preview</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <MauiVersion>10.0.41</MauiVersion>
+    <MauiVersion Condition="'$(MauiVersion)' == ''">$(CommunityPlatformMauiVersion)</MauiVersion>
+    <LinuxGtk4Maui10Version Condition="$([System.String]::Copy('$(MauiVersion)').StartsWith('10.'))">$(MauiVersion)</LinuxGtk4Maui10Version>
+    <LinuxGtk4Maui10Version Condition="'$(LinuxGtk4Maui10Version)' == ''">$(MicrosoftMauiControlsVersion)</LinuxGtk4Maui10Version>
+    <LinuxGtk4Maui11Version Condition="$([System.String]::Copy('$(MauiVersion)').StartsWith('11.'))">$(MauiVersion)</LinuxGtk4Maui11Version>
+    <LinuxGtk4Maui11Version Condition="'$(LinuxGtk4Maui11Version)' == ''">$(CommunityPlatformMauiVersion)</LinuxGtk4Maui11Version>
+    <LinuxGtk4TargetFrameworks Condition="$([System.String]::Copy('$(MauiVersion)').StartsWith('10.'))">net10.0</LinuxGtk4TargetFrameworks>
+    <LinuxGtk4TargetFrameworks Condition="'$(LinuxGtk4TargetFrameworks)' == ''">net10.0;net11.0</LinuxGtk4TargetFrameworks>
     <!-- Set to false when the maui-labs DevFlow projects should not be referenced by the sample -->
     <EnableMauiDevFlow Condition="'$(EnableMauiDevFlow)' == ''">false</EnableMauiDevFlow>
   </PropertyGroup>
