@@ -388,6 +388,12 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Agent Extensions** — expose app-specific diagnostic tools under `/api/v1/ext/{namespace}/...` with self-describing metadata for CLI and MCP discovery
 - **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK
 
+Android driver commands and screen recording use `System.Diagnostics.Process` through the
+driver's internal `HostProcess` helper, not `Xamarin.Android.Tools.ProcessUtils`. Output and
+error streams drain concurrently; cancelling an ADB command terminates only its client, not
+the shared ADB server. `Xamarin.Android.Tools.AndroidSdk` remains required for `AdbRunner`
+device discovery and reverse-port setup.
+
 ## Focus-safe capture and native dialogs
 
 iOS Simulator full-screen screenshots use `simctl`, including system dialogs. CLI and

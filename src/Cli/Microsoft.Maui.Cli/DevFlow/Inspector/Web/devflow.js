@@ -94,8 +94,15 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   let gesturePoints = [];
   let isGesturing = false;
   let isDragging = false;
-  let refreshPromise = null;
+  let refreshGeneration = 0;
+  let refreshRequestVersion = 0;
+  let activeRefresh = null;
   const STATE_FETCH_TIMEOUT_MS = 10000;
+  const STATE_REFRESH_RETRY_MS = 3000;
+  const REFRESH_INTENT_RETRY = 0;
+  const REFRESH_INTENT_EVIDENCE = 1;
+  const REFRESH_INTENT_TAP = 2;
+  const REFRESH_INTENT_MUTATION = 3;
 
   // Inspector selection and tree state. Declared early so the event
   // handlers registered below can read them (they only run after init has set them).
@@ -229,27 +236,61 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // Refresh state via AJAX (no full page reload — avoids flash)
   async function refreshState(force = false) {
-    if (refreshPromise) {
-      if (!force) return refreshPromise;
-      await refreshPromise;
-      // Another forced caller may already have started the fresh refresh; share it.
-      if (refreshPromise) return refreshPromise;
+    const tap = latestTap;
+    if (activeRefresh) {
+      if (!force) return activeRefresh.promise;
+      activeRefresh.controller.abort();
     }
 
-    const currentRefresh = (async () => {
-      const tap = latestTap;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), STATE_FETCH_TIMEOUT_MS);
+    const refresh = {
+      generation: ++refreshGeneration,
+      requestVersion: refreshRequestVersion,
+      tap,
+      controller: new AbortController(),
+      followUpPromise: null,
+      promise: null,
+    };
+    const isSuperseded = () => refresh.generation !== refreshGeneration;
+    const followReplacement = () =>
+      activeRefresh && activeRefresh !== refresh ? activeRefresh.promise : null;
+    const ensureCurrent = () => {
+      if (isSuperseded()) return false;
+      if (refresh.controller.signal.aborted) {
+        throw refresh.controller.signal.reason
+          || new DOMException('State refresh aborted.', 'AbortError');
+      }
+      return true;
+    };
+    activeRefresh = refresh;
+    refresh.promise = (async () => {
+      const timeout = setTimeout(() => {
+        if (isSuperseded()) return;
+        refresh.controller.abort();
+      }, STATE_FETCH_TIMEOUT_MS);
       disconnectedOverlay?.setAttribute('aria-busy', 'true');
       try {
-        const resp = await fetch(`${basePath}/api/state${diagnosticsWanted() ? '?diagnostics=1' : ''}`, { signal: controller.signal });
+        const query = [];
+        if (diagnosticsWanted()) query.push('diagnostics=1');
+        if (force) query.push('fresh=1');
+        const resp = await fetch(
+          `${basePath}/api/state${query.length ? `?${query.join('&')}` : ''}`,
+          { signal: refresh.controller.signal });
+        if (!ensureCurrent()) return followReplacement();
         if (!resp.ok) { markConnected(false); return null; }
         const state = await resp.json();
+        if (!ensureCurrent()) return followReplacement();
 
         // Keep the previous frame intact until its replacement image is ready.
+        let image = null;
         if (screenshot && state.screenshotUrl) {
-          const image = await loadDecodedImage(state.screenshotUrl, controller.signal);
+          image = await loadDecodedImage(state.screenshotUrl, refresh.controller.signal);
+          if (!ensureCurrent()) return followReplacement();
           if (!navigator.onLine) return null;
+        }
+
+        // Commit the complete frame synchronously so tree, screenshot, geometry, and metadata
+        // cannot be mixed with a superseded refresh.
+        if (image) {
           screenshot.src = image.src;
         }
         markConnected(true);
@@ -281,31 +322,43 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           ['data-id', 'style', 'data-isVisible', 'data-isEnabled', 'data-opacity', 'data-text', 'data-value']
             .map(attribute => element.getAttribute(attribute)));
         layoutPanel?.frameChanged(JSON.stringify([treeRevision, diagnosticInputsRevision, renderedState]));
-        if (tap !== null && tap === latestTap) {
+        if (tap !== null && tap === latestTap && refresh.requestVersion === refreshRequestVersion) {
           const renderedStateSignature = JSON.stringify(renderedState);
           if (renderedStateSignature !== tap.previewStateSignature || tap.unchangedCaptures > 0) {
             latestTap = null;
+            if (refreshTimer
+                && refreshTimerDelay === STATE_REFRESH_RETRY_MS
+                && refreshTimerIntent === REFRESH_INTENT_RETRY) {
+              clearTimeout(refreshTimer);
+              refreshTimer = null;
+              refreshTimerDelay = null;
+              refreshTimerIntent = REFRESH_INTENT_RETRY;
+            }
             renderPreviewPending();
           } else {
             tap.unchangedCaptures++;
-            scheduleRefresh(300);
+            scheduleRefresh(300, REFRESH_INTENT_RETRY);
           }
         }
         return state;
       } catch (err) {
+        if (isSuperseded()) {
+          return followReplacement();
+        }
         markConnected(false);
         console.error('State refresh failed:', err);
         return null;
       } finally {
         clearTimeout(timeout);
-        disconnectedOverlay?.removeAttribute('aria-busy');
       }
     })();
-    refreshPromise = currentRefresh;
     try {
-      return await currentRefresh;
+      return await refresh.promise;
     } finally {
-      if (refreshPromise === currentRefresh) refreshPromise = null;
+      if (activeRefresh === refresh) {
+        activeRefresh = null;
+        disconnectedOverlay?.removeAttribute('aria-busy');
+      }
     }
   }
 
@@ -345,7 +398,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     if (label) label.textContent = 'Checking…';
     setStatus(checkingStatus);
     try {
-      // Forced: wait for any in-flight poll, then check again rather than reusing its result.
+      // Forced: replace any in-flight refresh rather than reusing its result.
       await refreshState(true);
     } finally {
       retryConnectionBtn.disabled = false;
@@ -463,21 +516,69 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // Debounced refresh — coalesce rapid calls
   let refreshTimer = null;
+  let refreshTimerDelay = null;
+  let refreshTimerIntent = REFRESH_INTENT_RETRY;
   let latestTap = null; // newest accepted tap the Preview does not reflect yet
   let pendingTapRequests = 0;
   function renderPreviewPending() {
     previewPending.classList.toggle('df-hidden', pendingTapRequests === 0 && latestTap === null);
   }
-  function scheduleRefresh(delayMs = 300) {
-    if (refreshTimer) clearTimeout(refreshTimer);
+  function queueRefreshAfter(refresh) {
+    refresh.followUpPromise ??= (async () => {
+      await refresh.promise;
+      const current = activeRefresh;
+      if (current && current !== refresh && current.requestVersion === refreshRequestVersion)
+        return current.promise;
+      return refreshState(true);
+    })();
+    return refresh.followUpPromise;
+  }
+  function scheduleRefresh(delayMs = 300, intent = REFRESH_INTENT_EVIDENCE) {
+    if (intent === REFRESH_INTENT_EVIDENCE || intent === REFRESH_INTENT_MUTATION)
+      refreshRequestVersion++;
+    if (refreshTimer) {
+      const pendingIntent = refreshTimerIntent;
+      refreshTimerIntent = Math.max(refreshTimerIntent, intent);
+      if (refreshTimerDelay === 0 && delayMs > 0) return;
+      if (pendingIntent > intent && delayMs > 0) return;
+      clearTimeout(refreshTimer);
+    } else {
+      refreshTimerIntent = intent;
+    }
+    refreshTimerDelay = delayMs;
     refreshTimer = setTimeout(async () => {
       refreshTimer = null;
-      // A refresh already in flight may predate the tap, so wait for it and capture again.
-      const state = await refreshState(latestTap !== null);
-      if (!state && latestTap !== null) scheduleRefresh(3000);
+      refreshTimerDelay = null;
+      const scheduledIntent = refreshTimerIntent;
+      refreshTimerIntent = REFRESH_INTENT_RETRY;
+      const tap = latestTap;
+      let state;
+      if (scheduledIntent === REFRESH_INTENT_MUTATION) {
+        state = await refreshState(true);
+      } else if (scheduledIntent === REFRESH_INTENT_TAP) {
+        if (tap !== null && activeRefresh?.tap === tap) {
+          const sharedRefresh = activeRefresh;
+          state = await sharedRefresh.promise;
+          if (sharedRefresh.requestVersion !== refreshRequestVersion)
+            state = await queueRefreshAfter(sharedRefresh);
+        } else {
+          state = await refreshState(tap !== null);
+        }
+      } else if (scheduledIntent === REFRESH_INTENT_RETRY) {
+        state = activeRefresh
+          ? await activeRefresh.promise
+          : await refreshState();
+      } else if (activeRefresh) {
+        state = await queueRefreshAfter(activeRefresh);
+      } else {
+        state = await refreshState();
+      }
+      if (!state && latestTap !== null && !activeRefresh)
+        scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY);
     }, delayMs);
   }
-  if (screenshot) screenshot.addEventListener('error', () => scheduleRefresh(3000));
+  if (screenshot) screenshot.addEventListener('error', () =>
+    scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY));
 
   // ── Click → Tap (with text-input awareness) ──
   // Element types that should open a text editor instead of just tapping.
@@ -625,7 +726,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           recordStepById('fill', editor.dataset.elementId, { value: editor.value });
         }
         removeEditor(editor);
-        scheduleRefresh(300);
+        scheduleRefresh(300, REFRESH_INTENT_MUTATION);
         return;
       }
 
@@ -775,7 +876,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     } finally {
       pendingTapRequests--;
       renderPreviewPending();
-      scheduleRefresh(0);
+      scheduleRefresh(0, REFRESH_INTENT_TAP);
     }
   }
 
@@ -858,7 +959,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           body: JSON.stringify({ x, y, deltaX: dx, deltaY: dy })
         });
         if (recordingId && resp.ok) recordStep('scroll', null, { dx, dy });
-        scheduleRefresh(300);
+        scheduleRefresh(300, resp.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
       } catch (err) {
         console.error('Scroll failed:', err);
       }
@@ -901,12 +1002,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           return;
         }
         try {
-          await fetch(`${basePath}/api/gesture`, {
+          const response = await fetch(`${basePath}/api/gesture`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ points: gesturePoints.map((p) => ({ x: p.x, y: p.y, t: p.t })) })
           });
-          scheduleRefresh(300);
+          scheduleRefresh(300, response.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
           if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
         } catch (err) {
           console.error('Gesture failed:', err);
@@ -1053,7 +1154,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     onRuntimeChange: ({ elementId, name, value }) => {
       if (recordingId) recordStep('setProperty', elById(elementId), { name, value });
       layoutPanel?.invalidate('An app property changed; the previous Layout snapshot is stale.');
-      scheduleRefresh(200);
+      scheduleRefresh(200, REFRESH_INTENT_MUTATION);
     },
   });
 
@@ -1969,7 +2070,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       setStatus(r.ok
         ? `Returned to ${checkpointLabel || 'start'} (${checkpointRoute}). Navigation only — app data is not reset.`
         : 'Could not navigate to the checkpoint route.');
-      scheduleRefresh(500);
+      scheduleRefresh(500, r.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
     } catch (err) { setStatus('Navigate failed.'); }
   }
 
@@ -1996,7 +2097,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           : `Replay failed (HTTP ${r.status}).`));
       }
     } catch (err) { setStatus('Replay failed.'); }
-    finally { setReplayUi(false); scheduleRefresh(400); }
+    finally { setReplayUi(false); scheduleRefresh(400, REFRESH_INTENT_MUTATION); }
   }
 
   function showReplayReport(rep) {

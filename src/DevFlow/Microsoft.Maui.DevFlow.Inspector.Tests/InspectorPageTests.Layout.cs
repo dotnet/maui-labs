@@ -593,7 +593,7 @@ public partial class InspectorLayoutWorkspaceTests
         {
             ContentType = "application/json", Body = """{"youAreWriter":true,"heldByOther":false}"""
         }));
-        await _page.RouteAsync("**/api/state", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/state*", route => route.FulfillAsync(new()
         {
             ContentType = "application/json",
             Body = JsonSerializer.Serialize(new
@@ -614,7 +614,7 @@ public partial class InspectorLayoutWorkspaceTests
 
     private Task AdvanceLayoutPollingAsync() =>
         _page.RunAndWaitForResponseAsync(() => _page.Clock.RunForAsync(3100),
-            response => response.Url.EndsWith("/api/state", StringComparison.Ordinal));
+            response => IsStateUrl(response.Url));
 
     private async Task OpenLayoutWorkspaceAsync()
     {
