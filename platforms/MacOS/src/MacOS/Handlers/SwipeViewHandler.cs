@@ -31,7 +31,6 @@ public partial class SwipeViewHandler : MacOSViewHandler<SwipeView, NSView>
 	NSView? _contentView;
 	NSView? _actionContainer;
 	nfloat _panOffset;
-	bool _isOpen;
 	static readonly nfloat ActionWidth = 80;
 
 	public SwipeViewHandler() : base(Mapper, CommandMapper) { }
@@ -118,7 +117,7 @@ public partial class SwipeViewHandler : MacOSViewHandler<SwipeView, NSView>
 			DrawsBackground = false,
 			Alignment = NSTextAlignment.Center,
 			TextColor = NSColor.White,
-			Font = NSFont.SystemFontOfSize(12),
+			Font = NSFont.SystemFontOfSize(12)!,
 		};
 		label.SizeToFit();
 		label.Frame = new CGRect(0, (height - label.Frame.Height) / 2, ActionWidth, label.Frame.Height);
@@ -161,7 +160,6 @@ public partial class SwipeViewHandler : MacOSViewHandler<SwipeView, NSView>
 				{
 					var targetOffset = _panOffset > 0 ? ActionWidth * items.Count : -ActionWidth * items.Count;
 					AnimateContent(targetOffset);
-					_isOpen = true;
 					return;
 				}
 			}
@@ -171,7 +169,6 @@ public partial class SwipeViewHandler : MacOSViewHandler<SwipeView, NSView>
 
 	void CloseSwipe(bool animated)
 	{
-		_isOpen = false;
 		if (animated)
 			AnimateContent(0);
 		else

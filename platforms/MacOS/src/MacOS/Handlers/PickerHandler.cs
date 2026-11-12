@@ -134,6 +134,9 @@ public partial class PickerHandler : MacOSViewHandler<IPicker, NSPopUpButton>
         if (menu != null && menu.Count > 0)
         {
             var item = menu.ItemAt(0);
+            if (item == null)
+                return;
+
             var attrs = new Foundation.NSDictionary(
                 AppKit.NSStringAttributeKey.ForegroundColor, color);
             item.AttributedTitle = new Foundation.NSAttributedString(picker.Title, attrs);
@@ -161,6 +164,10 @@ public partial class PickerHandler : MacOSViewHandler<IPicker, NSPopUpButton>
         {
             handler.PlatformView.WantsLayer = true;
             handler.PlatformView.Layer!.BackgroundColor = solidPaint.Color.ToPlatformColor().CGColor;
+        }
+        else if (handler.PlatformView.Layer is { } layer)
+        {
+            layer.BackgroundColor = null;
         }
     }
 }

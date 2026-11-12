@@ -224,7 +224,9 @@ until the app restarts — safe for experimentation.
 2. `maui devflow ui tap --automationId "MyButton"` — tap buttons, checkboxes, list items
 3. `maui devflow ui clear --automationId "MyEntry"` — clear text fields
 4. Or use element IDs from tree/query: `maui devflow ui tap <elementId>`
-5. Take screenshot to verify result, or use `--and-screenshot` on the action
+5. Content drawn on a canvas (SkiaSharp `SKCanvasView`, `GraphicsView`, Syncfusion charts) has no element of its own — tap a point inside the canvas element: `maui devflow ui tap --automationId "Chart" --x 120 --y 80` (device-independent units from the element's top-left; pick the point from its `bounds` and a screenshot). On iOS/Mac Catalyst this needs `AgentOptions.EnableSyntheticTouch` (agent status `capabilities.syntheticTouch`)
+6. Drag a custom slider's thumb, reorder an item, or drop onto a target with a real touch from a point: `maui devflow ui gesture drag --automationId "Slider_Track" --x 12 --y 20 --to-x 180 --to-y 20` (or `--to-element <dropTargetId>`, `--dx/--dy`, `--hold 500` for long-press-to-drag). Unlike `ui gesture pan`, which may invoke the MAUI `PanGestureRecognizer` directly, this goes through the touch pipeline — a tap on the same view does not fire, and an enclosing scroller can take the drag — so it tests what a finger does. On iOS/Mac Catalyst a drag an enclosing scroller or ancestor recognizer would contest (e.g. vertical inside a vertical ScrollView) is refused with the recognizer's name; drag along the other axis or scroll first. Same iOS/Mac Catalyst requirement as point taps
+7. Take screenshot to verify result, or use `--and-screenshot` on the action
 
 **Blazor WebView (if applicable):**
 1. `maui devflow webview snapshot` — DOM tree as accessible text (best for AI)
@@ -430,7 +432,8 @@ resolution options are provided.
 | `ui tree [--depth N] [--window W] [--fields F] [--format compact]` | Visual tree. `--fields "id,type,text"` projects specific fields. `--format compact` returns only id, type, text, automationId, bounds |
 | `ui query [--type T] [--automationId A] [--text T] [--selector S] [--fields F] [--format compact] [--wait-until exists\|gone] [--timeout N]` | Find elements. `--wait-until` polls until condition met (default 30s timeout). `--fields` and `--format` same as tree |
 | `ui hittest <x> <y> [--window W]` | Find elements at a point (deepest first). Returns IDs, types, bounds |
-| `ui tap [elementId] [--automationId A] [--type T] [--text T] [--index N] [--and-screenshot [path]] [--and-tree] [--and-tree-depth N]` | Tap element by ID or implicit resolution |
+| `ui tap [elementId] [--automationId A] [--type T] [--text T] [--index N] [--x X --y Y] [--and-screenshot [path]] [--and-tree] [--and-tree-depth N]` | Tap element by ID or implicit resolution; `--x/--y` taps that point inside it (canvas-drawn content) |
+| `ui gesture drag [--element ID] [--automationId A] [--text T] --x X --y Y (--to-x X --to-y Y \| --to-element ID \| --dx DX --dy DY) [--hold MS] [--duration MS] [--steps N]` | Real-touch drag from a point on the element: thumbs, reorder, drop targets. `--to-x/--to-y` are on `--to-element` when given, otherwise on the element |
 | `ui fill [elementId] <text> [--automationId A] [--type T] [--text T] [--index N] [--and-screenshot [path]] [--and-tree]` | Fill text into Entry/Editor. elementId optional when using resolution options |
 | `ui clear [elementId] [--automationId A] [--type T] [--text T] [--index N] [--and-screenshot [path]] [--and-tree]` | Clear text. elementId optional when using resolution options |
 | `MAUI focus [elementId] [--automationId A] [--type T] [--text T] [--index N]` | Set focus. elementId optional when using resolution options |

@@ -24,6 +24,11 @@ on:
         type: string
         default: '[]'
         description: 'JSON string array of dotnet test arguments (version properties/filter), only valid with test-only: true. Arguments are not evaluated by a shell.'
+      build-target-framework:
+        required: false
+        type: string
+        default: ''
+        description: 'Build only this target framework with dotnet build. Requires run-tests: false and pack: false.'
       pack:
         required: false
         type: boolean
@@ -96,6 +101,11 @@ jobs:
         shell: pwsh
         run: throw 'Test arguments require test-only=true; test-only requires run-tests=true and pack=false (no signing or publishing).'
 
+      - name: Validate targeted build mode
+        if: inputs.build-target-framework != '' && (inputs.test-only || inputs.run-tests || inputs.pack)
+        shell: pwsh
+        run: throw 'build-target-framework requires test-only=false, run-tests=false, and pack=false.'
+
       - name: Download pre-build artifact
         if: inputs.pre-build-artifact != ''
         uses: actions/download-artifact@v8
@@ -119,21 +129,21 @@ jobs:
       # Use Arcade's dotnet wrapper for workload-related setup so SDK resolution
       # matches the later cibuild invocation.
       - name: Install workloads (Windows)
-        if: inputs.install-workloads && matrix.os == 'windows-latest'
+        if: inputs.install-workloads && runner.os == 'Windows'
         run: eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
         shell: cmd
 
       - name: Install workloads (Unix)
-        if: inputs.install-workloads && matrix.os != 'windows-latest'
+        if: inputs.install-workloads && runner.os != 'Windows'
         run: ./eng/common/dotnet.sh workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
 
       - name: Install Android SDK dependencies (Windows)
-        if: inputs.install-workloads && matrix.os == 'windows-latest'
+        if: inputs.install-workloads && runner.os == 'Windows' && inputs.android-project != ''
         run: eng\common\dotnet.cmd build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
         shell: cmd
 
       - name: Install Android SDK dependencies (macOS)
-        if: inputs.install-workloads && runner.os == 'macOS'
+        if: inputs.install-workloads && runner.os == 'macOS' && inputs.android-project != ''
         run: ./eng/common/dotnet.sh build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
 
       # cibuild.cmd/.sh hardcode -pack -publish, and Arcade's publish step errors out with
@@ -141,7 +151,7 @@ jobs:
       # app heads). Expanded here so those flags can follow the `pack` input. For pack: true
       # callers this is the exact command cibuild runs.
       - name: Build, Test and Pack (Windows)
-        if: matrix.os == 'windows-latest' && !inputs.test-only
+        if: runner.os == 'Windows' && !inputs.test-only && inputs.build-target-framework == ''
         run: >
           eng\common\build.cmd
           -restore -build -test -ci
@@ -154,7 +164,7 @@ jobs:
         shell: cmd
 
       - name: Build and Test (macOS)
-        if: runner.os == 'macOS' && !inputs.test-only
+        if: runner.os == 'macOS' && !inputs.test-only && inputs.build-target-framework == ''
         run: >
           ./eng/common/build.sh
           --restore --build --test --ci
@@ -167,7 +177,7 @@ jobs:
           ${{ inputs.skip-xcode-version-validation && '/p:ValidateXcodeVersion=false' || '' }}
 
       - name: Build and Test (Linux)
-        if: startsWith(matrix.os, 'ubuntu') && !inputs.test-only
+        if: startsWith(matrix.os, 'ubuntu') && !inputs.test-only && inputs.build-target-framework == ''
         run: >
           ./eng/common/build.sh
           --restore --build --test --ci
@@ -177,6 +187,22 @@ jobs:
           --projects $(pwd)/${{ inputs.project-path }}
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
           ${{ inputs.build-arguments }}
+
+      - name: Build targeted framework
+        if: inputs.build-target-framework != ''
+        shell: pwsh
+        env:
+          BUILD_PROJECT: ${{ inputs.project-path }}
+          BUILD_TARGET_FRAMEWORK: ${{ inputs.build-target-framework }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet build $env:BUILD_PROJECT `
+            --configuration Release `
+            --framework $env:BUILD_TARGET_FRAMEWORK `
+            --warnaserror `
+            -p:ContinuousIntegrationBuild=false `
+            -p:VersionSuffix=$env:CI_PACKAGE_VERSION_SUFFIX `
+            ${{ inputs.build-arguments }}
 
       - name: Run targeted platform tests
         if: inputs.test-only

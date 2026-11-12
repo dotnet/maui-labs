@@ -5,24 +5,20 @@ using Microsoft.Extensions.AI;
 namespace Microsoft.Maui.Essentials.AI;
 
 /// <summary>
-/// Handles the channel, chunker, and update processing for streaming responses.
+/// Handles the channel and update processing for streaming responses.
 /// Extracted from the platform-specific chat client for testability.
 /// </summary>
 /// <remarks>
-/// When a <see cref="StreamChunkerBase"/> is provided, <see cref="ProcessContent"/> expects
-/// cumulative snapshots and the chunker computes deltas (used by Apple Intelligence).
-/// When no chunker is provided, <see cref="ProcessContent"/> expects pre-chunked deltas
-/// and passes them through directly for providers that already emit incremental deltas.
+/// <see cref="ProcessContent"/> expects append-only deltas. Provider-native bridges normalize
+/// cumulative snapshots before forwarding them to managed code.
 /// </remarks>
 internal sealed class StreamingResponseHandler
 {
 	private readonly Channel<ChatResponseUpdate> _channel;
-	private readonly StreamChunkerBase? _chunker;
 	private readonly string? _modelId;
 
 	/// <summary>
-	/// Creates a handler that passes content through directly (no chunking).
-	/// Use when the AI model already provides incremental deltas.
+	/// Creates a handler that passes provider-native deltas through directly.
 	/// </summary>
 	/// <param name="modelId">Optional provider model identifier to include on every update.</param>
 	public StreamingResponseHandler(string? modelId = null)
@@ -33,58 +29,26 @@ internal sealed class StreamingResponseHandler
 	}
 
 	/// <summary>
-	/// Creates a handler with a chunker for computing deltas from cumulative snapshots.
-	/// Use when the AI model provides progressively longer complete responses.
-	/// </summary>
-	/// <param name="chunker">The chunker that computes content deltas.</param>
-	/// <param name="modelId">Optional provider model identifier to include on every update.</param>
-	public StreamingResponseHandler(StreamChunkerBase chunker, string? modelId = null) : this(modelId)
-	{
-		_chunker = chunker;
-	}
-
-	/// <summary>
-	/// Processes a content (text) streaming update.
-	/// If a chunker is configured, <paramref name="text"/> should be the cumulative response.
-	/// If no chunker, <paramref name="text"/> should be the incremental delta.
+	/// Processes an append-only content delta.
 	/// </summary>
 	public void ProcessContent(string? text)
 	{
-		if (text is null)
+		if (string.IsNullOrEmpty(text))
 			return;
 
-		var delta = _chunker is not null ? _chunker.Process(text) : text;
-		if (!string.IsNullOrEmpty(delta))
+		_channel.Writer.TryWrite(new ChatResponseUpdate
 		{
-			_channel.Writer.TryWrite(new ChatResponseUpdate
-			{
-				Role = ChatRole.Assistant,
-				ModelId = _modelId,
-				Contents = { new TextContent(delta) }
-			});
-		}
+			Role = ChatRole.Assistant,
+			ModelId = _modelId,
+			Contents = { new TextContent(text) }
+		});
 	}
 
 	/// <summary>
-	/// Processes a tool call update. Flushes any pending content first.
+	/// Processes a tool call update.
 	/// </summary>
 	public void ProcessToolCall(string? toolCallId, string? toolCallName, string? toolCallArguments)
 	{
-		if (_chunker is not null)
-		{
-			var pendingContent = _chunker.Flush();
-			if (!string.IsNullOrEmpty(pendingContent))
-			{
-				_channel.Writer.TryWrite(new ChatResponseUpdate
-				{
-					Role = ChatRole.Assistant,
-					ModelId = _modelId,
-					Contents = { new TextContent(pendingContent) }
-				});
-			}
-			_chunker.Reset();
-		}
-
 		var args = toolCallArguments is null
 			? null
 #pragma warning disable IL3050, IL2026 // DefaultJsonTypeInfoResolver is only used when reflection-based serialization is enabled
@@ -113,24 +77,10 @@ internal sealed class StreamingResponseHandler
 	}
 
 	/// <summary>
-	/// Flushes remaining chunker content, emits usage, and completes the channel successfully.
+	/// Emits usage and completes the channel successfully.
 	/// </summary>
 	public void Complete(UsageDetails? usage = null)
 	{
-		if (_chunker is not null)
-		{
-			var finalChunk = _chunker.Flush();
-			if (!string.IsNullOrEmpty(finalChunk))
-			{
-				_channel.Writer.TryWrite(new ChatResponseUpdate
-				{
-					Role = ChatRole.Assistant,
-					ModelId = _modelId,
-					Contents = { new TextContent(finalChunk) }
-				});
-			}
-		}
-
 		if (usage is not null)
 		{
 			_channel.Writer.TryWrite(new ChatResponseUpdate

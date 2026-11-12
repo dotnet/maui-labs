@@ -19,7 +19,7 @@ public class MacOSFontManager : IFontManager
 
     public double DefaultFontSize => 13.0;
 
-    public NSFont DefaultFont => NSFont.SystemFontOfSize((nfloat)DefaultFontSize);
+    public NSFont DefaultFont => NSFont.SystemFontOfSize((nfloat)DefaultFontSize)!;
 
     public NSFont GetFont(Font font, double defaultFontSize = 0)
     {
@@ -39,7 +39,7 @@ public class MacOSFontManager : IFontManager
             nsFont ??= NSFont.FromFontName(font.Family, size);
         }
 
-        nsFont ??= NSFont.SystemFontOfSize(size);
+        nsFont ??= NSFont.SystemFontOfSize(size)!;
 
         // Apply weight traits
         var manager = NSFontManager.SharedFontManager;

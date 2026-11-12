@@ -38,7 +38,7 @@
       "type": "parameter",
       "description": "The minimum iOS version.",
       "datatype": "string",
-      "defaultValue": "13.0",
+      "defaultValue": "15.0",
       "replaces": "IOS_MIN_VERSION"
     },
     "maccatalystMinVersion": {

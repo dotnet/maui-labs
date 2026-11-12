@@ -18,6 +18,13 @@ internal sealed class HostOperations(Func<Task<AgentStatus?>> getStatus)
     {
         using var driver = await CreateAlertDriverAsync(udid, pid);
 
+        if (driver is MacCatalystAppDriver && string.IsNullOrWhiteSpace(buttonLabel))
+        {
+            throw new ArgumentException(
+                "An exact button label is required when dismissing a macOS alert. Run 'maui devflow ui alert detect' and pass one of its visible button labels.",
+                nameof(buttonLabel));
+        }
+
         return await ((IAlertDriver)driver).HandleAlertIfPresentAsync(buttonLabel);
     }
 
@@ -116,7 +123,7 @@ internal sealed class HostOperations(Func<Task<AgentStatus?>> getStatus)
         return "maccatalyst";
     }
 
-    private async Task<int> ResolveMacCatalystPidAsync(int? pid)
+    internal async Task<int> ResolveMacCatalystPidAsync(int? pid)
     {
         if (pid.HasValue)
             return pid.Value;
@@ -124,13 +131,15 @@ internal sealed class HostOperations(Func<Task<AgentStatus?>> getStatus)
         try
         {
             var status = await getStatus();
+            if (status?.App?.ProcessId is int processId)
+                return processId;
+
             var appName = status?.App?.Name ?? status?.AppName;
             if (!string.IsNullOrWhiteSpace(appName))
             {
-                var result = await ProcessRunner.RunAsync("pgrep", ["-f", appName]);
-                var lines = result.StandardOutput.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                if (lines.Length > 0 && int.TryParse(lines[0].Trim(), out var resolved))
-                    return resolved;
+                var matchedProcessId = ProcessNameResolver.FindUniqueProcessId(appName);
+                if (matchedProcessId.HasValue)
+                    return matchedProcessId.Value;
             }
         }
         catch { }

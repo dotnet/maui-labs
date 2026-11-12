@@ -19,6 +19,8 @@ internal sealed class AXElement : IDisposable
     /// </summary>
     internal nint Handle => _handle;
 
+    internal bool IsSameElement(AXElement other) => CFEqual(_handle, other._handle);
+
     private AXElement(nint handle)
     {
         _handle = handle;
@@ -168,15 +170,7 @@ internal sealed class AXElement : IDisposable
             {
                 var found = child.FindFirstInternal(predicate, depth + 1, maxDepth);
                 if (found is not null)
-                {
-                    // Dispose remaining children
-                    foreach (var c in children)
-                        if (!ReferenceEquals(c, child)) c.Dispose();
-                    // Don't dispose the child that contains the match
-                    // (its subtree was already explored and the found element is independent)
-                    child.Dispose();
                     return found;
-                }
             }
         }
         finally

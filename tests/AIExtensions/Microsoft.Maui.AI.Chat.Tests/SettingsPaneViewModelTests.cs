@@ -1,10 +1,32 @@
 using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.Essentials.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
 
 public sealed class SettingsPaneViewModelTests
 {
+    [Fact]
+    public void ModelCapabilities_EnableToolsOnlyForTheCapableSelectionWithoutLosingToolChoices()
+    {
+        using var client = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("nano", "Nano", "Ready", SupportsToolCalling: true,
+                SupportsRequiredToolMode: false));
+        var settings = new SettingsPaneViewModel([client]);
+        var tool = AIFunctionFactory.Create(() => "secret", "lookup");
+        settings.ModelStatus = new(ChatModelAvailability.Available, [ChatModelCapability.Text]);
+        Assert.False(settings.SupportsToolCalling);
+        Assert.Null(settings.CreateChatOptions([]).Tools);
+        Assert.Same(ChatToolMode.None, settings.CreateChatOptions([]).ToolMode);
+        Assert.True(settings.UseCalculatorTool);
+
+        settings.ModelStatus = new(ChatModelAvailability.Available, [ChatModelCapability.Text, ChatModelCapability.ToolCalling]);
+        Assert.True(settings.SupportsToolCalling);
+        Assert.Same(tool, Assert.Single(settings.CreateChatOptions([tool]).Tools!));
+        settings.ToolMode = ChatToolMode.RequireAny;
+        Assert.Throws<NotSupportedException>(() => settings.CreateChatOptions([tool]));
+    }
+
     [Fact]
     public void ChatDescriptor_ToolCallingIsOptIn()
     {
@@ -70,6 +92,43 @@ public sealed class SettingsPaneViewModelTests
 
         Assert.Same(live, settings.SelectedClient);
         Assert.Equal("ChatClient1Radio", settings.Clients[1].AutomationId);
+    }
+
+    [Fact]
+    public void ModelSelection_OverridesEachRequestWithoutReplacingTheClient()
+    {
+        using var client = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("models", "Models", "Ready", Models:
+            [
+                new("gemini-nano", "Default"),
+                new("gemini-nano-preview-fast", "Preview fast"),
+            ]));
+        using var other = CreateClient("Other", isReplay: false);
+        var settings = new SettingsPaneViewModel([client, other]);
+
+        Assert.True(settings.HasModels);
+        Assert.Equal("gemini-nano", settings.SelectedModelId);
+        Assert.Equal("ChatModel-gemini-nano-preview-fast", settings.Models[1].AutomationId);
+        var originalOptions = settings.CreateChatOptions([]);
+        Assert.Equal("gemini-nano", originalOptions.ModelId);
+
+        settings.SelectedModelId = "gemini-nano-preview-fast";
+
+        Assert.Same(client, settings.SelectedClient);
+        Assert.Equal("gemini-nano-preview-fast", settings.CreateChatOptions([]).ModelId);
+        Assert.Equal("gemini-nano", originalOptions.ModelId);
+
+        settings.IsBusy = true;
+        Assert.False(settings.CanEditOptions);
+        settings.IsBusy = false;
+        settings.SelectedClient = other;
+
+        Assert.False(settings.HasModels);
+        Assert.Null(settings.RequestModelId);
+        Assert.Null(settings.CreateChatOptions([]).ModelId);
+
+        settings.SelectedClient = client;
+        Assert.Equal("gemini-nano", settings.SelectedModelId);
     }
 
     [Fact]
@@ -154,6 +213,32 @@ public sealed class SettingsPaneViewModelTests
 
         settings.UseStructuredJson = false;
         Assert.Null(settings.CreateChatOptions([]).ResponseFormat);
+    }
+
+    [Fact]
+    public void CreateChatOptions_GeminiDescriptor_DisablesToolsReasoningAndStructuredOutput()
+    {
+        using var client = new DescribedChatClient(
+            new StubChatClient(),
+            new ChatClientDescriptor(
+                "gemini-nano-chat", "Gemini Nano", "The first request confirms availability.",
+                SupportsImageInput: true, SupportsToolCalling: false, SupportsStructuredOutput: false));
+        var settings = new SettingsPaneViewModel([client]) { UseStructuredJson = true };
+
+        var options = settings.CreateChatOptions([]);
+
+        Assert.Same(client, settings.SelectedClient);
+        Assert.Same(ChatToolMode.None, options.ToolMode);
+        Assert.Null(options.Tools);
+        Assert.Null(options.AllowMultipleToolCalls);
+        Assert.Null(options.Reasoning);
+        Assert.Null(options.ResponseFormat);
+        Assert.True(settings.UseStructuredJson);
+        Assert.True(settings.SelectedDescriptor!.SupportsImageInput);
+        Assert.False(settings.SelectedDescriptor.SupportsReasoningSummary);
+        Assert.False(settings.SelectedDescriptor.SupportsImageGeneration);
+        Assert.False(settings.SelectedDescriptor.SupportsStructuredOutput);
+        Assert.Contains("first request", settings.ClientStatus);
     }
 
     private static IChatClient CreateClient(string name, bool isReplay) =>

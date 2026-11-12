@@ -58,7 +58,7 @@ public partial class MapViewHandler : MacOSViewHandler<MapView, MKMapView>
         VirtualView.Polylines.CollectionChanged -= OnOverlaysChanged;
         VirtualView.Polygons.CollectionChanged -= OnOverlaysChanged;
 
-        platformView.Delegate = null;
+        platformView.Delegate = null!;
         _mapDelegate = null;
         base.DisconnectHandler(platformView);
     }
