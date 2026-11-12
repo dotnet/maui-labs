@@ -19,10 +19,13 @@ Chat, Embeddings, and Images have separate providers and capabilities.
 
 Native chat does not fall back to Azure. Structured responses stream only when
 the selected provider emits incremental updates. Apple Intelligence runs tools
-inside its own session instead of handing the calls back to the app, so it isn't
-offered the chat's UI actions (`set_theme` and `propose_notes`), and its
-instructions and suggestions leave them out; the notes still reach it with each
-message.
+inside its own session instead of handing the calls back to the app, so it can't
+ask before a tool runs (**Ask before running tools** is hidden while it is
+selected) and isn't offered the chat's UI actions (`set_theme` and
+`propose_notes`); its instructions and suggestions leave them out, and the notes
+still reach it with each message. It also ends the whole answer when a tool
+fails, so the calculator's schema lists its four operations for the model to
+choose from.
 
 Settings apply to the next message without starting a new chat. Controls reflect
 provider capabilities. Uncheck tools or choose **None** to disable calls.
@@ -45,7 +48,7 @@ The suggestions on an empty chat try what the selected client supports.
 | Several calls in one card | "Use the calculator: (12 × 7) + (30 ÷ 4)" | `CalculatorWorksheetHandler`, an `ActivityHandler`, folds every `calculate` call of an answer into one worksheet, a row per calculation. Rows fill in as their results arrive, and a calculation that failed or never ran says why; once the answer is stopped or fails, a row without a result says **No result**, also after the app restarts. |
 | A typed tool card | "Am I online?" | `ConnectionStatusBlock` is a `[ToolBlock("get_connection_status")]` block: the source generator writes the handler that maps the call's result into it, and `options.AddGeneratedToolBlocks()` registers it. |
 | A UI action | "Switch to dark mode" | `set_theme` runs in the app rather than in the model's client: it sets the app to the light, dark, or system theme. |
-| Approvals | **Ask before running tools** in settings | Each local tool, and `set_theme`, waits behind an approval card. **Approve** runs it; **Reject** tells the model it was declined. |
+| Approvals | **Ask before running tools** in settings | Each local tool, and `set_theme`, waits behind an approval card. **Approve** runs it; **Reject** tells the model it was declined. Hidden for Apple Intelligence, which runs tools itself. |
 | Reasoning | "Which is larger, 9.11 or 9.9?" | With **Reasoning summary** on, a model that summarizes its reasoning shows it muted above the answer, with the summary's headings, which the model marks with `**`, in bold. Reasoning that arrives only encrypted shows nothing. |
 | Images | Attach an image, or "Generate an image of a cozy cabin" | Clients that accept images take one with the message. With an Azure image deployment, the model can generate or edit images. |
 | Structured output | **Structured JSON** in settings | An answer that is a JSON object shows as a structured-response card, chosen by `StructuredResponseMatch`, a custom `BlockMatch`. |

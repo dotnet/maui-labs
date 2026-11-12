@@ -48,11 +48,10 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     [ObservableProperty] private bool isBusy;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SupportsToolCalling))]
-<<<<<<< HEAD
     [NotifyPropertyChangedFor(nameof(SupportsStructuredOutput))]
-=======
     [NotifyPropertyChangedFor(nameof(SupportsUIActions))]
->>>>>>> 8fd0b31 (Rebuild the playground chat on the engine and block templates)
+    [NotifyPropertyChangedFor(nameof(SupportsToolApproval))]
+    [NotifyPropertyChangedFor(nameof(AsksBeforeRunningTools))]
     private ChatModelStatus? modelStatus;
 
     [ObservableProperty] private bool useStreaming = true;
@@ -63,7 +62,9 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     [ObservableProperty] private bool useCalculatorTool = true;
     [ObservableProperty] private bool useConnectionStatusTool = true;
     [ObservableProperty] private bool useImageGenerationTool = true;
-    [ObservableProperty] private bool requireToolApproval;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AsksBeforeRunningTools))]
+    private bool requireToolApproval;
 
     // Store tool choices in the same types that ChatOptions accepts.
     [ObservableProperty] private ChatToolMode toolMode = ChatToolMode.Auto;
@@ -105,7 +106,16 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     /// <summary>
     /// Gets whether the selected client hands tool calls back to the app, so the model gets the chat's UI actions.
     /// </summary>
-    public bool SupportsUIActions => SupportsToolCalling && SelectedDescriptor?.SupportsUIActions == true;
+    public bool SupportsUIActions => SupportsToolCalling && SelectedDescriptor?.HandsBackToolCalls == true;
+
+    /// <summary>
+    /// Gets whether the app can ask before a tool runs, which needs a client that hands tool calls back to the app. A
+    /// client that runs tools in its own session runs them without asking.
+    /// </summary>
+    public bool SupportsToolApproval => SupportsToolCalling && SelectedDescriptor?.HandsBackToolCalls == true;
+
+    /// <summary>Gets whether each local tool asks before it runs: "Ask before running tools" is on and the client can ask.</summary>
+    public bool AsksBeforeRunningTools => RequireToolApproval && SupportsToolApproval;
 
     public bool IsMultipleToolCallsDefault
     {
@@ -263,6 +273,8 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         OnPropertyChanged(nameof(SupportsToolCalling));
         OnPropertyChanged(nameof(SupportsStructuredOutput));
         OnPropertyChanged(nameof(SupportsUIActions));
+        OnPropertyChanged(nameof(SupportsToolApproval));
+        OnPropertyChanged(nameof(AsksBeforeRunningTools));
         UpdateDefaultInstructions();
     }
 

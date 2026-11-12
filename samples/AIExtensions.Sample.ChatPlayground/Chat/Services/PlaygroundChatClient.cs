@@ -93,8 +93,8 @@ public sealed class PlaygroundChatClient : IChatClient
 
     /// <summary>
     /// Creates the tools the settings enable for the selected client: the local tools, which run on this device, and
-    /// the provider's image generation. With "Ask before running tools" on, each local tool asks for approval before
-    /// it runs.
+    /// the provider's image generation. While <see cref="SettingsPaneViewModel.AsksBeforeRunningTools"/>, each local
+    /// tool asks for approval before it runs.
     /// </summary>
     public IList<AITool> CreateEnabledTools()
     {
@@ -107,7 +107,7 @@ public sealed class PlaygroundChatClient : IChatClient
             tools.Add(_tools.Calculator);
         if (_settings.UseConnectionStatusTool)
             tools.Add(_tools.ConnectionStatus);
-        if (_settings.RequireToolApproval)
+        if (_settings.AsksBeforeRunningTools)
         {
             for (var index = 0; index < tools.Count; index++)
             {
@@ -127,8 +127,8 @@ public sealed class PlaygroundChatClient : IChatClient
     /// </summary>
     /// <param name="engineTools">
     /// The declarations of the engine's UI actions. An action registered as an <see cref="ApprovalRequiredAIFunction"/>
-    /// asks only while "Ask before running tools" is on; otherwise it is declared as a plain function, so it runs at
-    /// once.
+    /// asks only while <see cref="SettingsPaneViewModel.AsksBeforeRunningTools"/>; otherwise it is declared as a plain
+    /// function, so it runs at once.
     /// </param>
     public IList<AITool> CreateUIActions(IEnumerable<AITool>? engineTools)
     {
@@ -136,7 +136,7 @@ public sealed class PlaygroundChatClient : IChatClient
             return [];
 
         return engineTools
-            .Select(tool => !_settings.RequireToolApproval &&
+            .Select(tool => !_settings.AsksBeforeRunningTools &&
                 tool is AIFunctionDeclaration declaration &&
                 tool.GetService<ApprovalRequiredAIFunction>() is not null
                     ? AIFunctionFactory.CreateDeclaration(
