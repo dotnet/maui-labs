@@ -125,12 +125,12 @@ jobs:
       # matches the later cibuild invocation.
       - name: Install workloads (Windows)
         if: inputs.install-workloads && runner.os == 'Windows'
-        run: eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --version 11.0.100-servicing.26530.3 --source https://api.nuget.org/v3/index.json
+        run: eng\common\dotnet.cmd workload config --update-mode manifests && eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --include-previews
         shell: cmd
 
       - name: Install workloads (Unix)
         if: inputs.install-workloads && runner.os != 'Windows'
-        run: ./eng/common/dotnet.sh workload install ${{ inputs.workloads }} --version 11.0.100-servicing.26530.3 --source https://api.nuget.org/v3/index.json
+        run: ./eng/common/dotnet.sh workload config --update-mode manifests && ./eng/common/dotnet.sh workload install ${{ inputs.workloads }} --include-previews
 
       - name: Install Android SDK dependencies (Windows)
         if: inputs.install-workloads && runner.os == 'Windows' && inputs.android-project != ''

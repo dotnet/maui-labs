@@ -48,7 +48,7 @@ jobs:
           dotnet-version: '11.0.100'
 
       - name: Install MAUI workload
-        run: dotnet workload install maui --version 11.0.100-servicing.26530.3 --source https://api.nuget.org/v3/index.json
+        run: dotnet workload config --update-mode manifests && dotnet workload install maui --include-previews
 
       - name: Build runtime
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
