@@ -3958,6 +3958,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return nativeResult == "ok" ? HttpResponse.Ok("Scrolled") : HttpResponse.Error(nativeResult);
         }
 
+        // Set by the delta paths that can tell how far the view really moved.
+        ScrollMovement? movement = null;
         var result = await DispatchAsync(async () =>
         {
             // Priority 1: Scroll by item index on a specific ItemsView
@@ -3986,6 +3988,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
                 if (itemsView != null)
                 {
+                    // ItemsView.ScrollTo ignores an index past the end without any error, so a caller
+                    // stepping through a list by index would never learn that it reached the end.
+                    if (ValidateItemIndex(itemsView, body.ItemIndex.Value, body.GroupIndex ?? -1) is { } rangeError)
+                        return rangeError;
+
                     await ScrollWithTimeoutAsync(
                         () => { itemsView.ScrollTo(body.ItemIndex.Value, body.GroupIndex ?? -1, position, body.Animated); return Task.CompletedTask; },
                         () => { itemsView.ScrollTo(body.ItemIndex.Value, body.GroupIndex ?? -1, position, false); return Task.CompletedTask; });
@@ -4032,25 +4039,29 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                     // 2d: Element is itself a scrollable view — apply delta
                     if (el is ScrollView sv && (body.DeltaX != 0 || body.DeltaY != 0))
                     {
-                        var newX = Math.Max(0, sv.ScrollX + body.DeltaX);
-                        var newY = Math.Max(0, sv.ScrollY + body.DeltaY);
-                        await ScrollViewToAsync(sv, newX, newY, body.Animated);
+                        movement = await ScrollViewByAsync(sv, body.DeltaX, body.DeltaY, body.Animated);
                         return "ok";
                     }
 
                     // 2e: Element is an ItemsView — apply delta via native scroll
                     if (el is ItemsView && (body.DeltaX != 0 || body.DeltaY != 0))
                     {
-                        if (await TryNativeScroll(ve, body.DeltaX, body.DeltaY))
+                        if (await TryNativeScrollMeasured(ve, body.DeltaX, body.DeltaY) is { } itemsMovement)
+                        {
+                            movement = itemsMovement;
                             return "ok";
+                        }
                         return $"Native scroll not supported on this platform for {el.GetType().Name}";
                     }
 
                     // 2f: Try native scroll as final fallback
                     if (body.DeltaX != 0 || body.DeltaY != 0)
                     {
-                        if (await TryNativeScroll(ve, body.DeltaX, body.DeltaY))
+                        if (await TryNativeScrollMeasured(ve, body.DeltaX, body.DeltaY) is { } nativeMovement)
+                        {
+                            movement = nativeMovement;
                             return "ok";
+                        }
                     }
                 }
                 // Comet views implement IView/IScrollView but NOT VisualElement.
@@ -4076,19 +4087,18 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             var targetItemsView = FindDescendant<ItemsView>(currentPage);
             if (targetItemsView is VisualElement ive)
             {
-                if (await TryNativeScroll(ive, body.DeltaX, body.DeltaY))
+                if (await TryNativeScrollMeasured(ive, body.DeltaX, body.DeltaY) is { } pageItemsMovement)
+                {
+                    movement = pageItemsMovement;
                     return "ok";
+                }
             }
 
             // 3b: Try ScrollView on current page
             var targetScroll = FindDescendant<ScrollView>(currentPage);
             if (targetScroll != null)
             {
-                var newX = targetScroll.ScrollX + body.DeltaX;
-                var newY = targetScroll.ScrollY + body.DeltaY;
-                var x = Math.Max(0, newX);
-                var y = Math.Max(0, newY);
-                await ScrollViewToAsync(targetScroll, x, y, body.Animated);
+                movement = await ScrollViewByAsync(targetScroll, body.DeltaX, body.DeltaY, body.Animated);
                 return "ok";
             }
 
@@ -4109,7 +4119,86 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             body.ElementId,
             new Dictionary<string, object?> { ["DeltaX"] = body.DeltaX, ["DeltaY"] = body.DeltaY, ["Animated"] = body.Animated });
 
-        return result == "ok" ? HttpResponse.Ok("Scrolled") : HttpResponse.Error(result ?? "Scroll failed");
+        return result == "ok" ? ScrolledResponse(movement) : HttpResponse.Error(result ?? "Scroll failed");
+    }
+
+    /// <summary>
+    /// The success response of a scroll. When the backend could measure the movement it also carries
+    /// <c>scrolled</c> (false when the view was already at the end of its range in the requested direction)
+    /// and <c>actualDeltaX</c>/<c>actualDeltaY</c> in the same units and sign as the requested deltas.
+    /// </summary>
+    internal static HttpResponse ScrolledResponse(ScrollMovement? movement)
+    {
+        if (movement is not { IsMeasured: true } measured)
+            return HttpResponse.Ok("Scrolled");
+
+        return HttpResponse.Json(new Dictionary<string, object?>
+        {
+            ["success"] = true,
+            ["message"] = measured.Moved ? "Scrolled" : "Nothing moved: already at the end of the scrollable range",
+            ["scrolled"] = measured.Moved,
+            ["actualDeltaX"] = measured.DeltaX,
+            ["actualDeltaY"] = measured.DeltaY
+        });
+    }
+
+    /// <summary>
+    /// Checks an item-index scroll against the list's ItemsSource. Returns an error message when the index
+    /// is outside the list, or null when it is in range or cannot be checked (a grouped list addressed
+    /// without a group index, whose flat index the platform defines).
+    /// </summary>
+    internal static string? ValidateItemIndex(ItemsView itemsView, int itemIndex, int groupIndex)
+    {
+        if (itemIndex < 0)
+            return $"Item index {itemIndex} is out of range";
+
+        var source = itemsView.ItemsSource;
+        if (source == null)
+            return "The list has no ItemsSource to scroll to";
+
+        if (itemsView is not GroupableItemsView { IsGrouped: true })
+        {
+            var count = CountItems(source);
+            return itemIndex < count
+                ? null
+                : $"Item index {itemIndex} is out of range: the list has {count} item(s)";
+        }
+
+        if (groupIndex < 0)
+            return null;
+
+        var groupCount = CountItems(source);
+        if (groupIndex >= groupCount)
+            return $"Group index {groupIndex} is out of range: the list has {groupCount} group(s)";
+
+        if (GetItemByIndex(source, groupIndex) is not System.Collections.IEnumerable group)
+            return null;
+
+        var groupItems = CountItems(group);
+        return itemIndex < groupItems
+            ? null
+            : $"Item index {itemIndex} is out of range: group {groupIndex} has {groupItems} item(s)";
+    }
+
+    private static int CountItems(System.Collections.IEnumerable source)
+    {
+        if (source is System.Collections.ICollection collection)
+            return collection.Count;
+        var count = 0;
+        foreach (var _ in source)
+            count++;
+        return count;
+    }
+
+    /// <summary>
+    /// Scrolls a MAUI ScrollView by a delta and reports how far it really moved.
+    /// </summary>
+    private static async Task<ScrollMovement> ScrollViewByAsync(ScrollView scrollView, double deltaX, double deltaY, bool animated)
+    {
+        var beforeX = scrollView.ScrollX;
+        var beforeY = scrollView.ScrollY;
+        await ScrollViewToAsync(scrollView, Math.Max(0, beforeX + deltaX), Math.Max(0, beforeY + deltaY), animated);
+        return new ScrollMovement(scrollView.ScrollX - beforeX, scrollView.ScrollY - beforeY);
     }
 
     /// <summary>
@@ -4169,6 +4258,17 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     protected virtual Task<bool> TryNativeScroll(VisualElement element, double deltaX, double deltaY)
     {
         return Task.FromResult(false);
+    }
+
+    /// <summary>
+    /// Like <see cref="TryNativeScroll"/>, but also reports how far the native view really moved.
+    /// Returns null when no native scrollable view handled the scroll. The default calls
+    /// <see cref="TryNativeScroll"/> and reports <see cref="ScrollMovement.Unmeasured"/>; platform
+    /// subclasses override it to measure the movement.
+    /// </summary>
+    protected virtual async Task<ScrollMovement?> TryNativeScrollMeasured(VisualElement element, double deltaX, double deltaY)
+    {
+        return await TryNativeScroll(element, deltaX, deltaY) ? ScrollMovement.Unmeasured : null;
     }
 
     /// <summary>
