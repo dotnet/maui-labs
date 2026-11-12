@@ -231,6 +231,9 @@ public sealed class XcodeCompatibilityChecker
 
 			var document = XDocument.Load(propsFile);
 			var recommendedVersion = document.Descendants()
+				.FirstOrDefault(element => element.Name.LocalName == "RecommendedXcodeVersion")
+				?.Value
+				?? document.Descendants()
 				.FirstOrDefault(element => element.Name.LocalName == "_RecommendedXcodeVersion")
 				?.Value;
 

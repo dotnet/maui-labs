@@ -37,6 +37,17 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 	}
 
 	[Fact]
+	public void CheckXcodeCompatibility_WithLegacyRecommendedVersion_ReturnsOk()
+	{
+		CreateSdkPack("Microsoft.iOS.Sdk.net10.0_26.5", "26.5.10284", "26.5", useLegacyProperty: true);
+		var environment = CreateEnvironment(selectedVersion: "26.5");
+
+		var result = new XcodeCompatibilityChecker(environment).CheckXcodeCompatibility();
+
+		Assert.Equal(CheckStatus.Ok, result.Status);
+	}
+
+	[Fact]
 	public void CheckXcodeCompatibility_WithMatchingInstalledXcode_ReturnsQuotedElevatedAutoFix()
 	{
 		CreateSdkPack("Microsoft.iOS.Sdk.net10.0_26.5", "26.5.10284", "26.5");
@@ -71,6 +82,9 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 		Assert.Equal(CheckStatus.Warning, result.Status);
 		Assert.False(result.Fix!.AutoFixable);
 		Assert.Null(result.Fix.Command);
+		Assert.Contains("SDK packs require Xcode 26.5", result.Message);
+		Assert.DoesNotContain("$(", result.Message);
+		Assert.Equal("26.5", result.Details!["required_xcode_version"]!.GetValue<string>());
 		Assert.Contains(result.Fix.ManualSteps!, step => step.Contains("Install Xcode 26.5", StringComparison.Ordinal));
 	}
 
@@ -201,7 +215,8 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 		string packName,
 		string packVersion,
 		string requiredXcodeVersion,
-		string? root = null)
+		string? root = null,
+		bool useLegacyProperty = false)
 	{
 		var targetsDirectory = Path.Combine(root ?? _tempDirectory, packName, packVersion, "targets");
 		Directory.CreateDirectory(targetsDirectory);
@@ -211,7 +226,8 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 			<?xml version="1.0" encoding="utf-8"?>
 			<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 			  <PropertyGroup>
-			    <_RecommendedXcodeVersion>{requiredXcodeVersion}</_RecommendedXcodeVersion>
+			    {(useLegacyProperty ? "" : $"<RecommendedXcodeVersion>{requiredXcodeVersion}</RecommendedXcodeVersion>")}
+			    <_RecommendedXcodeVersion>{(useLegacyProperty ? requiredXcodeVersion : "$(RecommendedXcodeVersion)")}</_RecommendedXcodeVersion>
 			  </PropertyGroup>
 			</Project>
 			""");
