@@ -54,3 +54,12 @@ internal enum ResponseUpdateTypeNative : long
 	ToolCall = 1,
 	ToolResult = 2
 }
+
+[Native]
+internal enum RecognizeDocumentsRequestErrorNative : long
+{
+	Cancelled = 1,
+	InvalidRevision = 2,
+	InvalidRegionOfInterest = 3,
+	UnsupportedBarcodeSymbology = 4
+}

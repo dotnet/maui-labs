@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">
+  <rect width="1600" height="1200" fill="white"/>
+  <g fill="#111111" font-family="Helvetica, Arial, sans-serif">
+    <text x="120" y="105" font-size="62" font-weight="700">TRAVEL CHECKLIST</text>
+    <text x="120" y="205" font-size="42">Complete every section before departure.</text>
+
+    <text x="150" y="330" font-size="48">&#x2022; Documents</text>
+    <text x="350" y="425" font-size="44">- Passport</text>
+    <text x="350" y="510" font-size="44">- Visa</text>
+
+    <text x="150" y="635" font-size="48">&#x2022; Packing</text>
+    <text x="350" y="730" font-size="44">- Jacket</text>
+    <text x="350" y="815" font-size="44">- Shoes</text>
+    <text x="350" y="900" font-size="44">- Charger</text>
+
+    <text x="120" y="1050" font-size="42">Review the checklist again on departure day.</text>
+  </g>
+</svg>

@@ -270,6 +270,47 @@ The default generator uses English sentence embeddings. Select another supported
 language with the `NLLanguage` constructor or wrap an existing `NLEmbedding`.
 The corresponding model asset must be installed.
 
+## Document extraction
+
+On iOS, Mac Catalyst, and macOS 26+, Apple Vision recognizes documents locally.
+This feature uses the experimental `Microsoft.Extensions.DocumentExtraction`
+and `Microsoft.Extensions.Documents` contracts. It does not require Apple
+Intelligence or a cloud deployment.
+
+| Input | Support |
+|-------|---------|
+| PDF | Each page is rendered internally with PDFKit |
+| JPEG, PNG, HEIC, TIFF | Orientation-aware image input; only the first raster frame |
+| Android and Windows | No Apple Vision extraction support |
+
+Use the extraction client when you need document structure and source geometry:
+
+```csharp
+using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Extensions.Documents;
+using Microsoft.Extensions.AI;
+using Microsoft.Maui.Essentials.AI;
+
+using DocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+await using var input = File.OpenRead("receipt.pdf");
+ExtractionDocument result = await client.ExtractAsync(input, "receipt", "application/pdf");
+foreach (var element in result.EnumerateContent().OfType<ExtractionDocumentTextElement>())
+    Console.WriteLine(((TextContent)element.Content!).Text);
+```
+
+The result is non-disposable data; the input remains caller-owned. Source
+references retain exact polygons and coordinate frames. Tables preserve spans,
+empty anchor cells, and mixed cell content. Confidence, OCR candidates, detected
+entities, barcodes, and list-specific details remain available through explicit
+native inspection rather than fabricated normalized fields.
+
+Native representations are detached, bounded bridge snapshots, not
+live Swift objects or original response bytes; inspect them deliberately rather
+than including them automatically in logs or embeddings.
+
+See the [Apple document extraction guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-document-extraction.md)
+for architecture, request settings, and fidelity limits.
+
 ## Guides and samples
 
 - [Chat provider implementation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider.md) — shared behavior and provider policy.

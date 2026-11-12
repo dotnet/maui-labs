@@ -13,7 +13,7 @@
     <IsPackable>false</IsPackable>
     <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
     <MauiXamlInflator>SourceGen</MauiXamlInflator>
-    <NoWarn>$(NoWarn);MAUIAI0001;MEAI001;OPENAI001;XCODE_27_0_PREVIEW</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001;MEAI001;MEDE0001;EXTEXP0019;CTDE0001;OPENAI001;XCODE_27_0_PREVIEW</NoWarn>
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst'))">maccatalyst-x64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
     <ApplicationTitle>Chat Client Playground</ApplicationTitle>
@@ -43,7 +43,10 @@
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.DocumentExtraction" />
+    <PackageReference Include="CommunityToolkit.DocumentExtraction.Mistral" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     <PackageReference Include="Microsoft.Maui.Controls" />
     <PackageReference Include="OpenAI" />

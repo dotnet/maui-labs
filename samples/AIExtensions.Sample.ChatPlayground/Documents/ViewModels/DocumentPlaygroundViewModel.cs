@@ -1,0 +1,244 @@
+using System.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+
+namespace AIExtensions.Sample.ChatPlayground;
+
+/// <summary>Runs the selected extraction client against the imported file.</summary>
+public sealed partial class DocumentPlaygroundViewModel : ObservableObject
+{
+    private readonly FileInputService _input;
+    private readonly DocumentExtractionService _extraction;
+    private InputFile? _selected;
+    private string _normalizedOutput = string.Empty;
+    private DocumentExtractionRunResult? _extractionResult;
+
+    public DocumentPlaygroundViewModel(
+        DocumentExtractionService extraction,
+        FileInputService input, DocumentSettingsViewModel settings)
+    {
+        _extraction = extraction;
+        _input = input;
+        Settings = settings;
+        Settings.PropertyChanged += SettingsPropertyChanged;
+        StatusMessage = Settings.HasSelection
+            ? $"Selected {Settings.CurrentName}. Choose a document."
+            : "No document extraction client is configured.";
+    }
+
+    public DocumentSettingsViewModel Settings { get; }
+
+    [ObservableProperty] private string selectedName = "No document selected.";
+    [ObservableProperty] private string statusMessage = string.Empty;
+    [ObservableProperty] private string resultHeading = "DOCUMENT RESULT";
+    [ObservableProperty] private string resultOutput = string.Empty;
+    [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private ImageSource? selectedPreview;
+
+    public bool HasDocument => _selected is not null;
+    public bool HasResult => ResultOutput.Length > 0;
+    public bool HasRawResult => _extractionResult?.HasRawOutput == true;
+    public bool CanInspect => !IsBusy && HasResult;
+    public bool IsIdle => !IsBusy;
+    public bool CanExtract => !IsBusy && HasDocument && Settings.HasSelection;
+    public IAsyncRelayCommand ChooseDocument => ChooseDocumentCommand;
+    public IAsyncRelayCommand UseSamplePdf => UseSamplePdfCommand;
+    public IAsyncRelayCommand UseSampleImage => UseSampleImageCommand;
+    public IAsyncRelayCommand ExtractDocument => ExtractDocumentCommand;
+    public IRelayCommand RemoveDocumentAction => RemoveDocumentCommand;
+    public System.Windows.Input.ICommand CancelExtraction => ExtractDocumentCancelCommand;
+    public IRelayCommand InspectNormalized => InspectNormalizedResultCommand;
+    public IAsyncRelayCommand InspectRaw => InspectRawResultCommand;
+
+    [RelayCommand(CanExecute = nameof(CanInspect))]
+    private void InspectNormalizedResult() => ResultOutput = _normalizedOutput;
+
+    private bool CanInspectRaw() => CanInspect && HasRawResult;
+
+    [RelayCommand(CanExecute = nameof(CanInspectRaw))]
+    private async Task InspectRawResultAsync(CancellationToken cancellationToken)
+    {
+        var owner = _extractionResult;
+        if (owner is null)
+            return;
+        try
+        {
+            var raw = await owner.InspectRawAsync(cancellationToken);
+            if (ReferenceEquals(owner, _extractionResult))
+                ResultOutput = raw;
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception exception)
+        {
+            if (ReferenceEquals(owner, _extractionResult))
+                ResultOutput = $"Raw inspection failed: {exception}";
+        }
+    }
+
+    private bool CanChooseDocument() => !IsBusy;
+    private bool CanExtractDocument() => CanExtract;
+
+    [RelayCommand(CanExecute = nameof(CanChooseDocument))]
+    private Task ChooseDocumentAsync() => SelectDocumentAsync(() => _input.PickAsync(new PickOptions
+    {
+        PickerTitle = "Select a PDF or image document",
+        FileTypes = FileInputService.DocumentFiles,
+    }));
+
+    [RelayCommand(CanExecute = nameof(CanChooseDocument))]
+    private Task UseSamplePdfAsync() => SelectDocumentAsync(async () => await _input.LoadSampleAsync("document_sample.pdf"));
+
+    [RelayCommand(CanExecute = nameof(CanChooseDocument))]
+    private Task UseSampleImageAsync() => SelectDocumentAsync(async () => await _input.LoadSampleAsync("document_sample.png"));
+
+    private bool CanRemoveDocument() => !IsBusy && HasDocument;
+
+    [RelayCommand(CanExecute = nameof(CanRemoveDocument))]
+    private void RemoveDocument()
+    {
+        _selected = null;
+        SelectedName = "No document selected.";
+        SelectedPreview = null;
+        ClearResult();
+        ResultHeading = "DOCUMENT RESULT";
+        StatusMessage = "Choose a PDF or image using the + menu.";
+        OnPropertyChanged(nameof(HasDocument));
+        OnPropertyChanged(nameof(CanExtract));
+        ExtractDocumentCommand.NotifyCanExecuteChanged();
+        RemoveDocumentCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task SelectDocumentAsync(Func<Task<InputFile?>> load)
+    {
+        IsBusy = true;
+        Settings.IsBusy = true;
+        try
+        {
+            var file = await load();
+            if (file is null)
+            {
+                StatusMessage = "File selection cancelled.";
+                return;
+            }
+            _selected = file;
+            SelectedName = file.FileName;
+            SelectedPreview = file.MediaType.StartsWith("image/", StringComparison.Ordinal)
+                ? ImageSource.FromStream(() => new MemoryStream(file.Bytes, writable: false))
+                : ImageSource.FromFile("folder.png");
+            ClearResult();
+            ResultHeading = "DOCUMENT RESULT";
+            StatusMessage = $"Selected {file.FileName}. Choose a client in settings, then extract.";
+            OnPropertyChanged(nameof(HasDocument));
+            OnPropertyChanged(nameof(CanExtract));
+            ExtractDocumentCommand.NotifyCanExecuteChanged();
+            RemoveDocumentCommand.NotifyCanExecuteChanged();
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"Could not select document: {exception.Message}";
+        }
+        finally
+        {
+            Settings.IsBusy = false;
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExtractDocument), IncludeCancelCommand = true)]
+    private async Task ExtractDocumentAsync(CancellationToken cancellationToken)
+    {
+        var file = _selected ?? throw new InvalidOperationException("Choose a document first.");
+        var name = Settings.CurrentName;
+        IsBusy = true;
+        Settings.IsBusy = true;
+        ClearResult();
+        StatusMessage = $"Processing {file.FileName} with {name}...";
+        try
+        {
+            var client = Settings.SelectedClientOption?.Client
+                ?? throw new InvalidOperationException("Choose a document extraction client.");
+            var result = await _extraction.ExtractAsync(
+                client, file, Settings.CreateOptions(), cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            _extractionResult = result;
+            ResultOutput = result.Output;
+            _normalizedOutput = ResultOutput;
+            OnPropertyChanged(nameof(HasRawResult));
+            ResultHeading = name.ToUpperInvariant() + " RESULT";
+            StatusMessage = $"Extracted {result.PageCount} page(s) with {name}.";
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            ClearResult();
+            StatusMessage = "Document processing timed out.";
+        }
+        catch (OperationCanceledException)
+        {
+            ClearResult();
+            StatusMessage = "Document processing cancelled.";
+        }
+        catch (Exception exception)
+        {
+            ClearResult();
+            StatusMessage = $"Document processing failed with {name}: {exception.Message}";
+        }
+        finally
+        {
+            Settings.IsBusy = false;
+            IsBusy = false;
+        }
+    }
+
+    private void SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(DocumentSettingsViewModel.SelectedClientOption))
+        {
+            ExtractDocumentCommand.Cancel();
+            InspectRawResultCommand.Cancel();
+            ClearResult();
+            ResultHeading = "DOCUMENT RESULT";
+            StatusMessage = Settings.HasSelection
+                ? $"Selected {Settings.CurrentName}. Choose a file, then extract."
+                : "No document extraction client selected.";
+            OnPropertyChanged(nameof(CanExtract));
+            ExtractDocumentCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private void ClearResult()
+    {
+        _extractionResult = null;
+        ResultOutput = string.Empty;
+        _normalizedOutput = string.Empty;
+        OnPropertyChanged(nameof(HasRawResult));
+    }
+
+    public void ReleasePageResult()
+    {
+        ExtractDocumentCommand.Cancel();
+        InspectRawResultCommand.Cancel();
+        ClearResult();
+    }
+
+    partial void OnResultOutputChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasResult));
+        OnPropertyChanged(nameof(CanInspect));
+        InspectNormalizedResultCommand.NotifyCanExecuteChanged();
+        InspectRawResultCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnIsBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsIdle));
+        OnPropertyChanged(nameof(CanExtract));
+        ChooseDocumentCommand.NotifyCanExecuteChanged();
+        UseSamplePdfCommand.NotifyCanExecuteChanged();
+        UseSampleImageCommand.NotifyCanExecuteChanged();
+        RemoveDocumentCommand.NotifyCanExecuteChanged();
+        ExtractDocumentCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanInspect));
+        InspectNormalizedResultCommand.NotifyCanExecuteChanged();
+        InspectRawResultCommand.NotifyCanExecuteChanged();
+    }
+}

@@ -1,7 +1,7 @@
 # Essentials.AI contributor guide
 
-Build, test, and contribute to `Microsoft.Maui.Essentials.AI`, which provides
-on-device chat and embeddings through `Microsoft.Extensions.AI`.
+Build, test, and contribute to `Microsoft.Maui.Essentials.AI`: on-device chat
+and embeddings through `Microsoft.Extensions.AI`, plus Apple document extraction.
 
 > **Experimental:** packages ship as previews; APIs may change.
 
@@ -14,19 +14,8 @@ on-device chat and embeddings through `Microsoft.Extensions.AI`.
 | [Apple Foundation Models](../../docs/ai/apple-foundation-models.md) | Apple toolchain, availability, images, native bridge, and validation |
 | [Windows AI language models](../../docs/ai/windows-ai-language-models.md) | Windows packaging, dependencies, model setup, and validation |
 | [Gemini Nano Android](../../docs/ai/gemini-nano-android.md) | Android binding, AICore readiness, download, and validation |
+| [Apple document extraction](../../docs/ai/apple-document-extraction.md) | Extraction architecture, native fidelity, and upstream feedback |
 | [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md) | Interactive provider comparison and diagnostics |
-
-Apple chat is supported on iOS, Mac Catalyst, and macOS 26+ with Apple Intelligence
-enabled. NaturalLanguage embeddings require iOS 13+, Mac Catalyst 13.1+, or
-macOS 10.15+. Windows AI chat is supported on eligible Windows 11 24H2+
-Copilot+ systems. Gemini Nano chat requires API 26+ and supported AICore
-hardware.
-
-| Package | Purpose |
-|---------|---------|
-| `Microsoft.Maui.Essentials.AI` | Apple, Windows, and Android on-device chat, plus Apple text embeddings |
-
-For installation and a quick start, see the [package README](Microsoft.Maui.Essentials.AI/README.md).
 
 ## Prerequisites
 
@@ -178,6 +167,10 @@ dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Ess
 
 ## Architecture
 
+- `Microsoft.Maui.Essentials.AI/DocumentExtraction/` — portable exchange-document
+  client and mapping. The Apple processor in `Platform/MaciOS/`
+  handles Vision requests and PDFKit input; the Swift bridge snapshots native observations.
+  See the [extraction guide](../../docs/ai/apple-document-extraction.md).
 - `Microsoft.Maui.Essentials.AI/Platform/MaciOS/` — managed Apple chat and
   embedding clients.
 - `AppleNative/EssentialsAI/` — Swift Foundation Models bridge.
