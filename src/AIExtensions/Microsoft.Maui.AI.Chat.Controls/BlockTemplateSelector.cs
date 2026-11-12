@@ -60,7 +60,7 @@ public sealed class BlockTemplateSelector : DataTemplateSelector
                     $"{wrapper.GetType().Name}.{nameof(BlockWrapper.GetWrappedBlock)} returned the block it was given. Return the block it wraps, or null when it doesn't wrap the block.");
             }
 
-            if (wrapper.When is { } when && !when.Matches(wrapped))
+            if (wrapper.When is { } when && !when.Matches(wrapped, GetShownTool(block, wrapped)))
                 continue;
 
             return GetWrappedTemplate(wrapper, wrapper.Template, Select(wrapped, container));
@@ -81,6 +81,16 @@ public sealed class BlockTemplateSelector : DataTemplateSelector
 
         return Empty;
     }
+
+    /// <summary>
+    /// Gets the tool of the call that <paramref name="wrapped"/> shows for <paramref name="block"/>: the inner block of an
+    /// approval shows the call the approval asks about, also when it is a block of the app's own type, which doesn't
+    /// name the tool itself.
+    /// </summary>
+    private static string? GetShownTool(ContentBlock block, ContentBlock wrapped) =>
+        block is InteractiveFunctionBlock interactive && ReferenceEquals(interactive.InnerBlock, wrapped)
+            ? interactive.ToolName
+            : null;
 
     private DataTemplate GetWrappedTemplate(BlockWrapper wrapper, ControlTemplate? chrome, DataTemplate wrappedTemplate)
     {

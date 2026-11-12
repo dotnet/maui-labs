@@ -126,6 +126,70 @@ public class BlockWrapperTests
     }
 
     [Fact]
+    public void Wrapper_WhenWithATool_MatchesTheApprovalsOfTheToolWhateverBlockShowsTheCall()
+    {
+        // A block of the app's own type doesn't name a tool, but inside an approval it shows the call the approval asks
+        // about, so the approvals of a tool get the tool's chrome whatever block a handler shows the call with.
+        var weather = Chrome();
+        var other = Chrome();
+        var selector = Selector(
+            new ApprovalWrapper { When = BlockMatch.Tool("get_weather"), Template = weather },
+            new ApprovalWrapper { Template = other });
+
+        Assert.Same(weather, ChromeOf(selector, Blocks.Approval(new WeatherCard(), Blocks.ToolCall("get_weather"))));
+        Assert.Same(weather, ChromeOf(selector, Blocks.Approval("get_weather")));
+        Assert.Same(other, ChromeOf(selector, Blocks.Approval(new WeatherCard(), Blocks.ToolCall("search"))));
+    }
+
+    [Fact]
+    public void Wrapper_When_CombinesTheApprovalsToolWithTheWrappedBlock()
+    {
+        var weatherCard = Chrome();
+        var weatherOrSearch = Chrome();
+        var other = Chrome();
+        var selector = Selector(
+            new ApprovalWrapper { When = BlockMatch.All(BlockMatch.Tool("get_weather"), BlockMatch.Is<WeatherCard>()), Template = weatherCard },
+            new ApprovalWrapper { When = BlockMatch.Any(BlockMatch.Tool("get_weather"), BlockMatch.Tool("search")), Template = weatherOrSearch },
+            new ApprovalWrapper { Template = other });
+
+        Assert.Same(weatherCard, ChromeOf(selector, Blocks.Approval(new WeatherCard(), Blocks.ToolCall("get_weather"))));
+        Assert.Same(weatherOrSearch, ChromeOf(selector, Blocks.Approval("get_weather")));
+        Assert.Same(weatherOrSearch, ChromeOf(selector, Blocks.Approval(new WeatherCard(), Blocks.ToolCall("search"))));
+        Assert.Same(other, ChromeOf(selector, Blocks.Approval(new WeatherCard(), Blocks.ToolCall("delete_file"))));
+
+        // Every approval except the tool's: the tool of the call decides, also for a block of the app's own type.
+        var exceptWeather = Chrome();
+        var negated = Selector(
+            new ApprovalWrapper { When = BlockMatch.Not(BlockMatch.Tool("get_weather")), Template = exceptWeather },
+            new ApprovalWrapper { Template = other });
+
+        Assert.Same(other, ChromeOf(negated, Blocks.Approval(new WeatherCard(), Blocks.ToolCall("get_weather"))));
+        Assert.Same(other, ChromeOf(negated, Blocks.Approval("get_weather")));
+        Assert.Same(exceptWeather, ChromeOf(negated, Blocks.Approval(new WeatherCard(), Blocks.ToolCall("search"))));
+    }
+
+    [Fact]
+    public void ApprovalWrapper_TheWrappedBlockGetsTheTemplateItGetsOutsideAnApproval()
+    {
+        // The approval's tool decides which wrapper applies. A tool's template picks the blocks that show the tool's calls
+        // themselves, so a block of the app's own type gets its own template inside an approval as it does anywhere else.
+        var selector = new BlockTemplateSelector
+        {
+            Wrappers = { new ApprovalWrapper { Template = Chrome() } },
+            Templates =
+            {
+                new BlockTemplate { When = BlockMatch.Tool("get_weather"), Template = new DataTemplate(() => new Label { Text = "call" }) },
+                new BlockTemplate { When = BlockMatch.Is<WeatherCard>(), Template = new DataTemplate(() => new Label { Text = "card" }) },
+            },
+        };
+
+        var view = (ContentView)Show(selector, Blocks.Approval(new WeatherCard(), Blocks.ToolCall("get_weather")));
+
+        Assert.Equal("card", Assert.IsType<Label>(view.Content).Text);
+        Assert.False(BlockMatch.Tool("get_weather").Matches(new WeatherCard()));
+    }
+
+    [Fact]
     public void Wrapper_WithoutChrome_ShowsTheWrappedBlocksViewBoundToTheWrappedBlock()
     {
         var approval = Blocks.Approval("search");
@@ -348,6 +412,9 @@ public class BlockWrapperTests
         view.BindingContext = block;
         return view;
     }
+
+    private static ControlTemplate? ChromeOf(BlockTemplateSelector selector, ContentBlock block) =>
+        ((ContentView)Show(selector, block)).ControlTemplate;
 
     private static Label Label(View view, string automationId) =>
         view.GetVisualTreeDescendants().OfType<Label>().Single(label => label.AutomationId == automationId);
