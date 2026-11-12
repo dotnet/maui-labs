@@ -295,9 +295,12 @@ persisted. The engine writes a thread only when a turn commits (`AppendUserMessa
 A stopped turn is committed with its partial output. The thread keeps every update of a turn,
 including tool calls that never got a result and a stopped turn's unanswered approvals, so a restore
 shows them as the turn ended them; the history sent to the model leaves them out, live and restored,
-because a provider rejects them, as well as reasoning that a stop cut off, which stays on screen.
-Threads must round-trip `ChatResponseUpdate.AdditionalProperties`, which mark continuation rounds and
-stopped turns. Call `RestoreAsync` to load a thread's turns and message history; until it has loaded
+because a provider rejects them or `FunctionInvokingChatClient` would run them, as well as reasoning
+that a stop cut off, which stays on screen. Threads must round-trip
+`ChatResponseUpdate.AdditionalProperties`, which mark continuation rounds and stopped turns; string
+values may come back as the `JsonElement`s that JSON deserialization gives. A thread that drops them
+restores a stopped turn as completed, with its cut-off reasoning in the history, but still leaves its
+unanswered approvals out. Call `RestoreAsync` to load a thread's turns and message history; until it has loaded
 them, a send fails and `ClearAsync` waits for it. Restored approvals
 and UI actions are display history, not resumable pending work: they accept no decision or
 invocation, and their `IsAwaitingInput` is false. A restored call without a recorded result is

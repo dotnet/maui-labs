@@ -19,7 +19,9 @@ namespace Microsoft.Maui.AI.Chat;
 /// A committed turn can hold function calls without a result, and a stopped turn approval requests
 /// and responses whose call has no result. Implementations store them like any other update: a
 /// restore shows them as their turn ended them, and the rebuilt history leaves them out, so the next
-/// request stays valid.
+/// request stays valid. The engine marks continuation rounds and stopped turns in
+/// <see cref="ChatResponseUpdate.AdditionalProperties"/> with string values, which may come back as
+/// the <see cref="System.Text.Json.JsonElement"/>s that JSON deserialization gives.
 /// </para>
 /// <para>
 /// Conversation threads are single-thread-affine and are not thread-safe. Callers must serialize

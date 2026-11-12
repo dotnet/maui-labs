@@ -294,6 +294,45 @@ public class UIAgentTests
         }
     }
 
+    [Fact]
+    public async Task SendMessageAsync_ApprovalAnsweredInALaterSend_RunsTheCallOnce()
+    {
+        // The first send ends with the approval pending, and its history leaves the request out, because its call has
+        // no result. FunctionInvokingChatClient runs an approved call from the response alone.
+        var deleted = new List<string>();
+        var deleteFile = new ApprovalRequiredAIFunction(AIFunctionFactory.Create(
+            (string fileName) =>
+            {
+                deleted.Add(fileName);
+                return $"Deleted {fileName}";
+            },
+            "DeleteFile",
+            "Deletes a file."));
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ResponseEmitters.EmitToolCallResponse(
+            "delete-1",
+            "DeleteFile",
+            new Dictionary<string, object?> { ["fileName"] = "a.txt" },
+            ct));
+        model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Deleted.", ct));
+        using var agent = new UIAgent(
+            new FunctionInvokingChatClient(model),
+            options => options.ChatOptions = new ChatOptions { Tools = [deleteFile] });
+
+        ToolApprovalBlock? approval = null;
+        await foreach (var block in agent.SendMessageAsync(new ChatMessage(ChatRole.User, "Delete a.txt")))
+            approval ??= block as ToolApprovalBlock;
+        Assert.NotNull(approval);
+        approval.Approve();
+        var response = await approval.GetResultAsync();
+
+        await EnumerateAsync(agent.SendMessageAsync(new ChatMessage(ChatRole.User, [response])));
+
+        Assert.Equal(["a.txt"], deleted);
+        Assert.Equal(2, model.Requests.Count);
+        ToolHistory.AssertValid(model.Requests[^1]);
+    }
+
     private static async Task EnumerateAsync(IAsyncEnumerable<ContentBlock> blocks)
     {
         await foreach (var _ in blocks)

@@ -147,10 +147,13 @@ These match upstream so that upstream fixes apply directly:
   stop, a failed or unanswered UI action, or a provider's call that nothing ran) as
   `FunctionInvocationContentBlock.IsAbandoned`, as it was when the turn ended, and a handler of the
   app's own shows its row of the call again. The history leaves such calls out, live and restored,
-  and for a stopped turn also approval requests and responses whose call has no result, because
-  providers reject a call without a result and `FunctionInvokingChatClient` rejects an unanswered
-  approval request or runs an approved call before it sends the request. Upstream adds every message
-  to the history, so the next request can fail on such a call.
+  and also approval requests and responses whose call has no result, because providers reject a call
+  without a result and `FunctionInvokingChatClient` rejects an unanswered approval request or runs an
+  approved call before it sends the request. Only a stopped turn has such approvals, but they are left
+  out of every turn, so a thread that loses the stopped mark cannot rerun a tool or fail every later
+  send. The engine reads its marks from JSON string values too, as a thread that saves updates with
+  `AIJsonUtilities.DefaultOptions` gives them back. Upstream adds every message to the history, so the
+  next request can fail on such a call.
 - **Errors discard the turn, retry resends all of it.** A failed turn commits nothing and keeps its
   partial blocks on screen. `RetryAsync` clears the turn's response blocks (`ResponseBlocks` raises a
   `Reset`, which tells a list to drop them) and sends the whole turn again. #68672
