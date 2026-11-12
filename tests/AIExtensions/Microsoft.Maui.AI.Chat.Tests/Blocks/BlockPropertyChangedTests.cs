@@ -75,15 +75,24 @@ public class BlockPropertyChangedTests
     }
 
     [Fact]
-    public void FunctionInvocationContentBlock_RaisesApprovalWhenAnApprovalWrapsIt()
+    public void ToolApprovalBlock_WrappingABlockOfTheAppsOwnType_RaisesTheResultOfItsCall()
     {
-        var call = new FunctionInvocationContentBlock { Call = new FunctionCallContent("delete-1", "DeleteFile") };
-        var names = Record(call);
+        var call = new FunctionCallContent("delete-1", "DeleteFile");
+        var card = new AppCard();
+        var callBlock = new FunctionInvocationContentBlock { Call = call };
+        var approval = new ToolApprovalBlock(card, callBlock, new ToolApprovalRequestContent("approval-1", call));
+        var cardNames = Record(card);
+        var seen = new List<string>();
+        approval.PropertyChanged += (_, e) => seen.Add($"{e.PropertyName}:{approval.HasResult}");
 
-        var approval = new ToolApprovalBlock(call, new ToolApprovalRequestContent("approval-1", call.Call));
+        callBlock.Result = new FunctionResultContent("delete-1", "Deleted");
 
-        Assert.Same(approval, call.Approval);
-        Assert.Equal(["Approval"], names);
+        Assert.Same(card, approval.InnerBlock);
+        Assert.Same(call, approval.Call);
+        Assert.Equal("DeleteFile", approval.ToolName);
+        Assert.Equal("Deleted", approval.Result?.Result);
+        Assert.Equal(["Result:True", "HasResult:True"], seen);
+        Assert.Empty(cardNames);
     }
 
     [Fact]
@@ -124,8 +133,8 @@ public class BlockPropertyChangedTests
         var seen = new List<string>();
         approval.PropertyChanged += (_, e) => seen.Add($"{e.PropertyName}:{approval.IsAbandoned}");
 
-        Assert.True(approval.InnerBlock.Abandon());
-        approval.InnerBlock.ReportAbandonedChanged();
+        Assert.True(approval.CallBlock.Abandon());
+        approval.CallBlock.ReportAbandonedChanged();
 
         Assert.Equal(["IsAbandoned:True"], seen);
     }
@@ -150,7 +159,7 @@ public class BlockPropertyChangedTests
         var seen = new List<string>();
         approval.PropertyChanged += (_, e) => seen.Add($"{e.PropertyName}:{approval.HasResult}");
 
-        approval.InnerBlock.Result = new FunctionResultContent("delete-1", "Deleted");
+        approval.CallBlock.Result = new FunctionResultContent("delete-1", "Deleted");
 
         Assert.Equal(["Result:True", "HasResult:True"], seen);
     }
@@ -447,9 +456,8 @@ public class BlockPropertyChangedTests
     private static ToolApprovalBlock CreateApproval()
     {
         var call = new FunctionCallContent("delete-1", "DeleteFile");
-        return new ToolApprovalBlock(
-            new FunctionInvocationContentBlock { Call = call },
-            new ToolApprovalRequestContent("approval-1", call));
+        var callBlock = new FunctionInvocationContentBlock { Call = call };
+        return new ToolApprovalBlock(callBlock, callBlock, new ToolApprovalRequestContent("approval-1", call));
     }
 
     private static UIActionBlock CreateAction(AIFunction function, UIActionInvocationMode mode)
@@ -522,6 +530,11 @@ public class BlockPropertyChangedTests
         public string? Forecast { get; set; }
 
         public void Changed() => NotifyChanged();
+    }
+
+    /// <summary>A card of the app's own type, which is not a function block.</summary>
+    private sealed class AppCard : ContentBlock
+    {
     }
 
     /// <summary>Shows every call, or only the calls of <paramref name="toolName"/>, as a <see cref="CustomCallBlock"/>.</summary>

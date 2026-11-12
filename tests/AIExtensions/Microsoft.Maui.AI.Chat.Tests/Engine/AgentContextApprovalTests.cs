@@ -72,7 +72,7 @@ public class AgentContextApprovalTests
 
         Assert.NotNull(capturedBlock);
         Assert.Equal(ApprovalStatus.Approved, capturedBlock!.Status);
-        Assert.Equal("DeleteFile", capturedBlock.InnerBlock.ToolName);
+        Assert.Equal("DeleteFile", Assert.IsAssignableFrom<FunctionInvocationContentBlock>(capturedBlock.InnerBlock).ToolName);
     }
 
     [Fact]

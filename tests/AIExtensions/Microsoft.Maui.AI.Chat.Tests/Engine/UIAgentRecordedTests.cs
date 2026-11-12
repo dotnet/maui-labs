@@ -166,7 +166,7 @@ public class UIAgentRecordedTests
 
         Assert.NotNull(approvalBlock);
         Assert.Equal(ApprovalStatus.Approved, approvalBlock!.Status);
-        Assert.Equal("DeleteFile", approvalBlock.InnerBlock.ToolName);
+        Assert.Equal("DeleteFile", Assert.IsAssignableFrom<FunctionInvocationContentBlock>(approvalBlock.InnerBlock).ToolName);
 
         // After approval, should have continued to produce text
         var lastTurn = context.Turns[^1];

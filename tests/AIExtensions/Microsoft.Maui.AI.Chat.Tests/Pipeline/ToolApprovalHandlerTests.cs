@@ -29,7 +29,7 @@ public class ToolApprovalHandlerTests
             result.Kind);
         var block = Assert.IsType<ToolApprovalBlock>(result.Block);
         Assert.Equal(ApprovalStatus.Pending, block.Status);
-        Assert.Equal("DeleteFile", block.InnerBlock.ToolName);
+        Assert.Equal("DeleteFile", Assert.IsAssignableFrom<FunctionInvocationContentBlock>(block.InnerBlock).ToolName);
         Assert.Equal("call-1", block.Id);
     }
 
@@ -57,10 +57,11 @@ public class ToolApprovalHandlerTests
 
         Assert.Single(blocks);
         var approvalBlock = Assert.IsType<ToolApprovalBlock>(blocks[0]);
-        Assert.NotNull(approvalBlock.InnerBlock);
-        Assert.Equal("GetWeather", approvalBlock.InnerBlock.ToolName);
-        Assert.NotNull(approvalBlock.InnerBlock.Call);
-        Assert.Equal("call-1", approvalBlock.InnerBlock.Call!.CallId);
+        var inner = Assert.IsAssignableFrom<FunctionInvocationContentBlock>(approvalBlock.InnerBlock);
+        Assert.Equal("GetWeather", inner.ToolName);
+        Assert.NotNull(inner.Call);
+        Assert.Equal("call-1", inner.Call!.CallId);
+        Assert.Same(inner.Call, approvalBlock.Call);
     }
 
     [Fact]
@@ -173,8 +174,9 @@ public class ToolApprovalHandlerTests
         Assert.Equal(BlockMappingResult<ToolApprovalHandler.ApprovalHandlerState>.ResultKind.Emit,
             result.Kind);
         var block = Assert.IsType<ToolApprovalBlock>(result.Block);
-        Assert.NotNull(block.InnerBlock);
-        Assert.Equal("DeleteFile", block.InnerBlock.ToolName);
+        var inner = Assert.IsType<FunctionInvocationContentBlock>(block.InnerBlock);
+        Assert.Equal("DeleteFile", inner.ToolName);
+        Assert.Equal("DeleteFile", block.ToolName);
     }
 
     private static ChatResponseUpdate CreateApprovalUpdate(

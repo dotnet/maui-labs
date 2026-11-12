@@ -822,7 +822,7 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
 
         foreach (var block in turn.RequestBlocks.Concat(turn.ResponseBlocks))
         {
-            var call = block as FunctionInvocationContentBlock ?? (block as InteractiveFunctionBlock)?.InnerBlock;
+            var call = block as FunctionInvocationContentBlock ?? (block as InteractiveFunctionBlock)?.CallBlock;
             if (call is null || !call.Abandon())
                 continue;
 

@@ -93,7 +93,8 @@
         <!--
             Every calculation of a response on one worksheet, a row per calculate call, which fills in as the results
             arrive. A row still waiting when its turn stopped or failed will never get its result, so it says so; the
-            row is not an engine block, so it reads that from its turn.
+            row is not an engine block, so it reads that from its turn. A calculation that needs approval has a
+            worksheet of its own inside the approval, which doesn't spin while it waits for the decision.
         -->
         <chat:BlockTemplate When="{chat:Is local:CalculatorWorksheetBlock}">
             <DataTemplate x:DataType="local:CalculatorWorksheetBlock">
@@ -122,6 +123,11 @@
                                                 </DataTrigger>
                                                 <DataTrigger TargetType="ActivityIndicator" Value="True"
                                                              Binding="{Binding IsFailed, Source={RelativeSource AncestorType={x:Type chat:ConversationTurn}}, x:DataType=chat:ConversationTurn}">
+                                                    <Setter Property="IsVisible" Value="False" />
+                                                    <Setter Property="IsRunning" Value="False" />
+                                                </DataTrigger>
+                                                <DataTrigger TargetType="ActivityIndicator" Value="True"
+                                                             Binding="{Binding IsAwaitingInput, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}">
                                                     <Setter Property="IsVisible" Value="False" />
                                                     <Setter Property="IsRunning" Value="False" />
                                                 </DataTrigger>
@@ -189,7 +195,8 @@
                                         <Setter Property="IsVisible" Value="False" />
                                         <Setter Property="IsRunning" Value="False" />
                                     </DataTrigger>
-                                    <DataTrigger TargetType="ActivityIndicator" Binding="{Binding Approval.IsAwaitingInput}" Value="True">
+                                    <DataTrigger TargetType="ActivityIndicator" Value="True"
+                                                 Binding="{Binding IsAwaitingInput, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}">
                                         <Setter Property="IsVisible" Value="False" />
                                         <Setter Property="IsRunning" Value="False" />
                                     </DataTrigger>
@@ -319,7 +326,8 @@
                                         <Setter Property="IsVisible" Value="False" />
                                         <Setter Property="IsRunning" Value="False" />
                                     </DataTrigger>
-                                    <DataTrigger TargetType="ActivityIndicator" Binding="{Binding Approval.IsAwaitingInput}" Value="True">
+                                    <DataTrigger TargetType="ActivityIndicator" Value="True"
+                                                 Binding="{Binding IsAwaitingInput, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}">
                                         <Setter Property="IsVisible" Value="False" />
                                         <Setter Property="IsRunning" Value="False" />
                                     </DataTrigger>

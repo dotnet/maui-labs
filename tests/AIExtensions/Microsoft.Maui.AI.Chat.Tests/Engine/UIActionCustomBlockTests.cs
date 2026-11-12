@@ -180,9 +180,9 @@ public class UIActionCustomBlockTests
         var turn = Assert.Single(context.Turns);
         Assert.DoesNotContain(turn.ResponseBlocks, block => block is Banner);
         var action = Assert.Single(turn.ResponseBlocks.OfType<UIActionBlock>());
-        Assert.Equal(typeof(FunctionInvocationContentBlock), action.InnerBlock.GetType());
-        Assert.Equal(ChatRole.Assistant, action.InnerBlock.Role);
-        Assert.Equal("Map of Paris", action.InnerBlock.Result?.Result?.ToString());
+        var inner = Assert.IsType<FunctionInvocationContentBlock>(action.InnerBlock);
+        Assert.Equal(ChatRole.Assistant, inner.Role);
+        Assert.Equal("Map of Paris", inner.Result?.Result?.ToString());
         ToolHistory.AssertValid(model.Requests[1]);
     }
 
@@ -202,7 +202,7 @@ public class UIActionCustomBlockTests
 
         Assert.Equal(ConversationStatus.Idle, context.Status);
         var action = Assert.Single(Assert.Single(context.Turns).ResponseBlocks.OfType<UIActionBlock>());
-        Assert.Equal("Map of Paris", action.InnerBlock.Result?.Result?.ToString());
+        Assert.Equal("Map of Paris", Assert.IsAssignableFrom<FunctionInvocationContentBlock>(action.InnerBlock).Result?.Result?.ToString());
         Assert.Equal("Map of Paris", ToolHistory.FindResult(model.Requests[1], "map-1"));
     }
 

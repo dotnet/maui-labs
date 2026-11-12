@@ -28,19 +28,34 @@ internal sealed class ToolApprovalHandler : ContentBlockHandler<ToolApprovalHand
 
             context.MarkHandled(approvalRequest);
 
-            // Delegate the inner FunctionCallContent to produce a typed block. A registered UI action
-            // that needs approval is run by the client once approved, because
-            // FunctionInvokingChatClient cannot invoke it.
+            // The registered handlers create the block that shows the call, as they would without the approval.
+            // A registered UI action that needs approval is run by the client once approved, because
+            // FunctionInvokingChatClient cannot invoke it; the approval shows the action's call.
             var created = context.CreateInnerBlock(approvalRequest.ToolCall);
             var action = created as UIActionBlock;
-            var innerBlock = action is not null
-                ? CreateActionInnerBlock(action)
-                : created as FunctionInvocationContentBlock
-                    ?? CreateFallbackInnerBlock(approvalRequest.ToolCall);
+            ContentBlock innerBlock;
+            FunctionInvocationContentBlock callBlock;
+            switch (created)
+            {
+                case UIActionBlock uiAction:
+                    innerBlock = callBlock = CreateActionCallBlock(uiAction);
+                    break;
+                case FunctionInvocationContentBlock functionBlock:
+                    innerBlock = callBlock = functionBlock;
+                    break;
+                case { } appBlock:
+                    // A block of the app's own type cannot hold the call's result, so the approval keeps one.
+                    innerBlock = appBlock;
+                    callBlock = CreateCallBlock(approvalRequest.ToolCall, appBlock);
+                    break;
+                default:
+                    innerBlock = callBlock = CreateCallBlock(approvalRequest.ToolCall, shownLike: null);
+                    break;
+            }
 
             state.Emitted = true;
             return BlockMappingResult<ApprovalHandlerState>.Emit(
-                new ToolApprovalBlock(innerBlock, approvalRequest)
+                new ToolApprovalBlock(innerBlock, callBlock, approvalRequest)
                 {
                     Id = GetBlockId(approvalRequest, innerBlock),
                     UIAction = action,
@@ -51,17 +66,17 @@ internal sealed class ToolApprovalHandler : ContentBlockHandler<ToolApprovalHand
         return BlockMappingResult<ApprovalHandlerState>.Pass();
     }
 
-    private static FunctionInvocationContentBlock CreateActionInnerBlock(UIActionBlock action)
+    private static FunctionInvocationContentBlock CreateActionCallBlock(UIActionBlock action)
     {
-        var innerBlock = action.InnerBlock;
-        innerBlock.Role = action.Role;
-        innerBlock.AuthorName = action.AuthorName;
-        innerBlock.CreatedAt = action.CreatedAt;
-        innerBlock.LifecycleState = BlockLifecycleState.Inactive;
-        return innerBlock;
+        var callBlock = action.CallBlock;
+        callBlock.Role = action.Role;
+        callBlock.AuthorName = action.AuthorName;
+        callBlock.CreatedAt = action.CreatedAt;
+        callBlock.LifecycleState = BlockLifecycleState.Inactive;
+        return callBlock;
     }
 
-    private static FunctionInvocationContentBlock CreateFallbackInnerBlock(ToolCallContent toolCall)
+    private static FunctionInvocationContentBlock CreateCallBlock(ToolCallContent toolCall, ContentBlock? shownLike)
     {
         var block = new FunctionInvocationContentBlock();
         if (toolCall is FunctionCallContent functionCall)
@@ -69,12 +84,20 @@ internal sealed class ToolApprovalHandler : ContentBlockHandler<ToolApprovalHand
             block.Call = functionCall;
         }
 
+        if (shownLike is not null)
+        {
+            block.Role = shownLike.Role;
+            block.AuthorName = shownLike.AuthorName;
+            block.CreatedAt = shownLike.CreatedAt;
+            block.LifecycleState = BlockLifecycleState.Inactive;
+        }
+
         return block;
     }
 
     private static string GetBlockId(
         ToolApprovalRequestContent approvalRequest,
-        FunctionInvocationContentBlock innerBlock)
+        ContentBlock innerBlock)
     {
         if (approvalRequest.ToolCall is FunctionCallContent { CallId: { Length: > 0 } callId })
             return callId;

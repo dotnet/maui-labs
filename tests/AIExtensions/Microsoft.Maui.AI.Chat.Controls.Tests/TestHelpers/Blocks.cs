@@ -26,11 +26,20 @@ internal static class Blocks
         return block;
     }
 
-    public static ToolApprovalBlock Approval(string name, IDictionary<string, object?>? arguments = null)
+    public static ToolApprovalBlock Approval(string name, IDictionary<string, object?>? arguments = null) =>
+        Approval(ToolCall(name, arguments));
+
+    /// <summary>An approval of the call that <paramref name="call"/> holds and shows.</summary>
+    public static ToolApprovalBlock Approval(FunctionInvocationContentBlock call) => Approval(call, call);
+
+    /// <summary>
+    /// An approval whose call <paramref name="innerBlock"/> shows, as the engine creates it for a handler that shows
+    /// the call with a block of the app's own type; <paramref name="call"/> holds the call and its result.
+    /// </summary>
+    public static ToolApprovalBlock Approval(ContentBlock innerBlock, FunctionInvocationContentBlock call)
     {
-        var inner = ToolCall(name, arguments);
-        var request = new ToolApprovalRequestContent("approval-1", inner.Call!);
-        return new ToolApprovalBlock(inner, request) { Role = ChatRole.Assistant };
+        var request = new ToolApprovalRequestContent("approval-1", call.Call!);
+        return new ToolApprovalBlock(innerBlock, call, request) { Role = ChatRole.Assistant };
     }
 
     public static UIActionBlock UIAction(string name, UIActionInvocationMode mode, Func<string>? action = null)

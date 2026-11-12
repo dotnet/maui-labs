@@ -12,10 +12,13 @@ namespace Microsoft.Maui.AI.Chat;
 /// </summary>
 /// <remarks>
 /// Emitted by <see cref="ToolApprovalHandler"/> when M.E.AI surfaces a <see cref="ToolApprovalRequestContent"/>
-/// (produced by wrapping a tool in an <see cref="ApprovalRequiredAIFunction"/>). As an
-/// <see cref="IInteractiveBlock"/>, <see cref="AgentContext"/> awaits the user's decision and sends the
-/// corresponding response back to the chat client. A decision raises <see cref="ContentBlock.PropertyChanged"/>
-/// for <see cref="Status"/> and <see cref="IsAwaitingInput"/>.
+/// (produced by wrapping a tool in an <see cref="ApprovalRequiredAIFunction"/>). Its
+/// <see cref="InteractiveFunctionBlock.InnerBlock"/> is the block that the registered handlers create for the
+/// call, as they would without the approval: the built-in call block, a typed block for the tool, a block of the
+/// app's own type, or the call of a UI action. That block receives the call's result once the call ran or was
+/// rejected. As an <see cref="IInteractiveBlock"/>, <see cref="AgentContext"/> awaits the user's decision and
+/// sends the corresponding response back to the chat client. A decision raises
+/// <see cref="ContentBlock.PropertyChanged"/> for <see cref="Status"/> and <see cref="IsAwaitingInput"/>.
 /// </remarks>
 public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
 {
@@ -26,14 +29,14 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
     private ApprovalStatus _status;
 
     internal ToolApprovalBlock(
-        FunctionInvocationContentBlock innerBlock,
+        ContentBlock innerBlock,
+        FunctionInvocationContentBlock callBlock,
         ToolApprovalRequestContent request)
-        : base(innerBlock)
+        : base(innerBlock, callBlock)
     {
         ApprovalRequest = request;
         _status = ApprovalStatus.Pending;
         CaptureAwaitingInput();
-        innerBlock.Approval = this;
     }
 
     public ApprovalStatus Status => _status;

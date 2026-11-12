@@ -49,8 +49,11 @@ IChatClient client = providerClient.AsBuilder().UseFunctionInvocation().Build();
 Sending throws `InvalidOperationException` when `ChatOptions.Tools` contains an invocable
 `AIFunction` but the client has no `FunctionInvokingChatClient`. Tools wrapped in
 `ApprovalRequiredAIFunction` show a `ToolApprovalBlock` and wait for `Approve()` or `Reject()`.
-When one call of a response needs approval, `FunctionInvokingChatClient` turns every call of the
-response into an approval request, and marks the requests of tools that need none with
+The approval's `InnerBlock` is the block that the registered handlers create for the call, as they
+would without the approval: the built-in call block, a typed block or `[ToolBlock]`, or a block of the
+app's own type, which receives the call's result through its handler. When one call of a response
+needs approval, `FunctionInvokingChatClient` turns every call of the response into an approval
+request, and marks the requests of tools that need none with
 `RequiresConfirmation` false. The engine shows those requests as the calls they carry and approves
 them itself, so only the calls that need approval wait for the user. The others run with the batch
 once those are decided, also when they are rejected.
@@ -63,8 +66,7 @@ failing the turn. Canceling the token passed to `InvokeAsync` cancels only that 
 action can be invoked again. Once a turn stops or fails, its approvals and UI actions accept no
 decision or invocation, and an action that was still running shows no result when it returns. Once a
 turn ends, whether it completed, stopped or failed, each of its calls has a result or is marked
-`IsAbandoned`, and a call's `Approval` is the approval that wraps it (see
-[Binding from XAML](#binding-from-xaml)). `IsAwaitingInput` on both blocks says whether they can still be answered: true for
+`IsAbandoned` (see [Binding from XAML](#binding-from-xaml)). `IsAwaitingInput` on both blocks says whether they can still be answered: true for
 a pending approval and for a manual action that has not run, false once answered, while the action runs,
 and after a stop, failure or restore. The block raises `PropertyChanged` for it, so templates can bind
 their buttons to it. A server call that `FunctionInvokingChatClient` hands back uninvoked, because a UI
@@ -144,10 +146,10 @@ third-party list.
 - A tool call's block tells its card everything, so the card never searches the session.
   `FunctionInvocationContentBlock.HasResult` turns true when the result arrives, and `IsAbandoned` when
   the turn ends without one: it completed, stopped or failed, or left the call's approval or UI action
-  unanswered. A restored call without a recorded result is abandoned too. `Approval` is the
-  `ToolApprovalBlock` that wraps the call, or null: bind `Approval.IsAwaitingInput` to show that the call
-  waits for approval, and check `Approval.Status` for a rejection, whose result only says that the call
-  was rejected. Approvals and UI actions forward `IsAbandoned` like their call's other properties.
+  unanswered. A restored call without a recorded result is abandoned too. Approvals and UI actions have
+  the same properties for their call (`Call`, `Result`, `HasResult`, `IsAbandoned`), also when an approval
+  wraps a block of the app's own type. A call that needs approval is the approval's `InnerBlock`, and the
+  approval's `Status` tells a rejection, whose result only says that the call was rejected.
 - `UIAgent<TState>.State` raises `PropertyChanged` for `Value` and `HasPendingPredictiveState`, so a view
   can bind to `State.Value` and show a pending prediction. Assigning `Value` raises it even for the current
   instance, so after changing the value in place, assign it again to refresh bindings to its properties

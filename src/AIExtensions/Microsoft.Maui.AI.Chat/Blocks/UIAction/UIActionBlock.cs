@@ -128,28 +128,28 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
             if (_innerEntry?.Invoke(new BlockMappingContext(new ChatResponseUpdate(ChatRole.Tool, [result])))
                 is { Kind: not HandleResult.ResultKind.Pass })
             {
-                InnerBlock.InvokeNotifyChanged();
+                CallBlock.InvokeNotifyChanged();
             }
         }
         finally
         {
             // The turn gets the result before any view hears of it, so a handler that throws cannot keep the
             // turn waiting.
-            var hadResult = InnerBlock.HasResult;
-            var resultChanged = !hadResult && InnerBlock.SetResultSilently(result);
+            var hadResult = CallBlock.HasResult;
+            var resultChanged = !hadResult && CallBlock.SetResultSilently(result);
             _resultSource.TrySetResult(result);
             if (resultChanged)
-                InnerBlock.ReportResultChanged(hadResult);
+                CallBlock.ReportResultChanged(hadResult);
             ReportAwaitingInputChanged();
         }
     }
 
-    private protected override void OnInnerBlockChanged(string? propertyName)
+    private protected override void OnCallChanged(string? propertyName)
     {
         if (string.IsNullOrEmpty(propertyName) || propertyName == nameof(HasResult))
             RaisePropertyChanged(s_isCompleteChanged);
 
-        base.OnInnerBlockChanged(propertyName);
+        base.OnCallChanged(propertyName);
     }
 
     private async Task<AIContent> InvokeCoreAsync(CancellationToken cancellationToken)
