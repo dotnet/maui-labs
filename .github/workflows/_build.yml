@@ -136,6 +136,13 @@ jobs:
           test -d "$sdk_path"
           xcrun --sdk macosx --find install_name_tool
 
+      - name: Setup Java
+        if: inputs.install-workloads && inputs.android-project != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         env:

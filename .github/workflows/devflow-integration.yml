@@ -385,7 +385,7 @@ jobs:
       fail-fast: false
       matrix:
         framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: maccatalyst
