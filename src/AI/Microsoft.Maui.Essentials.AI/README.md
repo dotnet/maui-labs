@@ -247,10 +247,11 @@ when supplied by the provider. Fully enumerate streams to capture final usage.
 Streaming also produces time-to-first-chunk and time-per-output-chunk metrics.
 The explicit sensitive-data setting above excludes prompt and response content.
 
-With the repository's pinned M.E.AI 10.4.1, input/output tokens are span tags
-and `gen_ai.client.token.usage` measurements; cached input is also a span tag
-(`gen_ai.usage.cache_read.input_tokens`). Total and reasoning counts remain
-available on `UsageDetails`, without separate built-in span tags or metrics.
+With the repository's pinned M.E.AI 10.11.0, input/output tokens are span tags
+and `gen_ai.client.token.usage` measurements; cached input and reasoning output
+are also span tags (`gen_ai.usage.cache_read.input_tokens` and
+`gen_ai.usage.reasoning.output_tokens`). The total count remains available on
+`UsageDetails`, without a separate built-in span tag or metric.
 On OS 26, timing and model metadata remain available without token usage.
 Response IDs and finish reasons are emitted only when supplied by the provider.
 

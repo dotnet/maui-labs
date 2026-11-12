@@ -361,7 +361,7 @@ public class CallOutcomeTests
         Assert.Same(approval, call.Approval);
         Assert.Equal(ApprovalStatus.Rejected, call.Approval?.Status);
         Assert.True(call.HasResult);
-        Assert.Equal("Tool call invocation rejected. Not now", call.Result?.Result?.ToString());
+        Assert.Equal(RejectedCall.Result("Not now"), call.Result?.Result?.ToString());
         Assert.False(call.IsAbandoned);
         Assert.False(approval.IsAbandoned);
     }

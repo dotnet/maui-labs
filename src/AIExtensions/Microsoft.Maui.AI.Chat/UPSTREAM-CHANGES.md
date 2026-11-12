@@ -251,7 +251,7 @@ These match upstream so that upstream fixes apply directly:
   UI action's block in the approval and answers only with the approval response, which
   `FunctionInvokingChatClient` cannot carry out for a declaration.
 - **Reused call ids and the approvals `FunctionInvokingChatClient` carries out** (its limitation, not a
-  port difference). `FunctionInvokingChatClient` (10.7, unchanged on dotnet/extensions main) skips an
+  port difference). `FunctionInvokingChatClient` (10.11, unchanged on dotnet/extensions main) skips an
   approval response whose call id has a result anywhere in the request, and keys approval requests by
   `ficc_<callId>`. With a provider that reuses call ids, an approved server tool or a rejection (of a
   server tool or a UI action) whose id was answered earlier in the conversation is never carried out,
