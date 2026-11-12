@@ -328,12 +328,12 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 			return Task.FromResult<FileResult?>(null);
 		}
 
-		public Task<IEnumerable<FileResult>?> PickMultipleAsync(PickOptions? options = null)
+		public Task<IEnumerable<FileResult?>> PickMultipleAsync(PickOptions? options = null)
 		{
 			var dialog = new Microsoft.Win32.OpenFileDialog { Multiselect = true };
 			if (dialog.ShowDialog() == true)
-				return Task.FromResult<IEnumerable<FileResult>?>(dialog.FileNames.Select(f => new FileResult(f)));
-			return Task.FromResult<IEnumerable<FileResult>?>(Array.Empty<FileResult>());
+				return Task.FromResult<IEnumerable<FileResult?>>(dialog.FileNames.Select(f => (FileResult?)new FileResult(f)));
+			return Task.FromResult<IEnumerable<FileResult?>>(Array.Empty<FileResult?>());
 		}
 	}
 }

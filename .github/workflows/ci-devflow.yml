@@ -293,4 +293,5 @@ jobs:
       run-tests: false
       pack: false
       os: '["xcode-27"]'
+      xcode-version: '27.0'
       android-project: samples/DevFlow.Sample.Native/Android/DevFlow.Sample.Native.Android.csproj
