@@ -6,7 +6,7 @@
   "baseline": {
     "source": "platforms/MacOS/src/MacOS/Handlers/GestureManager.cs",
     "replace": {
-      "old": "            ButtonMask = (nuint)tap.Buttons,\n",
+      "old": "        recognizer.ButtonMask = (nuint)tap.Buttons;\n",
       "new": ""
     },
     "exitCode": 42,

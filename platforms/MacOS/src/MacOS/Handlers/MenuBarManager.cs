@@ -1,5 +1,6 @@
 using AppKit;
 using Foundation;
+using System.Runtime.InteropServices;
 using Microsoft.Maui.Controls;
 
 using Microsoft.Maui.Platforms.MacOS.Platform;
@@ -13,6 +14,10 @@ namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 /// </summary>
 public static class MenuBarManager
 {
+    [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
+    static extern void SendMessage(IntPtr receiver, IntPtr selector, IntPtr argument);
+
+    static readonly IntPtr SetWindowsMenuSelector = ObjCRuntime.Selector.GetHandle("setWindowsMenu:");
     static MacOSMenuBarOptions _options = new();
     static readonly Lazy<NSBundle> _menuResources = new(() =>
     {
@@ -28,7 +33,8 @@ public static class MenuBarManager
 
     static void ClearWindowMenu()
     {
-        NSApplication.SharedApplication.WindowsMenu = null;
+        var application = NSApplication.SharedApplication;
+        SendMessage(application.Handle, SetWindowsMenuSelector, IntPtr.Zero);
     }
 
     /// <summary>
