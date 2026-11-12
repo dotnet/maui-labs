@@ -269,6 +269,9 @@ public class UIAgent : IDisposable
     /// interactive blocks. It also rebuilds the message history sent with the next request, which leaves
     /// out calls without a result, as the live commit of their turn did; their blocks are
     /// <see cref="FunctionInvocationContentBlock.IsAbandoned"/>.
+    /// Each request round of a turn is replayed through a pipeline of its own, as it ran live, so a handler's
+    /// blocks get the same content: a block of one round sees a later round's content only through the calls it
+    /// shows, such as their results.
     /// Custom projections require the same handlers to be registered, and their
     /// discriminator data must survive the thread implementation's serialization. In particular,
     /// <see cref="AIContent.RawRepresentation"/> and <see cref="ChatResponseUpdate.RawRepresentation"/>
@@ -380,6 +383,7 @@ public class UIAgent : IDisposable
         RestoredTurn? currentTurn = null;
         BlockMappingPipeline? responsePipeline = null;
         FunctionCallRegistry? calls = null;
+        var inRoundRequest = false;
         try
         {
             BeginStateRestore();
@@ -424,6 +428,7 @@ public class UIAgent : IDisposable
                         _options,
                         _logger,
                         calls);
+                    inRoundRequest = false;
                     continue;
                 }
 
@@ -441,6 +446,26 @@ public class UIAgent : IDisposable
                         _options,
                         _logger,
                         calls);
+                    inRoundRequest = isContinuation;
+                }
+
+                // The live turn sends each request that continues it in a round of its own, with a new pipeline, and
+                // the round's request blocks are no longer active once its response starts. The replay keeps those
+                // boundaries, so the blocks of a round see the calls that FunctionInvokingChatClient replays at the
+                // start of the next round only through the calls the turn shows, as they did live.
+                if (isContinuation && !inRoundRequest)
+                {
+                    responsePipeline.Finalize();
+                    responsePipeline = new BlockMappingPipeline(
+                        _options,
+                        _logger,
+                        calls);
+                    inRoundRequest = true;
+                }
+                else if (!isContinuation && inRoundRequest)
+                {
+                    responsePipeline.Finalize();
+                    inRoundRequest = false;
                 }
 
                 // Continuation inputs were requests, so like live requests they bypass the state mapper.

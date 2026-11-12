@@ -128,6 +128,8 @@ These match upstream so that upstream fixes apply directly:
   (approval responses, UI-action results) are stored as updates marked with
   `Microsoft.Maui.AI.Chat.Persistence.IsContinuation.v1`. Upstream writes each continuation round as
   a new user turn. Keeping one turn lets restore rebuild the same `ConversationTurn`s the user saw.
+  Restore replays each round through a pipeline of its own, as the live turn sent it, so a block of one
+  round doesn't take the calls that `FunctionInvokingChatClient` replays at the start of the next.
 - **Smaller thread contract.** `IConversationThread` has upstream's seven members plus `Clear()`.
   Earlier previews also had `AbortTurn()` and `GetMessageHistory()`; they are gone because nothing
   pending is ever written and history is rebuilt from `GetUpdates()`, as upstream does.
