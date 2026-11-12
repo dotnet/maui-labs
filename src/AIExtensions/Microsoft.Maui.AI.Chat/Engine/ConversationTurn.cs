@@ -22,6 +22,7 @@ namespace Microsoft.Maui.AI.Chat;
 public class ConversationTurn : INotifyPropertyChanged
 {
     private static readonly PropertyChangedEventArgs s_isStoppedChanged = new(nameof(IsStopped));
+    private static readonly PropertyChangedEventArgs s_isRespondingChanged = new(nameof(IsResponding));
     private static readonly PropertyChangedEventArgs s_isFailedChanged = new(nameof(IsFailed));
     private static readonly PropertyChangedEventArgs s_errorChanged = new(nameof(Error));
     private static readonly PropertyChangedEventArgs s_modelIdChanged = new(nameof(ModelId));
@@ -31,6 +32,7 @@ public class ConversationTurn : INotifyPropertyChanged
     private readonly ObservableList<ContentBlock> _responseBlocks = new();
     private string _id = Guid.NewGuid().ToString("N");
     private bool _isStopped;
+    private bool _isResponding;
     private Exception? _error;
     private string? _modelId;
     private UsageDetails? _usage;
@@ -95,6 +97,20 @@ public class ConversationTurn : INotifyPropertyChanged
                 OnPropertyChanged(s_isStoppedChanged);
         }
     }
+
+    /// <summary>
+    /// Gets whether the turn is responding: <see langword="true"/> from the send that adds it, or the retry that runs
+    /// it again, until its response completed, stopped or failed.
+    /// </summary>
+    /// <remarks>
+    /// A turn joins <see cref="AgentContext.Turns"/> already responding, and a restored turn never responds, so a view
+    /// can show how a turn ended once it no longer responds. On a retry, the change is raised after the changes of
+    /// <see cref="Error"/> and <see cref="IsFailed"/>, before the <see cref="ConversationStatus.Streaming"/> status
+    /// change. When the turn ends, it is raised once the turn's outcome is final: after the changes of
+    /// <see cref="IsStopped"/>, <see cref="Error"/> and <see cref="IsFailed"/>, and before the status change that
+    /// reports the end of the turn.
+    /// </remarks>
+    public bool IsResponding => _isResponding;
 
     /// <summary>
     /// Gets whether the turn's last attempt failed: <see langword="true"/> while <see cref="Error"/> is set.
@@ -170,11 +186,15 @@ public class ConversationTurn : INotifyPropertyChanged
 
     internal void AddRequestBlock(ContentBlock block)
     {
+        ArgumentNullException.ThrowIfNull(block);
+        block.Turn = this;
         _requestBlocks.Add(block);
     }
 
     internal void AddResponseBlock(ContentBlock block)
     {
+        ArgumentNullException.ThrowIfNull(block);
+        block.Turn = this;
         _responseBlocks.Add(block);
     }
 
@@ -228,6 +248,19 @@ public class ConversationTurn : INotifyPropertyChanged
     }
 
     internal void RaiseIsStoppedChanged() => OnPropertyChanged(s_isStoppedChanged);
+
+    /// <summary>Sets <see cref="IsResponding"/>; the caller raises the change once the context's state is in place.</summary>
+    /// <returns>Whether the value changed.</returns>
+    internal bool SetIsRespondingSilently(bool value)
+    {
+        if (_isResponding == value)
+            return false;
+
+        _isResponding = value;
+        return true;
+    }
+
+    internal void RaiseIsRespondingChanged() => OnPropertyChanged(s_isRespondingChanged);
 
     /// <summary>Raises the change of <see cref="Error"/> and then of <see cref="IsFailed"/>, as far as they changed.</summary>
     internal void RaiseFailureChanged(FailureChange change)

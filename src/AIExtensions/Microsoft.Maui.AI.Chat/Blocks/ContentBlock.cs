@@ -9,8 +9,8 @@ namespace Microsoft.Maui.AI.Chat;
 
 /// <summary>
 /// Base class for every renderable unit in a conversation. Owns an <see cref="Id"/>, a
-/// <see cref="LifecycleState"/>, a <see cref="Role"/>, and the change notifications used to stream
-/// incremental updates to the UI.
+/// <see cref="LifecycleState"/>, a <see cref="Role"/>, the <see cref="Turn"/> it belongs to, and the change
+/// notifications used to stream incremental updates to the UI.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -37,6 +37,7 @@ namespace Microsoft.Maui.AI.Chat;
 public abstract class ContentBlock : INotifyPropertyChanged
 {
     private static readonly PropertyChangedEventArgs s_allPropertiesChanged = new(string.Empty);
+    private static readonly PropertyChangedEventArgs s_turnChanged = new(nameof(Turn));
 
     private readonly bool _reportsAllPropertiesOnChange;
     private string _id = string.Empty;
@@ -44,6 +45,7 @@ public abstract class ContentBlock : INotifyPropertyChanged
     private ChatRole? _role;
     private string? _authorName;
     private DateTimeOffset? _createdAt;
+    private ConversationTurn? _turn;
 
     /// <summary>Initializes a new instance of the <see cref="ContentBlock"/> class.</summary>
     protected ContentBlock()
@@ -94,6 +96,48 @@ public abstract class ContentBlock : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Gets the turn that owns the block, or <see langword="null"/> before the block is added to a turn.
+    /// </summary>
+    /// <remarks>
+    /// Set when the block is added to a turn's <see cref="ConversationTurn.RequestBlocks"/> or
+    /// <see cref="ConversationTurn.ResponseBlocks"/>, and on the
+    /// <see cref="InteractiveFunctionBlock.InnerBlock"/> of an approval or a UI action in that turn.
+    /// </remarks>
+    public ConversationTurn? Turn
+    {
+        get => _turn;
+        internal set
+        {
+            if (ReferenceEquals(_turn, value))
+                return;
+
+            _turn = value;
+            RaisePropertyChanged(s_turnChanged);
+            OnTurnSet(value);
+        }
+    }
+
+    /// <summary>
+    /// Ends whatever the block still waits for because its turn ended without finishing it: the turn completed
+    /// without a result for it, was stopped or failed, or was restored.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The engine calls this method on every block of a turn when the turn ends, and on the
+    /// <see cref="InteractiveFunctionBlock.InnerBlock"/> of an approval or a UI action, once the turn's outcome is
+    /// set and before its changes are raised. When this method returns <see langword="true"/>, the engine raises
+    /// <see cref="NotifyChanged"/> for the block once the turn's outcome is reported; during a restore it runs
+    /// before the turn is shown.
+    /// </para>
+    /// <para>
+    /// Override this method on a block of your own that waits for a result, such as a block that folds several
+    /// tool calls into rows, to mark the rows that still have no result.
+    /// </para>
+    /// </remarks>
+    /// <returns>Whether the block changed because its turn ended.</returns>
+    protected virtual bool Abandon() => false;
+
+    /// <summary>
     /// Reports that every property of the block may have changed: raises <see cref="PropertyChanged"/> with
     /// an empty property name. The engine reports it for a block of your own when the block's handler updates
     /// or completes it, and when the engine sets the result of a call block or abandons it; call it after
@@ -137,4 +181,10 @@ public abstract class ContentBlock : INotifyPropertyChanged
     internal void RaisePropertyChanged(PropertyChangedEventArgs e) => PropertyChanged?.Invoke(this, e);
 
     internal void InvokeNotifyChanged() => NotifyChanged();
+
+    internal bool InvokeAbandon() => Abandon();
+
+    internal virtual void OnTurnSet(ConversationTurn? turn)
+    {
+    }
 }

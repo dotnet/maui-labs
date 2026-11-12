@@ -101,7 +101,7 @@ public class FunctionInvocationContentBlock : ContentBlock
     /// the change with <see cref="ReportAbandonedChanged"/> once the turn's outcome is final.
     /// </summary>
     /// <returns>Whether <see cref="IsAbandoned"/> became true.</returns>
-    internal bool Abandon()
+    protected override bool Abandon()
     {
         if (_abandoned || HasResult)
             return false;
@@ -111,7 +111,11 @@ public class FunctionInvocationContentBlock : ContentBlock
     }
 
     /// <summary>Raises the change of <see cref="IsAbandoned"/>.</summary>
-    internal void ReportAbandonedChanged() => RaisePropertyChanged(s_isAbandonedChanged);
+    internal void ReportAbandonedChanged()
+    {
+        if (IsAbandoned)
+            RaisePropertyChanged(s_isAbandonedChanged);
+    }
 
     /// <summary>Sets <see cref="Result"/> without raising its change, which the caller reports later.</summary>
     /// <returns>Whether the result changed.</returns>

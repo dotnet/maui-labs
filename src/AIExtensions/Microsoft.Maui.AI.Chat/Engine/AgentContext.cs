@@ -206,6 +206,9 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
         var requestMessage = EnsureMessageId(message);
         var turn = new ConversationTurn { Id = requestMessage.MessageId! };
 
+        // The turn joins Turns already responding, so a view adds it as a turn that has not ended yet.
+        turn.SetIsRespondingSilently(true);
+
         // The attempt starts before the turn is reported, so a handler of the report cannot start another.
         var attempt = BeginAttempt(cancellationToken);
         try
@@ -214,8 +217,18 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
         }
         catch
         {
+            // A handler of the addition threw, so the turn never runs.
             EndAttempt(attempt);
-            attempt.Complete();
+            try
+            {
+                if (turn.SetIsRespondingSilently(false))
+                    turn.RaiseIsRespondingChanged();
+            }
+            finally
+            {
+                attempt.Complete();
+            }
+
             throw;
         }
 
@@ -336,20 +349,7 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
     {
         var turns = new List<ConversationTurn>(restoredTurns.Count);
         foreach (var restoredTurn in restoredTurns)
-        {
-            var turn = new ConversationTurn
-            {
-                Id = restoredTurn.Id,
-                IsStopped = restoredTurn.IsStopped,
-                ModelId = restoredTurn.ModelId,
-                Usage = restoredTurn.Usage,
-            };
-            foreach (var block in restoredTurn.RequestBlocks)
-                turn.AddRequestBlock(block);
-            foreach (var block in restoredTurn.ResponseBlocks)
-                turn.AddResponseBlock(block);
-            turns.Add(turn);
-        }
+            turns.Add(restoredTurn.Turn);
 
         _restoreCompleted = true;
         if (turns.Count == 0)
@@ -499,9 +499,12 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
         try
         {
             var retried = turn.SetErrorSilently(null);
+            var responding = turn.SetIsRespondingSilently(true);
             Status = ConversationStatus.Streaming;
             Error = null;
             turn.RaiseFailureChanged(retried);
+            if (responding)
+                turn.RaiseIsRespondingChanged();
             RaiseStatusChanged();
 
             IReadOnlyList<ChatMessage> currentMessages = [message];
@@ -644,43 +647,36 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
         }
         catch (Exception) when (cancellationToken.IsCancellationRequested)
         {
-            var abandoned = AbandonUnfinished(turn, interactiveBlocks);
-            try
-            {
-                return EndCanceledAttempt(attempt, pendingTurn, turn);
-            }
-            finally
-            {
-                ReportAbandoned(abandoned);
-            }
+            return EndCanceledAttempt(attempt, pendingTurn, turn, interactiveBlocks);
         }
         catch (Exception ex)
         {
-            var abandoned = AbandonUnfinished(turn, interactiveBlocks);
-            try
-            {
-                Fail(attempt, turn, message, ex);
-            }
-            finally
-            {
-                ReportAbandoned(abandoned);
-            }
-
+            Fail(attempt, turn, message, ex, interactiveBlocks);
             return AttemptOutcome.Failed;
         }
 
         // The turn is committed, so an exception from an app handler while it is reported reaches the
         // caller instead of failing a turn that can no longer be retried.
-        var unanswered = AbandonUnfinished(turn, interactiveBlocks: null);
         _retryMessage = null;
+        var ended = turn.SetIsRespondingSilently(false);
         Status = ConversationStatus.Idle;
+        EndAttempt(attempt);
+        List<ContentBlock>? unanswered = null;
         try
         {
-            ReportAttemptEnded(attempt);
+            unanswered = AbandonUnfinished(turn, interactiveBlocks: null);
         }
         finally
         {
-            ReportAbandoned(unanswered);
+            try
+            {
+                ReportAttemptEnded(attempt, turn, stopped: false, ended);
+            }
+            finally
+            {
+                if (unanswered is not null)
+                    ReportAbandoned(unanswered);
+            }
         }
 
         return AttemptOutcome.Succeeded;
@@ -719,7 +715,8 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
     private AttemptOutcome EndCanceledAttempt(
         Attempt attempt,
         PendingTurn pendingTurn,
-        ConversationTurn turn)
+        ConversationTurn turn,
+        List<IInteractiveBlock> interactiveBlocks)
     {
         var stopped = false;
         if (!attempt.Discard)
@@ -730,7 +727,7 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
             }
             catch (Exception ex)
             {
-                Fail(attempt, turn, pendingTurn.InitialMessage, ex);
+                Fail(attempt, turn, pendingTurn.InitialMessage, ex, interactiveBlocks);
                 return AttemptOutcome.Failed;
             }
 
@@ -739,42 +736,87 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
 
         _retryMessage = null;
         Error = null;
+        var ended = turn.SetIsRespondingSilently(false);
         Status = ConversationStatus.Idle;
-        ReportAttemptEnded(attempt, stopped ? turn : null);
+        EndAttempt(attempt);
+        List<ContentBlock>? abandoned = null;
+        try
+        {
+            abandoned = AbandonUnfinished(turn, interactiveBlocks);
+        }
+        finally
+        {
+            try
+            {
+                ReportAttemptEnded(attempt, turn, stopped, ended);
+            }
+            finally
+            {
+                if (abandoned is not null)
+                    ReportAbandoned(abandoned);
+            }
+        }
+
         return AttemptOutcome.Stopped;
     }
 
-    private void Fail(Attempt attempt, ConversationTurn turn, ChatMessage? message, Exception exception)
+    private void Fail(
+        Attempt attempt,
+        ConversationTurn turn,
+        ChatMessage? message,
+        Exception exception,
+        List<IInteractiveBlock>? interactiveBlocks)
     {
         var failure = turn.SetErrorSilently(exception);
+        var ended = turn.SetIsRespondingSilently(false);
         _retryMessage = message;
         Error = exception;
         Status = ConversationStatus.Error;
         EndAttempt(attempt);
+        List<ContentBlock>? abandoned = null;
         try
         {
-            _agent.RejectPendingPredictiveState();
+            abandoned = AbandonUnfinished(turn, interactiveBlocks);
         }
         finally
         {
-            _agent.LogProcessingError(exception);
             try
             {
-                turn.RaiseFailureChanged(failure);
+                _agent.RejectPendingPredictiveState();
             }
             finally
             {
-                RaiseStatusChanged();
+                _agent.LogProcessingError(exception);
+                try
+                {
+                    turn.RaiseFailureChanged(failure);
+                }
+                finally
+                {
+                    try
+                    {
+                        RaiseTurnEnded(turn, ended);
+                    }
+                    finally
+                    {
+                        if (abandoned is not null)
+                            ReportAbandoned(abandoned);
+                    }
+                }
             }
         }
     }
 
     /// <summary>
     /// Reports that an attempt ended once its outcome is final: rejects a prediction nobody accepted, raises
-    /// the change of a stopped turn and then the status change. They run app code, which may already send,
+    /// the changes of the turn that ended and then the status change. They run app code, which may already send,
     /// retry or clear; code that throws cannot change the outcome.
     /// </summary>
-    private void ReportAttemptEnded(Attempt attempt, ConversationTurn? stoppedTurn = null)
+    /// <param name="attempt">The attempt that ended.</param>
+    /// <param name="turn">The turn it ran.</param>
+    /// <param name="stopped">Whether the turn was marked stopped.</param>
+    /// <param name="ended">Whether the turn stopped responding.</param>
+    private void ReportAttemptEnded(Attempt attempt, ConversationTurn turn, bool stopped, bool ended)
     {
         EndAttempt(attempt);
         try
@@ -785,12 +827,30 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
         {
             try
             {
-                stoppedTurn?.RaiseIsStoppedChanged();
+                if (stopped)
+                    turn.RaiseIsStoppedChanged();
             }
             finally
             {
-                RaiseStatusChanged();
+                RaiseTurnEnded(turn, ended);
             }
+        }
+    }
+
+    /// <summary>
+    /// Raises the change of <see cref="ConversationTurn.IsResponding"/> of a turn that ended, and then the status
+    /// change that reports the end, also when a handler of the turn's change throws.
+    /// </summary>
+    private void RaiseTurnEnded(ConversationTurn turn, bool ended)
+    {
+        try
+        {
+            if (ended)
+                turn.RaiseIsRespondingChanged();
+        }
+        finally
+        {
+            RaiseStatusChanged();
         }
     }
 
@@ -803,8 +863,8 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
 
     /// <summary>
     /// Ends what the turn left unfinished once nothing can send it: the approvals and UI actions of a turn that
-    /// stopped or failed stop accepting input, and the turn's calls without a result are abandoned, because
-    /// they can no longer get one. Nothing is reported yet.
+    /// stopped or failed stop accepting input, and the turn's blocks and calls without a result are abandoned,
+    /// because they can no longer get one. Nothing on the blocks is reported yet.
     /// </summary>
     /// <param name="turn">The turn that ended.</param>
     /// <param name="interactiveBlocks">
@@ -816,24 +876,40 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
         var abandoned = new List<ContentBlock>();
         foreach (var interactive in interactiveBlocks ?? [])
         {
-            if (interactive is InteractiveFunctionBlock block && block.Abandon())
-                abandoned.Add(block);
+            if (interactive is InteractiveFunctionBlock block && block.InvokeAbandon())
+                AddOnce(abandoned, block);
         }
 
         foreach (var block in turn.RequestBlocks.Concat(turn.ResponseBlocks))
         {
-            var call = block as FunctionInvocationContentBlock ?? (block as InteractiveFunctionBlock)?.CallBlock;
-            if (call is null || !call.Abandon())
+            if (block.InvokeAbandon())
+                AddOnce(abandoned, block);
+
+            if (block is not InteractiveFunctionBlock interactive)
                 continue;
 
-            abandoned.Add(call);
-
             // A card shown by an approval or UI action refreshes from the wrapper's notification.
-            if (!ReferenceEquals(call, block) && !abandoned.Exists(other => ReferenceEquals(other, block)))
-                abandoned.Add(block);
+            if (interactive.CallBlock.InvokeAbandon())
+            {
+                AddOnce(abandoned, interactive.CallBlock);
+                AddOnce(abandoned, interactive);
+            }
+
+            if (!ReferenceEquals(interactive.InnerBlock, interactive.CallBlock)
+                && interactive.InnerBlock.InvokeAbandon())
+            {
+                AddOnce(abandoned, interactive.InnerBlock);
+                AddOnce(abandoned, interactive);
+            }
         }
 
         return abandoned;
+
+        static void AddOnce(List<ContentBlock> list, ContentBlock item)
+        {
+            if (!list.Exists(existing => ReferenceEquals(existing, item)))
+                list.Add(item);
+        }
     }
 
     /// <summary>

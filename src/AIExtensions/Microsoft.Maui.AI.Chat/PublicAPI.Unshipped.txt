@@ -67,6 +67,7 @@ Microsoft.Maui.AI.Chat.ContentBlock.OnPropertyChanged(string? propertyName = nul
 Microsoft.Maui.AI.Chat.ContentBlock.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
 Microsoft.Maui.AI.Chat.ContentBlock.Role.get -> Microsoft.Extensions.AI.ChatRole?
 Microsoft.Maui.AI.Chat.ContentBlock.SetProperty<T>(ref T field, T value, string? propertyName = null) -> bool
+Microsoft.Maui.AI.Chat.ContentBlock.Turn.get -> Microsoft.Maui.AI.Chat.ConversationTurn?
 Microsoft.Maui.AI.Chat.ContentBlockHandler<TState>
 Microsoft.Maui.AI.Chat.ContentBlockHandler<TState>.ContentBlockHandler() -> void
 Microsoft.Maui.AI.Chat.ConversationStatus
@@ -79,6 +80,7 @@ Microsoft.Maui.AI.Chat.ConversationTurn.ConversationTurn() -> void
 Microsoft.Maui.AI.Chat.ConversationTurn.Error.get -> System.Exception?
 Microsoft.Maui.AI.Chat.ConversationTurn.Id.get -> string!
 Microsoft.Maui.AI.Chat.ConversationTurn.IsFailed.get -> bool
+Microsoft.Maui.AI.Chat.ConversationTurn.IsResponding.get -> bool
 Microsoft.Maui.AI.Chat.ConversationTurn.IsStopped.get -> bool
 Microsoft.Maui.AI.Chat.ConversationTurn.ModelId.get -> string?
 Microsoft.Maui.AI.Chat.ConversationTurn.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
@@ -326,8 +328,10 @@ abstract Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.TryCreateBlock(Microsoft
 abstract Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.TryUpdateBlock(Microsoft.Maui.AI.Chat.BlockMappingContext! context, TBlock! state, out bool isCompleted) -> bool
 override sealed Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.Handle(Microsoft.Maui.AI.Chat.BlockMappingContext! context, TBlock! state) -> Microsoft.Maui.AI.Chat.BlockMappingResult<TBlock!>
 virtual Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.OnContentUpdated(TBlock! block) -> void
+override Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock.Abandon() -> bool
 override Microsoft.Maui.AI.Chat.ToolApprovalBlock.IsAwaitingInput.get -> bool
 override Microsoft.Maui.AI.Chat.UIActionBlock.IsAwaitingInput.get -> bool
+virtual Microsoft.Maui.AI.Chat.ContentBlock.Abandon() -> bool
 virtual Microsoft.Maui.AI.Chat.InteractiveFunctionBlock.IsAwaitingInput.get -> bool
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Complete() -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Emit(Microsoft.Maui.AI.Chat.ContentBlock! block, TState state) -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>

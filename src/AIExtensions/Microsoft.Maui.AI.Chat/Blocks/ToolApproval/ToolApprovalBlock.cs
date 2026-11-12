@@ -84,11 +84,12 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
     }
 
     /// <summary>Stops waiting for a decision because the turn ended; later decisions are ignored.</summary>
-    internal override bool Abandon()
+    /// <returns>Whether the approval stopped waiting for a decision.</returns>
+    protected override bool Abandon()
     {
         var wasAwaitingInput = IsAwaitingInput;
         _tcs.TrySetCanceled();
-        UIAction?.Abandon();
+        UIAction?.InvokeAbandon();
         return wasAwaitingInput;
     }
 

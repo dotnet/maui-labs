@@ -106,7 +106,8 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
     /// Stops waiting for a result because the turn ended; a later invocation does nothing, and an
     /// invocation that returns afterwards does not show its result, which is never sent.
     /// </summary>
-    internal override bool Abandon()
+    /// <returns>Whether the action stopped waiting for a manual invocation.</returns>
+    protected override bool Abandon()
     {
         var wasAwaitingInput = IsAwaitingInput;
         _resultSource.TrySetCanceled();

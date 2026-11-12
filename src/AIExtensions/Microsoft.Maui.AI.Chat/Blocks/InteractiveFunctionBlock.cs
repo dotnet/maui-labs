@@ -97,20 +97,19 @@ public abstract class InteractiveFunctionBlock : ContentBlock
     public virtual bool IsAwaitingInput => false;
 
     /// <summary>
-    /// Stops accepting a decision or an invocation once nothing can send it: the turn stopped or failed, or
-    /// the block was restored.
-    /// </summary>
-    /// <returns>
-    /// Whether the block stopped waiting for input, so the caller raises the change once
-    /// the turn's outcome is final.
-    /// </returns>
-    internal virtual bool Abandon() => false;
-
-    /// <summary>
     /// Records the current <see cref="IsAwaitingInput"/>, which <see cref="ReportAwaitingInputChanged"/>
     /// compares against. Called once the engine's block is constructed, or when it is restored silently.
     /// </summary>
     internal void CaptureAwaitingInput() => _reportedAwaitingInput = IsAwaitingInput;
+
+    internal override void OnTurnSet(ConversationTurn? turn)
+    {
+        InnerBlock.Turn = turn;
+        if (!ReferenceEquals(CallBlock, InnerBlock))
+            CallBlock.Turn = turn;
+        if (this is ToolApprovalBlock { UIAction: { } action })
+            action.Turn = turn;
+    }
 
     /// <summary>
     /// Raises <see cref="ContentBlock.PropertyChanged"/> for <see cref="IsAwaitingInput"/> when it changed

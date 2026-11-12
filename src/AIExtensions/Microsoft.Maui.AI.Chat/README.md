@@ -133,24 +133,29 @@ third-party list.
 - `AgentContext` raises `PropertyChanged` for `Status` and `Error`. `Turns` raises `CollectionChanged`:
   an `Add` when a send adds a turn, and one `Reset` once a restore loaded every turn or `ClearAsync`
   removed them.
-- `ConversationTurn` raises `PropertyChanged` for `IsStopped`, `Error` and `IsFailed`, `ModelId` and
-  `Usage`. A failed turn keeps its `Error` until a retry runs it again, while `AgentContext.Error` only
-  reports the last attempt, so every failed turn can show why it failed. Its `RequestBlocks` and
-  `ResponseBlocks` raise an `Add` per block, and `ResponseBlocks` a `Reset` when `RetryAsync` removes
-  the blocks of the failed attempt.
-- Blocks raise `PropertyChanged` for the properties that changed, such as `RawText` and `Content` while
-  text streams, a reasoning block's `Text`, a tool call's `Result` and `HasResult`, an approval's
-  `Status`, a UI action's `IsComplete`, and `IsAwaitingInput`. A block of your own type, including a
-  `[ToolBlock]`, raises it with an empty name (every property may have changed) whenever its handler
-  updates it, and after the engine sets its result or abandons it; raise specific names with
-  `SetProperty` or `OnPropertyChanged`.
-- A tool call's block tells its card everything, so the card never searches the session.
+- `ConversationTurn` raises `PropertyChanged` for `IsResponding`, `IsStopped`, `Error` and `IsFailed`,
+  `ModelId` and `Usage`. A turn joins `Turns` with `IsResponding` already true, and raises the change when
+  the turn ends (or starts again on a retry), after `IsStopped`, `Error` and `IsFailed` and before the
+  status change; a restored turn never responds. A failed turn keeps its `Error` until a retry runs it
+  again, while `AgentContext.Error` only reports the last attempt, so every failed turn can show why it
+  failed. Its `RequestBlocks` and `ResponseBlocks` raise an `Add` per block, and `ResponseBlocks` a `Reset`
+  when `RetryAsync` removes the blocks of the failed attempt.
+- Blocks know the turn they belong to (`ContentBlock.Turn`, also set on an approval's or UI action's
+  `InnerBlock`), and raise `PropertyChanged` for the properties that changed, such as `RawText` and
+  `Content` while text streams, a reasoning block's `Text`, a tool call's `Result` and `HasResult`, an
+  approval's `Status`, a UI action's `IsComplete`, and `IsAwaitingInput`. A block of your own type,
+  including a `[ToolBlock]`, raises it with an empty name (every property may have changed) whenever its
+  handler updates it, and after the engine sets its result or abandons it (`ContentBlock.Abandon()`);
+  raise specific names with `SetProperty` or `OnPropertyChanged`.
+- When a turn ends (it completed, stopped or failed, or was restored), the engine calls
+  `ContentBlock.Abandon()` on every block of the turn and on each approval's or UI action's `InnerBlock`.
+  A tool call's block tells its card everything, so the card never searches the session:
   `FunctionInvocationContentBlock.HasResult` turns true when the result arrives, and `IsAbandoned` when
-  the turn ends without one: it completed, stopped or failed, or left the call's approval or UI action
-  unanswered. A restored call without a recorded result is abandoned too. Approvals and UI actions have
-  the same properties for their call (`Call`, `Result`, `HasResult`, `IsAbandoned`), also when an approval
-  wraps a block of the app's own type. A call that needs approval is the approval's `InnerBlock`, and the
-  approval's `Status` tells a rejection, whose result only says that the call was rejected.
+  the turn ends without one. Approvals and UI actions have the same properties for their call (`Call`,
+  `Result`, `HasResult`, `IsAbandoned`), also when an approval wraps a block of the app's own type, and
+  a block of your own that folds several tool calls into rows overrides `Abandon()` to mark the rows that
+  still have no result. A call that needs approval is the approval's `InnerBlock`, and the approval's
+  `Status` tells a rejection, whose result only says that the call was rejected.
 - `UIAgent<TState>.State` raises `PropertyChanged` for `Value` and `HasPendingPredictiveState`, so a view
   can bind to `State.Value` and show a pending prediction. Assigning `Value` raises it even for the current
   instance, so after changing the value in place, assign it again to refresh bindings to its properties
