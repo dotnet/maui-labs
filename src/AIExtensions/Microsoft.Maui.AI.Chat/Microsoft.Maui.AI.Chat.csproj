@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Description>Headless AI conversation engine extracted from Microsoft.Maui.AI.Chat. Provides UIAgent, AgentContext, BlockMappingPipeline, ContentBlock hierarchy, and RichText AST. Zero UI dependencies.</Description>
+    <Description>A headless AI chat engine for .NET MAUI over any Microsoft.Extensions.AI IChatClient: turns a streamed response into bindable content blocks (text, reasoning, media, tool calls, approvals, UI actions) and runs each turn with tools, approvals, stop, retry, restore, and shared and predictive state. No UI dependencies.</Description>
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <PackageId>Microsoft.Maui.AI.Chat</PackageId>

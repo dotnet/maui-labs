@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>Microsoft.Maui.AI.Chat.Generators.Tests</RootNamespace>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
