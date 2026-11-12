@@ -254,9 +254,7 @@ public class UIAgent : IDisposable
             thread.CompleteTurn();
         }
 
-        var messages = UnansweredCalls.Remove(
-            turn.Messages,
-            UnansweredCalls.CollectAnsweredCallIds(turn));
+        var messages = UnansweredCalls.Remove(turn.Messages);
         if (stopped)
             CutOffReasoning.Remove(messages);
         _history.AddRange(messages);
@@ -346,15 +344,9 @@ public class UIAgent : IDisposable
         var updates = history
             .Select(message => CreateMessageUpdate(EnsureMessageId(message), isContinuation: false))
             .ToArray();
-        var answered = new HashSet<string>(
-            history
-                .SelectMany(message => message.Contents)
-                .OfType<FunctionResultContent>()
-                .Select(result => result.CallId),
-            StringComparer.Ordinal);
         return ReplayAsync(
             updates,
-            UnansweredCalls.Remove(history, answered),
+            UnansweredCalls.Remove(history),
             cancellationToken);
     }
 
@@ -385,7 +377,6 @@ public class UIAgent : IDisposable
         var replayedHistory = new List<ChatMessage>();
         var responseUpdates = new List<ChatResponseUpdate>();
         var turnHistoryStart = 0;
-        var turnAnsweredCallIds = new HashSet<string>(StringComparer.Ordinal);
         RestoredTurn? currentTurn = null;
         BlockMappingPipeline? responsePipeline = null;
         FunctionCallRegistry? calls = null;
@@ -414,7 +405,7 @@ public class UIAgent : IDisposable
                             ?? Guid.NewGuid().ToString("N"),
                         IsStopped(update));
                     turns.Add(currentTurn);
-                    BeginTurnHistory(update);
+                    turnHistoryStart = replayedHistory.Count;
                     replayedHistory.Add(CreateHistoryMessage(update));
                     calls = new FunctionCallRegistry();
 
@@ -444,15 +435,13 @@ public class UIAgent : IDisposable
                             ?? Guid.NewGuid().ToString("N"),
                         isStopped: false);
                     turns.Add(currentTurn);
-                    BeginTurnHistory(update: null);
+                    turnHistoryStart = replayedHistory.Count;
                     calls = new FunctionCallRegistry();
                     responsePipeline = new BlockMappingPipeline(
                         _options,
                         _logger,
                         calls);
                 }
-
-                UnansweredCalls.AddAnsweredCallIds(turnAnsweredCallIds, update.Contents);
 
                 // Continuation inputs were requests, so like live requests they bypass the state mapper.
                 var processUpdate = isContinuation
@@ -511,14 +500,6 @@ public class UIAgent : IDisposable
             throw;
         }
 
-        void BeginTurnHistory(ChatResponseUpdate? update)
-        {
-            turnHistoryStart = replayedHistory.Count;
-            turnAnsweredCallIds.Clear();
-            if (update is not null)
-                UnansweredCalls.AddAnsweredCallIds(turnAnsweredCallIds, update.Contents);
-        }
-
         void CompleteRestoredTurn()
         {
             responsePipeline?.Finalize();
@@ -531,7 +512,7 @@ public class UIAgent : IDisposable
             // without a result are left out even when the thread lost the mark that the turn was stopped, because a
             // restored approval can never be answered.
             var turnHistory = replayedHistory.GetRange(turnHistoryStart, replayedHistory.Count - turnHistoryStart);
-            var committed = UnansweredCalls.Remove(turnHistory, turnAnsweredCallIds);
+            var committed = UnansweredCalls.Remove(turnHistory);
             if (currentTurn.IsStopped)
                 CutOffReasoning.Remove(committed);
             replayedHistory.RemoveRange(turnHistoryStart, turnHistory.Count);

@@ -47,40 +47,30 @@ internal static class UnansweredCalls
         return open;
     }
 
-    internal static HashSet<string> CollectAnsweredCallIds(PendingTurn turn)
+    /// <summary>
+    /// Removes the calls that no later result answers from <paramref name="messages"/>, with their approval
+    /// requests and responses, and the messages left empty.
+    /// </summary>
+    /// <remarks>
+    /// The calls are matched in history order, as <see cref="FindOpen"/> matches them: a call stays open until a
+    /// result for its id follows it, a repeat of an open call or its approval request is the same call, and a call
+    /// id reused after its result starts a new call, as from a provider that numbers its calls per response. An
+    /// approval response belongs to its id's open call, or else to the call it answered, which already has its
+    /// result when the client answered an approved UI action.
+    /// </remarks>
+    internal static List<ChatMessage> Remove(IReadOnlyList<ChatMessage> messages)
     {
-        var callIds = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var message in turn.Messages)
-            AddAnsweredCallIds(callIds, message.Contents);
-        foreach (var update in turn.ThreadUpdates)
-            AddAnsweredCallIds(callIds, update.Contents);
-        return callIds;
-    }
-
-    /// <summary>Adds the call ids of the results in <paramref name="contents"/> to <paramref name="callIds"/>.</summary>
-    internal static void AddAnsweredCallIds(HashSet<string> callIds, IList<AIContent> contents)
-    {
-        foreach (var content in contents)
-        {
-            if (content is FunctionResultContent result)
-                callIds.Add(result.CallId);
-        }
-    }
-
-    internal static List<ChatMessage> Remove(
-        IReadOnlyList<ChatMessage> messages,
-        HashSet<string> answeredCallIds)
-    {
+        var unanswered = FindUnanswered(messages);
         var kept = new List<ChatMessage>(messages.Count);
         foreach (var message in messages)
         {
-            if (AllKept(message.Contents, answeredCallIds))
+            if (unanswered.Count == 0 || !message.Contents.Any(unanswered.Contains))
             {
                 kept.Add(message);
                 continue;
             }
 
-            var contents = Filter(message.Contents, answeredCallIds);
+            var contents = message.Contents.Where(content => !unanswered.Contains(content)).ToList();
             if (contents.Count == 0)
                 continue;
 
@@ -92,28 +82,50 @@ internal static class UnansweredCalls
         return kept;
     }
 
-    private static bool AllKept(IList<AIContent> contents, HashSet<string> answeredCallIds)
+    /// <summary>Finds the calls, approval requests and approval responses of the calls that no result answers.</summary>
+    private static HashSet<AIContent> FindUnanswered(IReadOnlyList<ChatMessage> messages)
     {
-        foreach (var content in contents)
+        var open = new Dictionary<string, List<AIContent>>(StringComparer.Ordinal);
+        var last = new Dictionary<string, List<AIContent>>(StringComparer.Ordinal);
+        foreach (var message in messages)
         {
-            if (!IsKept(content, answeredCallIds))
-                return false;
+            foreach (var content in message.Contents)
+            {
+                switch (content)
+                {
+                    case FunctionCallContent call:
+                        Open(call.CallId).Add(call);
+                        break;
+                    case ToolApprovalRequestContent { ToolCall: FunctionCallContent call } request:
+                        Open(call.CallId).Add(request);
+                        break;
+                    case ToolApprovalResponseContent { ToolCall: FunctionCallContent call } response:
+                        (open.GetValueOrDefault(call.CallId) ?? last.GetValueOrDefault(call.CallId) ?? Open(call.CallId))
+                            .Add(response);
+                        break;
+                    case FunctionResultContent result:
+                        open.Remove(result.CallId);
+                        break;
+                }
+            }
         }
 
-        return true;
-    }
+        var unanswered = new HashSet<AIContent>(ReferenceEqualityComparer.Instance);
+        foreach (var contents in open.Values)
+            unanswered.UnionWith(contents);
+        return unanswered;
 
-    private static List<AIContent> Filter(IList<AIContent> contents, HashSet<string> answeredCallIds)
-        => contents
-            .Where(content => IsKept(content, answeredCallIds))
-            .ToList();
-
-    private static bool IsKept(AIContent content, HashSet<string> answeredCallIds)
-        => content switch
+        // The open call with the id, or a new one when the id has none.
+        List<AIContent> Open(string callId)
         {
-            FunctionCallContent call => answeredCallIds.Contains(call.CallId),
-            ToolApprovalRequestContent { ToolCall: FunctionCallContent call } => answeredCallIds.Contains(call.CallId),
-            ToolApprovalResponseContent { ToolCall: FunctionCallContent call } => answeredCallIds.Contains(call.CallId),
-            _ => true,
-        };
+            if (!open.TryGetValue(callId, out var contents))
+            {
+                contents = [];
+                open[callId] = contents;
+                last[callId] = contents;
+            }
+
+            return contents;
+        }
+    }
 }
