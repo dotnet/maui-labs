@@ -33,8 +33,8 @@ var session = new AgentContext(agent);
 await session.SendMessageAsync("Hello!");
 
 foreach (var turn in session.Turns)
-foreach (var block in turn.ResponseBlocks)
-    Console.WriteLine(block);
+foreach (var text in turn.ResponseBlocks.OfType<RichContentBlock>())
+    Console.WriteLine(text.RawText);
 ```
 
 ## Server tools and UI actions
