@@ -1,0 +1,57 @@
+html {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color-scheme: light dark;
+}
+
+.container {
+    max-width: 52rem;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+section {
+    border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
+
+section h2 {
+    font-size: 1rem;
+    margin: 0 0 0.5rem;
+}
+
+button {
+    margin-right: 0.25rem;
+}
+
+output {
+    display: block;
+    margin-top: 0.5rem;
+    font-family: monospace;
+    white-space: pre-wrap;
+}
+
+pre {
+    white-space: pre-wrap;
+}
+
+#blazor-error-ui {
+    background: lightyellow;
+    color: black;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}

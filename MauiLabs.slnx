@@ -90,6 +90,9 @@
     <Project Path="platforms/MacOS/src/MacOS.Essentials/MacOS.Essentials.csproj" />
     <Project Path="platforms/MacOS/src/MacOS.BlazorWebView/MacOS.BlazorWebView.csproj" />
   </Folder>
+  <Folder Name="/platforms/Browser/">
+    <Project Path="platforms/Browser/src/Browser.Essentials/Browser.Essentials.csproj" />
+  </Folder>
   <Folder Name="/platforms/MacOS/tests/">
     <Project Path="platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj" />
   </Folder>
