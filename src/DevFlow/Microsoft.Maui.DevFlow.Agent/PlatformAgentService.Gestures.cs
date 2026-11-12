@@ -287,6 +287,7 @@ public partial class PlatformAgentService
         typeof(global::AndroidX.AppCompat.Widget.AppCompatImageView),
         typeof(global::Microsoft.Maui.Platform.LayoutViewGroup),
         typeof(global::Microsoft.Maui.Platform.ContentViewGroup),
+        typeof(global::Microsoft.Maui.Graphics.Platform.PlatformGraphicsView),
         typeof(global::Microsoft.Maui.Platform.WrapperView),
         typeof(global::Microsoft.Maui.Platform.MauiTextView),
         typeof(global::Microsoft.Maui.Platform.MauiShapeView),
