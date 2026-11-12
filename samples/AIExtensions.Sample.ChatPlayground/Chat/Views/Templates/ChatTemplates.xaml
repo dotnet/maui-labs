@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
-    How each block of a conversation looks. The chat area lays out every turn's request and response blocks with the
-    BlockTemplateSelector below, which uses the first template whose When matches a block: the specific templates come
-    first. A block that no template matches shows nothing. An approval shows the card of its call, picked the same way,
-    inside the approval wrapper's Approve and Reject.
+    How each row of the conversation looks. The chat area lists the conversation's rows, each turn's request and
+    response blocks and then the turn itself once it ended, with the BlockTemplateSelector below. For a block, it uses
+    the first template whose When matches the block: the specific templates come first. A block that no template
+    matches shows nothing. An approval shows the card of its call, picked the same way, inside the approval wrapper's
+    Approve and Reject. A turn's own row uses the TurnTemplate.
 
     The templates bind to their block, which raises PropertyChanged as it streams and as its call runs, so they update in
     place. Buttons call the chat's view model, found with RelativeSource.
@@ -20,6 +21,8 @@
     <local:MediaImageConverter x:Key="MediaImage" />
     <local:HasValueConverter x:Key="HasValue" />
     <local:BoldTextConverter x:Key="BoldText" />
+    <local:TurnFooterConverter x:Key="TurnFooter" />
+    <local:TurnErrorConverter x:Key="TurnError" />
 
     <chat:BlockTemplateSelector x:Key="BlockTemplates">
 
@@ -55,6 +58,41 @@
                 </ControlTemplate>
             </chat:ApprovalWrapper>
         </chat:BlockTemplateSelector.Wrappers>
+
+        <!--
+            The end of a turn, after its blocks: why its response failed, with Retry while it is the last turn, and
+            whether it was stopped, the model that answered and the tokens it used. The space below it separates the
+            turns.
+        -->
+        <chat:BlockTemplateSelector.TurnTemplate>
+            <DataTemplate x:DataType="chat:ConversationTurn">
+                <VerticalStackLayout Spacing="2" Padding="0,2,0,12" AutomationId="TurnEnd">
+                    <Border Style="{StaticResource ErrorCardStyle}" IsVisible="{Binding IsFailed}"
+                            AutomationId="TurnFailed">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="{Binding Error, Converter={StaticResource TurnError}}"
+                                   TextColor="{AppThemeBinding Light={StaticResource ErrorText}, Dark={StaticResource ErrorTextDark}}"
+                                   LineBreakMode="WordWrap" AutomationId="TurnError" />
+                            <Button Text="Retry" HorizontalOptions="Start" HeightRequest="36" Padding="14,0"
+                                    Command="{Binding RetryAction, Source={RelativeSource AncestorType={x:Type local:ChatViewModel}}, x:DataType=local:ChatViewModel}"
+                                    CommandParameter="{Binding .}"
+                                    AutomationId="RetryButton" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Label Style="{StaticResource CardDetail}"
+                           IsVisible="{Binding Text, Source={RelativeSource Self}, Converter={StaticResource HasValue}, x:DataType=Label}"
+                           AutomationId="TurnFooter">
+                        <Label.Text>
+                            <MultiBinding Converter="{StaticResource TurnFooter}">
+                                <Binding Path="ModelId" />
+                                <Binding Path="Usage" />
+                                <Binding Path="IsStopped" />
+                            </MultiBinding>
+                        </Label.Text>
+                    </Label>
+                </VerticalStackLayout>
+            </DataTemplate>
+        </chat:BlockTemplateSelector.TurnTemplate>
 
         <!-- What the user typed: a bubble on the right. -->
         <chat:BlockTemplate>
@@ -126,8 +164,7 @@
 
         <!--
             Every calculation of a response on one worksheet, a row per calculate call, which fills in as the results
-            arrive. A row still waiting when its turn stopped or failed will never get its result, so it says so; the
-            row is not an engine block, so it reads that from its turn. A calculation that needs approval has a
+            arrive, or says "No result" once the turn ends without one. A calculation that needs approval has a
             worksheet of its own inside the approval, which doesn't spin while it waits for the decision.
         -->
         <chat:BlockTemplate When="{chat:Is local:CalculatorWorksheetBlock}">
@@ -151,44 +188,20 @@
                                                            AutomationId="CalculationRunning">
                                             <ActivityIndicator.Triggers>
                                                 <DataTrigger TargetType="ActivityIndicator" Value="True"
-                                                             Binding="{Binding IsStopped, Source={RelativeSource AncestorType={x:Type chat:ConversationTurn}}, x:DataType=chat:ConversationTurn}">
-                                                    <Setter Property="IsVisible" Value="False" />
-                                                    <Setter Property="IsRunning" Value="False" />
-                                                </DataTrigger>
-                                                <DataTrigger TargetType="ActivityIndicator" Value="True"
-                                                             Binding="{Binding IsFailed, Source={RelativeSource AncestorType={x:Type chat:ConversationTurn}}, x:DataType=chat:ConversationTurn}">
-                                                    <Setter Property="IsVisible" Value="False" />
-                                                    <Setter Property="IsRunning" Value="False" />
-                                                </DataTrigger>
-                                                <DataTrigger TargetType="ActivityIndicator" Value="True"
                                                              Binding="{Binding IsAwaitingInput, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}">
+                                                    <Setter Property="IsVisible" Value="False" />
+                                                    <Setter Property="IsRunning" Value="False" />
+                                                </DataTrigger>
+                                                <DataTrigger TargetType="ActivityIndicator" Value="Rejected"
+                                                             Binding="{Binding Status, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}">
                                                     <Setter Property="IsVisible" Value="False" />
                                                     <Setter Property="IsRunning" Value="False" />
                                                 </DataTrigger>
                                             </ActivityIndicator.Triggers>
                                         </ActivityIndicator>
-                                        <Label Grid.Column="1" Text="No result" IsVisible="False"
+                                        <Label Grid.Column="1" Text="No result" IsVisible="{Binding IsAbandoned}"
                                                Style="{StaticResource CardDetail}" VerticalOptions="Center"
-                                               AutomationId="CalculationNoResult">
-                                            <Label.Triggers>
-                                                <MultiTrigger TargetType="Label">
-                                                    <MultiTrigger.Conditions>
-                                                        <BindingCondition Binding="{Binding IsPending}" Value="True" />
-                                                        <BindingCondition Value="True"
-                                                                          Binding="{Binding IsStopped, Source={RelativeSource AncestorType={x:Type chat:ConversationTurn}}, x:DataType=chat:ConversationTurn}" />
-                                                    </MultiTrigger.Conditions>
-                                                    <Setter Property="IsVisible" Value="True" />
-                                                </MultiTrigger>
-                                                <MultiTrigger TargetType="Label">
-                                                    <MultiTrigger.Conditions>
-                                                        <BindingCondition Binding="{Binding IsPending}" Value="True" />
-                                                        <BindingCondition Value="True"
-                                                                          Binding="{Binding IsFailed, Source={RelativeSource AncestorType={x:Type chat:ConversationTurn}}, x:DataType=chat:ConversationTurn}" />
-                                                    </MultiTrigger.Conditions>
-                                                    <Setter Property="IsVisible" Value="True" />
-                                                </MultiTrigger>
-                                            </Label.Triggers>
-                                        </Label>
+                                               AutomationId="CalculationNoResult" />
                                         <!-- Anything but a number: why it failed, in red, or that the call never ran. -->
                                         <Label Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Message}"
                                                IsVisible="{Binding HasMessage}" Style="{StaticResource CardDetail}"
@@ -231,6 +244,11 @@
                                     </DataTrigger>
                                     <DataTrigger TargetType="ActivityIndicator" Value="True"
                                                  Binding="{Binding IsAwaitingInput, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}">
+                                        <Setter Property="IsVisible" Value="False" />
+                                        <Setter Property="IsRunning" Value="False" />
+                                    </DataTrigger>
+                                    <DataTrigger TargetType="ActivityIndicator" Value="Rejected"
+                                                 Binding="{Binding Status, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}">
                                         <Setter Property="IsVisible" Value="False" />
                                         <Setter Property="IsRunning" Value="False" />
                                     </DataTrigger>
@@ -331,6 +349,11 @@
                                     </DataTrigger>
                                     <DataTrigger TargetType="ActivityIndicator" Value="True"
                                                  Binding="{Binding IsAwaitingInput, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}">
+                                        <Setter Property="IsVisible" Value="False" />
+                                        <Setter Property="IsRunning" Value="False" />
+                                    </DataTrigger>
+                                    <DataTrigger TargetType="ActivityIndicator" Value="Rejected"
+                                                 Binding="{Binding Status, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}">
                                         <Setter Property="IsVisible" Value="False" />
                                         <Setter Property="IsRunning" Value="False" />
                                     </DataTrigger>

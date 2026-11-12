@@ -86,7 +86,9 @@ public sealed class ChatPersistenceTests
         var rows = Assert.Single(turn.ResponseBlocks.OfType<CalculatorWorksheetBlock>()).Rows;
         Assert.Equal(["call-1", "call-2"], rows.Select(row => row.CallId));
         Assert.Equal("84", CalculatorDisplay.FormatResult(rows[0].Result, System.Globalization.CultureInfo.InvariantCulture));
-        Assert.True(rows[1].IsPending);
+        Assert.False(rows[0].IsAbandoned);
+        Assert.False(rows[1].IsPending);
+        Assert.True(rows[1].IsAbandoned);
 
         // The model never hears of the call without a result, which a provider would reject.
         await harness.Session.SendMessageAsync("And the second one?");
