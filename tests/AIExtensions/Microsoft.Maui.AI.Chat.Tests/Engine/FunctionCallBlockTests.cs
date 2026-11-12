@@ -43,7 +43,7 @@ public class FunctionCallBlockTests
         var approval = AssertSingleApprovalBlock(
             turn,
             ApprovalStatus.Rejected,
-            "Tool call invocation rejected. Not now");
+            RejectedCall.Result("Not now"));
         Assert.True(approval.Call?.InformationalOnly);
     }
 

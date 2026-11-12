@@ -102,7 +102,7 @@ public class UIActionApprovalReusedIdTests
         Assert.Equal(5, scenario.Model.Requests.Count);
         ToolHistory.AssertValidWithReusedIds(scenario.Model.Requests[4]);
         Assert.Equal(
-            [approve ? "Map of Paris" : "Tool call invocation rejected. No", "Sunny"],
+            [approve ? "Map of Paris" : RejectedCall.Result("No"), "Sunny"],
             FindResults(scenario.Model.Requests[4], "0"));
         context.Dispose();
     }

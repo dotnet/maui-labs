@@ -534,11 +534,12 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - Timing is measured by the optional MEAI OpenTelemetry wrapper, not stored in chat responses.
 - The wrapper measures total operation duration, time to the first emitted streaming update, and time between later emitted updates.
 - An emitted update is not necessarily a token; it may contain text, tools, metadata, or token usage metadata.
-- With the pinned M.E.AI 10.4.1, input/output tokens are span tags and
-  `gen_ai.client.token.usage` measurements, and cached input is the
-  `gen_ai.usage.cache_read.input_tokens` span tag. Total and reasoning counts are
-  only on `UsageDetails`. Response IDs and finish reasons are emitted only when
-  the provider supplies them.
+- With the pinned M.E.AI 10.11.0, input/output tokens are span tags and
+  `gen_ai.client.token.usage` measurements, and cached input and reasoning
+  output are the `gen_ai.usage.cache_read.input_tokens` and
+  `gen_ai.usage.reasoning.output_tokens` span tags. The total count is only on
+  `UsageDetails`. Response IDs and finish reasons are emitted only when the
+  provider supplies them.
 
 **Provider patterns**
 

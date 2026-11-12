@@ -110,7 +110,7 @@ public class UIActionApprovalBatchTests
         var approval = Assert.Single(turn.ResponseBlocks.OfType<ToolApprovalBlock>());
         Assert.Equal("ShowMap", approval.ToolName);
         Assert.Equal(approve ? ApprovalStatus.Approved : ApprovalStatus.Rejected, approval.Status);
-        var expected = approve ? "Map of Paris" : "Tool call invocation rejected. Not now";
+        var expected = approve ? "Map of Paris" : RejectedCall.Result("Not now");
         Assert.Equal(expected, approval.Result?.Result?.ToString());
         Assert.Equal(approve ? ["Paris"] : [], scenario.Shown);
         Assert.Equal(
