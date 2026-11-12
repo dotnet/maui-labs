@@ -87,6 +87,41 @@ public class BlockTemplateSelectorTests
     }
 
     [Fact]
+    public void SelectTemplate_ShowsATurnWithTheTurnTemplate()
+    {
+        var turnTemplate = new DataTemplate(() => new Label());
+        var selector = new BlockTemplateSelector
+        {
+            Templates = { new BlockTemplate { Template = new DataTemplate(() => new Label()) } },
+            TurnTemplate = turnTemplate,
+        };
+
+        Assert.Same(turnTemplate, selector.SelectTemplate(new ConversationTurn(), new ContentView()));
+        Assert.NotSame(turnTemplate, Select(selector, Blocks.Text("hi")));
+    }
+
+    [Fact]
+    public void SelectTemplate_ATurnWithoutATurnTemplate_GetsTheEmptyTemplate()
+    {
+        // The catch-all is for blocks, so it doesn't take the turn's row.
+        var selector = new BlockTemplateSelector { Templates = { new BlockTemplate { Template = new DataTemplate(() => new Label()) } } };
+
+        Assert.Same(Select(new BlockTemplateSelector(), Blocks.Text("hi")), selector.SelectTemplate(new ConversationTurn(), new ContentView()));
+    }
+
+    [Fact]
+    public void SelectTemplate_EvaluatesATurnTemplateSelectorAgainstTheTurn()
+    {
+        var turn = new ConversationTurn();
+        var ended = new DataTemplate(() => new Label());
+        var inner = new RecordingSelector(ended);
+        var selector = new BlockTemplateSelector { TurnTemplate = inner };
+
+        Assert.Same(ended, selector.SelectTemplate(turn, new ContentView()));
+        Assert.Same(turn, inner.Item);
+    }
+
+    [Fact]
     public void SelectTemplate_EvaluatesANestedSelectorAgainstTheBlock()
     {
         var failed = new DataTemplate(() => new Label { Text = "failed" });
@@ -176,6 +211,18 @@ public class BlockTemplateSelectorTests
 
     private static DataTemplate Select(BlockTemplateSelector selector, ContentBlock block) =>
         selector.SelectTemplate(block, new ContentView());
+
+    /// <summary>A selector that records the item it selected a template for.</summary>
+    private sealed class RecordingSelector(DataTemplate template) : DataTemplateSelector
+    {
+        public object? Item { get; private set; }
+
+        protected override DataTemplate OnSelectTemplate(object item, BindableObject container)
+        {
+            Item = item;
+            return template;
+        }
+    }
 }
 
 /// <summary>A label bound to a text block's raw text, as an app would write it in XAML.</summary>
