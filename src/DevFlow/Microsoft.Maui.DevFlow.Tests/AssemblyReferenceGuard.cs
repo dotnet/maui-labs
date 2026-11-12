@@ -7,8 +7,8 @@ namespace Microsoft.Maui.DevFlow.Tests;
 /// <summary>
 /// Reads assembly references straight out of the PE metadata so a compiled assembly can be
 /// inspected without loading it. This works for any target framework — including the
-/// <c>net10.0-android</c> / <c>-ios</c> / <c>-maccatalyst</c> / <c>-macos</c> outputs that a
-/// <c>net10.0</c> test process could never load.
+/// <c>net11.0-android</c> / <c>-ios</c> / <c>-maccatalyst</c> / <c>-macos</c> outputs that a
+/// <c>net11.0</c> test process could never load.
 /// </summary>
 internal static class AssemblyReferenceGuard
 {

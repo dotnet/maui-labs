@@ -43,8 +43,8 @@ test("selectRegistration: projectRoot narrows", () => {
 
 test("selectRegistration: platform/tfm narrows", () => {
   const agents = [
-    reg({ port: 1, platform: "android", tfm: "net10.0-android" }),
-    reg({ port: 2, platform: "windows", tfm: "net10.0-windows10.0.19041.0" }),
+    reg({ port: 1, platform: "android", tfm: "net11.0-android" }),
+    reg({ port: 2, platform: "windows", tfm: "net11.0-windows10.0.19041.0" }),
   ];
   const out = selectRegistration(agents, { platform: "android" });
   assert.equal(out.kind === "unique" && out.agent.port, 1);
@@ -100,8 +100,8 @@ test("candidatePorts: includes pinned, default, scan range; deduped", () => {
 
 test("androidRegistrationPorts trusts broker platform metadata over stale hints", () => {
   const registrations = [
-    reg({ port: 10223, platform: "android", tfm: "net10.0-android" }),
-    reg({ port: 10224, platform: "windows", tfm: "net10.0-windows10.0.19041.0" }),
+    reg({ port: 10223, platform: "android", tfm: "net11.0-android" }),
+    reg({ port: 10224, platform: "windows", tfm: "net11.0-windows10.0.19041.0" }),
     reg({ port: 10225, platform: "", tfm: "" }),
   ];
 

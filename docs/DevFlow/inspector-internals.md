@@ -256,7 +256,7 @@ not infer retry counts from TCP resets, whose exception shape and wire-level ret
 the platform HTTP stack. Separate real-socket tests retain delayed-listener and IPv4/IPv6
 loopback coverage. Cancellation, timeout, protocol, and trust failures remain non-retryable.
 The dedicated Windows Chromium job also repeats all 20 client retry regressions five times on
-each of `net472` and `net10.0`, failing immediately on any failure or skip.
+each of `net472` and `net11.0`, failing immediately on any failure or skip.
 
 MAUI clipping/overlap integration cases scope their captures to MAUI elements; native accessibility
 and Blazor probes are separate capabilities and are not needed to assert those XAML findings.

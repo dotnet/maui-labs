@@ -26,7 +26,7 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 	[Fact]
 	public void CheckXcodeCompatibility_WithCompatibleSelectedXcode_ReturnsOk()
 	{
-		CreateSdkPack("Microsoft.iOS.Sdk.net10.0_26.5", "26.5.10284", "26.5");
+		CreateSdkPack("Microsoft.iOS.Sdk.net11.0_26.5", "26.5.10284", "26.5");
 		var environment = CreateEnvironment(selectedVersion: "26.5.1");
 
 		var result = new XcodeCompatibilityChecker(environment).CheckXcodeCompatibility();
@@ -39,7 +39,7 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 	[Fact]
 	public void CheckXcodeCompatibility_WithMatchingInstalledXcode_ReturnsQuotedElevatedAutoFix()
 	{
-		CreateSdkPack("Microsoft.iOS.Sdk.net10.0_26.5", "26.5.10284", "26.5");
+		CreateSdkPack("Microsoft.iOS.Sdk.net11.0_26.5", "26.5.10284", "26.5");
 		const string matchingPath = "/Applications/Xcode 26.5.app";
 		var environment = CreateEnvironment(
 			selectedVersion: "26.4",
@@ -63,7 +63,7 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 	[Fact]
 	public void CheckXcodeCompatibility_WithoutMatchingInstalledXcode_ReturnsManualFix()
 	{
-		CreateSdkPack("Microsoft.iOS.Sdk.net10.0_26.5", "26.5.10284", "26.5");
+		CreateSdkPack("Microsoft.iOS.Sdk.net11.0_26.5", "26.5.10284", "26.5");
 		var environment = CreateEnvironment(selectedVersion: "26.4");
 
 		var result = new XcodeCompatibilityChecker(environment).CheckXcodeCompatibility();
@@ -77,7 +77,7 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 	[Fact]
 	public void CheckXcodeCompatibility_WithNoSelectedXcode_ReportsSelectionProblem()
 	{
-		CreateSdkPack("Microsoft.iOS.Sdk.net10.0_26.5", "26.5.10284", "26.5");
+		CreateSdkPack("Microsoft.iOS.Sdk.net11.0_26.5", "26.5.10284", "26.5");
 		var environment = CreateEnvironment(
 			selectedVersion: null,
 			installedXcodes:
@@ -95,8 +95,8 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 	[Fact]
 	public void CheckXcodeCompatibility_WithConflictingPlatformRequirements_DoesNotAutoFix()
 	{
-		CreateSdkPack("Microsoft.iOS.Sdk.net10.0_26.5", "26.5.10284", "26.5");
-		CreateSdkPack("Microsoft.MacCatalyst.Sdk.net10.0_26.4", "26.4.10259", "26.4");
+		CreateSdkPack("Microsoft.iOS.Sdk.net11.0_26.5", "26.5.10284", "26.5");
+		CreateSdkPack("Microsoft.MacCatalyst.Sdk.net11.0_26.4", "26.4.10259", "26.4");
 		var environment = CreateEnvironment(
 			selectedVersion: "26.5",
 			installedXcodes:
@@ -116,8 +116,8 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 	[Fact]
 	public void CheckXcodeCompatibility_SelectsLatestPackPerPlatform()
 	{
-		CreateSdkPack("Microsoft.iOS.Sdk.net10.0_26.4", "26.4.10259", "26.4");
-		CreateSdkPack("Microsoft.iOS.Sdk.net10.0_26.5", "26.5.10284", "26.5");
+		CreateSdkPack("Microsoft.iOS.Sdk.net11.0_26.4", "26.4.10259", "26.4");
+		CreateSdkPack("Microsoft.iOS.Sdk.net11.0_26.5", "26.5.10284", "26.5");
 		var environment = CreateEnvironment(selectedVersion: "26.5");
 
 		var result = new XcodeCompatibilityChecker(environment).CheckXcodeCompatibility();
@@ -130,9 +130,9 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 	public void CheckXcodeCompatibility_MergesPackRoots()
 	{
 		var secondRoot = Path.Combine(_tempDirectory, "second-root");
-		CreateSdkPack("Microsoft.iOS.Sdk.net10.0_26.5", "26.5.10284", "26.5");
+		CreateSdkPack("Microsoft.iOS.Sdk.net11.0_26.5", "26.5.10284", "26.5");
 		CreateSdkPack(
-			"Microsoft.MacCatalyst.Sdk.net10.0_26.5",
+			"Microsoft.MacCatalyst.Sdk.net11.0_26.5",
 			"26.5.10284",
 			"26.5",
 			secondRoot);
@@ -158,7 +158,7 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 	[Fact]
 	public void CheckXcodeCompatibility_IgnoresPacksForOtherTargetFrameworks()
 	{
-		CreateSdkPack("Microsoft.iOS.Sdk.net11.0_26.5", "26.5.11514-net11-p4", "26.5");
+		CreateSdkPack("Microsoft.iOS.Sdk.net10.0_26.5", "26.5.11514-net10-p4", "26.5");
 		var environment = CreateEnvironment(selectedVersion: "26.5");
 
 		var result = new XcodeCompatibilityChecker(environment).CheckXcodeCompatibility();
@@ -227,7 +227,7 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 
 	sealed class FakeXcodeCompatibilityEnvironment : IXcodeCompatibilityEnvironment
 	{
-		public string TargetFramework { get; init; } = "net10.0";
+		public string TargetFramework { get; init; } = "net11.0";
 		public XcodeInstallation? SelectedXcode { get; init; }
 		public IReadOnlyList<XcodeInstallation> InstalledXcodes { get; init; } = [];
 		public IReadOnlyList<string> PackRoots { get; init; } = [];

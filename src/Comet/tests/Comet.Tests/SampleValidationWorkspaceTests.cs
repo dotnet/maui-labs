@@ -84,7 +84,7 @@ namespace Comet.Tests
 			{
 				var baseline = sample["baseline"]!.AsObject();
 				baseline["status"] = "runtime_blocked";
-				baseline["attempted_commands"] = JsonArray("dotnet build -f net10.0-ios -p:RuntimeIdentifier=iossimulator-arm64");
+				baseline["attempted_commands"] = JsonArray("dotnet build -f net11.0-ios -p:RuntimeIdentifier=iossimulator-arm64");
 				baseline["logs"] = JsonArray(logRelativePath);
 				baseline["blockers"] = JsonArray("Missing runtime automation wiring for meaningful interaction capture.");
 			});

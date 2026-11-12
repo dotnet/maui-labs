@@ -138,7 +138,7 @@ try {
             New-Item -ItemType Directory -Path $probe | Out-Null
             @"
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
+  <PropertyGroup><TargetFramework>net11.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
   <ItemGroup><PackageReference Include="$packagePrefix.Essentials" Version="$version" /></ItemGroup>
 </Project>
 "@ | Set-Content (Join-Path $probe 'EssentialsProbe.csproj')

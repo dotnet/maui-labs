@@ -26,7 +26,7 @@ From the repository root:
 ```bash
 dotnet build src/Comet.SourceGenerator/Comet.SourceGenerator.csproj -c Release
 dotnet build src/Comet/Comet.csproj -c Release
-dotnet build sample/CometBaristaNotes/CometBaristaNotes.csproj -c Release -f net10.0-maccatalyst
+dotnet build sample/CometBaristaNotes/CometBaristaNotes.csproj -c Release -f net11.0-maccatalyst
 ```
 
 ## Migration takeaway

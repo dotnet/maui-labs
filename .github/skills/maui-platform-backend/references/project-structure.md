@@ -161,7 +161,7 @@ platforms/[Platform.Name]/
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <RootNamespace>Microsoft.Maui.Platforms.[Platform.Name]</RootNamespace>
     <AssemblyName>Microsoft.Maui.Platforms.[Platform.Name]</AssemblyName>
     <PackageId>Microsoft.Maui.Platforms.[Platform.Name]</PackageId>
@@ -182,7 +182,7 @@ platforms/[Platform.Name]/
 ```
 
 ### TFM
-All backends use `net10.0` (plain .NET — no custom platform TFM). Apps use the **"head project" pattern**: a separate `.csproj` that references the MAUI app's shared code.
+All backends use `net11.0` (plain .NET — no custom platform TFM). Apps use the **"head project" pattern**: a separate `.csproj` that references the MAUI app's shared code.
 
 ---
 

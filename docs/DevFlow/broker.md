@@ -56,7 +56,7 @@ When a MAUI app starts with `AddMicrosoft.Maui.DevFlowAgent()`:
 
 1. The agent reads its **project identity** from assembly metadata injected at build time
    (`Microsoft.Maui.DevFlowProject` = absolute path to `.csproj`, `Microsoft.Maui.DevFlowTfm` = e.g.
-   `net10.0-maccatalyst`).
+   `net11.0-maccatalyst`).
 
 2. It attempts to connect to the broker at `ws://localhost:19223/ws/agent` and sends a
    registration message:
@@ -64,7 +64,7 @@ When a MAUI app starts with `AddMicrosoft.Maui.DevFlowAgent()`:
    {
      "type": "register",
      "project": "/Users/dev/MyApp/MyApp.csproj",
-     "tfm": "net10.0-maccatalyst",
+     "tfm": "net11.0-maccatalyst",
      "platform": "MacCatalyst",
      "appName": "MyApp"
    }
@@ -129,7 +129,7 @@ Each agent instance is identified by a **deterministic hash**:
 ID = SHA256( absolute_csproj_path + "|" + TFM )[:12]
 ```
 
-For example, `/Users/dev/MyApp/MyApp.csproj|net10.0-maccatalyst` → `7ff0e6fd13d9`.
+For example, `/Users/dev/MyApp/MyApp.csproj|net11.0-maccatalyst` → `7ff0e6fd13d9`.
 
 This means:
 - The **same app on different platforms** (iOS vs Mac Catalyst) gets different IDs
@@ -194,8 +194,8 @@ Shows all agents currently registered with the broker:
 ```
 ID             App                  Platform       TFM                      Port   Uptime
 ------------------------------------------------------------------------------------------
-7ff0e6fd13d9   MauiTodo             MacCatalyst    net10.0-maccatalyst      10223  2m 15s
-a3c9e1f20b44   MauiTodo             Android        net10.0-android          10224  1m 30s
+7ff0e6fd13d9   MauiTodo             MacCatalyst    net11.0-maccatalyst      10223  2m 15s
+a3c9e1f20b44   MauiTodo             Android        net11.0-android          10224  1m 30s
 ```
 
 ### Multiple Agents — Disambiguation
@@ -209,8 +209,8 @@ Multiple agents connected. Use --agent-port to specify which one:
 
 ID             App                  Platform       TFM                      Port
 ----------------------------------------------------------------------------------
-7ff0e6fd13d9   MauiTodo             MacCatalyst    net10.0-maccatalyst      10223
-a3c9e1f20b44   MauiTodo             Android        net10.0-android          10224
+7ff0e6fd13d9   MauiTodo             MacCatalyst    net11.0-maccatalyst      10223
+a3c9e1f20b44   MauiTodo             Android        net11.0-android          10224
 
 Example: maui devflow ui status --agent-port <port>
 ```
@@ -317,7 +317,7 @@ The broker exposes a simple HTTP API on port 19223 for CLI and diagnostic use:
   {
     "id": "7ff0e6fd13d9",
     "project": "/Users/dev/MyApp/MyApp.csproj",
-    "tfm": "net10.0-maccatalyst",
+    "tfm": "net11.0-maccatalyst",
     "platform": "MacCatalyst",
     "appName": "MyApp",
     "port": 10223,

@@ -83,7 +83,7 @@ jobs:
       - name: Install Playwright Chromium
         shell: pwsh
         run: |
-          & .\artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Release\net10.0\playwright.ps1 install chromium
+          & .\artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Release\net11.0\playwright.ps1 install chromium
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run real Inspector browser regressions without a native agent
@@ -124,7 +124,7 @@ jobs:
           $project = 'src\DevFlow\Microsoft.Maui.DevFlow.Client.Tests\Microsoft.Maui.DevFlow.Client.Tests.csproj'
           dotnet build $project --configuration Release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          foreach ($framework in @('net472', 'net10.0')) {
+          foreach ($framework in @('net472', 'net11.0')) {
             for ($iteration = 1; $iteration -le 5; $iteration++) {
               $logName = "client-retry-$framework-$iteration.trx"
               dotnet test $project --configuration Release --framework $framework --no-build --no-restore `

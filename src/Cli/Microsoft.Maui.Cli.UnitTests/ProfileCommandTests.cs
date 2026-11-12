@@ -503,7 +503,7 @@ public class ProfileCommandTests
 		File.WriteAllText(appProjectPath, """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
+			    <TargetFramework>net11.0</TargetFramework>
 			  </PropertyGroup>
 			  <ItemGroup>
 			    <ProjectReference Include="../Left/Shared.csproj" />
@@ -550,7 +550,7 @@ public class ProfileCommandTests
 		using var tempProject = TempProjectFile("""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+			    <TargetFrameworks>net11.0;netstandard2.1</TargetFrameworks>
 			  </PropertyGroup>
 			</Project>
 			""");
@@ -560,7 +560,7 @@ public class ProfileCommandTests
 		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
 		try
 		{
-			var result = await RunProfileBuildAsync(tempProject.Path, workspace, "-f", "net10.0");
+			var result = await RunProfileBuildAsync(tempProject.Path, workspace, "-f", "net11.0");
 
 			Assert.True(result.ExitCode == 0, result.Output);
 			Assert.Contains(
@@ -584,7 +584,7 @@ public class ProfileCommandTests
 			$"""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+			    <TargetFrameworks>net11.0;netstandard2.1</TargetFrameworks>
 			    <RestoreOutputPath>{System.Security.SecurityElement.Escape(externalRestorePath + Path.DirectorySeparatorChar)}</RestoreOutputPath>
 			  </PropertyGroup>
 			</Project>
@@ -595,7 +595,7 @@ public class ProfileCommandTests
 		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
 		try
 		{
-			var result = await RunProfileBuildAsync(tempProject.Path, workspace, "-f", "net10.0");
+			var result = await RunProfileBuildAsync(tempProject.Path, workspace, "-f", "net11.0");
 
 			Assert.NotEqual(0, result.ExitCode);
 			Assert.Contains("could not isolate RestoreOutputPath", result.Output, StringComparison.OrdinalIgnoreCase);
@@ -622,7 +622,7 @@ public class ProfileCommandTests
 			"""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
+			    <TargetFramework>net11.0</TargetFramework>
 			  </PropertyGroup>
 			  <ItemGroup>
 			    <ProjectReference Include="../Library/Library.csproj" />
@@ -634,7 +634,7 @@ public class ProfileCommandTests
 			"""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+			    <TargetFrameworks>net11.0;netstandard2.1</TargetFrameworks>
 			  </PropertyGroup>
 			</Project>
 			""");
@@ -663,7 +663,7 @@ public class ProfileCommandTests
 		using var tempProject = TempProjectFile("""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
+			    <TargetFramework>net11.0</TargetFramework>
 			  </PropertyGroup>
 			  <Target Name="ValidateBuildPropsImports" BeforeTargets="BeforeBuild">
 			    <Error Condition="'$(EarlyBuildPropsImported)' != 'true'" Text="CustomBeforeDirectoryBuildProps was not imported." />
@@ -704,7 +704,7 @@ public class ProfileCommandTests
 		using var tempProject = TempProjectFile("""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
+			    <TargetFramework>net11.0</TargetFramework>
 			  </PropertyGroup>
 			  <Target Name="ValidateCustomBuildTargets" BeforeTargets="BeforeBuild">
 			    <Error Condition="'$(CustomBuildTargetsImported)' != 'true'" Text="CUSTOM_BUILD_TARGETS_NOT_LOADED" />
@@ -747,7 +747,7 @@ public class ProfileCommandTests
 		using var tempProject = TempProjectFile("""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+			    <TargetFrameworks>net11.0;netstandard2.1</TargetFrameworks>
 			  </PropertyGroup>
 			</Project>
 			""");
@@ -793,14 +793,14 @@ public class ProfileCommandTests
 		{
 			var hooks = await ProfileBuildWorkspace.ResolveExistingBuildHooksAsync(
 				tempProject.Path,
-				"net10.0",
+				"net11.0",
 				"Release",
 				CancellationToken.None);
 			Assert.Contains(Path.GetFullPath(innerTargetsPath), hooks.InnerTargets);
 			Assert.Contains(Path.GetFullPath(outerTargetsPath), hooks.OuterTargets);
 			workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null, hooks);
 
-			var result = await RunProfileBuildAsync(tempProject.Path, workspace, "-f", "net10.0", "-c", "Release");
+			var result = await RunProfileBuildAsync(tempProject.Path, workspace, "-f", "net11.0", "-c", "Release");
 
 			Assert.True(result.ExitCode == 0, result.Output);
 			Assert.True(File.Exists(innerMarkerPath));
@@ -818,7 +818,7 @@ public class ProfileCommandTests
 		using var tempProject = TempProjectFile("""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
+			    <TargetFramework>net11.0</TargetFramework>
 			  </PropertyGroup>
 			</Project>
 			""");
@@ -864,7 +864,7 @@ public class ProfileCommandTests
 			$"""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
+			    <TargetFramework>net11.0</TargetFramework>
 			    <RestoreOutputPath>{System.Security.SecurityElement.Escape(externalRestorePath + Path.DirectorySeparatorChar)}</RestoreOutputPath>
 			  </PropertyGroup>
 			</Project>
@@ -893,7 +893,7 @@ public class ProfileCommandTests
 		using var tempProject = TempProjectFile("""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
+			    <TargetFramework>net11.0</TargetFramework>
 			    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
 			    <BeforeMicrosoftNETSdkTargets>$(BeforeMicrosoftNETSdkTargets);$(MSBuildProjectDirectory)/custom-before.targets</BeforeMicrosoftNETSdkTargets>
 			  </PropertyGroup>
@@ -974,7 +974,7 @@ public class ProfileCommandTests
 		using var tempProject = TempProjectFile("""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
+			    <TargetFramework>net11.0</TargetFramework>
 			  </PropertyGroup>
 			</Project>
 			""");
@@ -1006,36 +1006,36 @@ public class ProfileCommandTests
 	[Fact]
 	public void ResolveTargetFramework_PicksExplicitlyRequestedFramework()
 	{
-		var project = FakeProject(["net10.0-android", "net10.0-ios"]);
-		var result = ProfileCommand.ResolveTargetFramework(project, "net10.0-ios", "ios", nonInteractive: true, spectre: null);
-		Assert.Equal("net10.0-ios", result);
+		var project = FakeProject(["net11.0-android", "net11.0-ios"]);
+		var result = ProfileCommand.ResolveTargetFramework(project, "net11.0-ios", "ios", nonInteractive: true, spectre: null);
+		Assert.Equal("net11.0-ios", result);
 	}
 
 	[Fact]
 	public void ResolveTargetFramework_ThrowsWhenExplicitFrameworkNotInProject()
 	{
-		var project = FakeProject(["net10.0-android"]);
+		var project = FakeProject(["net11.0-android"]);
 		Assert.Throws<MauiToolException>(() =>
-			ProfileCommand.ResolveTargetFramework(project, "net10.0-ios", "ios", nonInteractive: true, spectre: null));
+			ProfileCommand.ResolveTargetFramework(project, "net11.0-ios", "ios", nonInteractive: true, spectre: null));
 	}
 
 	[Fact]
 	public void ResolveTargetFramework_ThrowsWhenExplicitFrameworkDoesNotMatchPlatform()
 	{
-		var project = FakeProject(["net10.0-android", "net10.0-ios"]);
+		var project = FakeProject(["net11.0-android", "net11.0-ios"]);
 		Assert.Throws<MauiToolException>(() =>
-			ProfileCommand.ResolveTargetFramework(project, "net10.0-ios", "android", nonInteractive: true, spectre: null));
+			ProfileCommand.ResolveTargetFramework(project, "net11.0-ios", "android", nonInteractive: true, spectre: null));
 	}
 
 	[Theory]
-	[InlineData("net10.0-android", "android", true)]
-	[InlineData("net10.0-ios", "ios", true)]
-	[InlineData("net10.0-maccatalyst", "maccatalyst", true)]
-	[InlineData("net10.0-windows10.0.19041.0", "windows", true)]
-	[InlineData("net10.0", "android", false)]
-	[InlineData("net10.0-android", "ios", false)]
-	[InlineData("net10.0-android", "maccatalyst", false)]
-	[InlineData("net10.0-ios", "android", false)]
+	[InlineData("net11.0-android", "android", true)]
+	[InlineData("net11.0-ios", "ios", true)]
+	[InlineData("net11.0-maccatalyst", "maccatalyst", true)]
+	[InlineData("net11.0-windows10.0.19041.0", "windows", true)]
+	[InlineData("net11.0", "android", false)]
+	[InlineData("net11.0-android", "ios", false)]
+	[InlineData("net11.0-android", "maccatalyst", false)]
+	[InlineData("net11.0-ios", "android", false)]
 	public void IsTargetFrameworkCompatible_ReturnsExpected(string tfm, string platform, bool expected)
 	{
 		Assert.Equal(expected, ProfileCommand.IsTargetFrameworkCompatible(tfm, platform));
@@ -1044,9 +1044,9 @@ public class ProfileCommandTests
 	[Fact]
 	public void ResolveTargetFramework_SelectsHighestVersionWhenNonInteractive()
 	{
-		var project = FakeProject(["net9.0-android", "net10.0-android"]);
+		var project = FakeProject(["net9.0-android", "net11.0-android"]);
 		var result = ProfileCommand.ResolveTargetFramework(project, null, "android", nonInteractive: true, spectre: null);
-		Assert.Equal("net10.0-android", result);
+		Assert.Equal("net11.0-android", result);
 	}
 
 	[Fact]
@@ -1058,11 +1058,11 @@ public class ProfileCommandTests
 	}
 
 	[Theory]
-	[InlineData("net10.0-android", "android")]
-	[InlineData("net10.0-ios", "ios")]
-	[InlineData("net10.0-maccatalyst", "maccatalyst")]
-	[InlineData("net10.0-windows10.0.19041.0", "windows")]
-	[InlineData("net10.0", null)]
+	[InlineData("net11.0-android", "android")]
+	[InlineData("net11.0-ios", "ios")]
+	[InlineData("net11.0-maccatalyst", "maccatalyst")]
+	[InlineData("net11.0-windows10.0.19041.0", "windows")]
+	[InlineData("net11.0", null)]
 	public void InferPlatformFromTargetFramework_ReturnsExpected(string tfm, string? expected)
 	{
 		Assert.Equal(expected, ProfileCommand.InferPlatformFromTargetFramework(tfm));
@@ -1071,7 +1071,7 @@ public class ProfileCommandTests
 	[Fact]
 	public void ResolveTargetFramework_ThrowsWhenNoCandidatesMatchPlatform()
 	{
-		var project = FakeProject(["net10.0-ios", "net10.0-maccatalyst"]);
+		var project = FakeProject(["net11.0-ios", "net11.0-maccatalyst"]);
 		Assert.Throws<MauiToolException>(() =>
 			ProfileCommand.ResolveTargetFramework(project, null, "android", nonInteractive: true, spectre: null));
 	}
@@ -1079,7 +1079,7 @@ public class ProfileCommandTests
 	// ── Framework sort key ────────────────────────────────────────────────────
 
 	[Theory]
-	[InlineData("net10.0-android", 10, 0)]
+	[InlineData("net11.0-android", 11, 0)]
 	[InlineData("net9.0-android", 9, 0)]
 	[InlineData("net10.5-ios", 10, 5)]
 	[InlineData("notaframework", 0, 0)]
@@ -1272,13 +1272,13 @@ public class ProfileCommandTests
 		var csprojContent = """
 			<Project>
 			  <PropertyGroup>
-			    <TargetFramework>net10.0-android</TargetFramework>
+			    <TargetFramework>net11.0-android</TargetFramework>
 			  </PropertyGroup>
 			</Project>
 			""";
 		using var tempProject = TempProjectFile(csprojContent);
 		var frameworks = MauiProjectResolver.GetTargetFrameworks(tempProject.Path);
-		Assert.Equal(["net10.0-android"], frameworks);
+		Assert.Equal(["net11.0-android"], frameworks);
 	}
 
 	[Fact]
@@ -1287,16 +1287,16 @@ public class ProfileCommandTests
 		var csprojContent = """
 			<Project>
 			  <PropertyGroup>
-			    <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+			    <TargetFrameworks>net11.0-android;net11.0-ios;net11.0-maccatalyst</TargetFrameworks>
 			  </PropertyGroup>
 			</Project>
 			""";
 		using var tempProject = TempProjectFile(csprojContent);
 		var frameworks = MauiProjectResolver.GetTargetFrameworks(tempProject.Path);
 		Assert.Equal(3, frameworks.Count);
-		Assert.Contains("net10.0-android", frameworks);
-		Assert.Contains("net10.0-ios", frameworks);
-		Assert.Contains("net10.0-maccatalyst", frameworks);
+		Assert.Contains("net11.0-android", frameworks);
+		Assert.Contains("net11.0-ios", frameworks);
+		Assert.Contains("net11.0-maccatalyst", frameworks);
 	}
 
 	[Fact]
@@ -1305,7 +1305,7 @@ public class ProfileCommandTests
 		var csprojContent = """
 			<Project>
 			  <PropertyGroup>
-			    <TargetFrameworks>net10.0-android;$(AdditionalFrameworks)</TargetFrameworks>
+			    <TargetFrameworks>net11.0-android;$(AdditionalFrameworks)</TargetFrameworks>
 			  </PropertyGroup>
 			</Project>
 			""";
@@ -1325,12 +1325,12 @@ public class ProfileCommandTests
 		File.WriteAllText(Path.Combine(Path.GetDirectoryName(tempProject.Path)!, "Frameworks.props"), """
 			<Project>
 			  <PropertyGroup>
-			    <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+			    <TargetFrameworks>net11.0-android;net11.0-ios</TargetFrameworks>
 			  </PropertyGroup>
 			</Project>
 			""");
 
-		Assert.Equal(["net10.0-android", "net10.0-ios"],
+		Assert.Equal(["net11.0-android", "net11.0-ios"],
 			MauiProjectResolver.GetTargetFrameworks(tempProject.Path));
 	}
 
@@ -1340,14 +1340,14 @@ public class ProfileCommandTests
 		var csprojContent = """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0-android</TargetFramework>
+			    <TargetFramework>net11.0-android</TargetFramework>
 			    <ApplicationId>com.example.myapp</ApplicationId>
 			  </PropertyGroup>
 			</Project>
 			""";
 
 		using var tempProject = TempProjectFile(csprojContent);
-		var applicationId = MauiProjectResolver.GetAndroidApplicationId(tempProject.Path, "net10.0-android", "Debug");
+		var applicationId = MauiProjectResolver.GetAndroidApplicationId(tempProject.Path, "net11.0-android", "Debug");
 
 		Assert.Equal("com.example.myapp", applicationId);
 	}
@@ -1358,7 +1358,7 @@ public class ProfileCommandTests
 		var csprojContent = """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0-android</TargetFramework>
+			    <TargetFramework>net11.0-android</TargetFramework>
 			    <ApplicationId>com.example.fromproject</ApplicationId>
 			  </PropertyGroup>
 			</Project>
@@ -1366,13 +1366,13 @@ public class ProfileCommandTests
 
 		using var tempProject = TempProjectFile(csprojContent);
 		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
-		var manifestDirectory = Path.Combine(projectDirectory, "obj", "Debug", "net10.0-android");
+		var manifestDirectory = Path.Combine(projectDirectory, "obj", "Debug", "net11.0-android");
 		Directory.CreateDirectory(manifestDirectory);
 		File.WriteAllText(
 			Path.Combine(manifestDirectory, "AndroidManifest.xml"),
 			"""<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.frommanifest" />""");
 
-		var applicationId = MauiProjectResolver.GetAndroidApplicationId(tempProject.Path, "net10.0-android", "Debug");
+		var applicationId = MauiProjectResolver.GetAndroidApplicationId(tempProject.Path, "net11.0-android", "Debug");
 
 		Assert.Equal("com.example.frommanifest", applicationId);
 	}
@@ -1912,7 +1912,7 @@ public class ProfileCommandTests
 			artifactsPath,
 			directoryBuildPropsPath,
 			directoryBuildTargetsPath,
-			"net10.0-ios",
+			"net11.0-ios",
 			"Release",
 			device,
 			transport,
@@ -1941,7 +1941,7 @@ public class ProfileCommandTests
 			artifactsPath,
 			directoryBuildPropsPath,
 			directoryBuildTargetsPath,
-			"net10.0-ios",
+			"net11.0-ios",
 			"Release",
 			transport,
 			9000,
@@ -1978,7 +1978,7 @@ public class ProfileCommandTests
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildTargetsFileName),
-			"net10.0-android",
+			"net11.0-android",
 			"Release",
 			transport,
 			9000,
@@ -2012,7 +2012,7 @@ public class ProfileCommandTests
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildTargetsFileName),
-			"net10.0-android",
+			"net11.0-android",
 			"Release",
 			device,
 			transport,
@@ -2037,7 +2037,7 @@ public class ProfileCommandTests
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildTargetsFileName),
-			"net10.0-android",
+			"net11.0-android",
 			"Release",
 			transport,
 			9000,
@@ -2061,7 +2061,7 @@ public class ProfileCommandTests
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildTargetsFileName),
-			"net10.0-ios",
+			"net11.0-ios",
 			"Release",
 			device,
 			transport,
@@ -2086,7 +2086,7 @@ public class ProfileCommandTests
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildTargetsFileName),
-			"net10.0-android",
+			"net11.0-android",
 			"Release",
 			transport,
 			9000,
@@ -2224,7 +2224,7 @@ public class ProfileCommandTests
 				<Project Sdk="Microsoft.NET.Sdk">
 				  <PropertyGroup>
 				    <OutputType>Exe</OutputType>
-				    <TargetFramework>net10.0</TargetFramework>
+				    <TargetFramework>net11.0</TargetFramework>
 				    <AssemblyName>dotnet</AssemblyName>
 				    <UseAppHost>true</UseAppHost>
 				  </PropertyGroup>
@@ -2542,7 +2542,7 @@ public class ProfileCommandTests
 			<Project>
 			  <PropertyGroup>
 			    <UseMaui>true</UseMaui>
-			    <TargetFramework>net10.0-android</TargetFramework>
+			    <TargetFramework>net11.0-android</TargetFramework>
 			    <IntermediateOutputPath>{System.Security.SecurityElement.Escape(intermediateOutputPath + Path.DirectorySeparatorChar)}</IntermediateOutputPath>
 			  </PropertyGroup>
 			  <Import Project="{System.Security.SecurityElement.Escape(targetsPath)}" />
@@ -2553,7 +2553,7 @@ public class ProfileCommandTests
 		=> $"""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
+			    <TargetFramework>net11.0</TargetFramework>
 			    <AssemblyName>{assemblyName}</AssemblyName>
 			  </PropertyGroup>
 			</Project>

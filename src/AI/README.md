@@ -42,10 +42,10 @@ For installation and a quick start, see the [package README](Microsoft.Maui.Esse
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst27.0 -p:UseXcode27Preview=true
 ```
 
-Use `net10.0-ios27.0` or `net10.0-macos27.0` for those platforms.
+Use `net11.0-ios27.0` or `net11.0-macos27.0` for those platforms.
 `UseXcode27Preview` selects the OS 27 reference packs; it does not install or
 select Xcode.
 
@@ -53,7 +53,7 @@ select Xcode.
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
-  -f net10.0-android
+  -f net11.0-android
 ```
 
 See the [Gemini Nano Android guide](../../docs/ai/gemini-nano-android.md) for
@@ -73,7 +73,7 @@ does not depend on Java being present on the agent's `PATH`.
 
 ```powershell
 dotnet build src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj `
-  -f net10.0-windows10.0.19041.0
+  -f net11.0-windows10.0.19041.0
 ```
 
 Build and package Windows app heads on Windows. See the Windows platform guide
@@ -81,11 +81,11 @@ for MSIX, capability, runtime, and physical-device validation requirements.
 
 ### Full product
 
-The library always targets `net10.0` and Android. Apple targets are added on
+The library always targets `net11.0` and Android. Apple targets are added on
 non-Linux hosts, using either the default reference packs or the OS 27 packs
 when `UseXcode27Preview=true`. Windows is appended only on Windows hosts.
 The Chat Playground and device tests use the same platform conditions, without
-the portable `net10.0` target or native macOS app target.
+the portable `net11.0` target or native macOS app target.
 
 ```bash
 dotnet build src/AI/EssentialsAI.slnf
@@ -107,7 +107,7 @@ or download those artifacts by itself. See
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj \
-  -p:TargetFrameworks=net10.0 -p:IsTestProject=true
+  -p:TargetFrameworks=net11.0 -p:IsTestProject=true
 ```
 
 The overrides keep the build portable and enable Arcade's test infrastructure
@@ -144,7 +144,7 @@ are tagged `RequiresModel=true`; exclude them with:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -c Release -p:UseXcode27Preview=true \
+  -f net11.0-maccatalyst27.0 -c Release -p:UseXcode27Preview=true \
   --filter "RequiresModel!=true" --logger trx
 ```
 
@@ -162,7 +162,7 @@ makes real requests against the configured deployments:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -c Debug -p:UseXcode27Preview=true \
+  -f net11.0-maccatalyst27.0 -c Debug -p:UseXcode27Preview=true \
   -p:EnableOpenAITests=true --logger trx
 ```
 
@@ -172,7 +172,7 @@ For example, isolate the OpenAI chat baseline while diagnosing a failure:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -c Debug -p:UseXcode27Preview=true \
+  -f net11.0-maccatalyst27.0 -c Debug -p:UseXcode27Preview=true \
   -p:EnableOpenAIClient=true --filter "FullyQualifiedName~OpenAIChatClient" --logger trx
 ```
 

@@ -63,7 +63,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
             }
 
             var projectPath = GetSampleProjectPath("android");
-            await BuildSampleAsync(projectPath, "net10.0-android",
+            await BuildSampleAsync(projectPath, "net11.0-android",
                 $"-p:EmbedAssembliesIntoApk=true -p:MauiDevFlowPort={AgentPort}");
 
             var apkPath = FindApk();
@@ -833,7 +833,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
 
     static string FindApk()
     {
-        var binDir = Path.Combine(GetSampleBuildOutputRoot("android"), "net10.0-android");
+        var binDir = Path.Combine(GetSampleBuildOutputRoot("android"), "net11.0-android");
 
         if (!Directory.Exists(binDir))
             throw new InvalidOperationException($"Android build output not found at: {binDir}");

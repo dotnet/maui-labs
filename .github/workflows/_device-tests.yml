@@ -14,7 +14,7 @@ on:
       target-framework:
         required: true
         type: string
-        description: 'Target framework to run tests against (e.g. net10.0-maccatalyst, net10.0-android)'
+        description: 'Target framework to run tests against (e.g. net11.0-maccatalyst, net11.0-android)'
       filter:
         required: false
         type: string
@@ -38,7 +38,7 @@ on:
       workload-version:
         required: false
         type: string
-        default: '10.0.203'
+        default: '11.0.100'
         description: 'Workload version to install (pinned for reproducibility)'
       xcode-version:
         required: false

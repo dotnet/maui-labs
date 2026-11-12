@@ -90,7 +90,7 @@ concurrency:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   DOTNET_NOLOGO: 1
-  DOTNET_WORKLOAD_VERSION: 10.0.203
+  DOTNET_WORKLOAD_VERSION: 11.0.100
   TEST_PROJECT: src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
 
 jobs:
@@ -630,14 +630,14 @@ jobs:
           $inspectorTests = 'src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj'
           $app = $null
           try {
-            dotnet build $cliProject -c Debug -f net10.0 --nologo -v minimal
+            dotnet build $cliProject -c Debug -f net11.0 --nologo -v minimal
             if ($LASTEXITCODE -ne 0) { throw 'CLI build failed.' }
-            dotnet build $sampleProject -c Debug -f net10.0-windows10.0.19041.0 --nologo -v minimal
+            dotnet build $sampleProject -c Debug -f net11.0-windows10.0.19041.0 --nologo -v minimal
             if ($LASTEXITCODE -ne 0) { throw 'Sample build failed.' }
             dotnet build $inspectorTests -c Debug --nologo -v minimal
             if ($LASTEXITCODE -ne 0) { throw 'Inspector test build failed.' }
 
-            $cli = Get-ChildItem 'artifacts\bin\Microsoft.Maui.Cli\Debug\net10.0\maui.dll' |
+            $cli = Get-ChildItem 'artifacts\bin\Microsoft.Maui.Cli\Debug\net11.0\maui.dll' |
               Select-Object -First 1 -ExpandProperty FullName
             dotnet $cli devflow broker stop 2>$null
             dotnet $cli devflow broker start
@@ -662,7 +662,7 @@ jobs:
               throw 'DevFlow sample did not register with the broker.'
             }
 
-            $playwright = Get-ChildItem 'artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Debug\net10.0\playwright.ps1' |
+            $playwright = Get-ChildItem 'artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Debug\net11.0\playwright.ps1' |
               Select-Object -First 1 -ExpandProperty FullName
             & $playwright install chromium
             if ($LASTEXITCODE -ne 0) { throw 'Playwright browser installation failed.' }

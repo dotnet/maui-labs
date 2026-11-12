@@ -1,7 +1,7 @@
 # Shared AppKit runtime tests
 
 This is the renamed/generalized `LayoutRegressionTests` application, not a second
-test app. Portable `MacOS.Tests` remains a separate `net10.0` xUnit project.
+test app. Portable `MacOS.Tests` remains a separate `net11.0` xUnit project.
 Native scenarios share one executable, project, process bootstrap and CI runner.
 Every launch selects exactly one registered scenario in a fresh process.
 

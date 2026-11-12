@@ -138,4 +138,4 @@ Adjust `FlatpakFinishArgs` to grant filesystem access:
 
 ### Generated manifest location
 
-The manifest is generated at `obj/Debug/net10.0/Flatpak/$(ApplicationId).json`. You can inspect and customize it for advanced use cases, or use it directly with `flatpak-builder` outside of the MSBuild workflow.
+The manifest is generated at `obj/Debug/net11.0/Flatpak/$(ApplicationId).json`. You can inspect and customize it for advanced use cases, or use it directly with `flatpak-builder` outside of the MSBuild workflow.

@@ -5,7 +5,7 @@
 
 Custom .NET MAUI backend targeting WPF (Windows Presentation Foundation) — an alternative to the official WinUI backend.
 
-This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback assemblies) and provides custom handler implementations that bridge MAUI's layout/rendering system to WPF controls. **All core MAUI controls, pages, layouts, gestures, and navigation patterns are implemented.**
+This backend uses the platform-agnostic MAUI NuGet packages (`net11.0` fallback assemblies) and provides custom handler implementations that bridge MAUI's layout/rendering system to WPF controls. **All core MAUI controls, pages, layouts, gestures, and navigation patterns are implemented.**
 
 > **Inspiration:** This project follows the patterns established by [mauiplatforms](https://github.com/Redth/mauiplatforms) (macOS/tvOS backends) and [Maui.Gtk](https://github.com/AathifMahir/Maui.Gtk).
 
@@ -290,7 +290,7 @@ manifests are read from the directory where the build wrote them.
 ## Samples
 
 Blazor Hybrid hosts need a Windows SDK-versioned target framework, such as
-`net10.0-windows10.0.17763.0`, so WebView2 can load the `Microsoft.Windows.SDK.NET`
+`net11.0-windows10.0.17763.0`, so WebView2 can load the `Microsoft.Windows.SDK.NET`
 projection assembly. Copy `wwwroot` content to both build and publish output; without
 `wwwroot/index.html`, the WebView can start but cannot load the Blazor host page.
 The `Windows.WPF.Sample` project includes both settings.
@@ -468,7 +468,7 @@ they remove only their own directories, never the user storage roots.
 
 ```
 src/
-  Microsoft.Maui.Platforms.Windows.WPF/              # WPF backend library (net10.0-windows)
+  Microsoft.Maui.Platforms.Windows.WPF/              # WPF backend library (net11.0-windows)
   Microsoft.Maui.Platforms.Windows.WPF.Essentials/   # WPF Essentials library
 samples/
   ControlGallery/                  # WPF Control Gallery (used by UI tests)
@@ -480,9 +480,9 @@ tests/
 
 ## Prerequisites
 
-### .NET 10 SDK
+### .NET 11 SDK
 
-Install the latest .NET 10 SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/10.0).
+Install the latest .NET 11 SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/11.0).
 
 ### Workloads
 
@@ -552,7 +552,7 @@ Comparison screenshots are saved to `tests/UITests/Comparisons/`.
 
 ## Key Technical Notes
 
-- MAUI NuGet packages resolve to the `net10.0` (platform-agnostic) assembly. `ToPlatform()` returns `object` — `WPFViewHandler<TVirtualView, TPlatformView>` provides the typed bridge.
+- MAUI NuGet packages resolve to the `net11.0` (platform-agnostic) assembly. `ToPlatform()` returns `object` — `WPFViewHandler<TVirtualView, TPlatformView>` provides the typed bridge.
 - The platform-agnostic `ViewHandler` has no-op `PlatformArrange` and returns `Size.Zero`. `WPFViewHandler` overrides these to bridge MAUI layout to WPF `Measure`/`Arrange`.
 - WPF `System.Windows.Controls` and MAUI `Microsoft.Maui.Controls` share many type names — every handler file uses `using` aliases to disambiguate (e.g., `WButton = System.Windows.Controls.Button`).
 - The `MauiWPFApplication` base class in `App.xaml` bootstraps the MAUI runtime within a WPF `Application`.

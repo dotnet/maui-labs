@@ -42,7 +42,7 @@ on:
         required: false
         type: boolean
         default: true
-        description: 'Install MAUI workloads and Android SDK (not needed for net10.0-only projects)'
+        description: 'Install MAUI workloads and Android SDK (not needed for net11.0-only projects)'
       workloads:
         required: false
         type: string
@@ -51,7 +51,7 @@ on:
       workload-version:
         required: false
         type: string
-        default: '10.0.203'
+        default: '11.0.100'
         description: 'Workload version to install (pinned for reproducibility)'
       os:
         required: false
@@ -82,7 +82,7 @@ on:
         required: false
         type: string
         default: 'src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj'
-        description: 'Project path for InstallAndroidDependencies target. Must target net10.0-android.'
+        description: 'Project path for InstallAndroidDependencies target. Must target net11.0-android.'
 
 env:
   CI_PACKAGE_VERSION_SUFFIX: ci.${{ github.run_number }}.${{ github.run_attempt }}
@@ -139,12 +139,12 @@ jobs:
 
       - name: Install Android SDK dependencies (Windows)
         if: inputs.install-workloads && runner.os == 'Windows' && inputs.android-project != ''
-        run: eng\common\dotnet.cmd build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
+        run: eng\common\dotnet.cmd build -t:InstallAndroidDependencies -f net11.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
         shell: cmd
 
       - name: Install Android SDK dependencies (macOS)
         if: inputs.install-workloads && runner.os == 'macOS' && inputs.android-project != ''
-        run: ./eng/common/dotnet.sh build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
+        run: ./eng/common/dotnet.sh build -t:InstallAndroidDependencies -f net11.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
 
       # cibuild.cmd/.sh hardcode -pack -publish, and Arcade's publish step errors out with
       # "ItemsToPush is not specified" when a filter contains nothing packable (e.g. sample
@@ -262,7 +262,7 @@ jobs:
 
           dotnet publish src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj \
             -c Release \
-            -f net10.0 \
+            -f net11.0 \
             -r "$rid" \
             -p:PublishAot=true \
             -p:PublishTrimmed=true \
@@ -270,7 +270,7 @@ jobs:
             -p:TreatWarningsAsErrors=true \
             --self-contained true
 
-          publish_dir="artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/$rid/publish"
+          publish_dir="artifacts/bin/Microsoft.Maui.Cli/Release/net11.0/$rid/publish"
           cli_path="$publish_dir/maui"
           commands_json="$(mktemp)"
           agents_json="$(mktemp)"

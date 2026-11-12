@@ -6,7 +6,7 @@ import { fetchAgents, isAgentRegistration } from "../src/broker.js";
 const validAgent = {
   id: "agent-1",
   project: "C:\\src\\App.csproj",
-  tfm: "net10.0-windows10.0.19041.0",
+  tfm: "net11.0-windows10.0.19041.0",
   platform: "WinUI",
   appName: "App",
   port: 9223,

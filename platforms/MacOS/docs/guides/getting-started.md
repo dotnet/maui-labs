@@ -4,7 +4,7 @@ Set up a .NET MAUI macOS (AppKit) app from scratch, or add macOS support to an e
 
 ## Overview
 
-The macOS backend runs as a separate **app head project** that references your shared MAUI code. This is similar to how MAUI uses platform-specific head projects, but since the macOS/AppKit backend is a community package (not built into the MAUI workload), you create a standalone `net10.0-macos` project that links to your shared pages, resources, and platform code.
+The macOS backend runs as a separate **app head project** that references your shared MAUI code. This is similar to how MAUI uses platform-specific head projects, but since the macOS/AppKit backend is a community package (not built into the MAUI workload), you create a standalone `net11.0-macos` project that links to your shared pages, resources, and platform code.
 
 ```
 MyApp/
@@ -31,7 +31,7 @@ MyApp/
 
 ## Step 1: Create the macOS App Head Project
 
-Create a new class library targeting `net10.0-macos`:
+Create a new class library targeting `net11.0-macos`:
 
 ```xml
 <!-- MyApp.MacOS/MyApp.MacOS.csproj -->
@@ -39,7 +39,7 @@ Create a new class library targeting `net10.0-macos`:
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0-macos</TargetFramework>
+    <TargetFramework>net11.0-macos</TargetFramework>
     <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
     <RootNamespace>MyApp</RootNamespace>
 
@@ -216,10 +216,10 @@ public class MacOSApp : Application
 dotnet build MyApp.MacOS/MyApp.MacOS.csproj
 
 # The app bundle is created at:
-# MyApp.MacOS/bin/Debug/net10.0-macos/osx-arm64/MyApp.app
+# MyApp.MacOS/bin/Debug/net11.0-macos/osx-arm64/MyApp.app
 
 # Launch
-open MyApp.MacOS/bin/Debug/net10.0-macos/osx-arm64/MyApp.app
+open MyApp.MacOS/bin/Debug/net11.0-macos/osx-arm64/MyApp.app
 ```
 
 ## Conditional Compilation

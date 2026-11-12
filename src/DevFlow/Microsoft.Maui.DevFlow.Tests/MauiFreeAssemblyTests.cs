@@ -65,7 +65,7 @@ public class MauiFreeAssemblyTests
         var assemblies = TestRepo.FindBuiltAssemblies(
             "Microsoft.Maui.DevFlow.Agent.Native",
             TestRepo.CurrentConfiguration,
-            "net10.0-android");
+            "net11.0-android");
 
         Assert.True(
             assemblies.Count > 0,
@@ -75,7 +75,7 @@ public class MauiFreeAssemblyTests
         foreach (var assembly in assemblies)
             AssemblyReferenceGuard.AssertMauiFree(assembly);
 
-        foreach (var targetFramework in new[] { "net10.0-ios", "net10.0-maccatalyst", "net10.0-macos" })
+        foreach (var targetFramework in new[] { "net11.0-ios", "net11.0-maccatalyst", "net11.0-macos" })
         {
             foreach (var assembly in TestRepo.FindBuiltAssemblies(
                 "Microsoft.Maui.DevFlow.Agent.Native",
@@ -98,7 +98,7 @@ public class MauiFreeAssemblyTests
         var assemblies = TestRepo.FindBuiltAssemblies(
             "Microsoft.Maui.DevFlow.Agent.Native.Essentials",
             TestRepo.CurrentConfiguration,
-            "net10.0-android");
+            "net11.0-android");
 
         Assert.True(
             assemblies.Count > 0,
@@ -108,7 +108,7 @@ public class MauiFreeAssemblyTests
         foreach (var assembly in assemblies)
             AssemblyReferenceGuard.AssertControlsFree(assembly);
 
-        foreach (var targetFramework in new[] { "net10.0-ios", "net10.0-maccatalyst", "net10.0-macos" })
+        foreach (var targetFramework in new[] { "net11.0-ios", "net11.0-maccatalyst", "net11.0-macos" })
         {
             foreach (var assembly in TestRepo.FindBuiltAssemblies(
                 "Microsoft.Maui.DevFlow.Agent.Native.Essentials",

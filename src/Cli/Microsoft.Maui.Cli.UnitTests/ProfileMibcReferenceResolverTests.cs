@@ -239,7 +239,7 @@ public sealed class ProfileMibcReferenceResolverTests : IDisposable
 			var selectedOutput = Path.Combine(workspace.Path, "obj", "Application", "Release_net11.0-android");
 			var expected = WriteAssembly(selectedOutput, "android-arm64", "R2R", "shrunk", "System.Private.CoreLib.dll");
 			WriteAssembly(selectedOutput, "android-arm", "R2R", "shrunk", "System.Private.CoreLib.dll");
-			WriteAssembly(workspace.Path, "obj", "Application", "Release_net10.0-android", "android-arm64", "R2R", "shrunk", "System.Private.CoreLib.dll");
+			WriteAssembly(workspace.Path, "obj", "Application", "Release_net11.0-android", "android-arm64", "R2R", "shrunk", "System.Private.CoreLib.dll");
 			WriteAssembly(workspace.Path, "obj", "Application", "Debug_net11.0-android", "android-arm64", "R2R", "shrunk", "System.Private.CoreLib.dll");
 			WriteAssembly(_root, "obj", "Release", "net11.0-android", "android-arm64", "R2R", "shrunk", "System.Private.CoreLib.dll");
 			var context = CreateContext(projectPath, workspace);
@@ -267,7 +267,7 @@ public sealed class ProfileMibcReferenceResolverTests : IDisposable
 		var projectPath = WriteProject("""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+			    <TargetFrameworks>net11.0;netstandard2.1</TargetFrameworks>
 			    <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
 			    <PublishTrimmed>true</PublishTrimmed>
 			    <AndroidLinkMode>None</AndroidLinkMode>
@@ -280,12 +280,12 @@ public sealed class ProfileMibcReferenceResolverTests : IDisposable
 		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
 		try
 		{
-			var context = CreateContext(projectPath, workspace, framework: "net10.0");
+			var context = CreateContext(projectPath, workspace, framework: "net11.0");
 			var artifactsRoot = Path.Combine(workspace.Path, "obj");
 			// The isolated project identity is evaluated by MSBuild, not inferred by the resolver.
-			WriteAssembly(artifactsRoot, "Application-not-the-project", "custom_net10.0_android-arm64", "linked", "Wrong.dll");
+			WriteAssembly(artifactsRoot, "Application-not-the-project", "custom_net11.0_android-arm64", "linked", "Wrong.dll");
 			var projectIdentity = await GetArtifactsProjectNameAsync(context);
-			var output = Path.Combine(artifactsRoot, projectIdentity, "custom_net10.0_android-arm64");
+			var output = Path.Combine(artifactsRoot, projectIdentity, "custom_net11.0_android-arm64");
 			var expected = WriteAssembly(output, "linked", "Application.dll");
 			WriteAssembly(artifactsRoot, projectIdentity, "custom_netstandard2.1_android-arm64", "linked", "Wrong.dll");
 
@@ -303,7 +303,7 @@ public sealed class ProfileMibcReferenceResolverTests : IDisposable
 		var projectPath = WriteProject("""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+			    <TargetFrameworks>net11.0;netstandard2.1</TargetFrameworks>
 			    <RuntimeIdentifiers>android-arm;android-arm64;android-x64</RuntimeIdentifiers>
 			    <PublishTrimmed>true</PublishTrimmed>
 			    <AndroidLinkMode>None</AndroidLinkMode>
@@ -317,16 +317,16 @@ public sealed class ProfileMibcReferenceResolverTests : IDisposable
 		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
 		try
 		{
-			var context = CreateContext(projectPath, workspace, framework: "net10.0");
+			var context = CreateContext(projectPath, workspace, framework: "net11.0");
 			var ridArguments = ProfileCommandArguments.BuildMibcPropertyArguments(context, "android-arm64");
 			Assert.Contains("-p:RuntimeIdentifier=android-arm64", ridArguments);
 			Assert.Contains("-p:RuntimeIdentifiers=", ridArguments);
 			Assert.Contains("-p:AppendRuntimeIdentifierToOutputPath=true", ridArguments);
 			var projectIdentity = await GetArtifactsProjectNameAsync(context);
 			var artifactsRoot = Path.Combine(workspace.Path, "obj", projectIdentity);
-			WriteAssembly(artifactsRoot, "custom_net10.0", "Application.dll");
-			WriteAssembly(artifactsRoot, "custom_net10.0_android-arm", "linked", "System.Private.CoreLib.dll");
-			var expected = WriteAssembly(artifactsRoot, "custom_net10.0_android-arm64", "linked", "System.Private.CoreLib.dll");
+			WriteAssembly(artifactsRoot, "custom_net11.0", "Application.dll");
+			WriteAssembly(artifactsRoot, "custom_net11.0_android-arm", "linked", "System.Private.CoreLib.dll");
+			var expected = WriteAssembly(artifactsRoot, "custom_net11.0_android-arm64", "linked", "System.Private.CoreLib.dll");
 			WriteAssembly(artifactsRoot, "custom_netstandard2.1_android-arm64", "linked", "WrongFramework.dll");
 
 			Assert.Equal(new[] { expected }, await ProfileMibcReferenceResolver.ResolveAsync(context, CancellationToken.None));

@@ -18,7 +18,7 @@ That single line is all you need for the common case. Supply a `TargetFramework`
 
 ```xml
 <MauiAppProjectReference Include="..\MyApp\MyApp.csproj"
-                         TargetFramework="net10.0-android"
+                         TargetFramework="net11.0-android"
                          RuntimeIdentifier="android-arm64" />
 ```
 
@@ -26,7 +26,7 @@ Pass arbitrary properties through to the child build:
 
 ```xml
 <MauiAppProjectReference Include="..\MyApp\MyApp.csproj"
-                         TargetFramework="net10.0-ios"
+                         TargetFramework="net11.0-ios"
                          RuntimeIdentifier="iossimulator-arm64"
                          Properties="EnableCodeSigning=false;ApplicationId=com.example.app" />
 ```
@@ -61,7 +61,7 @@ If you already maintain ProjectReference declarations (or generate projects prog
                   BuildReference="false"
                   PrivateAssets="all"
                   MauiAppProjectReference="true"
-                  TargetFramework="net10.0-android"
+                  TargetFramework="net11.0-android"
                   RuntimeIdentifier="android-arm64"
                   Properties="ApplicationId=com.example.myapp;AndroidPackageFormat=apk" />
 ```
@@ -70,7 +70,7 @@ If you already maintain ProjectReference declarations (or generate projects prog
 
 | Metadata | Purpose |
 | --- | --- |
-| `TargetFramework` | Target framework to build in the app project, for example `net10.0-android`. |
+| `TargetFramework` | Target framework to build in the app project, for example `net11.0-android`. |
 | `RuntimeIdentifier` | Optional runtime identifier, for example `iossimulator-arm64`. |
 | `Configuration` | Child build configuration. Defaults to the host project configuration. |
 | `BuildTarget` | Child target to run before artifact discovery. Defaults to `Build`. |

@@ -10,7 +10,7 @@ It is to Comet what **Expo Go** is to React Native or **DartPad** is to Flutter:
 
 | Project | Description |
 |---------|-------------|
-| [`Server/`](Server/) | `Microsoft.Maui.Go.Server` — file-watching dev server. Compiles `.cs` deltas with Roslyn and pushes them over WebSocket. Targets `net10.0`, runs on your dev machine. |
+| [`Server/`](Server/) | `Microsoft.Maui.Go.Server` — file-watching dev server. Compiles `.cs` deltas with Roslyn and pushes them over WebSocket. Targets `net11.0`, runs on your dev machine. |
 | [`CompanionApp/`](CompanionApp/) | `Microsoft.Maui.Go.CompanionApp` — the on-device runtime. A MAUI + Comet app that scans a QR code, connects to the server, applies metadata/IL/PDB deltas at runtime, and renders your view. Targets `net11.0-android;net11.0-ios;net11.0-maccatalyst` (+ Windows on Windows hosts). |
 | [`Shared/`](Shared/) | `Microsoft.Maui.Go.Shared` — wire protocol shared by server and companion (binary frames over WebSocket). |
 | [`spike/`](spike/) | Throwaway experiments — primarily `MetadataUpdaterSpike`, used to validate `System.Reflection.Metadata.MetadataUpdater` behaviour on each platform. |

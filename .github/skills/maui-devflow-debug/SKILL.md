@@ -46,7 +46,7 @@ for MAUI DevFlow product feedback. Do not run it automatically.
 
    If no project has DevFlow package references, stop and switch to `maui-devflow-onboard`.
 
-2. Pick the target framework and launch target. Do not assume `net10.0`; inspect the project first.
+2. Pick the target framework and launch target. Do not assume `net11.0`; inspect the project first.
 
    ```bash
    grep -i "TargetFramework" *.csproj Directory.Build.props 2>/dev/null

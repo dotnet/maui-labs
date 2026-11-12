@@ -35,7 +35,7 @@ function startFakeAgent(): Promise<FakeAgent> {
     };
     if (req.method === "GET" && url === "/api/agents") {
       return send([
-        { id: "x", project: "", tfm: "net10.0-windows10.0.19041.0", platform: "windows", appName: "Fake", port },
+        { id: "x", project: "", tfm: "net11.0-windows10.0.19041.0", platform: "windows", appName: "Fake", port },
       ]);
     }
     if (req.method === "GET" && url.startsWith("/api/v1/agent/status")) {

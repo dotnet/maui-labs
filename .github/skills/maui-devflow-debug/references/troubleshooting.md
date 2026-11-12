@@ -94,7 +94,7 @@ Fix: `dotnet workload install maui` (installs all MAUI workloads).
 
 **SDK version mismatch:**
 ```
-error : The current .NET SDK does not support targeting .NET 10.0
+error : The current .NET SDK does not support targeting .NET 11.0
 ```
 Fix: Install the required .NET SDK version, or check `global.json` for version pins.
 

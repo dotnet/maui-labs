@@ -15,7 +15,7 @@ From the repository root, using the SDK pinned by `global.json`:
 
 ```powershell
 dotnet build src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj --configuration Release
-& .\artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Release\net10.0\playwright.ps1 install chromium
+& .\artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Release\net11.0\playwright.ps1 install chromium
 dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj `
   --configuration Release --no-build --no-restore `
   --filter "FullyQualifiedName~InspectorLayoutWorkspaceTests" `
@@ -108,7 +108,7 @@ From the repository root (PowerShell):
 
 ```powershell
 dotnet build src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests -c Release
-& artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Release\net10.0\playwright.ps1 install chromium
+& artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Release\net11.0\playwright.ps1 install chromium
 $env:DEVFLOW_INSPECTOR_BROWSER_FIXTURES = "1"
 dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests -c Release --no-build --filter "Category=BrowserFixture"
 ```

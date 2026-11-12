@@ -45,7 +45,7 @@ public class DevFlowSelectAgentPortTests
     [Fact]
     public void SingleAgent_AutoSelectsItsPort()
     {
-        AgentRegistration[] agents = [Agent("a", "/src/App.csproj", "net10.0-ios", "iOS", 7000)];
+        AgentRegistration[] agents = [Agent("a", "/src/App.csproj", "net11.0-ios", "iOS", 7000)];
 
         Assert.Equal(7000, DevFlowCommands.SelectAgentPort(agents, csprojPath: null, configPort: null));
     }
@@ -55,8 +55,8 @@ public class DevFlowSelectAgentPortTests
     {
         AgentRegistration[] agents =
         [
-            Agent("a", "/src/App.csproj", "net10.0-ios", "iOS", 7000),
-            Agent("b", "/src/Other.csproj", "net10.0-maccatalyst", "MacCatalyst", 7001)
+            Agent("a", "/src/App.csproj", "net11.0-ios", "iOS", 7000),
+            Agent("b", "/src/Other.csproj", "net11.0-maccatalyst", "MacCatalyst", 7001)
         ];
 
         Assert.Equal(7001, DevFlowCommands.SelectAgentPort(agents, csprojPath: "/src/Other.csproj", configPort: null));
@@ -67,8 +67,8 @@ public class DevFlowSelectAgentPortTests
     {
         AgentRegistration[] agents =
         [
-            Agent("a", "/src/App.csproj", "net10.0-ios", "iOS", 7000),
-            Agent("b", "/src/Other.csproj", "net10.0-maccatalyst", "MacCatalyst", 7001)
+            Agent("a", "/src/App.csproj", "net11.0-ios", "iOS", 7000),
+            Agent("b", "/src/Other.csproj", "net11.0-maccatalyst", "MacCatalyst", 7001)
         ];
 
         Assert.Equal(5000, DevFlowCommands.SelectAgentPort(agents, csprojPath: null, configPort: 5000));
@@ -79,8 +79,8 @@ public class DevFlowSelectAgentPortTests
     {
         AgentRegistration[] agents =
         [
-            Agent("a", "/src/App.csproj", "net10.0-ios", "iOS", 7000),
-            Agent("b", "/src/Other.csproj", "net10.0-maccatalyst", "MacCatalyst", 7001)
+            Agent("a", "/src/App.csproj", "net11.0-ios", "iOS", 7000),
+            Agent("b", "/src/Other.csproj", "net11.0-maccatalyst", "MacCatalyst", 7001)
         ];
 
         Assert.Equal(0, DevFlowCommands.SelectAgentPort(agents, csprojPath: null, configPort: null));
@@ -91,8 +91,8 @@ public class DevFlowSelectAgentPortTests
     {
         AgentRegistration[] agents =
         [
-            Agent("a", "/src/App.csproj", "net10.0-ios", "iOS", 7000),
-            Agent("b", "/src/Other.csproj", "net10.0-maccatalyst", "MacCatalyst", 7001)
+            Agent("a", "/src/App.csproj", "net11.0-ios", "iOS", 7000),
+            Agent("b", "/src/Other.csproj", "net11.0-maccatalyst", "MacCatalyst", 7001)
         ];
 
         Assert.Equal(0, DevFlowCommands.SelectAgentPort(agents, csprojPath: "/src/Unrelated.csproj", configPort: null));
@@ -106,8 +106,8 @@ public class DevFlowSelectAgentPortTests
         // The same agent set returns the refusal sentinel for a local host...
         AgentRegistration[] agents =
         [
-            Agent("a", "/src/App.csproj", "net10.0-ios", "iOS", 7000),
-            Agent("b", "/src/Other.csproj", "net10.0-android", "Android", 7001)
+            Agent("a", "/src/App.csproj", "net11.0-ios", "iOS", 7000),
+            Agent("b", "/src/Other.csproj", "net11.0-android", "Android", 7001)
         ];
         Assert.Equal(0, DevFlowCommands.SelectAgentPort(agents, csprojPath: null, configPort: null));
 
@@ -121,8 +121,8 @@ public class DevFlowSelectAgentPortTests
     {
         AgentRegistration[] agents =
         [
-            Agent("a", "/src/App.csproj", "net10.0-ios", "iOS", 7000),
-            Agent("b", "/src/Other.csproj", "net10.0-android", "Android", 7001)
+            Agent("a", "/src/App.csproj", "net11.0-ios", "iOS", 7000),
+            Agent("b", "/src/Other.csproj", "net11.0-android", "Android", 7001)
         ];
 
         Assert.Equal(5500, DevFlowCommands.SelectAgentPort("remote.example.com", agents, csprojPath: null, configPort: 5500));
@@ -134,7 +134,7 @@ public class DevFlowSelectAgentPortTests
         // Even a unique local csproj match must not bind a remote target to a local agent's port.
         AgentRegistration[] agents =
         [
-            Agent("a", "/src/App.csproj", "net10.0-ios", "iOS", 7000)
+            Agent("a", "/src/App.csproj", "net11.0-ios", "iOS", 7000)
         ];
 
         Assert.Equal(9223, DevFlowCommands.SelectAgentPort("192.168.1.20", agents, csprojPath: "/src/App.csproj", configPort: null));
@@ -184,16 +184,16 @@ public class BrokerMultiAgentMessageTests
     {
         AgentRegistration[] agents =
         [
-            Agent("a", "iOS", "net10.0-ios", "FirstApp", 7000),
-            Agent("b", "MacCatalyst", "net10.0-maccatalyst", "SecondApp", 7001)
+            Agent("a", "iOS", "net11.0-ios", "FirstApp", 7000),
+            Agent("b", "MacCatalyst", "net11.0-maccatalyst", "SecondApp", 7001)
         ];
 
         var message = BrokerClient.BuildMultiAgentTargetingMessage(agents);
 
         Assert.Contains("Multiple", message);
         Assert.Contains("--agent-port", message);
-        Assert.Contains("--agent-port 7000  FirstApp (iOS net10.0-ios)", message);
-        Assert.Contains("--agent-port 7001  SecondApp (MacCatalyst net10.0-maccatalyst)", message);
+        Assert.Contains("--agent-port 7000  FirstApp (iOS net11.0-ios)", message);
+        Assert.Contains("--agent-port 7001  SecondApp (MacCatalyst net11.0-maccatalyst)", message);
     }
 
     [Fact]
@@ -201,7 +201,7 @@ public class BrokerMultiAgentMessageTests
     {
         AgentRegistration[] agents =
         [
-            Agent("a", "iOS", "net10.0-ios", "FirstApp", 7000)
+            Agent("a", "iOS", "net11.0-ios", "FirstApp", 7000)
         ];
 
         var message = BrokerClient.BuildMultiAgentTargetingMessage(agents, optionHint: "agentPort");
@@ -217,8 +217,8 @@ public class BrokerMultiAgentMessageTests
     {
         AgentRegistration[] agents =
         [
-            Agent("b", "MacCatalyst", "net10.0-maccatalyst", "SecondApp", 7001),
-            Agent("a", "iOS", "net10.0-ios", "FirstApp", 7000)
+            Agent("b", "MacCatalyst", "net11.0-maccatalyst", "SecondApp", 7001),
+            Agent("a", "iOS", "net11.0-ios", "FirstApp", 7000)
         ];
 
         var message = BrokerClient.BuildMultiAgentTargetingMessage(agents);

@@ -272,7 +272,7 @@ From the repository root:
 
 ```sh
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
-  -f net10.0-android
+  -f net11.0-android
 ```
 
 To run the native tests directly, set `ANDROID_HOME` to the installed SDK and run:

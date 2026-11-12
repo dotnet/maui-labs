@@ -32,7 +32,7 @@ echo "Setting default channel..."
 darc add-default-channel \
   --branch "refs/heads/$TARGET_BRANCH" \
   --repo "$REPO" \
-  --channel ".NET 10 Dev" \
+  --channel ".NET 11 Dev" \
   || echo "(may already exist)"
 
 # 4. Subscribe to arcade updates
@@ -51,7 +51,7 @@ darc add-subscription \
 echo ""
 echo "Creating MAUI subscription..."
 darc add-subscription \
-  --channel ".NET 10.0.1xx SDK" \
+  --channel ".NET 11.0.1xx SDK" \
   --source-repo https://github.com/dotnet/maui \
   --target-repo "$REPO" \
   --target-branch "$TARGET_BRANCH" \
@@ -63,7 +63,7 @@ darc add-subscription \
 echo ""
 echo "Creating Runtime subscription..."
 darc add-subscription \
-  --channel ".NET 10" \
+  --channel ".NET 11" \
   --source-repo https://github.com/dotnet/runtime \
   --target-repo "$REPO" \
   --target-branch "$TARGET_BRANCH" \
