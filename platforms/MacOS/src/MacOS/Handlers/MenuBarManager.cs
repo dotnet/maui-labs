@@ -44,10 +44,10 @@ public static class MenuBarManager
     public static void SetupDefaultMenuBar(MacOSMenuBarOptions? options = null)
     {
         _options = options ?? new MacOSMenuBarOptions();
-        ClearWindowMenu();
 
         var mainMenu = new NSMenu();
         NSApplication.SharedApplication.MainMenu = mainMenu;
+        ClearWindowMenu();
 
         AddDefaultAppMenu(mainMenu);
 
@@ -69,8 +69,8 @@ public static class MenuBarManager
 
         // Keep the application menu (index 0) if it exists
         var appMenuItem = mainMenu.Count > 0 ? mainMenu.ItemAt(0) : null;
-        ClearWindowMenu();
         mainMenu.RemoveAllItems();
+        ClearWindowMenu();
 
         if (appMenuItem != null)
             mainMenu.AddItem(appMenuItem);

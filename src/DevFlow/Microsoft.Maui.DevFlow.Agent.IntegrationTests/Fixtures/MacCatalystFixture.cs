@@ -134,6 +134,6 @@ public sealed class MacCatalystFixture : AppFixtureBase
         return process;
     }
 
-    string FormatProcessExit(Process process, string context)
-        => $"Mac Catalyst app exited with code {process.ExitCode} {context}.";
+    static string FormatProcessExit(Process process, string context)
+        => $"Mac Catalyst app process {process.Id} exited {context}.";
 }

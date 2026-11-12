@@ -35,7 +35,9 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
         await RuntimeTestContext.FlushMainQueueAsync();
         evidence.AppendJson("clicks.jsonl", new { button = "primary", _primaryTaps, _secondaryTaps });
 
-        if (_primaryTaps == 0 && _secondaryTaps == 1)
+        if (recognizers.Length == 2 &&
+            recognizers.All(r => r.ButtonMask == 1) &&
+            _secondaryTaps > 0)
         {
             evidence.Assert(true, "Unfixed AppKit routes a primary click to the secondary recognizer.");
             evidence.BaselineFailure("tap-buttons.primary-routed-to-secondary",
