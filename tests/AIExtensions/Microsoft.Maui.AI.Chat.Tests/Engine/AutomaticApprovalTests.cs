@@ -155,6 +155,117 @@ public class AutomaticApprovalTests
     }
 
     [Fact]
+    public async Task Restore_CallsThatNeedNoApproval_ShowInOneBlockOfTheAppsOwnType_OncePerCall()
+    {
+        // FunctionInvokingChatClient replays the batch's calls before their results. The restore must hand the replays
+        // to the calls the turn shows, as the live round did, not to the sheet, which would add them as new rows.
+        var thread = new JsonConversationThread();
+        var scenario = new Scenario { Handler = new WeatherSheetHandler(), Thread = thread };
+        scenario.Model.Enqueue(ct => EmitCalls(
+            ct,
+            split: false,
+            Weather("w-1", "Paris"),
+            Weather("w-2", "Oslo"),
+            Delete("d-1", "a.txt")));
+        scenario.Model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Done.", ct));
+        using (var live = scenario.CreateContext())
+            await live.SendMessageAsync("Weather in Paris and Oslo, and delete a.txt");
+
+        using var restored = scenario.CreateContext();
+        await restored.RestoreAsync();
+
+        var turn = Assert.Single(restored.Turns);
+        var sheet = Assert.Single(turn.ResponseBlocks.OfType<WeatherSheetBlock>());
+        Assert.Equal(["Paris: Sunny in Paris", "Oslo: Sunny in Oslo"], sheet.Rows.Select(row => $"{row.City}: {row.Forecast}"));
+        var approval = Assert.Single(turn.ResponseBlocks.OfType<ToolApprovalBlock>());
+        Assert.Equal(ApprovalStatus.Approved, approval.Status);
+        Assert.Equal("Deleted a.txt", approval.Result?.Result?.ToString());
+        Assert.False(approval.IsAbandoned);
+    }
+
+    [Fact]
+    public async Task Restore_AHandlerThatShowsEveryCallOfTheBatch_LeavesTheApprovedCallToItsApproval()
+    {
+        // The handler shows both tools, so it shows the call that needs no approval in a sheet of the turn, and the call
+        // that needs approval in a sheet of its own inside the approval. The replayed call that needs approval belongs
+        // to the approval: the restore must not let the turn's sheet take it, and with it the result.
+        var thread = new JsonConversationThread();
+        var scenario = new Scenario { Handler = new WeatherSheetHandler(foldDeletes: true), Thread = thread };
+        scenario.Model.Enqueue(ct => EmitCalls(ct, split: false, Weather("w-1", "Paris"), Delete("d-1", "a.txt")));
+        scenario.Model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Done.", ct));
+        using var live = scenario.CreateContext();
+        await live.SendMessageAsync("Weather in Paris, and delete a.txt");
+        var liveTurn = Assert.Single(live.Turns);
+
+        using var restored = scenario.CreateContext();
+        await restored.RestoreAsync();
+
+        var turn = Assert.Single(restored.Turns);
+        foreach (var shown in new[] { liveTurn, turn })
+        {
+            var sheet = Assert.Single(shown.ResponseBlocks.OfType<WeatherSheetBlock>());
+            Assert.Equal(["w-1: Sunny in Paris"], sheet.Rows.Select(row => $"{row.CallId}: {row.Forecast}"));
+            var approval = Assert.Single(shown.ResponseBlocks.OfType<ToolApprovalBlock>());
+            Assert.Equal(ApprovalStatus.Approved, approval.Status);
+            Assert.Equal("Deleted a.txt", approval.Result?.Result?.ToString());
+            Assert.False(approval.IsAbandoned);
+            var inner = Assert.IsType<WeatherSheetBlock>(approval.InnerBlock);
+            Assert.Equal(["d-1: Deleted a.txt"], inner.Rows.Select(row => $"{row.CallId}: {row.Forecast}"));
+        }
+    }
+
+    [Fact]
+    public async Task RestoreFromMessages_AHandlerThatShowsEveryCallOfTheBatch_LeavesTheApprovedCallToItsApproval()
+    {
+        // The messages FunctionInvokingChatClient leaves for the batch: the requests, the user's responses, the calls it
+        // replays once it has the responses, and their results. The responses start the round that replays the calls.
+        var weatherCall = Weather("w-1", "Paris");
+        var deleteCall = Delete("d-1", "a.txt");
+        var weatherRequest = new ToolApprovalRequestContent("approval-w-1", weatherCall) { RequiresConfirmation = false };
+        var deleteRequest = new ToolApprovalRequestContent("approval-d-1", deleteCall);
+        var scenario = new Scenario { Handler = new WeatherSheetHandler(foldDeletes: true) };
+        using var context = scenario.CreateContext();
+
+        await context.RestoreAsync(
+        [
+            new ChatMessage(ChatRole.User, "Weather in Paris, and delete a.txt") { MessageId = "user-1" },
+            new ChatMessage(ChatRole.Assistant, [weatherRequest, deleteRequest]) { MessageId = "assistant-1" },
+            new ChatMessage(ChatRole.User, [weatherRequest.CreateResponse(true), deleteRequest.CreateResponse(true)])
+            {
+                MessageId = "user-2",
+            },
+            new ChatMessage(
+                ChatRole.Assistant,
+                [
+                    new FunctionCallContent("w-1", "GetWeather", weatherCall.Arguments) { InformationalOnly = true },
+                    new FunctionCallContent("d-1", "DeleteFile", deleteCall.Arguments) { InformationalOnly = true },
+                ])
+            {
+                MessageId = "assistant-2",
+            },
+            new ChatMessage(
+                ChatRole.Tool,
+                [new FunctionResultContent("w-1", "Sunny in Paris"), new FunctionResultContent("d-1", "Deleted a.txt")])
+            {
+                MessageId = "tool-1",
+            },
+            new ChatMessage(ChatRole.Assistant, "Done.") { MessageId = "assistant-3" },
+        ]);
+
+        var turn = Assert.Single(context.Turns);
+        var sheet = Assert.Single(turn.ResponseBlocks.OfType<WeatherSheetBlock>());
+        Assert.Equal(["w-1: Sunny in Paris"], sheet.Rows.Select(row => $"{row.CallId}: {row.Forecast}"));
+        var approval = Assert.Single(turn.ResponseBlocks.OfType<ToolApprovalBlock>());
+        Assert.Equal(ApprovalStatus.Approved, approval.Status);
+        Assert.Equal("Deleted a.txt", approval.Result?.Result?.ToString());
+        Assert.False(approval.IsAbandoned);
+        var inner = Assert.IsType<WeatherSheetBlock>(approval.InnerBlock);
+        Assert.Equal(["d-1: Deleted a.txt"], inner.Rows.Select(row => $"{row.CallId}: {row.Forecast}"));
+        Assert.Empty(scenario.Weather);
+        Assert.Empty(scenario.Deleted);
+    }
+
+    [Fact]
     public async Task RequestsThatAllNeedNoDecision_RunWithoutWaitingForTheUser()
     {
         // A source other than the batching of FunctionInvokingChatClient can send requests that need no decision.
@@ -420,8 +531,12 @@ public class AutomaticApprovalTests
 
     private sealed record WeatherRow(string CallId, string? City, string? Forecast);
 
-    /// <summary>Shows every weather call of a message as a row of one sheet, like the playground's worksheet.</summary>
-    private sealed class WeatherSheetHandler : ContentBlockHandler<WeatherSheetBlock>
+    /// <summary>
+    /// Shows every weather call of a message as a row of one sheet, like the playground's worksheet, and with
+    /// <c>foldDeletes</c> the file deletions too. Like a handler written for live rounds, it adds a row for every call
+    /// it gets, without checking whether the sheet already shows the call.
+    /// </summary>
+    private sealed class WeatherSheetHandler(bool foldDeletes = false) : ContentBlockHandler<WeatherSheetBlock>
     {
         public override BlockMappingResult<WeatherSheetBlock> Handle(BlockMappingContext context, WeatherSheetBlock state)
         {
@@ -430,6 +545,11 @@ public class AutomaticApprovalTests
             {
                 switch (content)
                 {
+                    case FunctionCallContent { Name: "DeleteFile" } call when foldDeletes:
+                        context.MarkHandled(call);
+                        state.Rows.Add(new WeatherRow(call.CallId, call.Arguments?["fileName"]?.ToString(), Forecast: null));
+                        changed = true;
+                        break;
                     case FunctionCallContent { Name: "GetWeather" } call:
                         context.MarkHandled(call);
                         state.Rows.Add(new WeatherRow(call.CallId, call.Arguments?["city"]?.ToString(), Forecast: null));
