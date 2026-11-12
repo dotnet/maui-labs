@@ -446,8 +446,6 @@ jobs:
       - name: Install existing WPF template workloads
         shell: pwsh
         run: |
-          $sdkVersion = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
-          $sdkDirectory = Join-Path $env:DOTNET_ROOT "sdk\$sdkVersion"
           $dotnet = Join-Path $env:DOTNET_ROOT 'dotnet.exe'
           & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --from-rollback-file eng/workloads/dotnet11-ga.json
           if ($LASTEXITCODE -ne 0) { throw 'Workload installation failed.' }
