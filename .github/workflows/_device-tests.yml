@@ -74,7 +74,7 @@ jobs:
 
       - name: Install workloads
         if: inputs.install-workloads
-        run: pwsh -NoProfile -File eng/install-workloads.ps1 -Workloads "${{ inputs.workloads }}"
+        run: pwsh -NoProfile -File "${{ github.workspace }}/eng/install-workloads.ps1" -Workloads "${{ inputs.workloads }}"
 
       - name: Build and run device tests
         shell: pwsh

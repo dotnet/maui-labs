@@ -125,12 +125,12 @@ jobs:
       # matches the later cibuild invocation.
       - name: Install workloads (Windows)
         if: inputs.install-workloads && runner.os == 'Windows'
-        run: pwsh -NoProfile -File eng\install-workloads.ps1 -DotNet eng\common\dotnet.cmd -Workloads "${{ inputs.workloads }}"
+        run: pwsh -NoProfile -File "${{ github.workspace }}/eng/install-workloads.ps1" -DotNet "${{ github.workspace }}/eng/common/dotnet.cmd" -Workloads "${{ inputs.workloads }}"
         shell: cmd
 
       - name: Install workloads (Unix)
         if: inputs.install-workloads && runner.os != 'Windows'
-        run: pwsh -NoProfile -File eng/install-workloads.ps1 -DotNet ./eng/common/dotnet.sh -Workloads "${{ inputs.workloads }}"
+        run: pwsh -NoProfile -File "${{ github.workspace }}/eng/install-workloads.ps1" -DotNet "${{ github.workspace }}/eng/common/dotnet.sh" -Workloads "${{ inputs.workloads }}"
 
       - name: Install Android SDK dependencies (Windows)
         if: inputs.install-workloads && runner.os == 'Windows' && inputs.android-project != ''

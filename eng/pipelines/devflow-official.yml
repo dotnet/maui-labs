@@ -113,7 +113,7 @@ extends:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
             # DevFlow packages are built on Windows, including Apple library TFMs.
-            - pwsh: eng/install-workloads.ps1 -DotNet eng/common/dotnet.cmd -Workloads 'maui maui-android ios maccatalyst macos maui-tizen'
+            - pwsh: $(Build.SourcesDirectory)/eng/install-workloads.ps1 -DotNet $(Build.SourcesDirectory)/eng/common/dotnet.cmd -Workloads 'maui maui-android ios maccatalyst macos maui-tizen'
               displayName: Install MAUI and Apple workloads
             - pwsh: |
                 $arguments = @(
@@ -260,7 +260,7 @@ extends:
                 printf '%s\n' "$version" | grep -Eq '^Xcode 27([.[:space:]]|$)'
                 echo "##vso[task.setvariable variable=DEVELOPER_DIR]$DEVELOPER_DIR"
               displayName: Select and verify Xcode 27
-            - pwsh: eng/install-workloads.ps1 -DotNet .dotnet/dotnet -Workloads 'maui ios maccatalyst macos maui-tizen'
+            - pwsh: $(Build.SourcesDirectory)/eng/install-workloads.ps1 -DotNet $(Build.SourcesDirectory)/.dotnet/dotnet -Workloads 'maui ios maccatalyst macos maui-tizen'
               displayName: Install MAUI workloads
             - script: |
                 set -euo pipefail
@@ -334,7 +334,7 @@ extends:
                 path: '$(Build.SourcesDirectory)/artifacts/bin'
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - pwsh: eng/install-workloads.ps1 -DotNet eng/common/dotnet.cmd -Workloads 'maui maui-android macos maui-tizen'
+            - pwsh: $(Build.SourcesDirectory)/eng/install-workloads.ps1 -DotNet $(Build.SourcesDirectory)/eng/common/dotnet.cmd -Workloads 'maui maui-android macos maui-tizen'
               displayName: Install MAUI workloads
             - pwsh: |
                 $ErrorActionPreference = 'Stop'
@@ -430,7 +430,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - pwsh: eng/install-workloads.ps1 -DotNet eng/common/dotnet.cmd -Workloads maui
+            - pwsh: $(Build.SourcesDirectory)/eng/install-workloads.ps1 -DotNet $(Build.SourcesDirectory)/eng/common/dotnet.cmd -Workloads maui
               displayName: Install MAUI workload
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -457,7 +457,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - pwsh: eng/install-workloads.ps1 -DotNet eng/common/dotnet.cmd -Workloads 'maui macos'
+            - pwsh: $(Build.SourcesDirectory)/eng/install-workloads.ps1 -DotNet $(Build.SourcesDirectory)/eng/common/dotnet.cmd -Workloads 'maui macos'
               displayName: Install MAUI and macOS workloads
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -487,7 +487,7 @@ extends:
                 # Arcade installs the root .NET 11 SDK here; keep its workloads in the same host.
                 installationPath: $(Build.SourcesDirectory)\.dotnet
             - powershell: |
-                & ..\..\eng\install-workloads.ps1 -Workloads maui
+                & '$(Build.SourcesDirectory)\eng\install-workloads.ps1' -Workloads maui
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
               displayName: Install MAUI workload
               workingDirectory: $(Build.SourcesDirectory)\src\Testing

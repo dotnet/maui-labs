@@ -93,7 +93,7 @@ jobs:
         with:
           global-json-file: global.json
       - name: Install pinned scenario workloads
-        run: pwsh -NoProfile -File eng/install-workloads.ps1 -DotNet ./eng/common/dotnet.sh -Workloads "${{ matrix.workloads || 'macos' }}"
+        run: pwsh -NoProfile -File "${{ github.workspace }}/eng/install-workloads.ps1" -DotNet "${{ github.workspace }}/eng/common/dotnet.sh" -Workloads "${{ matrix.workloads || 'macos' }}"
       - name: Download requested product packages
         if: matrix.packages == true
         uses: actions/download-artifact@v8
