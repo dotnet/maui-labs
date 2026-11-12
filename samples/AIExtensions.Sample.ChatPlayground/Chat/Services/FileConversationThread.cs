@@ -180,22 +180,8 @@ public sealed class FileConversationThread : IConversationThread
         JsonSerializer.SerializeToNode(update, UpdateInfo) as JsonObject
             ?? throw new InvalidDataException("An update did not serialize to a JSON object.");
 
-    private static ChatResponseUpdate ReadUpdate(JsonObject node)
-    {
-        var update = node.Deserialize(UpdateInfo)
+    // Additional property values read back as JsonElement. The engine reads its turn markers in that form too.
+    private static ChatResponseUpdate ReadUpdate(JsonObject node) =>
+        node.Deserialize(UpdateInfo)
             ?? throw new InvalidDataException("A saved update is empty.");
-
-        // JSON reads property values back as JsonElement. The engine marks continuation rounds and stopped turns with
-        // string values, so text is given back as text.
-        if (update.AdditionalProperties is { Count: > 0 } properties)
-        {
-            foreach (var (key, value) in properties.ToArray())
-            {
-                if (value is JsonElement { ValueKind: JsonValueKind.String } text)
-                    properties[key] = text.GetString();
-            }
-        }
-
-        return update;
-    }
 }

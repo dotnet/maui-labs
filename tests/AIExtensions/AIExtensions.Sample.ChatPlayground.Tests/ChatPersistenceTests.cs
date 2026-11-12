@@ -211,7 +211,7 @@ public sealed class ChatPersistenceTests
             var call = Assert.IsType<FunctionCallContent>(updates[1].Contents[1]);
             Assert.Equal(("call-1", "calculate"), (call.CallId, call.Name));
             Assert.Equal("12 \u00D7 7", CalculatorDisplay.FormatExpression(call.Arguments, System.Globalization.CultureInfo.InvariantCulture));
-            Assert.Equal("continuation", updates[1].AdditionalProperties?["marker"]);
+            Assert.Equal("continuation", Assert.IsType<System.Text.Json.JsonElement>(updates[1].AdditionalProperties?["marker"]).GetString());
             var result = Assert.IsType<FunctionResultContent>(Assert.Single(updates[2].Contents));
             Assert.Equal("84", CalculatorDisplay.FormatResult(result, System.Globalization.CultureInfo.InvariantCulture));
             Assert.Equal("It is 84.", updates[3].Text);
