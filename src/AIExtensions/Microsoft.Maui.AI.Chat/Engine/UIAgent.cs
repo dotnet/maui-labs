@@ -3,6 +3,7 @@
 
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -217,11 +218,12 @@ public class UIAgent : IDisposable
     /// </param>
     /// <remarks>
     /// The thread receives every update of the turn, so a restore shows the turn as it ended. The history
-    /// leaves out function calls without a result, which a provider rejects. For a stopped turn it also
-    /// leaves out approval requests and responses whose call has no result, which the function invoking
-    /// client would reject or run, and reasoning that the stop cut off (<see cref="CutOffReasoning"/>).
-    /// A restore leaves the same out of the history it rebuilds. A turn that became stale because the
-    /// history was cleared or restored after it started is discarded.
+    /// leaves out function calls without a result, which a provider rejects, and approval requests and
+    /// responses whose call has no result, which the function invoking client would reject or run. A turn
+    /// that completes has no such approval; a stopped turn can. For a stopped turn the history also leaves
+    /// out reasoning that the stop cut off (<see cref="CutOffReasoning"/>). A restore leaves the same out of
+    /// the history it rebuilds. A turn that became stale because the history was cleared or restored after
+    /// it started is discarded.
     /// </remarks>
     internal void CommitTurn(PendingTurn turn, bool stopped)
     {
@@ -254,8 +256,7 @@ public class UIAgent : IDisposable
 
         var messages = UnansweredCalls.Remove(
             turn.Messages,
-            UnansweredCalls.CollectAnsweredCallIds(turn),
-            includeApprovals: stopped);
+            UnansweredCalls.CollectAnsweredCallIds(turn));
         if (stopped)
             CutOffReasoning.Remove(messages);
         _history.AddRange(messages);
@@ -275,7 +276,9 @@ public class UIAgent : IDisposable
     /// <see cref="AIContent.RawRepresentation"/> and <see cref="ChatResponseUpdate.RawRepresentation"/>
     /// are not durable discriminators unless the implementation explicitly persists them. Thread
     /// implementations must also round-trip <see cref="ChatResponseUpdate.AdditionalProperties"/>,
-    /// which carries engine metadata for continuation rounds and stopped turns.
+    /// which carries engine metadata for continuation rounds and stopped turns; its string values may come
+    /// back as the <see cref="System.Text.Json.JsonElement"/>s that JSON deserialization gives. A thread that
+    /// drops them restores a stopped turn as completed, but still sends no approval without a result.
     /// </remarks>
     public async Task<IReadOnlyList<ContentBlock>> RestoreAsync(
         CancellationToken cancellationToken = default)
@@ -351,7 +354,7 @@ public class UIAgent : IDisposable
             StringComparer.Ordinal);
         return ReplayAsync(
             updates,
-            UnansweredCalls.Remove(history, answered, includeApprovals: true),
+            UnansweredCalls.Remove(history, answered),
             cancellationToken);
     }
 
@@ -524,11 +527,12 @@ public class UIAgent : IDisposable
             if (currentTurn is null)
                 return;
 
-            // The same history as the live commit of the turn: the thread keeps what the history leaves out.
-            var stopped = currentTurn.IsStopped;
+            // The same history as the live commit of the turn: the thread keeps what the history leaves out. Approvals
+            // without a result are left out even when the thread lost the mark that the turn was stopped, because a
+            // restored approval can never be answered.
             var turnHistory = replayedHistory.GetRange(turnHistoryStart, replayedHistory.Count - turnHistoryStart);
-            var committed = UnansweredCalls.Remove(turnHistory, turnAnsweredCallIds, includeApprovals: stopped);
-            if (stopped)
+            var committed = UnansweredCalls.Remove(turnHistory, turnAnsweredCallIds);
+            if (currentTurn.IsStopped)
                 CutOffReasoning.Remove(committed);
             replayedHistory.RemoveRange(turnHistoryStart, turnHistory.Count);
             replayedHistory.AddRange(committed);
@@ -871,13 +875,21 @@ public class UIAgent : IDisposable
     private static bool IsStopped(ChatResponseUpdate update)
         => HasMarker(update.AdditionalProperties, StoppedPropertyName);
 
+    /// <summary>
+    /// Gets whether an engine mark is set. A thread that saves the updates as JSON gives its value back as a
+    /// <see cref="JsonElement"/>.
+    /// </summary>
     private static bool HasMarker(
         AdditionalPropertiesDictionary? properties,
         string name)
         => properties is not null
             && properties.TryGetValue(name, out var value)
-            && value is string text
-            && string.Equals(text, MarkerValue, StringComparison.Ordinal);
+            && value switch
+            {
+                string text => string.Equals(text, MarkerValue, StringComparison.Ordinal),
+                JsonElement { ValueKind: JsonValueKind.String } element => element.ValueEquals(MarkerValue),
+                _ => false,
+            };
 
     private static ChatMessage MarkStopped(ChatMessage message)
     {

@@ -12,8 +12,9 @@ namespace Microsoft.Maui.AI.Chat;
 /// dangling call. The thread keeps them, so a restore shows them as the turn ended them.
 /// </summary>
 /// <remarks>
-/// Approval requests and responses are removed too when <c>includeApprovals</c> is set (a stopped
-/// turn), because a dangling approval makes the next request fail or re-run the approved call.
+/// Approval requests and responses whose call has no result are removed too, because a dangling approval
+/// makes the next request fail or run the approved call again. A turn that completes never has one, but a
+/// stopped turn does, and a thread may lose the mark that a turn was stopped.
 /// </remarks>
 internal static class UnansweredCalls
 {
@@ -68,19 +69,18 @@ internal static class UnansweredCalls
 
     internal static List<ChatMessage> Remove(
         IReadOnlyList<ChatMessage> messages,
-        HashSet<string> answeredCallIds,
-        bool includeApprovals)
+        HashSet<string> answeredCallIds)
     {
         var kept = new List<ChatMessage>(messages.Count);
         foreach (var message in messages)
         {
-            if (AllKept(message.Contents, answeredCallIds, includeApprovals))
+            if (AllKept(message.Contents, answeredCallIds))
             {
                 kept.Add(message);
                 continue;
             }
 
-            var contents = Filter(message.Contents, answeredCallIds, includeApprovals);
+            var contents = Filter(message.Contents, answeredCallIds);
             if (contents.Count == 0)
                 continue;
 
@@ -92,39 +92,28 @@ internal static class UnansweredCalls
         return kept;
     }
 
-    private static bool AllKept(
-        IList<AIContent> contents,
-        HashSet<string> answeredCallIds,
-        bool includeApprovals)
+    private static bool AllKept(IList<AIContent> contents, HashSet<string> answeredCallIds)
     {
         foreach (var content in contents)
         {
-            if (!IsKept(content, answeredCallIds, includeApprovals))
+            if (!IsKept(content, answeredCallIds))
                 return false;
         }
 
         return true;
     }
 
-    private static List<AIContent> Filter(
-        IList<AIContent> contents,
-        HashSet<string> answeredCallIds,
-        bool includeApprovals)
+    private static List<AIContent> Filter(IList<AIContent> contents, HashSet<string> answeredCallIds)
         => contents
-            .Where(content => IsKept(content, answeredCallIds, includeApprovals))
+            .Where(content => IsKept(content, answeredCallIds))
             .ToList();
 
-    private static bool IsKept(
-        AIContent content,
-        HashSet<string> answeredCallIds,
-        bool includeApprovals)
+    private static bool IsKept(AIContent content, HashSet<string> answeredCallIds)
         => content switch
         {
             FunctionCallContent call => answeredCallIds.Contains(call.CallId),
-            ToolApprovalRequestContent { ToolCall: FunctionCallContent call } when includeApprovals
-                => answeredCallIds.Contains(call.CallId),
-            ToolApprovalResponseContent { ToolCall: FunctionCallContent call } when includeApprovals
-                => answeredCallIds.Contains(call.CallId),
+            ToolApprovalRequestContent { ToolCall: FunctionCallContent call } => answeredCallIds.Contains(call.CallId),
+            ToolApprovalResponseContent { ToolCall: FunctionCallContent call } => answeredCallIds.Contains(call.CallId),
             _ => true,
         };
 }
