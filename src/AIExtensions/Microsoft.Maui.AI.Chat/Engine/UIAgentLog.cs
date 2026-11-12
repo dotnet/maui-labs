@@ -33,4 +33,7 @@ internal static partial class UIAgentLog
 
     [LoggerMessage(108, LogLevel.Debug, "UI action '{FunctionName}' (CallId={CallId}) returned after its turn ended; its result is neither shown nor sent to the model")]
     internal static partial void UIActionResultAfterTurnEnded(ILogger logger, string functionName, string callId);
+
+    [LoggerMessage(109, LogLevel.Debug, "Tool call '{FunctionName}' (CallId={CallId}) needs no approval; approving it without asking the user")]
+    internal static partial void ApprovedAutomatically(ILogger logger, string functionName, string callId);
 }

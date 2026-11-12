@@ -24,6 +24,7 @@ internal class BlockMappingPipeline
     private readonly List<IActiveEntry> _activeStack = new();
     private readonly ILogger _logger;
     private readonly FunctionCallRegistry _calls;
+    private readonly IReadOnlyDictionary<string, UIAgentOptions.UIActionRegistration> _uiActions;
 
     internal BlockMappingPipeline(
         UIAgentOptions options,
@@ -32,6 +33,7 @@ internal class BlockMappingPipeline
     {
         _logger = logger ?? NullLogger.Instance;
         _calls = calls ?? new FunctionCallRegistry();
+        _uiActions = options.UIActions;
 
         // Registered UI actions claim their function calls first, so the action always runs. A handler
         // registered for an action's name shows the call inside the action instead.
@@ -75,6 +77,7 @@ internal class BlockMappingPipeline
         var contentTypes = string.Join(", ", update.Contents.Select(c => c.GetType().Name));
         BlockMappingPipelineLog.ProcessingUpdate(_logger, update.Role?.Value, update.Contents.Count, contentTypes);
 
+        update = ShowCallsThatNeedNoDecision(update);
         var context = new BlockMappingContext(update, _handlers, _calls);
         NoteArrivedResults(update, mapped: false);
 
@@ -204,6 +207,32 @@ internal class BlockMappingPipeline
         _activeStack.Clear();
 
         return Array.Empty<ContentBlock>();
+    }
+
+    /// <summary>
+    /// Replaces each approval request that needs no decision with the call it carries, so the handlers show it as
+    /// they show the call when no other call of its response needs approval: a call card, a row of a block of the
+    /// app's own type, or a card of a handler for the tool. The engine approves the request itself (see
+    /// <see cref="AutomaticApprovals"/>). Only the blocks change; the history keeps the request.
+    /// </summary>
+    private ChatResponseUpdate ShowCallsThatNeedNoDecision(ChatResponseUpdate update)
+    {
+        List<AIContent>? contents = null;
+        for (var i = 0; i < update.Contents.Count; i++)
+        {
+            if (!AutomaticApprovals.TryGetCall(update.Contents[i], _uiActions, out var call))
+                continue;
+
+            contents ??= [.. update.Contents];
+            contents[i] = call;
+        }
+
+        if (contents is null)
+            return update;
+
+        var shown = update.Clone();
+        shown.Contents = contents;
+        return shown;
     }
 
     private void ApplyKnownCalls(BlockMappingContext context)

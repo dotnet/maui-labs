@@ -632,6 +632,27 @@ public class UIAgent : IDisposable
     }
 
     /// <summary>
+    /// Approves the approval requests of the turn's last round that need no decision (see
+    /// <see cref="AutomaticApprovals"/>). <see cref="FunctionInvokingChatClient"/> needs a response to every request
+    /// of the round before it runs any call of it, and then runs the approved calls with the ones the user approved.
+    /// </summary>
+    internal IReadOnlyList<ToolApprovalResponseContent> ApproveAutomatically(PendingTurn turn)
+    {
+        List<ToolApprovalResponseContent>? responses = null;
+        foreach (var request in turn.ApprovalRequests)
+        {
+            // A call that was already handled needs no response; FunctionInvokingChatClient would pass one to the model.
+            if (!AutomaticApprovals.TryGetCall(request, _options.UIActions, out var call) || call.InformationalOnly)
+                continue;
+
+            UIAgentLog.ApprovedAutomatically(_logger, call.Name, call.CallId);
+            (responses ??= []).Add(request.CreateResponse(approved: true));
+        }
+
+        return responses ?? [];
+    }
+
+    /// <summary>
     /// Gets the provider conversation to continue. Only a configured thread makes a conversation
     /// stateful; within a turn the latest identifier returned by the provider wins.
     /// </summary>

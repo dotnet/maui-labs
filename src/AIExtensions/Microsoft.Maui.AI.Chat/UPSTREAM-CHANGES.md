@@ -250,6 +250,16 @@ These match upstream so that upstream fixes apply directly:
   client when a result for its call id arrives before the call itself is sent again. Upstream nests the
   UI action's block in the approval and answers only with the approval response, which
   `FunctionInvokingChatClient` cannot carry out for a declaration.
+- **Calls that need no approval in an approval batch.** Not in upstream, which is on
+  Microsoft.Extensions.AI 10.6 and shows every request of the batch as an approval. Since 10.8,
+  `FunctionInvokingChatClient` marks the requests of calls whose tools need no approval with
+  `ToolApprovalRequestContent.RequiresConfirmation` false (experimental, `MEAI001`), and still needs a
+  response to each request before it runs any call of the batch. The engine shows such a request as the
+  call it carries, through the same handlers as any call (a call card, a row of a block of the app's own
+  type, a `[ToolBlock]` card), and sends an approved response for it with the user's decisions, so the
+  call runs with the batch, also when the user rejects the others. The history and the thread keep the
+  request, and a restore shows it the same way. A request without the flag, from an older thread or
+  another source, defaults to `true` and stays an approval. UI actions keep their own rule (above).
 - **Reused call ids and the approvals `FunctionInvokingChatClient` carries out** (its limitation, not a
   port difference). `FunctionInvokingChatClient` (10.11, unchanged on dotnet/extensions main) skips an
   approval response whose call id has a result anywhere in the request, and keys approval requests by

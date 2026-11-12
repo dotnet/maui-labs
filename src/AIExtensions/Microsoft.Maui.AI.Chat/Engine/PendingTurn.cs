@@ -49,6 +49,9 @@ internal sealed class PendingTurn
     /// </summary>
     internal IReadOnlyList<FunctionCallContent> OpenCalls { get; private set; } = [];
 
+    /// <summary>Gets the approval requests of the last completed round, in the order the round made them.</summary>
+    internal IReadOnlyList<ToolApprovalRequestContent> ApprovalRequests { get; private set; } = [];
+
     /// <summary>Counts a request round that starts.</summary>
     internal void BeginRound() => Rounds++;
 
@@ -73,18 +76,20 @@ internal sealed class PendingTurn
 
     /// <summary>
     /// Moves the current round's response updates into <see cref="Messages"/> and records the round's
-    /// <see cref="OpenCalls"/>.
+    /// <see cref="OpenCalls"/> and <see cref="ApprovalRequests"/>.
     /// </summary>
     internal void CompleteRound()
     {
         if (_roundUpdates.Count == 0)
         {
             OpenCalls = [];
+            ApprovalRequests = [];
             return;
         }
 
         var messages = _roundUpdates.ToChatResponse().Messages;
         OpenCalls = UnansweredCalls.FindOpen(messages);
+        ApprovalRequests = [.. messages.SelectMany(static message => message.Contents).OfType<ToolApprovalRequestContent>()];
         Messages.AddRange(messages);
         _roundUpdates.Clear();
     }

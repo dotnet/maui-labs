@@ -548,7 +548,9 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
                 isInitialRequest = false;
                 currentMessages = [];
 
-                if (humanInputBlocks.Count == 0 && uiActionBlocks.Count == 0)
+                // Requests that need no decision are approved when the round ends, and run with the batch.
+                var automaticApprovals = _agent.ApproveAutomatically(pendingTurn);
+                if (humanInputBlocks.Count == 0 && uiActionBlocks.Count == 0 && automaticApprovals.Count == 0)
                     break;
 
                 _agent.ThrowIfNoRoundLeft(pendingTurn);
@@ -574,9 +576,11 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
                     RaiseStatusChanged();
                 }
 
-                var results = (await Task.WhenAll(resultTasks))
-                    .SelectMany(static contents => contents)
-                    .ToArray();
+                AIContent[] results =
+                [
+                    .. automaticApprovals,
+                    .. (await Task.WhenAll(resultTasks)).SelectMany(static contents => contents),
+                ];
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (results.Length > 0)
