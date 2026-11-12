@@ -3,6 +3,7 @@
 
 using System.ClientModel;
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -16,7 +17,9 @@ namespace Microsoft.Maui.AI.Chat.Tests.Engine;
 /// Runs the engine against provider streams recorded from Azure OpenAI. Set <c>MAUI_AI_CHAT_LIVE=1</c> to run
 /// the same scenarios against the live deployment configured in the shared <c>ai-attributes-secrets</c> user
 /// secrets (<c>AI:Endpoint</c>, <c>AI:ApiKey</c>, optional <c>AI:DeploymentName</c>) or the matching
-/// <c>AI_ENDPOINT</c>/<c>AI_API_KEY</c>/<c>AI_DEPLOYMENT_NAME</c> environment variables.
+/// <c>AI_ENDPOINT</c>/<c>AI_API_KEY</c>/<c>AI_DEPLOYMENT_NAME</c> environment variables. Set
+/// <c>MAUI_AI_CHAT_RECORD=1</c> to run against the live deployment and write each test's baseline from what it
+/// streams; filter the run to the tests whose baselines you mean to write.
 /// </summary>
 public class UIAgentRecordedTests
 {
@@ -27,9 +30,10 @@ public class UIAgentRecordedTests
         _loggerFactory = new XunitLoggerFactory(output);
     }
 
-    private static IChatClient CreateClient(string baseline)
+    private static IChatClient CreateClient(string baseline, [CallerFilePath] string testFile = "")
     {
-        if (!string.Equals(Environment.GetEnvironmentVariable("MAUI_AI_CHAT_LIVE"), "1", StringComparison.Ordinal))
+        var record = IsSet("MAUI_AI_CHAT_RECORD");
+        if (!record && !IsSet("MAUI_AI_CHAT_LIVE"))
             return RecordedChatClient.Load(baseline);
 
         var configuration = new ConfigurationBuilder()
@@ -43,9 +47,15 @@ public class UIAgentRecordedTests
         if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(apiKey))
             throw new InvalidOperationException("Live mode requires AI:Endpoint and AI:ApiKey (user secrets or environment).");
 
-        return new AzureOpenAIClient(new Uri(endpoint), new ApiKeyCredential(apiKey))
+        var live = new AzureOpenAIClient(new Uri(endpoint), new ApiKeyCredential(apiKey))
             .GetChatClient(deployment)
             .AsIChatClient();
+        return record
+            ? new RecordingChatClient(live, Path.Combine(Path.GetDirectoryName(testFile)!, "..", "Baselines", baseline))
+            : live;
+
+        static bool IsSet(string variable) =>
+            string.Equals(Environment.GetEnvironmentVariable(variable), "1", StringComparison.Ordinal);
     }
 
     [Fact]
@@ -175,6 +185,70 @@ public class UIAgentRecordedTests
         Assert.False(string.IsNullOrEmpty(textBlock!.RawText));
     }
 
+    [Theory]
+    [InlineData(true, "ToolApproval_BatchedWithPlainCall_Approved.recording.json")]
+    [InlineData(false, "ToolApproval_BatchedWithPlainCall_Rejected.recording.json")]
+    public async Task ToolApproval_BatchedWithACallThatNeedsNone_AsksOnlyAboutTheCallThatNeedsIt(bool approve, string baseline)
+    {
+        // The model calls both tools in one response. Function invocation then asks about both calls, and marks the
+        // one whose tool needs no approval; the engine shows that call as a plain call and approves it itself, so the
+        // user decides only about the deletion. Once they do, the weather call runs either way, with the deletion when
+        // it is approved, and the model hears both outcomes.
+        var provider = new ProviderCapture(CreateClient(baseline));
+        var chatClient = provider.AsBuilder()
+            .UseFunctionInvocation(_loggerFactory)
+            .Build();
+        AITool[] tools = [AIFunctionFactory.Create(GetWeather), new ApprovalRequiredAIFunction(AIFunctionFactory.Create(DeleteFile))];
+        var agent = new UIAgent(chatClient, options => options.ChatOptions = new ChatOptions { Tools = tools }, _loggerFactory);
+        var context = new AgentContext(agent);
+        var waiting = new List<string>();
+        using var decide = context.OnStatusChanged(status =>
+        {
+            if (status != ConversationStatus.AwaitingInput)
+                return;
+
+            var blocks = context.Turns[^1].ResponseBlocks;
+            waiting.AddRange(blocks.Where(block => block.Role == ChatRole.Assistant).Select(Describe));
+            var approval = blocks.OfType<ToolApprovalBlock>().Single();
+            if (approve)
+                approval.Approve();
+            else
+                approval.Reject("Keep the file.");
+        });
+
+        await context.SendMessageAsync(
+            "Get the weather in Seattle and delete the file named test.txt. Call both tools in the same response.");
+
+        var batch = provider.Responses[0].OfType<FunctionCallContent>().ToList();
+        Assert.Equal(["DeleteFile", "GetWeather"], batch.Select(call => call.Name).Order());
+        Assert.Equal(["approval of DeleteFile, pending", "call of GetWeather, no result"], waiting.Order());
+
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        var turn = context.Turns[^1];
+        var approval = Assert.Single(turn.ResponseBlocks.OfType<ToolApprovalBlock>());
+        Assert.Equal(("DeleteFile", approve ? ApprovalStatus.Approved : ApprovalStatus.Rejected), (approval.ToolName, approval.Status));
+        var weather = Assert.Single(turn.ResponseBlocks.OfType<FunctionInvocationContentBlock>());
+        Assert.Equal("GetWeather", weather.ToolName);
+        Assert.StartsWith("The weather in Seattle", weather.Result?.Result?.ToString(), StringComparison.Ordinal);
+        var deletion = approve ? "File 'test.txt' has been deleted." : RejectedCall.Result("Keep the file.");
+        Assert.Equal(deletion, approval.Result?.Result?.ToString());
+        Assert.False(string.IsNullOrWhiteSpace(turn.ResponseBlocks.OfType<TextContentBlock>().LastOrDefault()?.RawText));
+
+        Assert.Equal(2, provider.Requests.Count);
+        var results = provider.Requests[1].SelectMany(message => message.Contents).OfType<FunctionResultContent>()
+            .ToDictionary(result => result.CallId);
+        Assert.Equal(2, results.Count);
+        Assert.StartsWith("The weather in Seattle", results[batch.Single(call => call.Name == "GetWeather").CallId].Result?.ToString(), StringComparison.Ordinal);
+        Assert.Equal(deletion, results[batch.Single(call => call.Name == "DeleteFile").CallId].Result?.ToString());
+
+        static string Describe(ContentBlock block) => block switch
+        {
+            ToolApprovalBlock approval => $"approval of {approval.ToolName}, {approval.Status.ToString().ToLowerInvariant()}",
+            FunctionInvocationContentBlock call => $"call of {call.ToolName}, {(call.HasResult ? "result" : "no result")}",
+            _ => block.GetType().Name,
+        };
+    }
+
     [Description("Get the current weather for a city.")]
     private static string GetWeather([Description("The city name")] string city)
     {
@@ -185,5 +259,31 @@ public class UIAgentRecordedTests
     private static string DeleteFile([Description("The file name to delete")] string fileName)
     {
         return $"File '{fileName}' has been deleted.";
+    }
+
+    /// <summary>
+    /// Keeps what function invocation sends the provider, and the contents the provider streams back as they arrive:
+    /// function invocation changes the updates it receives in place, such as replacing calls with approval requests.
+    /// </summary>
+    private sealed class ProviderCapture(IChatClient innerClient) : DelegatingChatClient(innerClient)
+    {
+        public List<List<ChatMessage>> Requests { get; } = [];
+
+        public List<List<AIContent>> Responses { get; } = [];
+
+        public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Requests.Add([.. messages]);
+            var contents = new List<AIContent>();
+            Responses.Add(contents);
+            await foreach (var update in base.GetStreamingResponseAsync(messages, options, cancellationToken))
+            {
+                contents.AddRange(update.Contents);
+                yield return update;
+            }
+        }
     }
 }

@@ -32,6 +32,12 @@ internal sealed class RecordedChatClient : IChatClient
                 path);
         }
 
+        return LoadFile(path);
+    }
+
+    /// <summary>Replays the recording at <paramref name="path"/>, such as one a <see cref="RecordingChatClient"/> wrote.</summary>
+    public static RecordedChatClient LoadFile(string path)
+    {
         var root = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
         return new RecordedChatClient(
             root["interactions"]!.AsArray().Select(node => node!.AsObject()).ToList());
