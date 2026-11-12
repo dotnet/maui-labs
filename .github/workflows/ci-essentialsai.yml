@@ -52,7 +52,7 @@ jobs:
       os: '["xcode-27"]'
       run-tests: true
       pack: true
-      workload-version: '11.0.100'
+      workload-version: '11.0.100-servicing.26530.3'
       skip-xcode-version-validation: true
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
@@ -67,7 +67,7 @@ jobs:
       os: '["windows-2025-vs2026"]'
       run-tests: true
       pack: true
-      workload-version: '11.0.100'
+      workload-version: '11.0.100-servicing.26530.3'
       pre-build-artifact: native-apple-essentialsai
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
@@ -80,7 +80,7 @@ jobs:
       target-framework: net11.0-maccatalyst27.0
       filter: 'RequiresModel!=true'
       os: xcode-27
-      workload-version: '11.0.100'
+      workload-version: '11.0.100-servicing.26530.3'
 
   # Step 4: Run model-free Windows device tests. Hosted runners do not have
   # Windows AI models, but they can execute readiness, policy, lifecycle, and
@@ -94,4 +94,4 @@ jobs:
       filter: 'RequiresModel!=true'
       os: windows-2025-vs2026
       workloads: maui
-      workload-version: '11.0.100'
+      workload-version: '11.0.100-servicing.26530.3'

@@ -50,7 +50,7 @@ jobs:
       run-tests: false
       pack: false
       install-workloads: true
-      workload-version: '11.0.100'
+      workload-version: '11.0.100-servicing.26530.3'
       skip-xcode-version-validation: true
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
@@ -64,6 +64,6 @@ jobs:
       pack: false
       install-workloads: true
       workloads: maui macos
-      workload-version: '11.0.100'
+      workload-version: '11.0.100-servicing.26530.3'
       android-project: ''
       build-target-framework: net11.0-windows10.0.19041.0

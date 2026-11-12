@@ -5,6 +5,9 @@
     <!-- Multi-target net9.0 and net11.0 so `dotnet tool install` works on both
          SDKs. dotnet picks the highest compatible TFM at install time. -->
     <TargetFrameworks>net9.0;net11.0</TargetFrameworks>
+    <!-- Preserve the .NET 9 tool asset by allowing the compatible package graph selected below,
+         rather than promoting transitive dependencies to the repository-wide .NET 11 versions. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
     <RootNamespace>Microsoft.Maui.Cli</RootNamespace>
     <AssemblyName>maui</AssemblyName>
     <PackAsTool>true</PackAsTool>
@@ -31,8 +34,8 @@
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" VersionOverride="$(MicrosoftExtensionsCompatibilityVersion)" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" VersionOverride="$(MicrosoftExtensionsCompatibilityVersion)" />
     <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="Websocket.Client" />

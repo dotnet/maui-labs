@@ -38,7 +38,7 @@ on:
       workload-version:
         required: false
         type: string
-        default: '11.0.100'
+        default: '11.0.100-servicing.26530.3'
         description: 'Workload version to install (pinned for reproducibility)'
       xcode-version:
         required: false

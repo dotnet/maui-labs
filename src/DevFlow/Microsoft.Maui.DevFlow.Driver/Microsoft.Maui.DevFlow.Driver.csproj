@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
     <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(DefineConstants);WINDOWS_BUILD</DefineConstants>
     <!-- Only pack from the DevFlow pipeline job; the Cli job includes this project
          as a ProjectReference but the DevFlow job owns the package. -->
@@ -16,7 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="System.Text.Json" VersionOverride="$(SystemTextJsonCompatibilityVersion)" />
     <PackageReference Include="Xamarin.Android.Tools.AndroidSdk" PrivateAssets="all" GeneratePathProperty="true" />
     <PackageReference Include="Interop.UIAutomationClient" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
   </ItemGroup>

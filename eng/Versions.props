@@ -48,6 +48,9 @@
     <MicrosoftExtensionsConfigurationJsonVersion>11.0.1</MicrosoftExtensionsConfigurationJsonVersion>
     <MicrosoftExtensionsConfigurationUserSecretsVersion>11.0.1</MicrosoftExtensionsConfigurationUserSecretsVersion>
     <SystemTextJsonVersion>11.0.1</SystemTextJsonVersion>
+    <!-- The CLI and portable DevFlow client retain older TFMs and need a compatible BCL graph. -->
+    <MicrosoftExtensionsCompatibilityVersion>10.0.5</MicrosoftExtensionsCompatibilityVersion>
+    <SystemTextJsonCompatibilityVersion>10.0.5</SystemTextJsonCompatibilityVersion>
   </PropertyGroup>
   <PropertyGroup Label="AI">
     <MicrosoftExtensionsAIVersion>10.4.1</MicrosoftExtensionsAIVersion>
