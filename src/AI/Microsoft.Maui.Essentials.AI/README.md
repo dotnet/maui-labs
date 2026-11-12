@@ -247,12 +247,11 @@ when supplied by the provider. Fully enumerate streams to capture final usage.
 Streaming also produces time-to-first-chunk and time-per-output-chunk metrics.
 The explicit sensitive-data setting above excludes prompt and response content.
 
-With the repository's pinned M.E.AI 10.4.1, input/output tokens are span tags
-and `gen_ai.client.token.usage` measurements; cached input is also a span tag
-(`gen_ai.usage.cache_read.input_tokens`). Total and reasoning counts remain
-available on `UsageDetails`, without separate built-in span tags or metrics.
-On OS 26, timing and model metadata remain available without token usage.
-Response IDs and finish reasons are emitted only when supplied by the provider.
+MEAI records input/output tokens as span tags and `gen_ai.client.token.usage`
+measurements. Cached input and reasoning counts are also span tags; totals remain
+available on `UsageDetails`. On OS 26, timing and model metadata remain available
+without token usage. Response IDs and finish reasons are emitted only when
+supplied by the provider.
 
 For Apple tool diagnostics, supply an `ILoggerFactory` to the client.
 Lifecycle logs use Debug; arguments and results require Trace. Native callbacks
