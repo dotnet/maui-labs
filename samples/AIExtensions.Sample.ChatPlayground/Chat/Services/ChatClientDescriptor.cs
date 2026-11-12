@@ -3,8 +3,9 @@ using Microsoft.Maui.Essentials.AI;
 namespace AIExtensions.Sample.ChatPlayground;
 
 /// <summary>
-/// Metadata exposed by a configured chat-client slot. <see cref="SupportsUIActions"/> is false for a client that runs
-/// tools itself instead of handing the calls back to the app, so it can't take the chat's UI actions.
+/// Metadata exposed by a configured chat-client slot. <see cref="HandsBackToolCalls"/> is false for a client that runs
+/// tools in its own session instead of handing the calls back to the app, so the app can neither ask before a tool runs
+/// nor run the chat's UI actions.
 /// </summary>
 public sealed record ChatClientDescriptor(
     string Id,
@@ -20,7 +21,7 @@ public sealed record ChatClientDescriptor(
     string PreparationActionLabel = "Prepare",
     IReadOnlyList<ChatModelOption>? Models = null,
     bool SupportsRequiredToolMode = true,
-    bool SupportsUIActions = true);
+    bool HandsBackToolCalls = true);
 
 public sealed record ChatModelOption(string Id, string DisplayName)
 {

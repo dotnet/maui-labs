@@ -126,12 +126,17 @@
                                        IsVisible="{Binding SelectedDescriptor.SupportsImageGeneration}"
                                        Text="Let Azure generate or edit images; results stay in this conversation." />
                     </Grid>
+                    <!-- Hidden for a client that runs tools in its own session, which can't ask first. Each element
+                         hides, like the image generation row: a hidden Grid gives its CheckBox a NaN position on iOS
+                         and Mac Catalyst, which crashes. -->
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
                         <CheckBox IsChecked="{Binding RequireToolApproval}"
+                                  IsVisible="{Binding SupportsToolApproval}"
                                   WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
                                   AutomationId="RequireToolApprovalCheckBox" />
-                        <Label Grid.Column="1" Text="Ask before running tools" VerticalOptions="Center" />
-                        <local:InfoTip Grid.Column="2"
+                        <Label Grid.Column="1" Text="Ask before running tools" VerticalOptions="Center"
+                               IsVisible="{Binding SupportsToolApproval}" />
+                        <local:InfoTip Grid.Column="2" IsVisible="{Binding SupportsToolApproval}"
                                        Text="Show an Approve or Reject card in the chat before each local tool runs." />
                     </Grid>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">

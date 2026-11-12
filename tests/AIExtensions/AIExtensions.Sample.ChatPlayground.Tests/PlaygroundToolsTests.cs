@@ -33,4 +33,20 @@ public sealed class PlaygroundToolsTests
         Assert.Equal("Internet", json.GetProperty("networkAccess").GetString());
         Assert.Equal("WiFi", Assert.Single(json.GetProperty("connectionProfiles").EnumerateArray()).GetString());
     }
+
+    // A model that is free to write any text sends what the prompt shows, such as "×", and the call fails. Apple
+    // Intelligence ends its whole response when a tool fails, so the schema lists the operations it may choose from.
+    [Fact]
+    public void Calculator_SchemaListsTheFourOperations()
+    {
+        var tools = new PlaygroundTools(() => new ConnectionStatusResult("Internet", []));
+        var function = Assert.IsAssignableFrom<AIFunction>(tools.Calculator);
+
+        var operation = function.JsonSchema.GetProperty("properties").GetProperty("operation");
+
+        Assert.Equal("string", operation.GetProperty("type").GetString());
+        Assert.Equal(
+            ["add", "subtract", "multiply", "divide"],
+            operation.GetProperty("enum").EnumerateArray().Select(value => value.GetString()));
+    }
 }

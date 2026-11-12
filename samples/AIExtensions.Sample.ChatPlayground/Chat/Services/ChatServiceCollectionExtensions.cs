@@ -77,11 +77,12 @@ internal static class ChatServiceCollectionExtensions
                 "apple-intelligence-chat",
                 "Apple Intelligence",
                 "Model readiness is checked above the composer. Apple manages model preparation in system settings. " +
-                    "Apple runs the tools itself, so the theme switch and notes proposals are unavailable.",
+                    "Apple runs the tools itself, so it can't ask before running them, and the theme switch and notes " +
+                    "proposals are unavailable.",
                 SupportsImageInput: OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27),
                 SupportsToolCalling: true,
                 GetModelStatusAsync: (_, cancellationToken) => AppleIntelligenceChatClient.GetModelStatusAsync(cancellationToken),
-                SupportsUIActions: false))
+                HandsBackToolCalls: false))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())

@@ -261,7 +261,7 @@ public sealed class PlaygroundChatClientTests
     {
         using var model = new ScriptedChatClient(ScriptedResponse.Text("Hi"));
         using var harness = new PlaygroundChatHarness(
-            model, PlaygroundChatHarness.LiveDescriptor with { SupportsImageGeneration = false, SupportsUIActions = false });
+            model, PlaygroundChatHarness.LiveDescriptor with { SupportsImageGeneration = false, HandsBackToolCalls = false });
 
         await harness.Session.SendMessageAsync("Hello");
 
@@ -285,6 +285,22 @@ public sealed class PlaygroundChatClientTests
             tools.Select(ToolName));
         Assert.All(tools.Take(3), tool => Assert.IsType<ApprovalRequiredAIFunction>(tool));
         Assert.IsType<HostedImageGenerationTool>(tools[3]);
+    }
+
+    // Such a client calls the tool in its own session, so an approval wrapper would only claim to ask.
+    [Fact]
+    public void AskBeforeRunningTools_LeavesToolsPlainForAClientThatRunsToolsItself()
+    {
+        using var model = new ScriptedChatClient();
+        using var harness = new PlaygroundChatHarness(
+            model, PlaygroundChatHarness.LiveDescriptor with { SupportsImageGeneration = false, HandsBackToolCalls = false });
+        harness.Settings.RequireToolApproval = true;
+
+        var tools = harness.Router.CreateEnabledTools();
+
+        Assert.False(harness.Settings.AsksBeforeRunningTools);
+        Assert.Equal(["get_current_local_datetime", "calculate", "get_connection_status"], tools.Select(ToolName));
+        Assert.All(tools, tool => Assert.Null(tool.GetService<ApprovalRequiredAIFunction>()));
     }
 
     [Theory]

@@ -252,7 +252,7 @@ public sealed class SettingsPaneViewModelTests
     {
         using var live = CreateClient("Live");
         using var apple = new DescribedChatClient(new StubChatClient(),
-            new ChatClientDescriptor("apple", "Apple", "Runs tools itself", SupportsToolCalling: true, SupportsUIActions: false));
+            new ChatClientDescriptor("apple", "Apple", "Runs tools itself", SupportsToolCalling: true, HandsBackToolCalls: false));
         var settings = new SettingsPaneViewModel([live, apple]);
         Assert.True(settings.SupportsUIActions);
         Assert.Equal($"{SettingsPaneViewModel.DefaultInstructions} {SettingsPaneViewModel.UIActionInstructions}", settings.Instructions);
@@ -280,6 +280,35 @@ public sealed class SettingsPaneViewModelTests
         settings.SelectedClient = apple;
         settings.SelectedClient = live;
         Assert.Equal("Be brief.", settings.Instructions);
+    }
+
+    [Fact]
+    public void ClientThatRunsToolsItself_CannotAskBeforeRunningTools()
+    {
+        using var live = CreateClient("Live");
+        using var apple = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("apple", "Apple", "Runs tools itself", SupportsToolCalling: true, HandsBackToolCalls: false));
+        var settings = new SettingsPaneViewModel([live, apple]) { RequireToolApproval = true };
+        Assert.True(settings.SupportsToolApproval);
+        Assert.True(settings.AsksBeforeRunningTools);
+        var changed = new List<string?>();
+        settings.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        settings.SelectedClient = apple;
+
+        // The setting keeps its value for the next client; the settings pane hides it while it can't apply.
+        Assert.True(settings.RequireToolApproval);
+        Assert.False(settings.SupportsToolApproval);
+        Assert.False(settings.AsksBeforeRunningTools);
+        Assert.Contains(nameof(SettingsPaneViewModel.SupportsToolApproval), changed);
+        Assert.Contains(nameof(SettingsPaneViewModel.AsksBeforeRunningTools), changed);
+
+        settings.SelectedClient = live;
+        Assert.True(settings.AsksBeforeRunningTools);
+        changed.Clear();
+        settings.RequireToolApproval = false;
+        Assert.False(settings.AsksBeforeRunningTools);
+        Assert.Contains(nameof(SettingsPaneViewModel.AsksBeforeRunningTools), changed);
     }
 
     private static IChatClient CreateClient(string name) =>
