@@ -62,8 +62,7 @@
     <PackageReference Include="Xamarin.KotlinX.Coroutines.Core" />
     <PackageReference Include="Xamarin.KotlinX.Coroutines.Guava" />
     <PackageReference Include="Xamarin.KotlinX.Coroutines.Reactive" />
-    <!-- Keep separate archives on .NET 10: its Gradle 9 init-script bug blocks fused AARs (dotnet/android#10738).
-         Explicit inclusion binds only the bridge and packages Google runtimes unbound; revisit fusion on .NET 11. -->
+    <!-- Bind only the bridge and package Google runtime archives separately. -->
     <AndroidGradleProject
       Include="../AndroidNative/EssentialsAI/build.gradle.kts"
       CreateAndroidLibrary="false"
@@ -109,7 +108,7 @@
   <ItemGroup Condition=" $(TargetFramework.Contains('-windows')) ">
     <PackageReference Include="Microsoft.WindowsAppSDK.AI" VersionOverride="$(MicrosoftWindowsAppSDKAIVersion)" />
   </ItemGroup>
-  <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
+  <!-- Exclude Apple-only files from non-Apple TFMs (including net11.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
     <Compile Remove="Platform\MaciOS\**\*.cs" />
   </ItemGroup>

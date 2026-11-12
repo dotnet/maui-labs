@@ -53,7 +53,6 @@
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.Maui.Controls" />
-    <PackageReference Include="Microsoft.Maui.Controls.Compatibility" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.utility" />
     <!-- OSS device test runner -->

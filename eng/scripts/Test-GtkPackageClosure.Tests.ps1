@@ -9,7 +9,7 @@ function New-TestPackage([string] $Id, [string] $Version, [string] $Dependencies
     try {
         $writer = [System.IO.StreamWriter]::new($zip.CreateEntry("$Id.nuspec").Open())
         try {
-            $writer.Write("<package><metadata><id>$Id</id><version>$Version</version><dependencies><group targetFramework='net10.0'>$Dependencies</group></dependencies></metadata></package>")
+            $writer.Write("<package><metadata><id>$Id</id><version>$Version</version><dependencies><group targetFramework='net11.0'>$Dependencies</group></dependencies></metadata></package>")
         }
         finally { $writer.Dispose() }
     }

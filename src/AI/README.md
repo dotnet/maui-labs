@@ -57,7 +57,7 @@ targets; it does not install or select Xcode. Install the matching workloads wit
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
-  -f net10.0-android
+  -f net11.0-android
 ```
 
 See the [Gemini Nano Android guide](../../docs/ai/gemini-nano-android.md) for
@@ -77,7 +77,7 @@ does not depend on Java being present on the agent's `PATH`.
 
 ```powershell
 dotnet build src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj `
-  -f net10.0-windows10.0.19041.0
+  -f net11.0-windows10.0.19041.0
 ```
 
 Build and package Windows app heads on Windows. See the Windows platform guide
@@ -89,7 +89,7 @@ The library always targets `net10.0` and Android. The default .NET 10 Apple
 targets are added on non-Linux hosts; `UseNet11AppleTargets=true` also adds the
 .NET 11 OS 27.2 targets. Windows is appended only on Windows hosts.
 The Chat Playground and device tests use the same platform conditions, without
-the portable `net10.0` target or native macOS app target.
+the portable `net11.0` target or native macOS app target.
 
 ```bash
 dotnet build src/AI/EssentialsAI.slnf
@@ -111,7 +111,7 @@ or download those artifacts by itself. See
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj \
-  -p:TargetFrameworks=net10.0 -p:IsTestProject=true
+  -p:TargetFrameworks=net11.0 -p:IsTestProject=true
 ```
 
 The overrides keep the build portable and enable Arcade's test infrastructure

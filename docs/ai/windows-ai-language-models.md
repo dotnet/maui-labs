@@ -131,14 +131,14 @@ Build the Windows implementation on Windows:
 
 ```powershell
 dotnet build src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj `
-  -f net10.0-windows10.0.19041.0
+  -f net11.0-windows10.0.19041.0
 ```
 
 Run model-free device-test cases:
 
 ```powershell
 dotnet test tests\AI\Microsoft.Maui.Essentials.AI.DeviceTests\Microsoft.Maui.Essentials.AI.DeviceTests.csproj `
-  -f net10.0-windows10.0.19041.0 `
+  -f net11.0-windows10.0.19041.0 `
   --filter "RequiresModel!=true" `
   --logger trx
 ```
