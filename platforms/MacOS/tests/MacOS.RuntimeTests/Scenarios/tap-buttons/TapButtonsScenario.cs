@@ -46,7 +46,9 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
         evidence.Assert(recognizers.Length == 2 &&
             recognizers.Any(r => r.ButtonMask == 1) &&
             recognizers.Any(r => r.ButtonMask == 2),
-            "AppKit installs distinct primary and secondary click recognizers.",
+            $"AppKit installs distinct primary and secondary click recognizers. " +
+            $"Managed gestures={_target.GestureRecognizers.Count}; native recognizers={recognizers.Length}; " +
+            $"button masks=[{string.Join(", ", recognizers.Select(r => r.ButtonMask))}].",
             "tap-buttons.native-masks");
         evidence.Assert(_primaryTaps == 1 && _secondaryTaps == 0,
             $"Left click expected primary=1, secondary=0; actual primary={_primaryTaps}, secondary={_secondaryTaps}.",
