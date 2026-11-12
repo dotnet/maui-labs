@@ -24,7 +24,11 @@ internal sealed class AppleVisionRecognizeDocumentsProcessor
 
 	internal RecognizeDocumentsRequestCapabilities GetCapabilities()
 	{
-		using var native = RecognizeDocumentsRequestNative.GetCapabilities();
+		using var native = RecognizeDocumentsRequestNative.GetCapabilities(out var error);
+		if (error is not null)
+			throw new NSErrorException(error);
+		if (native is null)
+			throw new InvalidDataException("Apple Vision returned no document recognition capabilities.");
 		return new RecognizeDocumentsRequestCapabilities(
 			native.SupportedRecognitionLanguages,
 			native.SupportedBarcodeSymbologies,

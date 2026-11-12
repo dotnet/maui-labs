@@ -19,7 +19,7 @@ enum RecognizeDocumentsRequestSnapshotBuilder {
     static func build(
         _ container: DocumentObservation.Container,
         rootPath: String
-    ) -> (
+    ) throws -> (
         nodes: [RecognizeDocumentsRequestNodeSnapshot],
         truncated: Bool,
         maximumDepth: Int,
@@ -34,7 +34,7 @@ enum RecognizeDocumentsRequestSnapshotBuilder {
         var repeatedContainerCount = 0
         var firstRepeatedContainerPath: String?
         var firstRepeatedAncestorPath: String?
-        append(
+        try append(
             container,
             path: rootPath,
             parentPath: nil,
@@ -69,7 +69,7 @@ enum RecognizeDocumentsRequestSnapshotBuilder {
         repeatedContainerCount: inout Int,
         firstRepeatedContainerPath: inout String?,
         firstRepeatedAncestorPath: inout String?
-    ) {
+    ) throws {
         maximumDepthReached = max(maximumDepthReached, depth)
         guard depth <= maximumDepth, nodes.count < maximumNodeCount else {
             truncated = true
@@ -98,7 +98,7 @@ enum RecognizeDocumentsRequestSnapshotBuilder {
                 return
             }
             let nodePath = "\(path)/title"
-            nodes.append(textNode(
+            nodes.append(try textNode(
                 title,
                 kind: .title,
                 path: nodePath,
@@ -112,7 +112,7 @@ enum RecognizeDocumentsRequestSnapshotBuilder {
                 return
             }
             let nodePath = "\(path)/paragraphs/\(index)"
-            nodes.append(textNode(
+            nodes.append(try textNode(
                 paragraph,
                 kind: .paragraph,
                 path: nodePath,
@@ -157,7 +157,7 @@ enum RecognizeDocumentsRequestSnapshotBuilder {
                         rowSpan: NSNumber(value: cell.rowRange.count),
                         columnSpan: NSNumber(value: cell.columnRange.count)
                     ))
-                    append(
+                    try append(
                         cell.content,
                         path: "\(cellPath)/content",
                         parentPath: cellPath,
@@ -194,7 +194,7 @@ enum RecognizeDocumentsRequestSnapshotBuilder {
                 }
                 let itemPath = "\(listPath)/items/\(itemIndex)"
                 let itemText = item.content.text
-                nodes.append(RecognizeDocumentsRequestNodeSnapshot(
+                nodes.append(try RecognizeDocumentsRequestNodeSnapshot(
                     kind: .listItem,
                     path: itemPath,
                     parentPath: listPath,
@@ -202,14 +202,14 @@ enum RecognizeDocumentsRequestSnapshotBuilder {
                     polygon: polygon(item.content.boundingRegion),
                     itemString: item.itemString,
                     markerString: item.markerString,
-                    markerType: markerName(item.markerType),
-                    textAlignment: alignmentName(itemText.textAlignment),
+                    markerType: encodedCaseName(item.markerType),
+                    textAlignment: encodedCaseName(itemText.textAlignment),
                     recognitionLanguages: recognitionLanguages(itemText),
                     detectedData: detectedDataSnapshot(itemText),
                     candidates: candidatesSnapshot(itemText),
                     words: wordsSnapshot(itemText)
                 ))
-                append(
+                try append(
                     item.content,
                     path: "\(itemPath)/content",
                     parentPath: itemPath,
@@ -231,21 +231,21 @@ enum RecognizeDocumentsRequestSnapshotBuilder {
                 return
             }
             let barcodePath = "\(path)/barcodes/\(index)"
-            nodes.append(RecognizeDocumentsRequestNodeSnapshot(
+            nodes.append(try RecognizeDocumentsRequestNodeSnapshot(
                 kind: .barcode,
                 path: barcodePath,
                 parentPath: parentPath,
                 text: barcode.payloadString,
                 polygon: polygon(barcode.boundingRegion),
                 confidence: NSNumber(value: barcode.confidence),
-                symbology: barcodeSymbologyName(barcode.symbology),
+                symbology: encodedCaseName(barcode.symbology),
                 payloadString: barcode.payloadString,
                 payloadData: barcode.payloadData,
                 isGS1DataCarrier: NSNumber(value: barcode.isGS1DataCarrier),
                 isColorInverted: NSNumber(value: barcode.isColorInverted),
                 supplementalPayloadString: barcode.supplementalPayloadString,
                 supplementalPayloadData: barcode.supplementalPayloadData,
-                supplementalCompositeType: compositeTypeName(barcode.supplementalCompositeType)
+                supplementalCompositeType: encodedCaseName(barcode.supplementalCompositeType)
             ))
         }
     }

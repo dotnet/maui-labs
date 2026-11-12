@@ -16,14 +16,15 @@ public enum RecognizeDocumentsRequestErrorNative: Int {
 public class RecognizeDocumentsRequestNative: NSObject {
     private static let errorDomain = "RecognizeDocumentsRequestNative"
 
-    @objc public static func capabilities() -> RecognizeDocumentsRequestCapabilitiesNative {
+    @objc(capabilitiesWithError:)
+    public static func capabilities() throws -> RecognizeDocumentsRequestCapabilitiesNative {
         let request = RecognizeDocumentsRequest()
-        return RecognizeDocumentsRequestCapabilitiesNative(
+        return try RecognizeDocumentsRequestCapabilitiesNative(
             supportedRecognitionLanguages: request.supportedRecognitionLanguages
                 .map(\.minimalIdentifier)
                 .sorted(),
             supportedBarcodeSymbologies: request.supportedBarcodeSymbologies
-                .map { RecognizeDocumentsRequestSnapshotBuilder.barcodeSymbologyName($0) }
+                .map { try RecognizeDocumentsRequestSnapshotBuilder.encodedCaseName($0) }
                 .sorted(),
             supportedRevisions: RecognizeDocumentsRequest.supportedRevisions.map {
                 NSNumber(value: revisionNumber($0))
@@ -125,7 +126,7 @@ public class RecognizeDocumentsRequestNative: NSObject {
             }
             if let barcodeSymbologies = options.barcodeSymbologies {
                 barcodeOptions.symbologies = try barcodeSymbologies.map { name in
-                    guard let symbology = RecognizeDocumentsRequestSnapshotBuilder.barcodeSymbology(named: name) else {
+                    guard let symbology = try RecognizeDocumentsRequestSnapshotBuilder.barcodeSymbology(named: name) else {
                         throw makeError(
                             .unsupportedBarcodeSymbology,
                             description: "Unsupported barcode symbology '\(name)'."

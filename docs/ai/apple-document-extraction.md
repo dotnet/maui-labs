@@ -82,14 +82,41 @@ Raw output is not automatically included in normalized serialization,
 logging or embedding input. There is no mutable client
 last-response state.
 
+### Native leaf encoding
+
+The bridge uses Apple's `Encodable` implementations for Vision enum names,
+rather than maintaining switches for barcode symbologies, list markers,
+alignment, and composite types. For example, Apple's encoder produces
+`{"qr": {}}`; the snapshot keeps the case key `"qr"` for those payload-free
+values. Encoding failures propagate through the native error callback.
+
+On OS 27+, detected-data semantic details are retained as Apple's complete
+encoded JSON under `detectedData[].details`. For example:
+
+```json
+{"details":{"moneyAmount":{"_0":{"amount":12.5,"currency":"USD"}}}}
+```
+
+The bridge does not enumerate those cases or select their payload fields.
+Additional cases and fields emitted by Apple's encoder can therefore pass
+through to C# as `JsonElement` without new mapping code. This depends on what
+the running framework actually encodes; it does not make arbitrary new
+document container kinds automatically supported.
+
+DataDetection's `Encodable` conformances start at OS 27, not OS 26.
+OS 26 retains explicit semantic-detail/highlight mappings, including their
+older flattened JSON shape. Consumers of native inspection must not assume
+the same shape across OS versions. Neither shape is normalized document metadata.
+
 Vision's recursive list/table containers can expose overlapping or
 self-referential semantic views. A list item's content can contain duplicated
 paragraphs and a same-polygon list whose descendants re-enter that item's
 container. Calling the framework's recursive `Codable` implementation on such
 output can overflow the native stack.
 
-The bridge therefore uses cycle-safe traversal and explicit JSON encoding
-rather than recursive native `Codable`. It detects ancestor re-entry using a
+The bridge therefore controls container traversal rather than applying native
+`Codable` to the whole graph. Leaf encoding does not walk those containers.
+Traversal detects ancestor re-entry using a
 non-recursive fingerprint of text, title, polygon, and direct collection
 counts. Depth and node limits are final safety guards. Snapshot diagnostics
 report truncation, traversal counts, and re-entry paths.

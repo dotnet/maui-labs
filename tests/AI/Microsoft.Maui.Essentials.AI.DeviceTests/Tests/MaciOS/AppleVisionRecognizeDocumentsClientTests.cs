@@ -53,6 +53,35 @@ public class AppleVisionRecognizeDocumentsClientTests
 	}
 
 	[AppleVisionRecognizeDocumentsFact]
+	public async Task ExtractAsync_DetectedDataPreservesNativeLeafJsonAcrossTheBridge()
+	{
+		using var image = await FileSystem.OpenAppPackageFileAsync("DocumentExtraction/detected-data.png");
+		using DocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		var result = await client.ExtractAsync(image, "detections", "image/png");
+		var snapshot = Assert.Single(Assert.IsType<JsonElement[]>(result.RawRepresentation));
+		var detections = snapshot.EnumerateArray()
+			.SelectMany(observation => observation.GetProperty("nodes").EnumerateArray())
+			.SelectMany(node => node.GetProperty("detectedData").EnumerateArray()).ToArray();
+		Assert.NotEmpty(detections);
+		if (OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27))
+		{
+			Assert.All(detections, detection =>
+				Assert.Equal(JsonValueKind.Object, detection.GetProperty("details").ValueKind));
+			Assert.Contains(detections, detection =>
+				detection.GetProperty("details").TryGetProperty("emailAddress", out var email) &&
+				email.GetProperty("_0").GetProperty("emailAddress").GetString() == "travel@example.com");
+		}
+		else
+		{
+			Assert.Contains(detections, detection =>
+				detection.GetProperty("type").GetString() == "emailAddress" &&
+				detection.GetProperty("value").GetString() == "travel@example.com");
+		}
+		Assert.All(detections, detection => Assert.NotEmpty(detection.GetProperty("polygon").EnumerateArray()));
+		Assert.True(image.CanRead);
+	}
+
+	[AppleVisionRecognizeDocumentsFact]
 	public async Task ExtractAsync_TablePreservesGeometrySpansAndNativeDataWithoutFabricatedAssets()
 	{
 		using var image = await FileSystem.OpenAppPackageFileAsync("DocumentExtraction/merged-table.png");

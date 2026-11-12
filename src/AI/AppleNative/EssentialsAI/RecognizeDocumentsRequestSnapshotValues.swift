@@ -9,14 +9,14 @@ extension RecognizeDocumentsRequestSnapshotBuilder {
         kind: RecognizeDocumentsRequestNodeKind,
         path: String,
         parentPath: String?
-    ) -> RecognizeDocumentsRequestNodeSnapshot {
-        return RecognizeDocumentsRequestNodeSnapshot(
+    ) throws -> RecognizeDocumentsRequestNodeSnapshot {
+        return try RecognizeDocumentsRequestNodeSnapshot(
             kind: kind,
             path: path,
             parentPath: parentPath,
             text: text.transcript,
             polygon: polygon(text.boundingRegion),
-            textAlignment: alignmentName(text.textAlignment),
+            textAlignment: encodedCaseName(text.textAlignment),
             recognitionLanguages: recognitionLanguages(text),
             detectedData: detectedDataSnapshot(text),
             candidates: candidatesSnapshot(text),
@@ -78,115 +78,43 @@ extension RecognizeDocumentsRequestSnapshotBuilder {
         }
     }
 
-    static func alignmentName(
-        _ alignment: DocumentObservation.Container.Text.Alignment?
-    ) -> String? {
-        switch alignment {
-        case .center:
-            return "center"
-        case .leading:
-            return "leading"
-        case .trailing:
-            return "trailing"
-        case nil:
-            return nil
-        @unknown default:
-            return String(describing: alignment)
-        }
+    static func encodedJSON<T: Encodable>(_ value: T) throws -> Any {
+        try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(value),
+            options: [.fragmentsAllowed]
+        )
     }
 
-    static func markerName(
-        _ marker: DocumentObservation.Container.List.Marker?
-    ) -> String? {
-        switch marker {
-        case .bullet:
-            return "bullet"
-        case .hyphen:
-            return "hyphen"
-        case .lowercaseLatin:
-            return "lowercaseLatin"
-        case .uppercaseLatin:
-            return "uppercaseLatin"
-        case .decimal:
-            return "decimal"
-        case .decorativeDecimal:
-            return "decorativeDecimal"
-        case .compositeDecimal:
-            return "compositeDecimal"
-        case nil:
-            return nil
-        @unknown default:
-            return String(describing: marker)
+    static func encodedCaseName<T: Encodable>(_ value: T) throws -> String {
+        // Apple's payload-free enums encode as a single case key, e.g. {"qr": {}}.
+        guard let object = try encodedJSON(value) as? [String: Any],
+              object.count == 1, let name = object.keys.first else {
+            throw EncodingError.invalidValue(
+                value, .init(codingPath: [], debugDescription: "Expected a single encoded enum case.")
+            )
         }
+        return name
     }
 
-    static func compositeTypeName(
-        _ compositeType: BarcodeObservation.CompositeType?
-    ) -> String? {
-        switch compositeType {
-        case .gs1TypeA:
-            return "gs1TypeA"
-        case .gs1TypeB:
-            return "gs1TypeB"
-        case .gs1TypeC:
-            return "gs1TypeC"
-        case .linked:
-            return "linked"
-        case nil:
-            return nil
-        @unknown default:
-            return String(describing: compositeType)
-        }
-    }
-
-    static func barcodeSymbologyName(_ symbology: BarcodeSymbology) -> String {
-        switch symbology {
-        case .aztec: return "aztec"
-        case .code39: return "code39"
-        case .code39Checksum: return "code39Checksum"
-        case .code39FullASCII: return "code39FullASCII"
-        case .code39FullASCIIChecksum: return "code39FullASCIIChecksum"
-        case .code93: return "code93"
-        case .code93i: return "code93i"
-        case .code128: return "code128"
-        case .dataMatrix: return "dataMatrix"
-        case .ean8: return "ean8"
-        case .ean13: return "ean13"
-        case .i2of5: return "i2of5"
-        case .i2of5Checksum: return "i2of5Checksum"
-        case .itf14: return "itf14"
-        case .pdf417: return "pdf417"
-        case .qr: return "qr"
-        case .upce: return "upce"
-        case .codabar: return "codabar"
-        case .gs1DataBar: return "gs1DataBar"
-        case .gs1DataBarExpanded: return "gs1DataBarExpanded"
-        case .gs1DataBarLimited: return "gs1DataBarLimited"
-        case .microPDF417: return "microPDF417"
-        case .microQR: return "microQR"
-        case .msiPlessey: return "msiPlessey"
-        @unknown default: return String(describing: symbology)
-        }
+    static func encodedCaseName<T: Encodable>(_ value: T?) throws -> String? {
+        try value.map { try encodedCaseName($0) }
     }
 
     static func barcodeSymbology(
         named name: String
-    ) -> BarcodeSymbology? {
-        BarcodeSymbology.allCases.first {
-            barcodeSymbologyName($0).caseInsensitiveCompare(name) == .orderedSame
+    ) throws -> BarcodeSymbology? {
+        try BarcodeSymbology.allCases.first {
+            try encodedCaseName($0).caseInsensitiveCompare(name) == .orderedSame
         }
     }
 
     static func detectedDataSnapshot(
         _ text: DocumentObservation.Container.Text
-    ) -> [[String: Any]] {
-        text.detectedData.map { detected -> [String: Any] in
-            var snapshot: [String: Any] = [
-                "polygon": polygon(detected.boundingRegion).map(\.doubleValue),
-                "highlightStyle": highlightStyleName(
-                    detected.match.preferredHighlightStyle
-                ),
-            ]
+    ) throws -> [[String: Any]] {
+        try text.detectedData.map { detected -> [String: Any] in
+            var snapshot = try semanticDetailsSnapshot(detected.match.details)
+            snapshot["polygon"] = polygon(detected.boundingRegion).map(\.doubleValue)
+            snapshot["highlightStyle"] = try highlightStyleName(detected.match.preferredHighlightStyle)
             if let range = detected.match.range {
                 snapshot["utf16Location"] =
                     range.lowerBound.utf16Offset(in: text.transcript)
@@ -195,15 +123,22 @@ extension RecognizeDocumentsRequestSnapshotBuilder {
                     - range.lowerBound.utf16Offset(in: text.transcript)
             }
 
-            addSemanticDetails(detected.match.details, to: &snapshot)
             return snapshot
         }
     }
 
-    private static func addSemanticDetails(
-        _ details: DataDetector.Match.SemanticDetails,
-        to snapshot: inout [String: Any]
-    ) {
+    static func semanticDetailsSnapshot(_ details: DataDetector.Match.SemanticDetails) throws -> [String: Any] {
+        if #available(iOS 27.0, macCatalyst 27.0, macOS 27.0, tvOS 27.0, visionOS 27.0, *) {
+            return ["details": try encodedJSON(details)]
+        }
+        return legacySemanticDetailsSnapshot(details)
+    }
+
+    // DataDetection's Codable conformances were introduced in OS 27.
+    static func legacySemanticDetailsSnapshot(
+        _ details: DataDetector.Match.SemanticDetails
+    ) -> [String: Any] {
+        var snapshot: [String: Any] = [:]
         switch details {
         case .link(let link):
             snapshot["type"] = "link"
@@ -259,11 +194,15 @@ extension RecognizeDocumentsRequestSnapshotBuilder {
             snapshot["type"] = "unknown"
             snapshot["value"] = String(describing: details)
         }
+        return snapshot
     }
 
     private static func highlightStyleName(
         _ style: DataDetector.Match.HighlightStyle
-    ) -> String {
+    ) throws -> String {
+        if #available(iOS 27.0, macCatalyst 27.0, macOS 27.0, tvOS 27.0, visionOS 27.0, *) {
+            return try encodedCaseName(style)
+        }
         switch style {
         case .hidden: return "hidden"
         case .url: return "url"

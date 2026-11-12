@@ -89,8 +89,9 @@ interface RecognizeDocumentsRequestSnapshotNative
 interface RecognizeDocumentsRequestNative
 {
 	[Static]
-	[Export("capabilities")]
-	RecognizeDocumentsRequestCapabilitiesNative GetCapabilities();
+	[Export("capabilitiesWithError:")]
+	[return: NullAllowed]
+	RecognizeDocumentsRequestCapabilitiesNative GetCapabilities([NullAllowed] out NSError error);
 
 	[Export("performWithImageData:orientation:options:onComplete:")]
 	[return: NullAllowed]

@@ -57,6 +57,26 @@ public class AppleVisionRecognizeDocumentsMapperTests
 	}
 
 	[Fact]
+	public void AddPage_RetainsUnrecognizedNativeLeafCasesAndFieldsAsStructuredJson()
+	{
+		var result = Map("""
+			[{"nodes":[{"path":"p","kind":"paragraph","text":"Text","detectedData":[
+			{"details":{"newNativeCase":{"_0":{"newField":"preserved","amount":12.5,"nested":[1,2]}}},
+			 "utf16Location":0,"utf16Length":4}]}]}]
+			""");
+		var paragraph = Assert.Single(result.Sections[0].Elements);
+		var raw = Assert.IsType<JsonElement>(paragraph.Content!.RawRepresentation);
+		var detection = raw.GetProperty("detectedData")[0];
+		var details = detection.GetProperty("details").GetProperty("newNativeCase").GetProperty("_0");
+		Assert.Equal("preserved", details.GetProperty("newField").GetString());
+		Assert.Equal(12.5, details.GetProperty("amount").GetDouble());
+		Assert.Equal(2, details.GetProperty("nested")[1].GetInt32());
+		Assert.Equal(4, detection.GetProperty("utf16Length").GetInt32());
+		Assert.Equal("Text", Text(paragraph));
+		Assert.Null(paragraph.Content.AdditionalProperties);
+	}
+
+	[Fact]
 	public void AddPage_ListsAndBarcodesUseTextOnlyWithNativeSemanticsAvailableExplicitly()
 	{
 		var result = Map("""

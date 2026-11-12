@@ -15,14 +15,14 @@ final class RecognizeDocumentsRequestObservationSnapshot {
     let firstRepeatedContainerPath: String?
     let firstRepeatedAncestorPath: String?
 
-    init(_ observation: DocumentObservation) {
+    init(_ observation: DocumentObservation) throws {
         self.uuidString = observation.uuid.uuidString
         self.confidence = observation.confidence
         self.transcript = observation.document.text.transcript
         self.polygon = observation.document.boundingRegion.points.flatMap {
             [Double($0.x), Double($0.y)]
         }
-        let buildResult = RecognizeDocumentsRequestSnapshotBuilder.build(
+        let buildResult = try RecognizeDocumentsRequestSnapshotBuilder.build(
             observation.document,
             rootPath: "observations/\(observation.uuid.uuidString)/document"
         )
@@ -61,7 +61,7 @@ public class RecognizeDocumentsRequestSnapshotNative: NSObject, @unchecked Senda
     init(_ observations: [DocumentObservation]) throws {
         // Apple's Codable graph can re-enter Cell.content and List.Item.content
         // for framework-produced observations, so encode only the bounded snapshot.
-        let snapshots = observations
+        let snapshots = try observations
             .map(RecognizeDocumentsRequestObservationSnapshot.init)
             .map { $0.snapshotObject() }
         self.jsonData = try JSONSerialization.data(
