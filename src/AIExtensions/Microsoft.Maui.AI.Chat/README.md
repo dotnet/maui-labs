@@ -49,6 +49,11 @@ IChatClient client = providerClient.AsBuilder().UseFunctionInvocation().Build();
 Sending throws `InvalidOperationException` when `ChatOptions.Tools` contains an invocable
 `AIFunction` but the client has no `FunctionInvokingChatClient`. Tools wrapped in
 `ApprovalRequiredAIFunction` show a `ToolApprovalBlock` and wait for `Approve()` or `Reject()`.
+When one call of a response needs approval, `FunctionInvokingChatClient` turns every call of the
+response into an approval request, and marks the requests of tools that need none with
+`RequiresConfirmation` false. The engine shows those requests as the calls they carry and approves
+them itself, so only the calls that need approval wait for the user. The others run with the batch
+once those are decided, also when they are rejected.
 
 Actions that must run in the app, such as reading the current location or asking the user to pick
 something, are registered with `options.RegisterUIAction(function, mode)`. `Automatic` actions are
@@ -92,7 +97,8 @@ and receives the action's result, and the action still runs. The block must deri
   once per turn, even when `FunctionInvokingChatClient` replays an approved call; informational
   calls (`InformationalOnly`, for example handled by a server or restored) are shown without being
   invoked.
-- `ToolApprovalBlock` human-in-the-loop flow with single-use decisions.
+- `ToolApprovalBlock` human-in-the-loop flow with single-use decisions. Only calls that need
+  approval ask for it, also when the model batches them with calls that need none.
 - Automatic or manually invoked `UIActionBlock` client actions, with no false human-input pause
   for automatic actions.
 - Extensible `ActivityContentBlock`/`ActivityHandler<TBlock>` support for provider activity
