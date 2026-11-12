@@ -9,12 +9,14 @@ public sealed class AllMatch : BlockMatch
     public IList<BlockMatch> Conditions { get; } = new List<BlockMatch>();
 
     /// <inheritdoc />
-    public override bool Matches(ContentBlock block)
+    public override bool Matches(ContentBlock block) => Matches(block, tool: null);
+
+    internal override bool Matches(ContentBlock block, string? tool)
     {
         ArgumentNullException.ThrowIfNull(block);
         foreach (var condition in Conditions)
         {
-            if (condition is not null && !condition.Matches(block))
+            if (condition is not null && !condition.Matches(block, tool))
                 return false;
         }
 

@@ -32,6 +32,19 @@ public abstract class BlockMatch
     /// <returns><see langword="true"/> when the block satisfies the match.</returns>
     public abstract bool Matches(ContentBlock block);
 
+    /// <summary>
+    /// Gets whether <paramref name="block"/> satisfies this match where it shows the call of <paramref name="tool"/>, as
+    /// the block inside an approval shows the call the approval asks about.
+    /// </summary>
+    /// <param name="block">The block to test.</param>
+    /// <param name="tool">
+    /// The tool of the call that <paramref name="block"/> shows for the block that wraps it, or <see langword="null"/>. A
+    /// <see cref="ToolMatch"/> matches a block that doesn't show a call itself, such as a block of the app's own type, by
+    /// this tool. The combinations pass it on, and every other match tests the block alone.
+    /// </param>
+    /// <returns><see langword="true"/> when the block satisfies the match.</returns>
+    internal virtual bool Matches(ContentBlock block, string? tool) => Matches(block);
+
     /// <summary>Matches blocks of type <typeparamref name="TBlock"/>, including derived types.</summary>
     /// <typeparam name="TBlock">The block type, such as <see cref="TextContentBlock"/> or a <c>[ToolBlock]</c> type.</typeparam>
     /// <returns>A <see cref="BlockTypeMatch"/>.</returns>

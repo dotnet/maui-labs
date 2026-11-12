@@ -36,8 +36,9 @@ public abstract class BlockWrapper : BindableObject
 
     /// <summary>
     /// Gets or sets the wrapped blocks this wrapper applies to, matched against the wrapped block, such as
-    /// <c>{chat:Tool delete_file}</c> for the approvals of that tool's calls. When it isn't set, the wrapper applies to
-    /// every block it wraps.
+    /// <c>{chat:Tool delete_file}</c> for the approvals of that tool's calls. The block inside an approval shows the call
+    /// the approval asks about, so a <see cref="ToolMatch"/> matches it by that call's tool, also when it is a block of the
+    /// app's own type. When it isn't set, the wrapper applies to every block it wraps.
     /// </summary>
     public BlockMatch? When
     {

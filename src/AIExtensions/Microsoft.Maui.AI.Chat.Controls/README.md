@@ -130,7 +130,7 @@ events there.
 | Condition | XAML | Code | Matches |
 |---|---|---|---|
 | `BlockTypeMatch` | `{chat:Is chat:TextContentBlock}` | `BlockMatch.Is<TextContentBlock>()` | The type and derived types, including `[ToolBlock]` types |
-| `ToolMatch` | `{chat:Tool calculate}` | `BlockMatch.Tool("calculate")` | The tool's calls and UI actions (case-insensitive), not its approvals |
+| `ToolMatch` | `{chat:Tool calculate}` | `BlockMatch.Tool("calculate")` | The tool's calls and UI actions (case-insensitive), not its approvals. In a wrapper's `When`, also the block inside an approval of the tool |
 | `RoleMatch` | `{chat:Role user}` | `BlockMatch.Role(ChatRole.User)` | Blocks with the role (case-insensitive) |
 | `AllMatch` | `<chat:AllMatch>…</chat:AllMatch>` | `BlockMatch.All(…)` | Blocks that satisfy every condition |
 | `AnyMatch` | `<chat:AnyMatch>…</chat:AnyMatch>` | `BlockMatch.Any(…)` | Blocks that satisfy one condition |
@@ -200,7 +200,7 @@ looks the same with or without approval, and the approval adds only what it need
 
 ```xml
 <chat:BlockTemplateSelector.Wrappers>
-    <!-- Deleting asks louder. When matches the wrapped block: the call. -->
+    <!-- Deleting asks louder. When matches the wrapped block, which shows the call of delete_file. -->
     <chat:ApprovalWrapper When="{chat:Tool delete_file}">
         <ControlTemplate x:DataType="chat:ToolApprovalBlock">
             <Border Stroke="Red" Padding="8">
@@ -236,6 +236,11 @@ looks the same with or without approval, and the approval adds only what it need
   and whose `When` matches the wrapped block. It picks the wrapped block's view from the same templates and wrappers
   as any block's. A wrapping block that no wrapper applies to gets a template like any block, so a template for
   `{chat:Is chat:ToolApprovalBlock}` still works.
+- **`When` knows the approval's tool.** The block inside an approval shows the call the approval asks about, so in a
+  wrapper's `When`, `{chat:Tool delete_file}` matches it by that call's tool even when it is a block of the app's own
+  type, which doesn't name a tool. Combine it with `{chat:Is}` to pick by the wrapped block's type too. The wrapped
+  block still gets the template it gets outside an approval: a tool's template takes only the blocks that show the
+  tool's calls themselves.
 - **Two binding contexts.** The chrome binds to the wrapping block (`Status`, `IsAwaitingInput`, `ToolName`), and the
   wrapped block's view binds to the wrapped block. A wrapper without a `ControlTemplate` shows the wrapped block's
   view alone, still bound to the wrapped block.

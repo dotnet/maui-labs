@@ -9,9 +9,11 @@ public sealed class NotMatch : BlockMatch
     public BlockMatch? Match { get; set; }
 
     /// <inheritdoc />
-    public override bool Matches(ContentBlock block)
+    public override bool Matches(ContentBlock block) => Matches(block, tool: null);
+
+    internal override bool Matches(ContentBlock block, string? tool)
     {
         ArgumentNullException.ThrowIfNull(block);
-        return Match is not null && !Match.Matches(block);
+        return Match is not null && !Match.Matches(block, tool);
     }
 }
