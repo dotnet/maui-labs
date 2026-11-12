@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 # The servicing workload-set package is not published yet, so install the
 # feed-available manifests through a local workload set instead.
-$workloadVersion = '11.0.100-maui-labs.1'
+$workloadVersion = '11.0.100-servicing.26530.3'
 $sdkFeatureBand = '11.0.100'
 
 $sdkVersion = (& $DotNet --version).Trim()
