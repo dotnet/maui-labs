@@ -192,7 +192,17 @@ public abstract class IntegrationTestBase
 
         while (DateTime.UtcNow < deadline)
         {
-            results = await Client.QueryAsync(automationId: automationId);
+            try
+            {
+                results = await Client.QueryAsync(automationId: automationId);
+            }
+            catch (InvalidOperationException ex) when (
+                ex.Message == "The UI kept changing while DevFlow was reading it. Retry the operation after the current UI update completes.")
+            {
+                await Task.Delay(250);
+                continue;
+            }
+
             if (results.Count > 0)
                 return results[0];
             await Task.Delay(250);

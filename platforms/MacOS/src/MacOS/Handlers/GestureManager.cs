@@ -1,6 +1,7 @@
 using AppKit;
 using CoreGraphics;
 using Microsoft.Maui.Controls;
+using System.Runtime.InteropServices;
 
 using Microsoft.Maui.Platforms.MacOS.Platform;
 
@@ -79,7 +80,7 @@ public static class GestureManager
             NumberOfClicksRequired = (nint)tap.NumberOfTapsRequired,
         };
         view.AddGestureRecognizer(recognizer);
-        recognizer.ButtonMask = (nuint)tap.Buttons;
+        recognizer.UpdateButtonMask();
 
         // AppKit delivers events only to the hit-test view's own gesture recognizers,
         // not ancestors. Intercept child hit testing so clicks on child views
@@ -134,6 +135,10 @@ public static class GestureManager
 
 internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
 {
+    [DllImport(ObjCRuntime.Constants.ObjectiveCLibrary, EntryPoint = "objc_msgSend")]
+    static extern void SendMessage(IntPtr receiver, IntPtr selector, nuint argument);
+
+    static readonly IntPtr SetButtonMaskSelector = ObjCRuntime.Selector.GetHandle("setButtonMask:");
     readonly TapGestureRecognizer _tapGesture;
     bool _isConnected;
 
@@ -149,8 +154,11 @@ internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
     void OnTapGesturePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(TapGestureRecognizer.Buttons))
-            ButtonMask = (nuint)_tapGesture.Buttons;
+            UpdateButtonMask();
     }
+
+    internal void UpdateButtonMask() =>
+        SendMessage(Handle, SetButtonMaskSelector, (nuint)_tapGesture.Buttons);
 
     public void Disconnect()
     {
