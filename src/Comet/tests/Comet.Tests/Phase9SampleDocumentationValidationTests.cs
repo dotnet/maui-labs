@@ -199,7 +199,7 @@ namespace Comet.Tests
 			static void AssertCurrentMauiProject(Phase9Project project)
 			{
 				AssertContains(project.ProjectFileText, @"<UseMaui>\s*true\s*</UseMaui>", $"{project.ProjectPath} must opt into .NET MAUI.");
-				AssertContains(project.ProjectFileText, @"net10\.0-maccatalyst", $"{project.ProjectPath} must target net11.0-maccatalyst so the Phase 9 gate can run on macOS.");
+				AssertContains(project.ProjectFileText, @"net11\.0-maccatalyst", $"{project.ProjectPath} must target net11.0-maccatalyst so the Phase 9 gate can run on macOS.");
 				AssertContains(project.ProjectFileText, @"<SingleProject>\s*true\s*</SingleProject>", $"{project.ProjectPath} must stay a MAUI single-project app.");
 				AssertContains(project.ProjectFileText, @"ProjectReference\s+Include=.*Comet\.csproj", $"{project.ProjectPath} must reference src/Comet/Comet.csproj.");
 			}

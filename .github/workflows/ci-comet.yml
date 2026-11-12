@@ -1,7 +1,7 @@
 name: CI - Comet
 
 env:
-  COMET_WORKLOAD_VERSION: 11.0.100
+  COMET_WORKLOAD_VERSION: 11.0.100-preview.7.26410.2
 
 on:
   push:
@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup .NET 11
+      - name: Setup .NET 11 Preview
         uses: actions/setup-dotnet@v5
         with:
           global-json-file: src/Comet/global.json
@@ -62,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup .NET 11
+      - name: Setup .NET 11 Preview
         uses: actions/setup-dotnet@v5
         with:
           global-json-file: src/Comet/global.json
