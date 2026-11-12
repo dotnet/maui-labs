@@ -339,13 +339,8 @@ jobs:
       - name: Install existing WPF template workloads
         shell: pwsh
         run: |
-          $sdkVersion = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
-          $sdkDirectory = Join-Path $env:DOTNET_ROOT "sdk\$sdkVersion"
           $dotnet = Join-Path $env:DOTNET_ROOT 'dotnet.exe'
-          & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload config --update-mode manifests
-          if ($LASTEXITCODE -ne 0) { throw 'Workload configuration failed.' }
-          & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --include-previews
-          if ($LASTEXITCODE -ne 0) { throw 'Workload installation failed.' }
+          & ./eng/install-workloads.ps1 -DotNet $dotnet -Workloads 'maui maui-tizen'
       - name: Restore and build the normal source consumer
         id: source-font-build
         shell: pwsh

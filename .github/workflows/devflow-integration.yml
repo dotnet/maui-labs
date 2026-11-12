@@ -184,7 +184,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workloads
-        run: dotnet workload config --update-mode manifests && dotnet workload install maui-android android wasm-tools --include-previews
+        run: pwsh -NoProfile -File eng/install-workloads.ps1 -Workloads "maui-android android wasm-tools"
 
       - name: Cache AVD
         uses: actions/cache@v4
@@ -322,7 +322,7 @@ jobs:
       - name: Install Apple MAUI workloads
         # Keep this list to workloads the repo actually targets; unused workloads can hard-fail
         # when their runtime packs rotate out of the feeds.
-        run: dotnet workload config --update-mode manifests && dotnet workload install maui ios macos maccatalyst android wasm-tools --include-previews
+        run: pwsh -NoProfile -File eng/install-workloads.ps1 -Workloads "maui ios macos maccatalyst android wasm-tools"
 
       - name: Install Apple simulator automation tool
         if: matrix.framework == 'maui'
@@ -407,7 +407,7 @@ jobs:
       - name: Install Apple MAUI workloads
         # Keep this list to workloads the repo actually targets; unused workloads can hard-fail
         # when their runtime packs rotate out of the feeds.
-        run: dotnet workload config --update-mode manifests && dotnet workload install maui ios macos maccatalyst android wasm-tools --include-previews
+        run: pwsh -NoProfile -File eng/install-workloads.ps1 -Workloads "maui ios macos maccatalyst android wasm-tools"
 
       - name: Run DevFlow integration tests (maccatalyst)
         run: >
@@ -481,7 +481,7 @@ jobs:
       - name: Install Apple MAUI workloads
         # Keep this list to workloads the repo actually targets; unused workloads can hard-fail
         # when their runtime packs rotate out of the feeds.
-        run: dotnet workload config --update-mode manifests && dotnet workload install maui ios macos maccatalyst android wasm-tools --include-previews
+        run: pwsh -NoProfile -File eng/install-workloads.ps1 -Workloads "maui ios macos maccatalyst android wasm-tools"
 
       - name: Run DevFlow integration tests (macos)
         run: >
@@ -605,7 +605,7 @@ jobs:
       - name: Install MAUI workloads
         # Keep this list to workloads the repo actually targets; unused workloads can hard-fail
         # when their runtime packs rotate out of the feeds.
-        run: dotnet workload config --update-mode manifests && dotnet workload install maui ios macos maccatalyst android wasm-tools --include-previews
+        run: pwsh -NoProfile -File eng/install-workloads.ps1 -Workloads "maui ios macos maccatalyst android wasm-tools"
 
       - name: Run DevFlow integration tests (windows)
         shell: pwsh
@@ -704,7 +704,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workload
-        run: dotnet workload config --update-mode manifests && dotnet workload install maui --include-previews
+        run: pwsh -NoProfile -File eng/install-workloads.ps1 -Workloads maui
 
       - name: Run DevFlow integration tests (WPF)
         shell: pwsh
