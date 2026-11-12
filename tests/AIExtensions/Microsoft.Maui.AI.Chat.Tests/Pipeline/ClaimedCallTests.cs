@@ -65,10 +65,108 @@ public class ClaimedCallTests
         Assert.Same(result, Assert.Single(second.Rows).Result);
     }
 
-    private static (UIAgentOptions Options, FunctionCallRegistry Calls) CreateOptions()
+    [Fact]
+    public async Task CallReusingTheIdOfAClaimedCall_IsANewCall_OnceAResultForTheClaimedCallPassedBy()
+    {
+        // The handler shows calls but not their results; a result still answers its call, so a provider that numbers
+        // its calls per response can use the id again for a call that another handler shows.
+        var (options, calls) = CreateOptions(claimsResults: false);
+        var pipeline = new BlockMappingPipeline(options, calls: calls);
+        var list = Assert.IsType<CallListBlock>(Assert.Single(
+            await ProcessAsync(pipeline, Update(ChatRole.Assistant, Call("0")))));
+        Assert.Empty(await ProcessAsync(pipeline, Update(ChatRole.Tool, new FunctionResultContent("0", "found"))));
+
+        var other = new FunctionCallContent("0", "SetTheme");
+        var block = Assert.IsType<FunctionInvocationContentBlock>(Assert.Single(
+            await ProcessAsync(pipeline, Update(ChatRole.Assistant, other))));
+
+        Assert.Same(other, block.Call);
+        Assert.Single(list.Rows);
+    }
+
+    [Fact]
+    public async Task CallReusingTheIdOfAClaimedCall_IsANewCall_WhenItsResultComesInTheSameUpdate()
+    {
+        var (options, calls) = CreateOptions(claimsResults: false);
+        var pipeline = new BlockMappingPipeline(options, calls: calls);
+        Assert.IsType<CallListBlock>(Assert.Single(
+            await ProcessAsync(pipeline, Update(ChatRole.Assistant, Call("0"), new FunctionResultContent("0", "found")))));
+
+        var other = new FunctionCallContent("0", "SetTheme");
+        var block = Assert.IsType<FunctionInvocationContentBlock>(Assert.Single(
+            await ProcessAsync(pipeline, Update(ChatRole.Assistant, other))));
+
+        Assert.Same(other, block.Call);
+    }
+
+    [Fact]
+    public async Task ReplayFollowedByItsResult_AnswersTheClaimedCall()
+    {
+        // A replay of a call, such as an approved call that FunctionInvokingChatClient sends again before its result, is
+        // the same call; the result after it answers that call even when no handler shows the result.
+        var (options, calls) = CreateOptions(claimsResults: false);
+        var firstRound = new BlockMappingPipeline(options, calls: calls);
+        Assert.IsType<CallListBlock>(Assert.Single(await ProcessAsync(firstRound, Update(ChatRole.Assistant, Call("0")))));
+        firstRound.Finalize();
+
+        var secondRound = new BlockMappingPipeline(options, calls: calls);
+        Assert.Empty(await ProcessAsync(
+            secondRound,
+            Update(ChatRole.Assistant, Call("0"), new FunctionResultContent("0", "found"))));
+        var other = new FunctionCallContent("0", "SetTheme");
+        var block = Assert.IsType<FunctionInvocationContentBlock>(Assert.Single(
+            await ProcessAsync(secondRound, Update(ChatRole.Assistant, other))));
+
+        Assert.Same(other, block.Call);
+    }
+
+    [Fact]
+    public async Task ResultBeforeACallThatReusesItsId_DoesNotAnswerThatCall()
+    {
+        // The result answers the claimed call before it; the call after it is a new call that still waits.
+        var (options, calls) = CreateOptions(claimsResults: false, rowPerCall: true);
+        var pipeline = new BlockMappingPipeline(options, calls: calls);
+        var list = Assert.IsType<CallListBlock>(Assert.Single(
+            await ProcessAsync(pipeline, Update(ChatRole.Assistant, Call("0")))));
+        var reused = Call("0");
+
+        Assert.Empty(await ProcessAsync(pipeline, Update(ChatRole.Assistant, new FunctionResultContent("0", "found"), reused)));
+
+        Assert.Equal(2, list.Rows.Count);
+        Assert.True(calls.TryGet("0", out var registration));
+        Assert.Same(reused, registration.Call);
+        Assert.False(registration.HasResult);
+    }
+
+    [Fact]
+    public async Task CallIdReusedWhileTheBlockThatClaimedItIsActive_IsANewCallOfThatBlock()
+    {
+        // A block with a row per call claims a reused id while it is still streaming; the later result for the new
+        // call reaches its row instead of being taken for the first call's.
+        var (options, calls) = CreateOptions(rowPerCall: true);
+        var firstRound = new BlockMappingPipeline(options, calls: calls);
+        var list = Assert.IsType<CallListBlock>(Assert.Single(
+            await ProcessAsync(firstRound, Update(ChatRole.Assistant, Call("0")))));
+        Assert.Empty(await ProcessAsync(firstRound, Update(ChatRole.Tool, new FunctionResultContent("0", "first"))));
+        Assert.Empty(await ProcessAsync(firstRound, Update(ChatRole.Assistant, Call("0"))));
+        firstRound.Finalize();
+
+        var secondRound = new BlockMappingPipeline(options, calls: calls);
+        var result = new FunctionResultContent("0", "second");
+        Assert.Empty(await ProcessAsync(secondRound, Update(ChatRole.Tool, result)));
+
+        Assert.Collection(
+            list.Rows,
+            row => Assert.Equal("first", row.Result?.Result),
+            row => Assert.Same(result, row.Result));
+    }
+
+    private static (UIAgentOptions Options, FunctionCallRegistry Calls) CreateOptions(
+        bool claimsResults = true,
+        bool rowPerCall = false)
     {
         var options = new UIAgentOptions();
-        options.AddBlockHandler(new CallListHandler());
+        options.AddBlockHandler(new CallListHandler(claimsResults, rowPerCall));
         return (options, new FunctionCallRegistry());
     }
 
@@ -90,17 +188,26 @@ public class ClaimedCallTests
         public List<CallRow> Rows { get; } = [];
 
         public CallRow? Find(string callId) => Rows.Find(row => row.CallId == callId);
+
+        /// <summary>Finds the first row of the call id that still waits for its result.</summary>
+        public CallRow? FindWaiting(string callId) => Rows.Find(row => row.CallId == callId && row.Result is null);
     }
 
-    private sealed class CallRow(string callId)
+    private sealed class CallRow(FunctionCallContent call)
     {
-        public string CallId { get; } = callId;
+        public FunctionCallContent Call { get; } = call;
+
+        public string CallId => Call.CallId;
 
         public FunctionResultContent? Result { get; set; }
     }
 
-    /// <summary>Folds the calls of an update, and their results, into one list with a row per call.</summary>
-    private sealed class CallListHandler : ContentBlockHandler<CallListBlock>
+    /// <summary>
+    /// Folds the calls of an update, and their results, into one list with a row per call id, or with
+    /// <paramref name="rowPerCall"/> a row per call even when a provider reuses its id. With
+    /// <paramref name="claimsResults"/> false it shows the calls but leaves their results to others.
+    /// </summary>
+    private sealed class CallListHandler(bool claimsResults, bool rowPerCall) : ContentBlockHandler<CallListBlock>
     {
         public override BlockMappingResult<CallListBlock> Handle(BlockMappingContext context, CallListBlock state)
         {
@@ -111,11 +218,18 @@ public class ClaimedCallTests
                 {
                     case FunctionCallContent { Name: "Calculate" } call:
                         context.MarkHandled(call);
-                        if (state.Find(call.CallId) is null)
-                            state.Rows.Add(new CallRow(call.CallId));
+                        if (rowPerCall
+                            ? !state.Rows.Exists(row => ReferenceEquals(row.Call, call))
+                            : state.Find(call.CallId) is null)
+                        {
+                            state.Rows.Add(new CallRow(call));
+                        }
+
                         changed = true;
                         break;
-                    case FunctionResultContent result when state.Find(result.CallId) is { } row:
+                    case FunctionResultContent result
+                        when claimsResults
+                            && (rowPerCall ? state.FindWaiting(result.CallId) : state.Find(result.CallId)) is { } row:
                         context.MarkHandled(result);
                         row.Result = result;
                         changed = true;

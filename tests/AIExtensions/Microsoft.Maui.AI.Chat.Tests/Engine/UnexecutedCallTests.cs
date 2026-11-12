@@ -113,6 +113,85 @@ public class UnexecutedCallTests
         var continuation = results.Skip(1).ToDictionary(result => result.CallId);
         Assert.StartsWith(NotExecuted, continuation["0"].Result?.ToString());
         Assert.Equal("Theme set to dark", continuation["1"].Result?.ToString());
+
+        // Each call's block shows its own result.
+        var calls = Assert.Single(context.Turns).ResponseBlocks.OfType<FunctionInvocationContentBlock>().ToList();
+        Assert.Equal(2, calls.Count);
+        Assert.Equal("4", calls[0].Result?.Result?.ToString());
+        Assert.StartsWith(NotExecuted, calls[1].Result?.Result?.ToString());
+        Assert.False(calls[1].IsAbandoned);
+    }
+
+    [Fact]
+    public async Task CallReusingTheIdOfACallAHandlerShowsWithoutItsResult_RunsAsANewCall()
+    {
+        // A handler of the app's own shows the searches but not their results. The provider numbers its calls per
+        // response, so the UI action that the model calls after the search reuses the search's id.
+        var themes = new List<string>();
+        var search = AIFunctionFactory.Create((string query) => $"Sunny in {query}", "Search", "Searches the web.");
+        var setTheme = AIFunctionFactory.Create(
+            (string theme) =>
+            {
+                themes.Add(theme);
+                return $"Theme set to {theme}";
+            },
+            "SetTheme",
+            "Sets the theme.");
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ResponseEmitters.EmitMultipleToolCallResponse(
+            ct,
+            new FunctionCallContent("0", "Search", new Dictionary<string, object?> { ["query"] = "Paris" })));
+        model.Enqueue(ct => ResponseEmitters.EmitMultipleToolCallResponse(ct, SetTheme("0")));
+        model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Done.", ct));
+        model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Hello.", ct));
+        using var context = new AgentContext(new UIAgent(new FunctionInvokingChatClient(model), options =>
+        {
+            options.ChatOptions = new ChatOptions { Tools = [search] };
+            options.RegisterUIAction(setTheme, UIActionInvocationMode.Automatic);
+            options.AddBlockHandler(new WorksheetHandler("Search", claimsResults: false));
+        }));
+
+        await context.SendMessageAsync("Search Paris, then go dark");
+
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Equal(["dark"], themes);
+        Assert.Equal(3, model.Requests.Count);
+        ToolHistory.AssertValidWithReusedIds(model.Requests[^1]);
+        var turn = Assert.Single(context.Turns);
+        Assert.Single(Assert.Single(turn.ResponseBlocks.OfType<WorksheetBlock>()).Rows);
+        Assert.True(Assert.Single(turn.ResponseBlocks.OfType<UIActionBlock>()).IsComplete);
+
+        await context.SendMessageAsync("Hi");
+
+        ToolHistory.AssertValidWithReusedIds(model.Requests[^1]);
+    }
+
+    [Fact]
+    public async Task CallIdReusedWhileTheWorksheetStillStreams_EveryRowGetsItsResult()
+    {
+        // FunctionInvokingChatClient runs the first calculation, and the next response reuses its id for a calculation
+        // that comes back uninvoked. The worksheet, which shows a row per call, claims both.
+        var calculated = new List<string>();
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ResponseEmitters.EmitMultipleToolCallResponse(ct, Calculate("0", "2+2")));
+        model.Enqueue(ct => ResponseEmitters.EmitMultipleToolCallResponse(ct, Calculate("0", "3*3"), SetTheme("1")));
+        model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Done.", ct));
+        using var context = CreateContext(
+            model,
+            calculated,
+            UIActionInvocationMode.Automatic,
+            options => options.AddBlockHandler(new WorksheetHandler(rowPerCall: true)));
+
+        await context.SendMessageAsync("Calculate twice and go dark");
+
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Equal(["2+2"], calculated);
+        ToolHistory.AssertValidWithReusedIds(model.Requests[^1]);
+        var rows = Assert.Single(Assert.Single(context.Turns).ResponseBlocks.OfType<WorksheetBlock>()).Rows;
+        Assert.Collection(
+            rows,
+            row => Assert.Equal("4", row.Result?.Result?.ToString()),
+            row => Assert.StartsWith(NotExecuted, row.Result?.Result?.ToString()));
     }
 
     [Fact]
@@ -207,17 +286,29 @@ public class UnexecutedCallTests
         public List<WorksheetRow> Rows { get; } = [];
 
         public WorksheetRow? Find(string callId) => Rows.Find(row => row.CallId == callId);
+
+        /// <summary>Finds the first row of the call id that still waits for its result.</summary>
+        public WorksheetRow? FindWaiting(string callId) => Rows.Find(row => row.CallId == callId && row.Result is null);
     }
 
-    private sealed class WorksheetRow(string callId)
+    private sealed class WorksheetRow(FunctionCallContent call)
     {
-        public string CallId { get; } = callId;
+        public FunctionCallContent Call { get; } = call;
+
+        public string CallId => Call.CallId;
 
         public FunctionResultContent? Result { get; set; }
     }
 
-    /// <summary>Claims the calculations of an update into a worksheet, like an app that folds calls into rows.</summary>
-    private sealed class WorksheetHandler : ContentBlockHandler<WorksheetBlock>
+    /// <summary>
+    /// Claims the calls of a tool in an update into a worksheet, like an app that folds calls into rows: a row per call
+    /// id, or with <paramref name="rowPerCall"/> a row per call even when a provider reuses its id. With
+    /// <paramref name="claimsResults"/> false it shows the calls but leaves their results to others.
+    /// </summary>
+    private sealed class WorksheetHandler(
+        string toolName = "Calculate",
+        bool claimsResults = true,
+        bool rowPerCall = false) : ContentBlockHandler<WorksheetBlock>
     {
         public override BlockMappingResult<WorksheetBlock> Handle(BlockMappingContext context, WorksheetBlock state)
         {
@@ -226,13 +317,20 @@ public class UnexecutedCallTests
             {
                 switch (content)
                 {
-                    case FunctionCallContent { Name: "Calculate" } call:
+                    case FunctionCallContent call when call.Name == toolName:
                         context.MarkHandled(call);
-                        if (state.Find(call.CallId) is null)
-                            state.Rows.Add(new WorksheetRow(call.CallId));
+                        if (rowPerCall
+                            ? !state.Rows.Exists(row => ReferenceEquals(row.Call, call))
+                            : state.Find(call.CallId) is null)
+                        {
+                            state.Rows.Add(new WorksheetRow(call));
+                        }
+
                         changed = true;
                         break;
-                    case FunctionResultContent result when state.Find(result.CallId) is { } row:
+                    case FunctionResultContent result
+                        when claimsResults
+                            && (rowPerCall ? state.FindWaiting(result.CallId) : state.Find(result.CallId)) is { } row:
                         context.MarkHandled(result);
                         row.Result = result;
                         changed = true;

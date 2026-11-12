@@ -64,8 +64,14 @@ internal sealed class FunctionCallRegistry
         internal bool Answered { get; set; }
 
         /// <summary>
-        /// Gets whether the call has its result: a call block's own result, or for a block of the app's own
-        /// type, whose result the registry cannot read, whether a result for the call was handled.
+        /// Gets or sets whether a result for the call came after it, whether or not a handler showed the result.
+        /// </summary>
+        internal bool ResultArrived { get; set; }
+
+        /// <summary>
+        /// Gets whether the call shows its result: a call block's own result, or for a block of the app's own
+        /// type, whose result the registry cannot read, whether a result for the call was handled. A result for
+        /// a call that shows its result is not shown again.
         /// </summary>
         internal bool HasResult => Block switch
         {
@@ -73,5 +79,12 @@ internal sealed class FunctionCallRegistry
             InteractiveFunctionBlock interactiveBlock => interactiveBlock.HasResult,
             _ => Answered,
         };
+
+        /// <summary>
+        /// Gets whether the call is answered: it shows its result, or a result for it arrived. A later call with
+        /// the same id is then a new call, as from a provider that numbers its calls per response; until then it
+        /// is a replay of this one.
+        /// </summary>
+        internal bool IsAnswered => HasResult || ResultArrived;
     }
 }

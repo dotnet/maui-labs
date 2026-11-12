@@ -280,7 +280,10 @@ or projections spanning multiple calls. A handler that claims function calls wit
 them, whatever its block: a later replay of such a call is routed to the same handler instead of being
 shown again, and a result that arrives in a later request round, such as the error result for a server
 call that `FunctionInvokingChatClient` handed back uninvoked, is handed to the handler with the block's
-state, so a block with a row per call can fill in every row.
+state, so a block with a row per call can fill in every row. A call is answered once a result for it
+arrives, whether or not a handler shows the result; a later call that reuses its id, as from a provider
+that numbers its calls per response, is a new call, which the handler that claims it receives with its
+own result, even when the same block claimed the earlier call.
 
 ## Conversation persistence
 
