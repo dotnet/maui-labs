@@ -270,9 +270,9 @@ jobs:
       fail-fast: false
       matrix:
         framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
-    # Xcode 26.3 and the pinned iOS 26.2 runtime are installed on this image.
-    # Fresh simulator ownership does not eliminate hosted CoreSimulator stalls.
-    runs-on: macos-26
+    # The pinned .NET 11 Apple workload requires Xcode 27. The preview image also
+    # retains the iOS 26.x simulator set used by this suite.
+    runs-on: xcode-27
     timeout-minutes: 90
     env:
       DEVFLOW_TEST_PLATFORM: ios
@@ -289,7 +289,7 @@ jobs:
         run: |
           # Keep Xcode aligned with the pinned SDK's workload manifests.
           COMPATIBLE="${COMPATIBLE:-}"
-          for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
+          for candidate in /Applications/Xcode_27.0.app /Applications/Xcode_27.0.0.app; do
             if [[ -d "$candidate" ]]; then
               COMPATIBLE="$candidate"
               break
@@ -305,9 +305,7 @@ jobs:
             echo "Resolved developer dir: $DEVELOPER_ROOT"
             echo "Resolved Xcode app: $XCODE_APP"
             export DEVELOPER_DIR="$DEVELOPER_ROOT"
-            export MD_APPLE_SDK_ROOT="$XCODE_APP"
             echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
-            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
           fi
           sudo xcodebuild -runFirstLaunch
           xcodebuild -version
@@ -360,7 +358,7 @@ jobs:
       fail-fast: false
       matrix:
         framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: maccatalyst
@@ -374,7 +372,7 @@ jobs:
         run: |
           # Keep Xcode aligned with the pinned SDK's workload manifests.
           COMPATIBLE="${COMPATIBLE:-}"
-          for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
+          for candidate in /Applications/Xcode_27.0.app /Applications/Xcode_27.0.0.app; do
             if [[ -d "$candidate" ]]; then
               COMPATIBLE="$candidate"
               break
@@ -390,9 +388,7 @@ jobs:
             echo "Resolved developer dir: $DEVELOPER_ROOT"
             echo "Resolved Xcode app: $XCODE_APP"
             export DEVELOPER_DIR="$DEVELOPER_ROOT"
-            export MD_APPLE_SDK_ROOT="$XCODE_APP"
             echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
-            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
           fi
           sudo xcodebuild -runFirstLaunch
           xcodebuild -version
@@ -433,7 +429,7 @@ jobs:
       fail-fast: false
       matrix:
         framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: macos
@@ -452,7 +448,7 @@ jobs:
         run: |
           # Keep Xcode aligned with the pinned SDK's workload manifests.
           COMPATIBLE="${COMPATIBLE:-}"
-          for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
+          for candidate in /Applications/Xcode_27.0.app /Applications/Xcode_27.0.0.app; do
             if [[ -d "$candidate" ]]; then
               COMPATIBLE="$candidate"
               break
@@ -466,9 +462,7 @@ jobs:
             DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd)"
             XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd)"
             export DEVELOPER_DIR="$DEVELOPER_ROOT"
-            export MD_APPLE_SDK_ROOT="$XCODE_APP"
             echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
-            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
           fi
           sudo xcodebuild -runFirstLaunch
           xcodebuild -version
