@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Xml.Linq;
+using System.Text.RegularExpressions;
 using Microsoft.Maui.Cli.Utils;
 
 namespace Microsoft.Maui.Cli.Services;
@@ -25,6 +26,8 @@ public sealed record MauiProjectVersionInfo
 	public string? EffectiveVersion { get; init; }
 	public bool HasMixedPackageVersions { get; init; }
 	public string? CentralPackageFilePath { get; init; }
+	public List<string> TargetFrameworks { get; init; } = [];
+	public string? TargetDotNetFramework { get; init; }
 	public List<MauiProjectPackageVersion> Packages { get; init; } = [];
 }
 
@@ -57,6 +60,7 @@ public interface IMauiProjectVersionService
 	string? DiscoverProjectFile(string? path = null);
 	Task<MauiProjectVersionInfo> GetVersionInfoAsync(string projectPath, CancellationToken cancellationToken = default);
 	Task<MauiProjectVersionUpdateResult> SetVersionAsync(string projectPath, string version, bool dryRun, CancellationToken cancellationToken = default);
+	Task<MauiProjectVersionUpdateResult> SetTargetFrameworkAsync(string projectPath, string targetFramework, bool dryRun, CancellationToken cancellationToken = default);
 	Task<MauiProjectVersionUpdateResult> UseWorkloadVersionAsync(string projectPath, bool dryRun, CancellationToken cancellationToken = default);
 	Task<MauiProjectVersionChange?> EnsureNuGetSourceAsync(string projectPath, string sourceName, string sourceUrl, bool dryRun, CancellationToken cancellationToken = default);
 	Task<MauiProjectRestoreResult> RestoreAsync(string projectPath, CancellationToken cancellationToken = default);
@@ -66,6 +70,11 @@ public sealed class MauiProjectVersionService : IMauiProjectVersionService
 {
 	internal const string MauiVersionProperty = "MauiVersion";
 	internal const string WorkloadVersionExpression = "$(MauiVersion)";
+	internal const string TargetFrameworkProperty = "TargetFramework";
+	internal const string TargetFrameworksProperty = "TargetFrameworks";
+
+	static readonly Regex s_targetFrameworkRegex = new(@"(?<![A-Za-z0-9.])net\d+\.\d+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+	static readonly Regex s_targetFrameworkValueRegex = new(@"^net\d+\.\d+$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
 	static readonly HashSet<string> s_mauiPackageIds = new(StringComparer.OrdinalIgnoreCase)
 	{
@@ -111,6 +120,8 @@ public sealed class MauiProjectVersionService : IMauiProjectVersionService
 		var centralPackageFile = FindCentralPackageFile(Path.GetDirectoryName(projectPath) ?? Environment.CurrentDirectory);
 		var properties = LoadKnownProperties(projectPath, centralPackageFile);
 		var mauiVersion = ResolvePropertyExpression(GetPropertyValue(document, MauiVersionProperty), properties);
+		var targetFrameworks = GetTargetFrameworks(document, properties);
+		var targetDotNetFramework = GetCommonDotNetTargetFramework(targetFrameworks);
 
 		var packages = new List<MauiProjectPackageVersion>();
 		var projectPackages = GetProjectPackageVersions(document, projectPath, properties).ToList();
@@ -149,6 +160,8 @@ public sealed class MauiProjectVersionService : IMauiProjectVersionService
 			EffectiveVersion = effectiveVersion,
 			HasMixedPackageVersions = rawVersions.Count > 1,
 			CentralPackageFilePath = centralPackageFile,
+			TargetFrameworks = targetFrameworks,
+			TargetDotNetFramework = targetDotNetFramework,
 			Packages = packages,
 		};
 	}
@@ -161,6 +174,16 @@ public sealed class MauiProjectVersionService : IMauiProjectVersionService
 	{
 		ValidateVersionValue(version, allowWorkloadExpression: false);
 		return UpdateVersionAsync(projectPath, version, removeMauiVersionProperty: false, dryRun, cancellationToken);
+	}
+
+	public Task<MauiProjectVersionUpdateResult> SetTargetFrameworkAsync(
+		string projectPath,
+		string targetFramework,
+		bool dryRun,
+		CancellationToken cancellationToken = default)
+	{
+		targetFramework = NormalizeTargetFramework(targetFramework);
+		return UpdateTargetFrameworkAsync(projectPath, targetFramework, dryRun, cancellationToken);
 	}
 
 	public Task<MauiProjectVersionUpdateResult> UseWorkloadVersionAsync(
@@ -328,6 +351,7 @@ public sealed class MauiProjectVersionService : IMauiProjectVersionService
 			{
 				projectChanged = true;
 			}
+
 			else if (packageVersion is null)
 			{
 				projectPackageReferencesWithoutVersion.Add(packageId);
@@ -404,6 +428,111 @@ public sealed class MauiProjectVersionService : IMauiProjectVersionService
 		};
 	}
 
+	async Task<MauiProjectVersionUpdateResult> UpdateTargetFrameworkAsync(
+		string projectPath,
+		string targetFramework,
+		bool dryRun,
+		CancellationToken cancellationToken)
+	{
+		projectPath = Path.GetFullPath(projectPath);
+		if (!File.Exists(projectPath))
+			throw new FileNotFoundException($"Project file not found: {projectPath}", projectPath);
+
+		var info = await GetVersionInfoAsync(projectPath, cancellationToken);
+		if (!info.IsMauiProject)
+			throw new InvalidOperationException($"No .NET MAUI project markers found in {Path.GetFileName(projectPath)}.");
+
+		var document = LoadXml(projectPath);
+		var targetElements = document.Descendants()
+			.Where(element =>
+				(element.Name.LocalName == TargetFrameworkProperty ||
+				element.Name.LocalName == TargetFrameworksProperty) &&
+				element.Parent?.Name.LocalName == "PropertyGroup")
+			.ToList();
+		var localBaseTargetProperties = targetElements
+			.Where(IsUnconditionalProperty)
+			.Select(element => element.Name.LocalName)
+			.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+		var changes = new List<MauiProjectVersionChange>();
+		var changed = false;
+
+		if (targetElements.Count == 0)
+		{
+			if (info.TargetFrameworks.Count > 0)
+			{
+				throw new InvalidOperationException(
+					$"Target frameworks for {Path.GetFileName(projectPath)} are inherited or use MSBuild properties. " +
+					$"Update the file that defines them to {targetFramework}, then rerun this command.");
+			}
+
+			changes.Add(new MauiProjectVersionChange
+			{
+				FilePath = projectPath,
+				Description = "Set TargetFramework property",
+				NewValue = targetFramework,
+			});
+
+			var root = document.Root ?? throw new InvalidOperationException("Project file does not have a root element.");
+			var ns = root.Name.Namespace;
+			var propertyGroup = root.Elements().FirstOrDefault(element =>
+				element.Name.LocalName == "PropertyGroup" &&
+				element.Attribute("Condition") is null);
+			if (propertyGroup is null)
+			{
+				propertyGroup = new XElement(ns + "PropertyGroup");
+				root.AddFirst(propertyGroup);
+			}
+
+			propertyGroup.Add(new XElement(ns + TargetFrameworkProperty, targetFramework));
+			changed = true;
+		}
+		else
+		{
+			var updates = new List<(XElement Element, string OldValue, string NewValue)>();
+			foreach (var targetElement in targetElements)
+			{
+				var oldValue = targetElement.Value.Trim();
+				var newValue = ReplaceDotNetTargetFramework(targetElement, oldValue, targetFramework, localBaseTargetProperties);
+				if (string.Equals(oldValue, newValue, StringComparison.OrdinalIgnoreCase))
+					continue;
+
+				updates.Add((targetElement, oldValue, newValue));
+			}
+
+			foreach (var (targetElement, oldValue, newValue) in updates)
+			{
+				changes.Add(new MauiProjectVersionChange
+				{
+					FilePath = projectPath,
+					Description = $"Update {targetElement.Name.LocalName} property",
+					OldValue = oldValue,
+					NewValue = newValue,
+				});
+				targetElement.Value = newValue;
+				changed = true;
+			}
+
+			if (!changed && info.TargetDotNetFramework is null && info.TargetFrameworks.Count > 0)
+			{
+				throw new InvalidOperationException(
+					$"Could not update target frameworks in {Path.GetFileName(projectPath)} because they are not literal netX.Y values. " +
+					$"Update them to {targetFramework} manually, then rerun this command.");
+			}
+		}
+
+		if (!dryRun && changed)
+			await SaveXmlAsync(document, projectPath, cancellationToken);
+
+		return new MauiProjectVersionUpdateResult
+		{
+			ProjectPath = projectPath,
+			Version = targetFramework,
+			DryRun = dryRun,
+			Changes = changes,
+		};
+	}
+
 	static IEnumerable<string> EnumerateProjectFiles(string directory)
 	{
 		var pending = new Queue<string>();
@@ -440,6 +569,139 @@ public sealed class MauiProjectVersionService : IMauiProjectVersionService
 		if (mauiVersion is not null)
 			return mauiVersion;
 		return workloadVersion;
+	}
+
+	static List<string> GetTargetFrameworks(XDocument document, IReadOnlyDictionary<string, string> properties)
+	{
+		var values = new List<string>();
+		AddTargetFrameworkValues(GetPropertyValue(document, TargetFrameworkProperty), properties, values);
+		AddTargetFrameworkValues(GetPropertyValue(document, TargetFrameworksProperty), properties, values);
+
+		if (values.Count == 0)
+		{
+			properties.TryGetValue(TargetFrameworkProperty, out var inheritedTargetFramework);
+			properties.TryGetValue(TargetFrameworksProperty, out var inheritedTargetFrameworks);
+			AddTargetFrameworkValues(inheritedTargetFramework, properties, values);
+			AddTargetFrameworkValues(inheritedTargetFrameworks, properties, values);
+		}
+
+		return values
+			.Where(value => !string.IsNullOrWhiteSpace(value))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.ToList();
+	}
+
+	static void AddTargetFrameworkValues(string? value, IReadOnlyDictionary<string, string> properties, List<string> values)
+	{
+		var resolvedValue = ResolvePropertyExpression(value, properties);
+		if (string.IsNullOrWhiteSpace(resolvedValue))
+			return;
+
+		values.AddRange(resolvedValue
+			.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+	}
+
+	static string? GetCommonDotNetTargetFramework(IReadOnlyList<string> targetFrameworks)
+	{
+		var dotNetTargets = targetFrameworks
+			.Select(GetDotNetTargetFramework)
+			.Where(target => target is not null)
+			.Select(target => target!)
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.ToList();
+
+		return dotNetTargets.Count == 1 ? dotNetTargets[0] : null;
+	}
+
+	static string? GetDotNetTargetFramework(string targetFramework)
+	{
+		var match = s_targetFrameworkRegex.Match(targetFramework);
+		return match.Success ? match.Value.ToLowerInvariant() : null;
+	}
+
+	static string ReplaceDotNetTargetFramework(
+		XElement targetElement,
+		string targetFrameworkValue,
+		string targetFramework,
+		IReadOnlySet<string> localBaseTargetProperties)
+	{
+		var segments = targetFrameworkValue
+			.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+			.ToList();
+		if (segments.Count == 0)
+			return targetFrameworkValue;
+
+		foreach (var segment in segments)
+		{
+			if (TryGetAllowedTargetFrameworkExpression(segment, out var referencedProperty))
+			{
+				if (referencedProperty is not null && localBaseTargetProperties.Contains(referencedProperty))
+					continue;
+
+				throw new InvalidOperationException(
+					$"Could not update {targetElement.Name.LocalName} value '{targetFrameworkValue}' because {segment} is not defined in the project file. " +
+					$"Update the file that defines it to {targetFramework}, then rerun this command.");
+			}
+
+			if (segment.Contains("$(", StringComparison.Ordinal) ||
+				GetDotNetTargetFramework(segment) is null)
+			{
+				throw new InvalidOperationException(
+					$"Could not update {targetElement.Name.LocalName} value '{targetFrameworkValue}' because it is not a literal netX.Y target framework list. " +
+					$"Update it to {targetFramework} manually, then rerun this command.");
+			}
+		}
+
+		if (!s_targetFrameworkRegex.IsMatch(targetFrameworkValue))
+			return targetFrameworkValue;
+
+		return s_targetFrameworkRegex.Replace(targetFrameworkValue, targetFramework);
+	}
+
+	static bool TryGetAllowedTargetFrameworkExpression(string segment, out string? referencedProperty)
+	{
+		referencedProperty = null;
+		if (string.Equals(segment, $"$({TargetFrameworkProperty})", StringComparison.OrdinalIgnoreCase))
+		{
+			referencedProperty = TargetFrameworkProperty;
+			return true;
+		}
+
+		if (string.Equals(segment, $"$({TargetFrameworksProperty})", StringComparison.OrdinalIgnoreCase))
+		{
+			referencedProperty = TargetFrameworksProperty;
+			return true;
+		}
+
+		return false;
+	}
+
+	public static string NormalizeTargetFramework(string targetFramework)
+	{
+		if (string.IsNullOrWhiteSpace(targetFramework))
+			throw new ArgumentException("Target framework cannot be empty.", nameof(targetFramework));
+
+		targetFramework = targetFramework.Trim();
+		if (char.IsDigit(targetFramework[0]))
+			targetFramework = $"net{targetFramework}";
+		targetFramework = targetFramework.ToLowerInvariant();
+
+		if (!s_targetFrameworkValueRegex.IsMatch(targetFramework))
+			throw new ArgumentException($"Target framework must be a netX.Y value such as net10.0: {targetFramework}", nameof(targetFramework));
+
+		return targetFramework;
+	}
+
+	public static string? TryGetRequiredTargetFramework(string version)
+	{
+		if (string.IsNullOrWhiteSpace(version))
+			return null;
+
+		var versionStart = version.Split('-', 2)[0].Split('+', 2)[0];
+		var majorText = versionStart.Split('.', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+		return int.TryParse(majorText, out var major) && major > 0
+			? $"net{major}.0"
+			: null;
 	}
 
 	static bool HasTrueProperty(XDocument document, string propertyName) =>
