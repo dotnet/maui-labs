@@ -20,28 +20,40 @@ if ($sdkVersion -ne $sdkFeatureBand) {
     throw "Expected .NET SDK $sdkFeatureBand, but '$DotNet' selected $sdkVersion."
 }
 
-$sdkLine = & $DotNet --list-sdks |
-    Where-Object { $_ -like "$sdkVersion *" } |
-    Select-Object -Last 1
-if ($LASTEXITCODE -ne 0 -or $sdkLine -notmatch '^\S+\s+\[(.+)\]$') {
-    throw "Failed to locate the SDK root for $sdkVersion."
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) "maui-labs-workloads-$PID-$([Guid]::NewGuid().ToString('N'))"
+try {
+    $packageSource = Join-Path $tempRoot 'packages'
+    $artifactsPath = Join-Path $tempRoot 'artifacts'
+    $configFile = Join-Path $tempRoot 'NuGet.config'
+    New-Item -ItemType Directory -Force -Path $packageSource | Out-Null
+    Copy-Item (Join-Path $PSScriptRoot '../NuGet.config') $configFile
+
+    & $DotNet pack `
+        (Join-Path $PSScriptRoot 'workloads/WorkloadSet.csproj') `
+        --output $packageSource `
+        --artifacts-path $artifactsPath `
+        --nologo
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create the local workload-set package."
+    }
+
+    & $DotNet nuget add source $packageSource `
+        --name maui-labs-workload-set `
+        --configfile $configFile
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to add the local workload-set package source."
+    }
+
+    $workloadIds = $Workloads.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)
+    & $DotNet workload install @workloadIds `
+        --version $workloadVersion `
+        --configfile $configFile
+    if ($LASTEXITCODE -ne 0) {
+        throw "Workload installation failed with exit code $LASTEXITCODE."
+    }
 }
-
-$dotnetRoot = Split-Path $Matches[1] -Parent
-$workloadSetDirectory = Join-Path $dotnetRoot "sdk-manifests/$sdkFeatureBand/workloadsets/$workloadVersion"
-New-Item -ItemType Directory -Force -Path $workloadSetDirectory | Out-Null
-Copy-Item `
-    (Join-Path $PSScriptRoot 'workloads/microsoft.net.workloads.workloadset.json') `
-    (Join-Path $workloadSetDirectory 'microsoft.net.workloads.workloadset.json') `
-    -Force
-
-& $DotNet workload config --update-mode workload-set
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to enable workload-set update mode."
-}
-
-$workloadIds = $Workloads.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)
-& $DotNet workload install @workloadIds --version $workloadVersion
-if ($LASTEXITCODE -ne 0) {
-    throw "Workload installation failed with exit code $LASTEXITCODE."
+finally {
+    if (Test-Path -LiteralPath $tempRoot) {
+        Remove-Item -LiteralPath $tempRoot -Recurse -Force
+    }
 }
