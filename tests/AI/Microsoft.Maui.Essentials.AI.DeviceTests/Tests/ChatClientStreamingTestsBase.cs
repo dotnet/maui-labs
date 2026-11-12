@@ -18,7 +18,7 @@ public abstract class ChatClientStreamingTestsBase<T>
 		using var client = new T();
 		var updates = new List<ChatResponseUpdate>();
 		await foreach (var update in client.GetStreamingResponseAsync(
-			[new ChatMessage(ChatRole.User, "Say hello in one sentence.")]))
+			(ChatMessage[])[new ChatMessage(ChatRole.User, "Say hello in one sentence.")]))
 		{
 			updates.Add(update);
 		}

@@ -77,9 +77,9 @@ public static class GestureManager
         var recognizer = new MacOSTapGestureRecognizer(tap)
         {
             NumberOfClicksRequired = (nint)tap.NumberOfTapsRequired,
-            ButtonMask = (nuint)tap.Buttons,
         };
         view.AddGestureRecognizer(recognizer);
+        recognizer.ButtonMask = (nuint)tap.Buttons;
 
         // AppKit delivers events only to the hit-test view's own gesture recognizers,
         // not ancestors. Intercept child hit testing so clicks on child views

@@ -5,11 +5,13 @@ using UIKit;
 namespace DevFlow.Sample.Native;
 
 [Register(nameof(SceneDelegate))]
-public class SceneDelegate : UIWindowSceneDelegate
+public class SceneDelegate : UIResponder, IUIWindowSceneDelegate
 {
-    public override UIWindow? Window { get; set; }
+    [Export("window")]
+    public UIWindow? Window { get; set; }
 
-    public override void WillConnect(UIScene scene, UISceneSession session, UISceneConnectionOptions connectionOptions)
+    [Export("scene:willConnectToSession:options:")]
+    public void WillConnect(UIScene scene, UISceneSession session, UISceneConnectionOptions connectionOptions)
     {
         if (scene is not UIWindowScene windowScene)
             throw new InvalidOperationException("The application scene must be a UIWindowScene.");
@@ -21,7 +23,8 @@ public class SceneDelegate : UIWindowSceneDelegate
         Window.MakeKeyAndVisible();
     }
 
-    public override void DidDisconnect(UIScene scene)
+    [Export("sceneDidDisconnect:")]
+    public void DidDisconnect(UIScene scene)
     {
         Window = null;
     }
