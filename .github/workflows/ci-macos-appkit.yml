@@ -93,7 +93,7 @@ jobs:
         with:
           global-json-file: global.json
       - name: Install pinned scenario workloads
-        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --skip-manifest-update
+        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --version 11.0.100-servicing.26530.3 --source https://api.nuget.org/v3/index.json
       - name: Download requested product packages
         if: matrix.packages == true
         uses: actions/download-artifact@v8

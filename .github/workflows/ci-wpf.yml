@@ -342,7 +342,7 @@ jobs:
           $sdkVersion = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
           $sdkDirectory = Join-Path $env:DOTNET_ROOT "sdk\$sdkVersion"
           $dotnet = Join-Path $env:DOTNET_ROOT 'dotnet.exe'
-          & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --skip-manifest-update
+          & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --version 11.0.100-servicing.26530.3 --source https://api.nuget.org/v3/index.json
           if ($LASTEXITCODE -ne 0) { throw 'Workload installation failed.' }
       - name: Restore and build the normal source consumer
         id: source-font-build

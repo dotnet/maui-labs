@@ -83,6 +83,11 @@ public class BackgroundJobPlatformTests
                 public static int Submissions;
                 public static BGTaskScheduler Shared = new();
                 public void Submit(BGTaskRequest request, out NSError? error) { Submissions++; error = null; }
+                public void Submit(BGTaskRequest request, Action<NSError?> completion)
+                {
+                    Submissions++;
+                    completion(null);
+                }
             }
             """;
         var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)

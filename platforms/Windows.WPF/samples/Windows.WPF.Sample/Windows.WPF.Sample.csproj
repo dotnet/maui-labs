@@ -59,7 +59,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Windows.WPF\Windows.WPF.csproj" />
     <ProjectReference Include="..\..\src\Windows.WPF.Essentials\Windows.WPF.Essentials.csproj" />
-    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.WPF\Microsoft.Maui.DevFlow.Agent.WPF.csproj" />
+    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.WPF\Microsoft.Maui.DevFlow.Agent.WPF.csproj"
+                      Condition="'$(EnableMauiDevFlow)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup>

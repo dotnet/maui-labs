@@ -74,7 +74,7 @@ jobs:
 
       - name: Install workloads
         if: inputs.install-workloads
-        run: dotnet workload install ${{ inputs.workloads }} --skip-manifest-update
+        run: dotnet workload install ${{ inputs.workloads }} --version 11.0.100-servicing.26530.3 --source https://api.nuget.org/v3/index.json
 
       - name: Build and run device tests
         shell: pwsh
