@@ -235,6 +235,44 @@ public class UnansweredCallRestoreTests
         Assert.Empty(calculated);
     }
 
+    [Theory]
+    [InlineData(ThreadKind.InMemory)]
+    [InlineData(ThreadKind.Json)]
+    public async Task StoppedWhileACallThatReusesAnAnsweredIdRuns_TheNextRequestLeavesOnlyThatCallOut(ThreadKind kind)
+    {
+        // The provider numbers its calls per response: FunctionInvokingChatClient runs the search "0", and the UI action
+        // that the model calls next reuses the id. The search keeps its result; the stopped action has none.
+        var thread = CreateThread(kind);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var search = AIFunctionFactory.Create((string query) => $"Sunny in {query}", "Search", "Searches the web.");
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ResponseEmitters.EmitToolCallResponse("0", "Search", new Dictionary<string, object?> { ["query"] = "Paris" }, ct));
+        model.Enqueue(ct => ResponseEmitters.EmitToolCallResponse("0", "SetTheme", new Dictionary<string, object?> { ["theme"] = "dark" }, ct));
+        using var live = CreateContext(model, thread, search, options => options.RegisterUIAction(SlowSetTheme(started)));
+
+        var send = live.SendMessageAsync("Search Paris, then go dark");
+        await started.Task.WaitAsync(s_timeout);
+        await live.CancelAsync();
+        await send.WaitAsync(s_timeout);
+
+        var restoredModel = new ScriptedChatClient();
+        using var restored = CreateContext(restoredModel, thread, search, options => options.RegisterUIAction(SlowSetTheme(started)));
+        await restored.RestoreAsync();
+
+        var turn = Assert.Single(restored.Turns);
+        Assert.True(turn.IsStopped);
+        Assert.True(Assert.Single(turn.ResponseBlocks.OfType<FunctionInvocationContentBlock>()).HasResult);
+        Assert.True(Assert.Single(turn.ResponseBlocks.OfType<UIActionBlock>()).IsAbandoned);
+
+        await AssertNextRequestsAsync(
+            live,
+            model,
+            restored,
+            restoredModel,
+            ["user: Search Paris, then go dark", "assistant: call 0", "tool: result 0", "user: Hi"],
+            reusedIds: true);
+    }
+
     [Fact]
     public async Task CompletedTurnWithACallLeftWithoutAResult_RestoreShowsTheCallAbandoned_AndTheNextRequestLeavesItOut()
     {
@@ -349,7 +387,8 @@ public class UnansweredCallRestoreTests
         ScriptedChatClient liveModel,
         AgentContext restored,
         ScriptedChatClient restoredModel,
-        string[] expected)
+        string[] expected,
+        bool reusedIds = false)
     {
         liveModel.Enqueue(ct => ResponseEmitters.EmitTextResponse("Hello.", ct));
         restoredModel.Enqueue(ct => ResponseEmitters.EmitTextResponse("Hello.", ct));
@@ -362,7 +401,10 @@ public class UnansweredCallRestoreTests
         Assert.Equal(ConversationStatus.Idle, restored.Status);
         Assert.Equal(expected, Describe(liveModel.Requests[^1]));
         Assert.Equal(expected, Describe(Assert.Single(restoredModel.Requests)));
-        ToolHistory.AssertValid(restoredModel.Requests[^1]);
+        if (reusedIds)
+            ToolHistory.AssertValidWithReusedIds(restoredModel.Requests[^1]);
+        else
+            ToolHistory.AssertValid(restoredModel.Requests[^1]);
     }
 
     private static string[] Describe(IReadOnlyList<ChatMessage> request)

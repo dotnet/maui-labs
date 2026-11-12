@@ -70,8 +70,9 @@ needs approval still runs as a UI action. A UI action wrapped in `ApprovalRequir
 `ToolApprovalBlock` and runs once approved, whatever its mode; edit the approval's `Call.Arguments`
 before approving to supply input.
 
-Providers that number their calls per response reuse call ids. Blocks, UI actions and approved UI
-actions handle that, but `FunctionInvokingChatClient` matches the approvals it carries out by call id
+Providers that number their calls per response reuse call ids. Blocks, UI actions, approved UI
+actions and the history handle that (a call without a result is left out of the history, not an
+earlier call with its id), but `FunctionInvokingChatClient` matches the approvals it carries out by call id
 across the whole history: an approval whose call id already has a result earlier in the conversation
 is skipped, and a later approval for the same id fails the request. Give such providers unique call ids (for example with a
 middleware below `UseFunctionInvocation()` that rewrites them) when they use approvals.

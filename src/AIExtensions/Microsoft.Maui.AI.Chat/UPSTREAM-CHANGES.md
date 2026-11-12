@@ -151,7 +151,9 @@ These match upstream so that upstream fixes apply directly:
   without a result and `FunctionInvokingChatClient` rejects an unanswered approval request or runs an
   approved call before it sends the request. Only a stopped turn has such approvals, but they are left
   out of every turn, so a thread that loses the stopped mark cannot rerun a tool or fail every later
-  send. The engine reads its marks from JSON string values too, as a thread that saves updates with
+  send. Calls and results are matched in history order, as the check for a round's unanswered calls
+  matches them, so with a provider that reuses call ids only the call without a result is left out,
+  not an earlier call with the same id. The engine reads its marks from JSON string values too, as a thread that saves updates with
   `AIJsonUtilities.DefaultOptions` gives them back. Upstream adds every message to the history, so the
   next request can fail on such a call.
 - **Errors discard the turn, retry resends all of it.** A failed turn commits nothing and keeps its
