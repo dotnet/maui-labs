@@ -130,8 +130,9 @@ public class UnansweredCallRestoreTests
         Assert.Equal(ApprovalStatus.Pending, approval.Status);
         Assert.False(approval.IsAwaitingInput);
         Assert.True(approval.IsAbandoned);
-        Assert.True(approval.InnerBlock.IsAbandoned);
-        Assert.Same(approval, approval.InnerBlock.Approval);
+        var card = Assert.IsAssignableFrom<FunctionInvocationContentBlock>(approval.InnerBlock);
+        Assert.True(card.IsAbandoned);
+        Assert.Equal("delete-1", card.Call?.CallId);
 
         // FunctionInvokingChatClient would reject an approval request that has no response, on every later request,
         // whether or not the restored turn knows that it was stopped.
@@ -182,8 +183,9 @@ public class UnansweredCallRestoreTests
         var approval = Assert.Single(turn.ResponseBlocks.OfType<ToolApprovalBlock>());
         Assert.Equal(ApprovalStatus.Approved, approval.Status);
         Assert.Equal(liveApproval.Status, approval.Status);
-        Assert.False(approval.InnerBlock.HasResult);
-        Assert.True(approval.InnerBlock.IsAbandoned);
+        var card = Assert.IsAssignableFrom<FunctionInvocationContentBlock>(approval.InnerBlock);
+        Assert.False(card.HasResult);
+        Assert.True(card.IsAbandoned);
         Assert.Equal(liveApproval.IsAbandoned, approval.IsAbandoned);
 
         // FunctionInvokingChatClient would run an approved call that has no result before sending the request,
@@ -229,7 +231,7 @@ public class UnansweredCallRestoreTests
         Assert.True(call.IsAbandoned);
         var action = Assert.Single(turn.ResponseBlocks.OfType<UIActionBlock>());
         Assert.True(action.IsAbandoned);
-        Assert.True(action.InnerBlock.IsAbandoned);
+        Assert.True(Assert.IsAssignableFrom<FunctionInvocationContentBlock>(action.InnerBlock).IsAbandoned);
 
         await AssertNextRequestsAsync(live, model, restored, restoredModel, ["user: Calculate and go dark", "user: Hi"]);
         Assert.Empty(calculated);

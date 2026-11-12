@@ -8,13 +8,13 @@ using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 namespace Microsoft.Maui.AI.Chat.Tests.Engine;
 
 /// <summary>
-/// A call's block tells a card all it needs: the approval that wraps the call, and whether the call will never
-/// get a result because its turn ended without one.
+/// A call's block tells a card whether the call will never get a result because its turn ended without one, and an
+/// approval wraps the block that the handlers create for its call, whatever its type.
 /// </summary>
 public class CallOutcomeTests
 {
     [Fact]
-    public async Task Approval_LinksEachWrappedCallToItsApproval()
+    public async Task Approval_WrapsTheBlockTheHandlersCreateForItsCall()
     {
         var model = new ScriptedChatClient();
         model.Enqueue(ct => ResponseEmitters.EmitUpdates(
@@ -31,7 +31,7 @@ public class CallOutcomeTests
                         // A call no handler claims, shown by the built-in block.
                         new ToolApprovalRequestContent("approval-2", new FunctionCallContent("search-1", "Search")),
 
-                        // A call a handler shows as another kind of block, so a fallback block holds it.
+                        // A call a handler shows as a block of the app's own type, which the approval wraps too.
                         new ToolApprovalRequestContent("approval-4", new FunctionCallContent("notify-1", "Notify")),
 
                         // A call without an approval.
@@ -55,18 +55,20 @@ public class CallOutcomeTests
         Assert.Equal(["DeleteFile", "Notify", "Search"], approvals.Keys.Order());
         Assert.IsType<DeleteFileCard>(approvals["DeleteFile"].InnerBlock);
         Assert.Equal(typeof(FunctionInvocationContentBlock), approvals["Search"].InnerBlock.GetType());
-        Assert.Equal(typeof(FunctionInvocationContentBlock), approvals["Notify"].InnerBlock.GetType());
-        Assert.Equal("notify-1", approvals["Notify"].InnerBlock.Call?.CallId);
+        Assert.Equal("notify-1", Assert.IsType<Notice>(approvals["Notify"].InnerBlock).Id);
+        Assert.Equal("notify-1", approvals["Notify"].Call?.CallId);
+        Assert.False(approvals["Notify"].HasResult);
+        Assert.All(approvals.Values, approval => Assert.Equal(approval.ToolName, approval.Call?.Name));
+        Assert.All(approvals.Values, approval => Assert.DoesNotContain(approval.InnerBlock, blocks));
         Assert.DoesNotContain(blocks, block => block is Notice);
-        Assert.All(approvals.Values, approval => Assert.Same(approval, approval.InnerBlock.Approval));
-        Assert.Null(Assert.Single(blocks.OfType<FunctionInvocationContentBlock>()).Approval);
+        Assert.Equal("weather-1", Assert.Single(blocks.OfType<FunctionInvocationContentBlock>()).Call?.CallId);
 
         await context.CancelAsync();
         await send.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     [Fact]
-    public async Task UIActionThatNeedsApproval_ItsCallLinksToTheApprovalAndGetsTheActionsResult()
+    public async Task UIActionThatNeedsApproval_TheApprovalShowsTheActionsCallWithItsResult()
     {
         var shown = new List<string>();
         var showMap = new ApprovalRequiredAIFunction(AIFunctionFactory.Create(
@@ -84,25 +86,27 @@ public class CallOutcomeTests
             new FunctionInvokingChatClient(model),
             options => options.RegisterUIAction(showMap, UIActionInvocationMode.Automatic)));
         ToolApprovalBlock? approval = null;
-        var linkedWhenAsked = false;
+        ContentBlock? shownWhenAsked = null;
         context.OnStatusChanged(status =>
         {
             if (status != ConversationStatus.AwaitingInput)
                 return;
 
             approval = context.Turns[^1].ResponseBlocks.OfType<ToolApprovalBlock>().Single();
-            linkedWhenAsked = ReferenceEquals(approval, approval.InnerBlock.Approval);
+            shownWhenAsked = approval.InnerBlock;
             approval.Approve();
         });
 
         await context.SendMessageAsync("Show Paris");
 
         Assert.NotNull(approval);
-        Assert.True(linkedWhenAsked);
+        Assert.Same(approval.InnerBlock, shownWhenAsked);
         Assert.Same(approval.UIAction?.InnerBlock, approval.InnerBlock);
         Assert.Equal(["Paris"], shown);
-        Assert.Equal("Map of Paris", approval.InnerBlock.Result?.Result?.ToString());
-        Assert.False(approval.InnerBlock.IsAbandoned);
+        var card = Assert.IsAssignableFrom<FunctionInvocationContentBlock>(approval.InnerBlock);
+        Assert.Equal("Map of Paris", card.Result?.Result?.ToString());
+        Assert.Equal("Map of Paris", approval.Result?.Result?.ToString());
+        Assert.False(card.IsAbandoned);
         Assert.False(approval.IsAbandoned);
     }
 
@@ -175,7 +179,7 @@ public class CallOutcomeTests
         await send.WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(ApprovalStatus.Approved, approval.Status);
-        Assert.True(approval.InnerBlock.IsAbandoned);
+        Assert.True(Assert.IsAssignableFrom<FunctionInvocationContentBlock>(approval.InnerBlock).IsAbandoned);
         Assert.Equal(["IsAbandoned: awaiting input False, abandoned True"], changes);
     }
 
@@ -324,9 +328,9 @@ public class CallOutcomeTests
 
         Assert.Equal(ApprovalStatus.Pending, approval.Status);
         Assert.True(approval.IsAbandoned);
-        Assert.True(approval.InnerBlock.IsAbandoned);
+        Assert.True(Assert.IsAssignableFrom<FunctionInvocationContentBlock>(approval.InnerBlock).IsAbandoned);
         Assert.True(action.IsAbandoned);
-        Assert.True(action.InnerBlock.IsAbandoned);
+        Assert.True(Assert.IsAssignableFrom<FunctionInvocationContentBlock>(action.InnerBlock).IsAbandoned);
 
         // Each card raises each change once, when both changes are in place.
         string[] expected =
@@ -357,9 +361,8 @@ public class CallOutcomeTests
         Assert.Equal(ConversationStatus.Idle, context.Status);
         Assert.Empty(deleted);
         var approval = Assert.Single(Assert.Single(context.Turns).ResponseBlocks.OfType<ToolApprovalBlock>());
-        var call = approval.InnerBlock;
-        Assert.Same(approval, call.Approval);
-        Assert.Equal(ApprovalStatus.Rejected, call.Approval?.Status);
+        var call = Assert.IsAssignableFrom<FunctionInvocationContentBlock>(approval.InnerBlock);
+        Assert.Equal(ApprovalStatus.Rejected, approval.Status);
         Assert.True(call.HasResult);
         Assert.Equal(RejectedCall.Result("Not now"), call.Result?.Result?.ToString());
         Assert.False(call.IsAbandoned);
@@ -390,7 +393,7 @@ public class CallOutcomeTests
         var approval = Assert.Single(turn.ResponseBlocks.OfType<ToolApprovalBlock>());
         Assert.Equal(ApprovalStatus.Rejected, approval.Status);
         Assert.False(approval.HasResult);
-        Assert.True(approval.InnerBlock.IsAbandoned);
+        Assert.True(Assert.IsAssignableFrom<FunctionInvocationContentBlock>(approval.InnerBlock).IsAbandoned);
         Assert.True(approval.IsAbandoned);
         Assert.Single(model.Requests);
     }
@@ -426,7 +429,7 @@ public class CallOutcomeTests
         Assert.False(calls["search-1"].IsAbandoned);
         Assert.True(calls["search-2"].IsAbandoned);
         var approvals = blocks.OfType<ToolApprovalBlock>().ToDictionary(approval => approval.Call!.CallId);
-        Assert.All(approvals.Values, approval => Assert.Same(approval, approval.InnerBlock.Approval));
+        Assert.All(approvals.Values, approval => Assert.Same(approval.Call, Assert.IsAssignableFrom<FunctionInvocationContentBlock>(approval.InnerBlock).Call));
         Assert.Equal(ApprovalStatus.Pending, approvals["delete-1"].Status);
         Assert.True(approvals["delete-1"].IsAbandoned);
         Assert.Equal(ApprovalStatus.Approved, approvals["delete-2"].Status);

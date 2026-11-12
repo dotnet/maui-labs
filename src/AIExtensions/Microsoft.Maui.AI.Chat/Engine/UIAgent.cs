@@ -481,7 +481,7 @@ public class UIAgent : IDisposable
                     {
                         interactive.Abandon();
                         interactive.CaptureAwaitingInput();
-                        interactive.InnerBlock.Abandon();
+                        interactive.CallBlock.Abandon();
                     }
                     else if (block is FunctionInvocationContentBlock call)
                     {

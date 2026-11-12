@@ -283,7 +283,8 @@ public class PendingInteractionTests
     private static ToolApprovalBlock CreateApproval()
     {
         var call = new FunctionCallContent("delete-1", "DeleteFile");
-        return new ToolApprovalBlock(new FunctionInvocationContentBlock { Call = call }, new ToolApprovalRequestContent("approval-1", call));
+        var callBlock = new FunctionInvocationContentBlock { Call = call };
+        return new ToolApprovalBlock(callBlock, callBlock, new ToolApprovalRequestContent("approval-1", call));
     }
 
     /// <summary>Records the value of <see cref="InteractiveFunctionBlock.IsAwaitingInput"/> each time it is raised.</summary>

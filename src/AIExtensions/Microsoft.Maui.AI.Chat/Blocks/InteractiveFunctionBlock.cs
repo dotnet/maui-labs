@@ -7,15 +7,15 @@ using Microsoft.Extensions.AI;
 namespace Microsoft.Maui.AI.Chat;
 
 /// <summary>
-/// Base class for function blocks that pause the conversation for input, wrapping the inner
-/// <see cref="FunctionInvocationContentBlock"/> that holds the call and result.
+/// Base class for blocks that pause the conversation for input about a function call: an approval, or a UI
+/// action. <see cref="InnerBlock"/> is the block that shows the call, and the call and its result are this
+/// block's own <see cref="Call"/> and <see cref="Result"/>.
 /// </summary>
 /// <remarks>
-/// Base of <see cref="ToolApprovalBlock"/>; pairs with <see cref="IInteractiveBlock"/>. When the inner block
-/// raises <see cref="ContentBlock.PropertyChanged"/> for <see cref="Call"/>, <see cref="ToolName"/>,
-/// <see cref="Arguments"/>, <see cref="Result"/>, <see cref="HasResult"/> or <see cref="IsAbandoned"/>, this
-/// block raises it for its property of the same name, and for all six when the inner block reports that
-/// everything changed.
+/// Base of <see cref="ToolApprovalBlock"/> and <see cref="UIActionBlock"/>; pairs with <see cref="IInteractiveBlock"/>.
+/// When the call or its outcome changes, this block raises <see cref="ContentBlock.PropertyChanged"/> for
+/// <see cref="Call"/>, <see cref="ToolName"/>, <see cref="Arguments"/>, <see cref="Result"/>,
+/// <see cref="HasResult"/> or <see cref="IsAbandoned"/>, and for all six when everything may have changed.
 /// </remarks>
 public abstract class InteractiveFunctionBlock : ContentBlock
 {
@@ -32,30 +32,57 @@ public abstract class InteractiveFunctionBlock : ContentBlock
     /// <summary>Initializes a new instance of the <see cref="InteractiveFunctionBlock"/> class.</summary>
     /// <param name="innerBlock">The block that shows the call and its result.</param>
     public InteractiveFunctionBlock(FunctionInvocationContentBlock innerBlock)
+        : this(innerBlock, innerBlock)
     {
-        ArgumentNullException.ThrowIfNull(innerBlock);
-        InnerBlock = innerBlock;
-        innerBlock.PropertyChanged += OnInnerBlockPropertyChanged;
     }
 
-    public FunctionInvocationContentBlock InnerBlock { get; }
+    /// <summary>Initializes a new instance of the <see cref="InteractiveFunctionBlock"/> class.</summary>
+    /// <param name="innerBlock">The block that shows the call, of any type.</param>
+    /// <param name="callBlock">
+    /// The block that holds the call and its result: <paramref name="innerBlock"/> when it is a function block,
+    /// otherwise one that the engine keeps for it.
+    /// </param>
+    private protected InteractiveFunctionBlock(ContentBlock innerBlock, FunctionInvocationContentBlock callBlock)
+    {
+        ArgumentNullException.ThrowIfNull(innerBlock);
+        ArgumentNullException.ThrowIfNull(callBlock);
+        InnerBlock = innerBlock;
+        CallBlock = callBlock;
+        callBlock.PropertyChanged += OnCallBlockPropertyChanged;
+    }
 
-    public FunctionCallContent? Call => InnerBlock.Call;
+    /// <summary>
+    /// Gets the block that shows the call: the built-in call block, a typed block that a handler or
+    /// <c>[ToolBlock]</c> created for the tool, or a block of the app's own type.
+    /// </summary>
+    /// <remarks>
+    /// A <see cref="UIActionBlock"/>'s inner block is always a <see cref="FunctionInvocationContentBlock"/>,
+    /// because the action shows its result in it.
+    /// </remarks>
+    public ContentBlock InnerBlock { get; }
 
-    public FunctionResultContent? Result => InnerBlock.Result;
+    /// <summary>
+    /// Gets the block that holds the call and its result: <see cref="InnerBlock"/> when it is a function block,
+    /// otherwise one that the engine keeps and nothing shows.
+    /// </summary>
+    internal FunctionInvocationContentBlock CallBlock { get; }
 
-    public string? ToolName => InnerBlock.ToolName;
+    public FunctionCallContent? Call => CallBlock.Call;
 
-    public IDictionary<string, object?>? Arguments => InnerBlock.Arguments;
+    public FunctionResultContent? Result => CallBlock.Result;
 
-    public bool HasResult => InnerBlock.HasResult;
+    public string? ToolName => CallBlock.ToolName;
+
+    public IDictionary<string, object?>? Arguments => CallBlock.Arguments;
+
+    public bool HasResult => CallBlock.HasResult;
 
     /// <summary>
     /// Gets whether the call will never get a result, because its turn ended without one: for example an
     /// approval or UI action left unanswered when the turn stopped. See
     /// <see cref="FunctionInvocationContentBlock.IsAbandoned"/>.
     /// </summary>
-    public bool IsAbandoned => InnerBlock.IsAbandoned;
+    public bool IsAbandoned => CallBlock.IsAbandoned;
 
     /// <summary>
     /// Gets whether the block waits for the user: an approval that is still pending, or a manual UI action
@@ -104,11 +131,11 @@ public abstract class InteractiveFunctionBlock : ContentBlock
         return true;
     }
 
-    /// <summary>Raises the changes of this block that follow from a change of the inner block.</summary>
-    /// <param name="propertyName">The inner block's property, or empty when all of them may have changed.</param>
-    private protected virtual void OnInnerBlockChanged(string? propertyName) => ReportAwaitingInputChanged();
+    /// <summary>Raises the changes of this block that follow from a change of the call or its outcome.</summary>
+    /// <param name="propertyName">The property that changed, or empty when all of them may have changed.</param>
+    private protected virtual void OnCallChanged(string? propertyName) => ReportAwaitingInputChanged();
 
-    private void OnInnerBlockPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnCallBlockPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
         {
@@ -132,6 +159,6 @@ public abstract class InteractiveFunctionBlock : ContentBlock
                 return;
         }
 
-        OnInnerBlockChanged(e.PropertyName);
+        OnCallChanged(e.PropertyName);
     }
 }

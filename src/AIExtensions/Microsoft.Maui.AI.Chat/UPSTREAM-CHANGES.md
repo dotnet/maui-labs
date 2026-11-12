@@ -94,7 +94,7 @@ These match upstream so that upstream fixes apply directly:
   for example `Streaming` again for each continuation round). In detail:
   - `ContentBlock`, `ConversationTurn` and `AgentContext` implement `INotifyPropertyChanged`. The
     engine's blocks raise the names of the properties that changed, and `InteractiveFunctionBlock`
-    forwards its inner block's call and result properties. A block of any other type raises an empty
+    raises its call and result properties when they change. A block of any other type raises an empty
     name ("every property") from `NotifyChanged`, which runs when its handler updates or completes it and
     when the engine sets a call block's result or abandons it, because the engine cannot see which of its
     properties changed. Block authors get
@@ -221,8 +221,8 @@ These match upstream so that upstream fixes apply directly:
   handler of the app's own claims into a block of its own, whose result it then receives. When
   `FunctionInvokingChatClient` sends an approved call again, a rejected call comes back as
   informational, a replayed conversation repeats a call, or a complete response lists a call or its
-  result more than once in one message, the existing block (for an approval, its inner block) is
-  updated and receives the result. Upstream shows such repeats as extra blocks. A call
+  result more than once in one message, the existing block (for an approval, its inner block and the
+  approval itself) is updated and receives the result. Upstream shows such repeats as extra blocks. A call
   id reused after its result is a new call with its own block; both blocks have the call id as their
   `Id`, so key views by block instance. A call is answered once a result for its id follows it, as the
   engine's own check for unanswered calls counts it, even when no handler shows the result (a handler
@@ -280,7 +280,7 @@ These match upstream so that upstream fixes apply directly:
   `PropertyChanged` for it and its change notification when the value changes, after the turn's outcome
   is final. Upstream has no
   equivalent, so a restored pending approval looks answerable.
-- **A call says whether it can still get a result, and which approval wraps it.**
+- **A call says whether it can still get a result.**
   `FunctionInvocationContentBlock.IsAbandoned`, which `InteractiveFunctionBlock` forwards, turns true
   when the call's turn ends without a result for it: the turn completed, stopped or failed, or left the
   call's approval or UI action unanswered. A restore sets it for a call without a recorded result. Once
@@ -288,9 +288,8 @@ These match upstream so that upstream fixes apply directly:
   calls without a result. The change is raised once the turn's outcome is final, after the turn's and
   the context's changes, with one change notification per block. A rejected call is not abandoned: it
   keeps the rejection that `FunctionInvokingChatClient` returns as its result, unless the turn ended
-  before that arrived. `FunctionInvocationContentBlock.Approval` is the `ToolApprovalBlock` that wraps
-  the call, set when the approval is created. Upstream has neither, so a card bound to its call cannot
-  tell a stopped call from a running one, or find its approval, without searching the conversation.
+  before that arrived. Upstream has none, so a card bound to its call cannot tell a stopped call from a
+  running one.
 - **Canceling one invocation.** Canceling the token passed to `UIActionBlock.InvokeAsync` cancels only
   that invocation: its task is canceled, the action can be invoked again, and the turn keeps waiting
   for the result. Upstream cancels the block's result, which fails the turn.
@@ -300,9 +299,15 @@ These match upstream so that upstream fixes apply directly:
   shows inside the `UIActionBlock` (or inside the approval of an action that needs approval) and
   receives the action's result through the handler. A handler whose block is not a
   `FunctionInvocationContentBlock` cannot show a result, so the action shows a plain inner block.
-- **`InteractiveFunctionBlock`.** `ToolApprovalBlock` and `UIActionBlock` both wrap an inner
-  `FunctionInvocationContentBlock` that carries the call and result; an approval for a UI action shares
-  the action's inner block. Upstream's `FunctionApprovalBlock.InnerBlock` is a `ContentBlock` and its
+- **`InteractiveFunctionBlock`.** The shared base of `ToolApprovalBlock` and `UIActionBlock`, which upstream
+  does not have. Its `InnerBlock` is the block that shows the call, and it holds the call and its outcome
+  itself (`Call`, `Result`, `HasResult`, `IsAbandoned`). Like upstream's `FunctionApprovalBlock.InnerBlock`,
+  an approval's inner block is whatever block the registered handlers create for the call: the built-in
+  call block, a typed block, or a block of the app's own type, which receives the call's result through its
+  handler. Upstream returns no call or result for such a block; here the approval keeps them. An approval
+  of a UI action shows the action's call block rather than nesting the `UIActionBlock` as upstream does,
+  so its card has no button of its own: the approval is the action's UI step. A `UIActionBlock`'s inner
+  block is always a `FunctionInvocationContentBlock`, which shows the action's result; upstream's
   `UIActionBlock` has no inner block.
 - **Same-update call and result.** Handlers here complete a block whose result arrives in the same
   update (`IsAlreadyComplete`); upstream re-invokes the handler after emitting a function block. The

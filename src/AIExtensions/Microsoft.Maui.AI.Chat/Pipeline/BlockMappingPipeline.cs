@@ -292,8 +292,24 @@ internal class BlockMappingPipeline
                 entry.Block.GetType().Name,
                 handled.Kind.ToString(),
                 entry.Block.Id);
+
+            // An approval that wraps a block of the app's own type holds the call's result itself, also when that
+            // block does not show it.
+            var wrapper = known.Block is InteractiveFunctionBlock { HasResult: false } interactive
+                && !ReferenceEquals(interactive.InnerBlock, interactive.CallBlock)
+                    ? interactive
+                    : null;
+            if (wrapper is not null)
+            {
+                wrapper.CallBlock.Result = result;
+                context.MarkHandled(result);
+            }
+
             if (handled.Kind == HandleResult.ResultKind.Pass)
+            {
+                wrapper?.InvokeNotifyChanged();
                 return;
+            }
 
             if (handled.Kind == HandleResult.ResultKind.Complete)
                 entry.Block.LifecycleState = BlockLifecycleState.Inactive;
@@ -309,8 +325,8 @@ internal class BlockMappingPipeline
                 uiAction.SetResult(result);
                 break;
             case InteractiveFunctionBlock interactive:
-                interactive.InnerBlock.Result = result;
-                interactive.InnerBlock.InvokeNotifyChanged();
+                interactive.CallBlock.Result = result;
+                interactive.CallBlock.InvokeNotifyChanged();
                 interactive.InvokeNotifyChanged();
                 break;
             case FunctionInvocationContentBlock functionBlock:

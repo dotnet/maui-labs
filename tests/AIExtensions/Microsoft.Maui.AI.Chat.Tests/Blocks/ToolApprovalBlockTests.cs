@@ -16,7 +16,7 @@ public class ToolApprovalBlockTests
             Call = new FunctionCallContent("call-1", "DeleteFile", null)
         };
         var request = new ToolApprovalRequestContent("req-1", innerBlock.Call);
-        var block = new ToolApprovalBlock(innerBlock, request);
+        var block = new ToolApprovalBlock(innerBlock, innerBlock, request);
 
         Assert.Equal(ApprovalStatus.Pending, block.Status);
         Assert.Same(innerBlock, block.InnerBlock);
@@ -146,6 +146,6 @@ public class ToolApprovalBlockTests
             Call = new FunctionCallContent("call-1", "DeleteFile", null)
         };
         var request = new ToolApprovalRequestContent("req-1", innerBlock.Call);
-        return new ToolApprovalBlock(innerBlock, request);
+        return new ToolApprovalBlock(innerBlock, innerBlock, request);
     }
 }

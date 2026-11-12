@@ -16,9 +16,9 @@ namespace Microsoft.Maui.AI.Chat;
 /// restored) are rendered too, and a turn shows each call id once even when the call reappears in
 /// a later round. Setting <see cref="Call"/> raises <see cref="ContentBlock.PropertyChanged"/> for it and
 /// for <see cref="ToolName"/> and <see cref="Arguments"/> when they change; setting <see cref="Result"/>
-/// raises it for the result and for <see cref="HasResult"/> when that changes. A card bound to the block
-/// needs nothing else: <see cref="Approval"/> is the approval that wraps the call, if any, and
-/// <see cref="IsAbandoned"/> says the call will never get a result.
+/// raises it for the result and for <see cref="HasResult"/> when that changes, and <see cref="IsAbandoned"/>
+/// says the call will never get a result. When the call needs approval, a <see cref="ToolApprovalBlock"/> wraps
+/// the block as its <see cref="InteractiveFunctionBlock.InnerBlock"/>.
 /// </remarks>
 public class FunctionInvocationContentBlock : ContentBlock
 {
@@ -28,11 +28,9 @@ public class FunctionInvocationContentBlock : ContentBlock
     private static readonly PropertyChangedEventArgs s_resultChanged = new(nameof(Result));
     private static readonly PropertyChangedEventArgs s_hasResultChanged = new(nameof(HasResult));
     private static readonly PropertyChangedEventArgs s_isAbandonedChanged = new(nameof(IsAbandoned));
-    private static readonly PropertyChangedEventArgs s_approvalChanged = new(nameof(Approval));
 
     private FunctionCallContent? _call;
     private FunctionResultContent? _result;
-    private ToolApprovalBlock? _approval;
     private bool _abandoned;
 
     public FunctionCallContent? Call
@@ -77,31 +75,6 @@ public class FunctionInvocationContentBlock : ContentBlock
 
     public bool HasResult => Result is not null;
 
-    /// <summary>
-    /// Gets the approval that asks the user whether the call may run, or <see langword="null"/> when the call
-    /// needs none.
-    /// </summary>
-    /// <remarks>
-    /// Set when a <see cref="ToolApprovalBlock"/> wraps this block as its
-    /// <see cref="InteractiveFunctionBlock.InnerBlock"/>: a typed block that a handler created for the call,
-    /// the built-in block, or the call of a UI action that needs approval. A card reads the approval's
-    /// <see cref="ToolApprovalBlock.Status"/> and <see cref="InteractiveFunctionBlock.IsAwaitingInput"/>
-    /// through it, without searching the conversation. Setting it raises
-    /// <see cref="ContentBlock.PropertyChanged"/>.
-    /// </remarks>
-    public ToolApprovalBlock? Approval
-    {
-        get => _approval;
-        internal set
-        {
-            if (ReferenceEquals(_approval, value))
-                return;
-
-            _approval = value;
-            RaisePropertyChanged(s_approvalChanged);
-        }
-    }
-
     /// <summary>Gets whether the call will never get a result, because its turn ended without one.</summary>
     /// <remarks>
     /// <para>
@@ -112,7 +85,7 @@ public class FunctionInvocationContentBlock : ContentBlock
     /// </para>
     /// <para>
     /// A rejected call is not abandoned: <see cref="FunctionInvokingChatClient"/> gives it a result that only
-    /// says it was rejected, and its <see cref="Approval"/> has the status
+    /// says it was rejected, and the <see cref="ToolApprovalBlock"/> that wraps it has the status
     /// <see cref="ApprovalStatus.Rejected"/>. It is abandoned only when its turn ended before that result
     /// arrived.
     /// </para>
