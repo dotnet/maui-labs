@@ -187,6 +187,12 @@ internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
 {
     readonly View _view;
     readonly TapGestureRecognizer _tapGesture;
+    static readonly System.Reflection.MethodInfo? _sendTapped =
+        typeof(TapGestureRecognizer).GetMethod(
+            "SendTapped",
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.Public |
+            System.Reflection.BindingFlags.NonPublic);
     bool _isConnected;
 
     public MacOSTapGestureRecognizer(View view, TapGestureRecognizer tapGesture)
