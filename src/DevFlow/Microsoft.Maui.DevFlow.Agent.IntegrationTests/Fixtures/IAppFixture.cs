@@ -13,5 +13,6 @@ public interface IAppFixture : IAsyncLifetime
     string Platform { get; }
     string? DeviceId { get; }
     string? AppIdentifier { get; }
+    Task<string?> CaptureFailureDiagnosticsAsync();
     Task ResetPermissionAsync(Driver.PermissionService permission);
 }
