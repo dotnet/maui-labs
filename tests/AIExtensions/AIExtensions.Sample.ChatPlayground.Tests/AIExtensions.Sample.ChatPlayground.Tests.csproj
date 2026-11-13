@@ -94,6 +94,8 @@
              Link="Chat\Views\ChatConverters.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\Templates\StructuredResponseMatch.cs"
              Link="Chat\Views\Templates\StructuredResponseMatch.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\ScrollAnchorTracker.cs"
+             Link="Chat\Views\ScrollAnchorTracker.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\TurnFooterConverter.cs"
              Link="Chat\Views\TurnFooterConverter.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentModels.cs"
