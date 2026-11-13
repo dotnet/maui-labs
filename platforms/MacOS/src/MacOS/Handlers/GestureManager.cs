@@ -175,23 +175,8 @@ internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
     [Foundation.Export("handleTap:")]
     void HandleTap(NSGestureRecognizer recognizer)
     {
-        // SendTapped internally calls Command.Execute, so do NOT call it separately.
-        var sendTapped = typeof(TapGestureRecognizer).GetMethod(
-            "SendTapped", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        if (sendTapped != null)
-        {
-            var parent = (_tapGesture as IElement)?.FindParentOfType<View>();
-            var parameters = sendTapped.GetParameters();
-            if (parameters.Length == 1)
-                sendTapped.Invoke(_tapGesture, new object?[] { parent });
-            else if (parameters.Length == 2)
-                sendTapped.Invoke(_tapGesture, new object?[] { parent, null });
-        }
-        else
-        {
-            // Fallback if SendTapped is not found
-            _tapGesture.Command?.Execute(_tapGesture.CommandParameter);
-        }
+        if ((_tapGesture as IElement)?.FindParentOfType<View>() is { } parent)
+            _tapGesture.SendTapped(parent);
     }
 }
 
