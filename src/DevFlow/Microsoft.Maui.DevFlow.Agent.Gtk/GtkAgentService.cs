@@ -112,7 +112,10 @@ public class GtkAgentService : MauiDevFlowAgentService
         return base.GetNativeWindowSize(window);
     }
 
-    protected override Task<bool> TryNativeScroll(VisualElement element, double deltaX, double deltaY)
+    protected override async Task<bool> TryNativeScroll(VisualElement element, double deltaX, double deltaY)
+        => await TryNativeScrollMeasured(element, deltaX, deltaY) is not null;
+
+    protected override Task<ScrollMovement?> TryNativeScrollMeasured(VisualElement element, double deltaX, double deltaY)
     {
         try
         {
@@ -129,11 +132,20 @@ public class GtkAgentService : MauiDevFlowAgentService
                         {
                             var hAdj = scrolledWindow.GetHadjustment();
                             var vAdj = scrolledWindow.GetVadjustment();
+                            double movedX = 0, movedY = 0;
                             if (hAdj != null && deltaX != 0)
-                                hAdj.SetValue(Math.Max(hAdj.GetLower(), Math.Min(hAdj.GetValue() + deltaX, hAdj.GetUpper() - hAdj.GetPageSize())));
+                            {
+                                var before = hAdj.GetValue();
+                                hAdj.SetValue(ScrollMovement.ClampOffset(before, deltaX, hAdj.GetLower(), hAdj.GetUpper() - hAdj.GetPageSize()));
+                                movedX = hAdj.GetValue() - before;
+                            }
                             if (vAdj != null && deltaY != 0)
-                                vAdj.SetValue(Math.Max(vAdj.GetLower(), Math.Min(vAdj.GetValue() - deltaY, vAdj.GetUpper() - vAdj.GetPageSize())));
-                            return Task.FromResult(true);
+                            {
+                                var before = vAdj.GetValue();
+                                vAdj.SetValue(ScrollMovement.ClampOffset(before, -deltaY, vAdj.GetLower(), vAdj.GetUpper() - vAdj.GetPageSize()));
+                                movedY = before - vAdj.GetValue();
+                            }
+                            return Task.FromResult<ScrollMovement?>(new ScrollMovement(movedX, movedY));
                         }
                         current = current.GetParent() as global::Gtk.Widget;
                     }
@@ -142,7 +154,7 @@ public class GtkAgentService : MauiDevFlowAgentService
             }
         }
         catch { }
-        return Task.FromResult(false);
+        return Task.FromResult<ScrollMovement?>(null);
     }
 
     protected override bool TryNativeTap(VisualElement ve)
