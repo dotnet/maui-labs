@@ -108,18 +108,6 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
                 }
             }
 
-            try
-            {
-                Console.Error.WriteLine(
-                    $"[DevFlow integration] Blazor readiness diagnostics for {Platform}:{Environment.NewLine}" +
-                    await Client.GetLogsAsync(limit: 500));
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine(
-                    $"[DevFlow integration] Could not collect Blazor readiness diagnostics: {ex.Message}");
-            }
-
             // A prior test may have left the existing bridge in a stale state after an
             // in-WebView route change. Force a fresh Shell navigation and retry using the
             // full cold-start budget instead of failing the next test on the warm-path cap.
@@ -148,6 +136,18 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
                     _blazorReady = true;
                     return;
                 }
+            }
+
+            try
+            {
+                Console.Error.WriteLine(
+                    $"[DevFlow integration] Blazor readiness diagnostics for {Platform}:{Environment.NewLine}" +
+                    await Client.GetLogsAsync(limit: 500));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"[DevFlow integration] Could not collect Blazor readiness diagnostics: {ex.Message}");
             }
 
             throw new TimeoutException(

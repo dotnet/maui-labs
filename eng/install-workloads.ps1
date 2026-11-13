@@ -16,8 +16,15 @@ $sdkVersion = (& $DotNet --version).Trim()
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to determine the SDK version from '$DotNet'."
 }
-if ($sdkVersion -ne $sdkFeatureBand) {
-    throw "Expected .NET SDK $sdkFeatureBand, but '$DotNet' selected $sdkVersion."
+
+function Get-SdkFeatureBand([string] $version) {
+    $parsedVersion = [version]::Parse($version.Split('-', 2)[0])
+    $featureBand = [Math]::Floor($parsedVersion.Build / 100) * 100
+    return "$($parsedVersion.Major).$($parsedVersion.Minor).$featureBand"
+}
+
+if ((Get-SdkFeatureBand $sdkVersion) -ne (Get-SdkFeatureBand $sdkFeatureBand)) {
+    throw "Expected a .NET SDK in feature band $sdkFeatureBand, but '$DotNet' selected $sdkVersion."
 }
 
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) "maui-labs-workloads-$PID-$([Guid]::NewGuid().ToString('N'))"

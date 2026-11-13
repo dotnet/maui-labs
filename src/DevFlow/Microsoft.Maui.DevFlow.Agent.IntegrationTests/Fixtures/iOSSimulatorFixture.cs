@@ -207,6 +207,14 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
                 Console.Error.WriteLine($"[iOSFixture] Boot log collection also timed out: {ex.Message}");
             }
 
+            if (!string.Equals(
+                Environment.GetEnvironmentVariable("CI"),
+                "true",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                throw;
+            }
+
             Console.Error.WriteLine("[iOSFixture] Restarting CoreSimulatorService and retrying boot once.");
             try
             {

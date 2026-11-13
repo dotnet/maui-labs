@@ -174,7 +174,10 @@ namespace Microsoft.Maui.Handlers.WPF
 				}
 
 				var sendTapped = typeof(Microsoft.Maui.Controls.TapGestureRecognizer).GetMethod(
-					"SendTapped", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+					"SendTapped",
+					System.Reflection.BindingFlags.Instance |
+					System.Reflection.BindingFlags.Public |
+					System.Reflection.BindingFlags.NonPublic);
 				if (sendTapped != null)
 				{
 					var ps = sendTapped.GetParameters();
