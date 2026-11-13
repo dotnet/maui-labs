@@ -8,53 +8,56 @@
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
     <Grid>
         <local:PlaygroundPageLayout x:Name="ChatLayout" HeaderTitle="Chat"
-                                       HeaderInfo="Send messages with the selected real client. Replay plays only the current chat offline; More imports or exports that recording. Logs toggles local AI diagnostics."
-                                       HeaderStatus="{Binding Chat.StatusMessage}"
+                                       HeaderInfo="Chat with the selected client. The conversation and the shared notes are saved as they change and come back when the app starts. More starts a new chat or shows the notes. Logs toggles local AI diagnostics."
+                                       HeaderStatus="{Binding StatusMessage}"
                                        StatusAutomationId="RequestStatusLabel"
                                        SidebarTitle="Chat settings"
                                        Diagnostics="{Binding Diagnostics}">
             <local:PlaygroundPageLayout.HeaderActions>
-                <HorizontalStackLayout Spacing="4">
-                    <VerticalStackLayout Spacing="2">
-                        <ImageButton Source="add.png" Style="{StaticResource ChatActionButton}"
-                                     Command="{Binding NewChatAction}"
-                                     SemanticProperties.Description="Start a new chat, replacing the current autosave"
-                                     ToolTipProperties.Text="Export this chat before starting a new one"
-                                     AutomationId="NewChatButton" />
-                        <Label Text="New" Style="{StaticResource ChatActionLabel}" />
-                    </VerticalStackLayout>
-                    <VerticalStackLayout Spacing="2">
-                        <ImageButton x:Name="MoreButton" Source="more.png"
-                                     Style="{StaticResource ChatActionButton}"
-                                     SemanticProperties.Description="Chat recording options"
-                                     AutomationId="ChatMoreButton">
-                            <local:PopupMenu.Content>
-                                <VerticalStackLayout Spacing="8" x:DataType="local:ChatViewModel">
-                                    <Label Text="CURRENT CHAT" Style="{StaticResource SectionHeading}" />
-                                    <Button Text="Import from file" ImageSource="folder.png"
-                                            Command="{Binding ImportFileAction}"
-                                            SemanticProperties.Description="Replace the current chat with a recording from a file"
-                                            AutomationId="ImportChatFileButton" />
-                                    <Button Text="Load example" ImageSource="play.png"
-                                            Command="{Binding LoadSampleAction}"
-                                            SemanticProperties.Description="Replace the current chat with a bundled image and tool-call recording"
-                                            AutomationId="LoadSampleChatButton" />
-                                    <Button Text="Export to file" ImageSource="export.png"
-                                            Command="{Binding ExportChatAction}"
-                                            CommandParameter="{x:Reference MoreButton}"
-                                            AutomationId="ExportChatButton" />
-                                </VerticalStackLayout>
-                            </local:PopupMenu.Content>
-                        </ImageButton>
-                        <Label Text="More" Style="{StaticResource ChatActionLabel}" />
-                    </VerticalStackLayout>
-                </HorizontalStackLayout>
+                <VerticalStackLayout Spacing="2">
+                    <ImageButton x:Name="MoreButton" Source="more.png"
+                                 Style="{StaticResource ChatActionButton}"
+                                 SemanticProperties.Description="Chat options"
+                                 AutomationId="ChatMoreButton">
+                        <local:PopupMenu.Content>
+                            <VerticalStackLayout Spacing="8" x:DataType="local:ChatViewModel">
+                                <Label Text="CHAT" Style="{StaticResource SectionHeading}" />
+                                <Button Text="New chat" ImageSource="add.png"
+                                        Command="{Binding NewChatAction}"
+                                        SemanticProperties.Description="Start a new chat, replacing the saved conversation and notes"
+                                        AutomationId="NewChatButton" />
+                                <Button Text="{Binding Notes.ToggleShownText}"
+                                        Command="{Binding Notes.ToggleShownAction}"
+                                        AutomationId="ToggleNotesButton" />
+                            </VerticalStackLayout>
+                        </local:PopupMenu.Content>
+                    </ImageButton>
+                    <Label Text="More" Style="{StaticResource ChatActionLabel}" />
+                </VerticalStackLayout>
             </local:PlaygroundPageLayout.HeaderActions>
             <local:PlaygroundPageLayout.SettingsContent>
                 <local:SettingsPane BindingContext="{Binding Settings}" />
             </local:PlaygroundPageLayout.SettingsContent>
             <local:PlaygroundPageLayout.MainContent>
-                <local:ChatArea BindingContext="{Binding Chat}" />
+                <!-- The notes sit beside the messages, or below them on a narrow screen. -->
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
+                    <Border Style="{StaticResource PlaygroundPanel}" Padding="0" AutomationId="ChatPanel">
+                        <local:ChatArea />
+                    </Border>
+                    <local:NotesView Grid.Column="1" WidthRequest="300" Margin="12,0,0,0"
+                                     BindingContext="{Binding Notes}"
+                                     IsCompact="{Binding IsCompact, Source={x:Reference ChatLayout}, x:DataType=local:PlaygroundPageLayout}">
+                        <local:NotesView.Triggers>
+                            <DataTrigger TargetType="local:NotesView" Value="True"
+                                         Binding="{Binding IsCompact, Source={x:Reference ChatLayout}, x:DataType=local:PlaygroundPageLayout}">
+                                <Setter Property="Grid.Row" Value="1" />
+                                <Setter Property="Grid.Column" Value="0" />
+                                <Setter Property="WidthRequest" Value="-1" />
+                                <Setter Property="Margin" Value="0,12,0,0" />
+                            </DataTrigger>
+                        </local:NotesView.Triggers>
+                    </local:NotesView>
+                </Grid>
             </local:PlaygroundPageLayout.MainContent>
             <local:PlaygroundPageLayout.InputContent>
                 <Grid RowDefinitions="Auto,Auto" RowSpacing="8">
@@ -89,10 +92,7 @@
                                          AutomationId="ModelPreparationProgress" />
                         </Grid>
                     </Border>
-                    <Grid Grid.Row="1">
-                        <local:ChatComposer BindingContext="{Binding Chat}" />
-                        <local:ReplayControls IsVisible="{Binding Chat.IsReplayClient}" />
-                    </Grid>
+                    <local:ChatComposer Grid.Row="1" />
                 </Grid>
             </local:PlaygroundPageLayout.InputContent>
         </local:PlaygroundPageLayout>

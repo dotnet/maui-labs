@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+    The message box: an image to send with the message, when the client takes images, and Send while the chat is idle
+    or Stop while a response runs.
+-->
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
              x:Class="AIExtensions.Sample.ChatPlayground.ChatComposer"
-             x:DataType="local:ChatAreaViewModel"
-             IsVisible="{Binding IsLiveClient}"
+             x:DataType="local:ChatViewModel"
              AutomationId="LiveComposerPresenter">
     <Border Style="{StaticResource ComposerPanel}">
         <VerticalStackLayout Spacing="8">
@@ -24,7 +27,7 @@
                              SemanticProperties.Description="Add an image attachment"
                              AutomationId="AddAttachmentButton">
                     <local:PopupMenu.Content>
-                        <VerticalStackLayout Spacing="8" x:DataType="local:ChatAreaViewModel">
+                        <VerticalStackLayout Spacing="8" x:DataType="local:ChatViewModel">
                             <Label Text="ADD IMAGE" Style="{StaticResource SectionHeading}" />
                             <Button Text="Choose image" ImageSource="image.png"
                                     Command="{Binding ChooseImageAction}"
@@ -35,17 +38,17 @@
                         </VerticalStackLayout>
                     </local:PopupMenu.Content>
                 </ImageButton>
-                <Editor Grid.Column="1" Text="{Binding Prompt}"
-                       AutoSize="TextChanges" MinimumWidthRequest="0"
-                       MinimumHeightRequest="44" MaximumHeightRequest="120"
-                       Placeholder="Ask the selected real chat client"
-                       AutomationId="PromptEntry" />
+                <Editor Grid.Column="1" Text="{Binding Prompt}" Placeholder="{Binding Placeholder}"
+                        IsEnabled="{Binding IsInputEnabled}"
+                        AutoSize="TextChanges" MinimumWidthRequest="0"
+                        MinimumHeightRequest="44" MaximumHeightRequest="120"
+                        AutomationId="PromptEntry" />
                 <Grid Grid.Column="2" WidthRequest="44" HeightRequest="44" VerticalOptions="End">
-                    <ImageButton Source="send.png" Command="{Binding SendCommand}"
+                    <ImageButton Source="send.png" Command="{Binding SendAction}"
                                  IsVisible="{Binding IsIdle}" Style="{StaticResource AttachmentButton}"
                                  SemanticProperties.Description="Send message" AutomationId="SendButton" />
-                    <ImageButton Source="stop.png" Command="{Binding CancelCommand}"
-                                 IsVisible="{Binding IsBusy}" Style="{StaticResource CancelActionButton}"
+                    <ImageButton Source="stop.png" Command="{Binding StopAction}"
+                                 IsVisible="{Binding IsResponding}" Style="{StaticResource CancelActionButton}"
                                  SemanticProperties.Description="Stop response" AutomationId="StopButton" />
                 </Grid>
             </Grid>

@@ -16,6 +16,10 @@ applyTo: "**/*Tests*/**,**/*.Tests.*"
 |---------|-------------|--------|
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Attributes.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Attributes.Generators.Tests/` | `net10.0` |
+| AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/` | `net10.0` |
+| AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Generators.Tests/` | `net10.0` |
+| AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Controls.Tests/` | `net10.0` |
+| AIExtensions | `tests/AIExtensions/AIExtensions.Sample.ChatPlayground.Tests/` | `net10.0` |
 | AppProjectReference | `src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference.Tests/` | `net10.0` |
 | Essentials.AI | `tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/` | `net10.0` |
 | Essentials.AI | `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/` | multi-TFM |
@@ -89,6 +93,19 @@ public void VisualTreeWalker_FindsElementById()
     // Test with real MAUI types where possible
 }
 ```
+
+### AI Chat Tests
+
+The chat tests need no platform or device:
+
+- `Microsoft.Maui.AI.Chat.Controls.Tests/` covers the block template layer: the matches, `BlockTemplateSelector`,
+  `ViewTemplate`, `BlockView` and the markup extensions, with blocks from `TestHelpers/Blocks.cs`. A module
+  initializer installs a dispatcher that runs work inline; install `TestDispatcher` to observe coalesced updates.
+- `AIExtensions.Sample.ChatPlayground.Tests/` links the playground sources that need no running app and drives the real engine.
+  `PlaygroundChatHarness` wires the session the way `ChatViewModel` does, and `ScriptedChatClient` plays the model
+  from short scripted `ChatResponseUpdate`s. Wrap it in a `FunctionInvokingChatClient` when the tools should run,
+  as they do in the app. Follow the session with standard change notifications (`TestHelpers/SessionEvents.cs`),
+  not the engine's `RegisterOn…` callbacks.
 
 ### Naming Convention
 

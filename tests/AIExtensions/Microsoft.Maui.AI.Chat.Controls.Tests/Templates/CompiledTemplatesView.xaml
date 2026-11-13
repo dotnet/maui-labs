@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- The selector of MarkupExtensionTests.SelectorXaml, compiled with the test assembly like an app's XAML. -->
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:chat="http://schemas.microsoft.com/dotnet/2026/maui/ai/chat"
+             xmlns:local="clr-namespace:Microsoft.Maui.AI.Chat.Controls.Tests"
+             x:Class="Microsoft.Maui.AI.Chat.Controls.Tests.CompiledTemplatesView">
+    <ContentView.Resources>
+        <chat:BlockTemplateSelector x:Key="Blocks">
+            <chat:BlockTemplateSelector.Wrappers>
+                <chat:ApprovalWrapper When="{chat:Tool delete_file}">
+                    <ControlTemplate>
+                        <VerticalStackLayout>
+                            <Label Text="Delete the file?" />
+                            <ContentPresenter />
+                        </VerticalStackLayout>
+                    </ControlTemplate>
+                </chat:ApprovalWrapper>
+                <chat:ApprovalWrapper>
+                    <ControlTemplate x:DataType="chat:ToolApprovalBlock">
+                        <VerticalStackLayout>
+                            <ContentPresenter />
+                            <Label Text="{Binding Status}" />
+                        </VerticalStackLayout>
+                    </ControlTemplate>
+                </chat:ApprovalWrapper>
+            </chat:BlockTemplateSelector.Wrappers>
+            <chat:BlockTemplate When="{chat:Tool search}" Template="{chat:ViewTemplate local:ToolNameView}" />
+            <chat:BlockTemplate When="{chat:Tool delete_file}">
+                <DataTemplate x:DataType="chat:FunctionInvocationContentBlock">
+                    <Label Text="{Binding IsAwaitingInput, Source={RelativeSource AncestorType={x:Type chat:ToolApprovalBlock}}, x:DataType=chat:ToolApprovalBlock}" />
+                </DataTemplate>
+            </chat:BlockTemplate>
+            <chat:BlockTemplate When="{chat:Role user}">
+                <DataTemplate x:DataType="chat:TextContentBlock">
+                    <Label Text="{Binding RawText}" />
+                </DataTemplate>
+            </chat:BlockTemplate>
+            <chat:BlockTemplate Template="{chat:ViewTemplate local:RawTextLabel}">
+                <chat:BlockTemplate.When>
+                    <chat:AllMatch>
+                        <chat:BlockTypeMatch Type="{x:Type chat:TextContentBlock}" />
+                        <chat:NotMatch>
+                            <chat:RoleMatch Role="system" />
+                        </chat:NotMatch>
+                    </chat:AllMatch>
+                </chat:BlockTemplate.When>
+            </chat:BlockTemplate>
+            <chat:BlockTemplate When="{chat:Is chat:ReasoningContentBlock}" />
+            <chat:BlockTemplate>
+                <chat:BlockTemplate.When>
+                    <chat:AnyMatch>
+                        <chat:BlockTypeMatch Type="{x:Type chat:MediaContentBlock}" />
+                        <chat:ToolMatch Name="get_weather" />
+                    </chat:AnyMatch>
+                </chat:BlockTemplate.When>
+                <DataTemplate>
+                    <Label Text="media or weather" />
+                </DataTemplate>
+            </chat:BlockTemplate>
+        </chat:BlockTemplateSelector>
+    </ContentView.Resources>
+</ContentView>

@@ -1,0 +1,104 @@
+#nullable enable
+Microsoft.Maui.AI.Chat.Controls.AllMatch
+Microsoft.Maui.AI.Chat.Controls.AllMatch.AllMatch() -> void
+Microsoft.Maui.AI.Chat.Controls.AllMatch.Conditions.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.BlockMatch!>!
+Microsoft.Maui.AI.Chat.Controls.AnyMatch
+Microsoft.Maui.AI.Chat.Controls.AnyMatch.AnyMatch() -> void
+Microsoft.Maui.AI.Chat.Controls.AnyMatch.Conditions.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.BlockMatch!>!
+Microsoft.Maui.AI.Chat.Controls.ApprovalWrapper
+Microsoft.Maui.AI.Chat.Controls.ApprovalWrapper.ApprovalWrapper() -> void
+Microsoft.Maui.AI.Chat.Controls.BlockMatch
+Microsoft.Maui.AI.Chat.Controls.BlockMatch.BlockMatch() -> void
+Microsoft.Maui.AI.Chat.Controls.BlockTemplate
+Microsoft.Maui.AI.Chat.Controls.BlockTemplate.BlockTemplate() -> void
+Microsoft.Maui.AI.Chat.Controls.BlockTemplate.Template.get -> Microsoft.Maui.Controls.DataTemplate?
+Microsoft.Maui.AI.Chat.Controls.BlockTemplate.Template.set -> void
+Microsoft.Maui.AI.Chat.Controls.BlockTemplate.When.get -> Microsoft.Maui.AI.Chat.Controls.BlockMatch?
+Microsoft.Maui.AI.Chat.Controls.BlockTemplate.When.set -> void
+Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector
+Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.BlockTemplateSelector() -> void
+Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.Templates.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.BlockTemplate!>!
+Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.TurnTemplate.get -> Microsoft.Maui.Controls.DataTemplate?
+Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.TurnTemplate.set -> void
+Microsoft.Maui.AI.Chat.Controls.BlockTemplateSelector.Wrappers.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.BlockWrapper!>!
+Microsoft.Maui.AI.Chat.Controls.BlockTypeMatch
+Microsoft.Maui.AI.Chat.Controls.BlockTypeMatch.BlockTypeMatch() -> void
+Microsoft.Maui.AI.Chat.Controls.BlockTypeMatch.Type.get -> System.Type?
+Microsoft.Maui.AI.Chat.Controls.BlockTypeMatch.Type.set -> void
+Microsoft.Maui.AI.Chat.Controls.BlockView
+Microsoft.Maui.AI.Chat.Controls.BlockView.Block.get -> Microsoft.Maui.AI.Chat.ContentBlock?
+Microsoft.Maui.AI.Chat.Controls.BlockView.BlockView() -> void
+Microsoft.Maui.AI.Chat.Controls.BlockView<TBlock>
+Microsoft.Maui.AI.Chat.Controls.BlockView<TBlock>.Block.get -> TBlock?
+Microsoft.Maui.AI.Chat.Controls.BlockView<TBlock>.BlockView() -> void
+Microsoft.Maui.AI.Chat.Controls.BlockWrapper
+Microsoft.Maui.AI.Chat.Controls.BlockWrapper.BlockWrapper() -> void
+Microsoft.Maui.AI.Chat.Controls.BlockWrapper.Template.get -> Microsoft.Maui.Controls.ControlTemplate?
+Microsoft.Maui.AI.Chat.Controls.BlockWrapper.Template.set -> void
+Microsoft.Maui.AI.Chat.Controls.BlockWrapper.When.get -> Microsoft.Maui.AI.Chat.Controls.BlockMatch?
+Microsoft.Maui.AI.Chat.Controls.BlockWrapper.When.set -> void
+Microsoft.Maui.AI.Chat.Controls.ConversationItems
+Microsoft.Maui.AI.Chat.Controls.ConversationItems.CollectionChanged -> System.Collections.Specialized.NotifyCollectionChangedEventHandler?
+Microsoft.Maui.AI.Chat.Controls.ConversationItems.ConversationItems(Microsoft.Maui.AI.Chat.AgentContext! context) -> void
+Microsoft.Maui.AI.Chat.Controls.ConversationItems.Count.get -> int
+Microsoft.Maui.AI.Chat.Controls.ConversationItems.Dispose() -> void
+Microsoft.Maui.AI.Chat.Controls.ConversationItems.GetEnumerator() -> System.Collections.Generic.IEnumerator<object!>!
+Microsoft.Maui.AI.Chat.Controls.ConversationItems.this[int index].get -> object!
+Microsoft.Maui.AI.Chat.Controls.IsExtension
+Microsoft.Maui.AI.Chat.Controls.IsExtension.IsExtension() -> void
+Microsoft.Maui.AI.Chat.Controls.IsExtension.ProvideValue(System.IServiceProvider! serviceProvider) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
+Microsoft.Maui.AI.Chat.Controls.IsExtension.Type.get -> System.Type?
+Microsoft.Maui.AI.Chat.Controls.IsExtension.Type.set -> void
+Microsoft.Maui.AI.Chat.Controls.NotMatch
+Microsoft.Maui.AI.Chat.Controls.NotMatch.Match.get -> Microsoft.Maui.AI.Chat.Controls.BlockMatch?
+Microsoft.Maui.AI.Chat.Controls.NotMatch.Match.set -> void
+Microsoft.Maui.AI.Chat.Controls.NotMatch.NotMatch() -> void
+Microsoft.Maui.AI.Chat.Controls.RoleExtension
+Microsoft.Maui.AI.Chat.Controls.RoleExtension.ProvideValue(System.IServiceProvider! serviceProvider) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
+Microsoft.Maui.AI.Chat.Controls.RoleExtension.Role.get -> string?
+Microsoft.Maui.AI.Chat.Controls.RoleExtension.Role.set -> void
+Microsoft.Maui.AI.Chat.Controls.RoleExtension.RoleExtension() -> void
+Microsoft.Maui.AI.Chat.Controls.RoleMatch
+Microsoft.Maui.AI.Chat.Controls.RoleMatch.Role.get -> string?
+Microsoft.Maui.AI.Chat.Controls.RoleMatch.Role.set -> void
+Microsoft.Maui.AI.Chat.Controls.RoleMatch.RoleMatch() -> void
+Microsoft.Maui.AI.Chat.Controls.ToolExtension
+Microsoft.Maui.AI.Chat.Controls.ToolExtension.Name.get -> string?
+Microsoft.Maui.AI.Chat.Controls.ToolExtension.Name.set -> void
+Microsoft.Maui.AI.Chat.Controls.ToolExtension.ProvideValue(System.IServiceProvider! serviceProvider) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
+Microsoft.Maui.AI.Chat.Controls.ToolExtension.ToolExtension() -> void
+Microsoft.Maui.AI.Chat.Controls.ToolMatch
+Microsoft.Maui.AI.Chat.Controls.ToolMatch.Name.get -> string?
+Microsoft.Maui.AI.Chat.Controls.ToolMatch.Name.set -> void
+Microsoft.Maui.AI.Chat.Controls.ToolMatch.ToolMatch() -> void
+Microsoft.Maui.AI.Chat.Controls.ViewTemplate
+Microsoft.Maui.AI.Chat.Controls.ViewTemplate.ViewTemplate(System.Type! viewType) -> void
+Microsoft.Maui.AI.Chat.Controls.ViewTemplate.ViewType.get -> System.Type!
+Microsoft.Maui.AI.Chat.Controls.ViewTemplateExtension
+Microsoft.Maui.AI.Chat.Controls.ViewTemplateExtension.ProvideValue(System.IServiceProvider! serviceProvider) -> Microsoft.Maui.Controls.DataTemplate!
+Microsoft.Maui.AI.Chat.Controls.ViewTemplateExtension.ViewTemplateExtension() -> void
+Microsoft.Maui.AI.Chat.Controls.ViewTemplateExtension.ViewType.get -> System.Type?
+Microsoft.Maui.AI.Chat.Controls.ViewTemplateExtension.ViewType.set -> void
+abstract Microsoft.Maui.AI.Chat.Controls.BlockMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
+abstract Microsoft.Maui.AI.Chat.Controls.BlockWrapper.GetWrappedBlock(Microsoft.Maui.AI.Chat.ContentBlock! block) -> Microsoft.Maui.AI.Chat.ContentBlock?
+override Microsoft.Maui.AI.Chat.Controls.AllMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
+override Microsoft.Maui.AI.Chat.Controls.AnyMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
+override Microsoft.Maui.AI.Chat.Controls.ApprovalWrapper.GetWrappedBlock(Microsoft.Maui.AI.Chat.ContentBlock! block) -> Microsoft.Maui.AI.Chat.ContentBlock?
+override Microsoft.Maui.AI.Chat.Controls.BlockTypeMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
+override Microsoft.Maui.AI.Chat.Controls.BlockView.OnBindingContextChanged() -> void
+override Microsoft.Maui.AI.Chat.Controls.NotMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
+override Microsoft.Maui.AI.Chat.Controls.RoleMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
+override Microsoft.Maui.AI.Chat.Controls.ToolMatch.Matches(Microsoft.Maui.AI.Chat.ContentBlock! block) -> bool
+static Microsoft.Maui.AI.Chat.Controls.BlockMatch.All(params Microsoft.Maui.AI.Chat.Controls.BlockMatch![]! matches) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
+static Microsoft.Maui.AI.Chat.Controls.BlockMatch.Any(params Microsoft.Maui.AI.Chat.Controls.BlockMatch![]! matches) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
+static Microsoft.Maui.AI.Chat.Controls.BlockMatch.Is<TBlock>() -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
+static Microsoft.Maui.AI.Chat.Controls.BlockMatch.Not(Microsoft.Maui.AI.Chat.Controls.BlockMatch! match) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
+static Microsoft.Maui.AI.Chat.Controls.BlockMatch.Role(Microsoft.Extensions.AI.ChatRole role) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
+static Microsoft.Maui.AI.Chat.Controls.BlockMatch.Tool(string! name) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
+static Microsoft.Maui.AI.Chat.Controls.BlockMatch.When(System.Func<Microsoft.Maui.AI.Chat.ContentBlock!, bool>! predicate) -> Microsoft.Maui.AI.Chat.Controls.BlockMatch!
+static readonly Microsoft.Maui.AI.Chat.Controls.BlockTemplate.TemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.AI.Chat.Controls.BlockTemplate.WhenProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.AI.Chat.Controls.BlockWrapper.TemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.AI.Chat.Controls.BlockWrapper.WhenProperty -> Microsoft.Maui.Controls.BindableProperty!
+virtual Microsoft.Maui.AI.Chat.Controls.BlockView.OnBlockChanged() -> void
+virtual Microsoft.Maui.AI.Chat.Controls.BlockView.OnBlockPropertyChanged(string? propertyName) -> void

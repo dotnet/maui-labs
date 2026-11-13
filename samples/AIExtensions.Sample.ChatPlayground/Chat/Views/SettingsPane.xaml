@@ -24,17 +24,7 @@
                     </DataTemplate>
                 </BindableLayout.ItemTemplate>
             </VerticalStackLayout>
-            <Label Text="Replay is read-only and uses the saved options for each turn."
-                   Style="{StaticResource MutedLabel}" FontSize="12"
-                   IsVisible="{Binding SelectedDescriptor.IsReplay}"
-                   AutomationId="ReplayOptionsHint" />
             <VerticalStackLayout Spacing="12" IsEnabled="{Binding CanEditOptions}" AutomationId="ChatOptionsPanel">
-                <VerticalStackLayout.Triggers>
-                    <DataTrigger TargetType="VerticalStackLayout"
-                                 Binding="{Binding SelectedDescriptor.IsReplay}" Value="True">
-                        <Setter Property="IsVisible" Value="False" />
-                    </DataTrigger>
-                </VerticalStackLayout.Triggers>
                 <VerticalStackLayout Spacing="4" IsVisible="{Binding HasModels}"
                                      AutomationId="ChatModelOptions">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
@@ -93,7 +83,7 @@
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                     <Label Text="System instructions" FontSize="12" VerticalOptions="Center" />
                     <local:InfoTip Grid.Column="1"
-                                   Text="Instructions are sent with the next request and shown once in the chat." />
+                                   Text="Sent with each request; a change applies from the next message." />
                 </Grid>
                 <Editor Text="{Binding Instructions}" AutoSize="TextChanges"
                         MinimumHeightRequest="70" AutomationId="InstructionsEditor" />
@@ -135,6 +125,19 @@
                         <local:InfoTip Grid.Row="3" Grid.Column="2"
                                        IsVisible="{Binding SelectedDescriptor.SupportsImageGeneration}"
                                        Text="Let Azure generate or edit images; results stay in this conversation." />
+                    </Grid>
+                    <!-- Hidden for a client that runs tools in its own session, which can't ask first. Each element
+                         hides, like the image generation row: a hidden Grid gives its CheckBox a NaN position on iOS
+                         and Mac Catalyst, which crashes. -->
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
+                        <CheckBox IsChecked="{Binding RequireToolApproval}"
+                                  IsVisible="{Binding SupportsToolApproval}"
+                                  WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
+                                  AutomationId="RequireToolApprovalCheckBox" />
+                        <Label Grid.Column="1" Text="Ask before running tools" VerticalOptions="Center"
+                               IsVisible="{Binding SupportsToolApproval}" />
+                        <local:InfoTip Grid.Column="2" IsVisible="{Binding SupportsToolApproval}"
+                                       Text="Show an Approve or Reject card in the chat before each local tool runs." />
                     </Grid>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                         <Label Text="Tool mode" VerticalOptions="Center" />

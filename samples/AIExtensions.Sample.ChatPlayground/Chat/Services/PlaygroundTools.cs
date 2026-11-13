@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.Extensions.AI;
 
 namespace AIExtensions.Sample.ChatPlayground;
@@ -29,7 +30,11 @@ public sealed class PlaygroundTools
     /// <summary>Gets the device's current network access and connection types.</summary>
     public AITool ConnectionStatus { get; }
 
-    private static double Calculate(double left, string operation, double right) =>
+    // The schema lists the operations, so a model chooses one of them instead of writing what the prompt shows.
+    private static double Calculate(
+        double left,
+        [AllowedValues("add", "subtract", "multiply", "divide")] string operation,
+        double right) =>
         operation.ToLowerInvariant() switch
         {
             "add" or "+" => left + right,

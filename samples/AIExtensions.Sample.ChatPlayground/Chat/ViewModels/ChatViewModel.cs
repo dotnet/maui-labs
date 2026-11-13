@@ -1,611 +1,466 @@
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Maui.ApplicationModel.DataTransfer;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Maui.AI.Chat;
+using Microsoft.Maui.AI.Chat.Controls;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Coordinates real chat requests, protocol history, and response presentation.</summary>
+/// <summary>
+/// Coordinates the chat tab: the one chat session that the chat area lists, the composer, the shared notes, and the
+/// settings that shape each request.
+/// </summary>
 public partial class ChatViewModel : ObservableObject
 {
-    private readonly PlaygroundTools _tools;
-    private readonly ChatSessionService _recording;
-    private readonly ChatConversation _conversation = new();
-    private readonly IChatClient _replayClient;
+    private readonly FileConversationThread _thread;
+    private readonly ImageInputService _imageInput;
     private IChatClient? _selectedClient;
-    private CancellationTokenSource? _requestCancellation;
-    // Only the active turn may apply UI changes after asynchronous provider work completes.
-    private long _requestGeneration;
-    private bool _replayIncomplete;
+    private ImageAttachment? _selectedImage;
+    private ConversationStatus _status;
+    private bool _isRestoring;
 
-    /// <summary>Initializes the child view models and request orchestration.</summary>
-    public ChatViewModel(PlaygroundTools tools, ChatSessionService recording, SettingsPaneViewModel settings,
-        ChatAreaViewModel chat, DiagnosticsViewModel diagnostics, ModelReadinessViewModel readiness)
+    /// <summary>Initializes the session, its router, and the child view models.</summary>
+    public ChatViewModel(PlaygroundTools tools, FileConversationThread thread, NotesFile notesFile,
+        ImageInputService imageInput, SettingsPaneViewModel settings, DiagnosticsViewModel diagnostics,
+        ModelReadinessViewModel readiness, ILoggerFactory loggerFactory)
     {
-        _tools = tools;
-        _recording = recording;
+        _thread = thread;
+        _imageInput = imageInput;
         Settings = settings;
-        Chat = chat;
         Diagnostics = diagnostics;
         Readiness = readiness;
+        var notes = new SharedNotes(notesFile);
+        var router = new PlaygroundChatClient(() => _selectedClient, settings, tools, notes.CreateRequestContext);
+
+        // One session for the whole tab. The router reads the settings for every request, and the thread saves each
+        // committed turn, so the conversation comes back when the app starts; New chat clears it.
+        Session = new AgentContext(new UIAgent<NotesState>(router, options =>
+        {
+            options.Thread = thread;
+            options.AddGeneratedToolBlocks();
+            options.AddBlockHandler(new CalculatorWorksheetHandler());
+            options.RegisterUIAction(ThemeAction.Create(ApplyTheme));
+            notes.Register(options);
+        }, loggerFactory));
+        Notes = new NotesViewModel(notes, Session);
+        Items = new ConversationItems(Session);
+
+        Session.PropertyChanged += SessionPropertyChanged;
         Readiness.PropertyChanged += (_, _) =>
         {
             Settings.ModelStatus = Readiness.Status;
-            UpdateChatCanSend();
+            RefreshComposer();
         };
-        _replayClient = settings.Clients.Single(option => option.Descriptor.IsReplay).Client;
-        Chat.SendCommand = new AsyncRelayCommand(SendAsync, () => Chat.CanSend);
-        Chat.CancelCommand = new RelayCommand(Cancel, () => Chat.IsBusy);
         Settings.PropertyChanged += SettingsPropertyChanged;
-        Chat.PropertyChanged += ChatPropertyChanged;
-        _recording.Changed += (_, _) => MainThread.BeginInvokeOnMainThread(RefreshOperationCommands);
         ApplyClientSelection(Settings.SelectedClient);
     }
 
+    /// <summary>Gets the chat session. It lives as long as the tab; New chat clears it.</summary>
+    public AgentContext Session { get; }
+
+    /// <summary>
+    /// Gets the conversation's rows, which the chat area lists: each turn's blocks, and then the turn itself once it
+    /// ended. It follows the session for as long as both live.
+    /// </summary>
+    public ConversationItems Items { get; }
+
     /// <summary>Gets the settings-pane state.</summary>
     public SettingsPaneViewModel Settings { get; }
-
-    /// <summary>Gets the chat-area state.</summary>
-    public ChatAreaViewModel Chat { get; }
 
     public DiagnosticsViewModel Diagnostics { get; }
 
     public ModelReadinessViewModel Readiness { get; }
 
+    /// <summary>Gets the notes that the user and the model share.</summary>
+    public NotesViewModel Notes { get; }
+
+    [ObservableProperty] private string statusMessage = "Choose a client and send a prompt.";
+    [ObservableProperty] private string welcomeTitle = "Start a real chat request";
+    [ObservableProperty] private string welcomeMessage = "Choose a client, configure options, and send a prompt.";
+    [ObservableProperty] private string placeholder = "Message";
+    [ObservableProperty] private IList<string> suggestions = [];
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(SendSuggestionCommand))]
+    private bool isInputEnabled;
+
+    /// <summary>Gets or sets the message the composer holds.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+    private string prompt = string.Empty;
+
+    /// <summary>Gets whether the selected client accepts images, so the composer can attach one.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ChooseImageCommand), nameof(UseSampleImageCommand))]
+    private bool isImageSupported;
+
+    /// <summary>Gets a preview of the image that goes with the next message.</summary>
+    [ObservableProperty] private ImageSource? selectedImagePreview;
+
+    /// <summary>Gets the file name of the image that goes with the next message.</summary>
+    [ObservableProperty] private string selectedImageName = string.Empty;
+
+    /// <summary>Gets whether an image goes with the next message.</summary>
+    public bool HasSelectedImage => _selectedImage is not null;
+
+    /// <summary>Gets whether a response is running, so the composer shows Stop instead of Send.</summary>
+    public bool IsResponding => Session.Status is ConversationStatus.Streaming or ConversationStatus.AwaitingInput;
+
+    /// <summary>Gets whether no response is running, so the composer shows Send.</summary>
+    public bool IsIdle => !IsResponding;
+
+    // The XAML source generator does not see the commands that [RelayCommand] generates, so the views bind to these.
+    public IAsyncRelayCommand SendAction => SendCommand;
+    public IAsyncRelayCommand<string> SendSuggestionAction => SendSuggestionCommand;
+    public IAsyncRelayCommand StopAction => StopCommand;
+    public IAsyncRelayCommand<ConversationTurn> RetryAction => RetryCommand;
+    public IRelayCommand<ToolApprovalBlock> ApproveAction => ApproveCommand;
+    public IRelayCommand<ToolApprovalBlock> RejectAction => RejectCommand;
+    public IAsyncRelayCommand<UIActionBlock> RunAction => RunActionCommand;
     public IAsyncRelayCommand NewChatAction => NewChatCommand;
-    public IAsyncRelayCommand ImportFileAction => ImportChatFileCommand;
-    public IAsyncRelayCommand LoadSampleAction => LoadSampleChatCommand;
-    public IAsyncRelayCommand<View> ExportChatAction => ExportChatCommand;
-    public IAsyncRelayCommand ReplayChatAction => ReplayChatCommand;
-    public IAsyncRelayCommand NextReplayAction => ReplayNextCommand;
-    public IRelayCommand RestartReplayAction => RestartReplayCommand;
+    public IAsyncRelayCommand ChooseImageAction => ChooseImageCommand;
+    public IAsyncRelayCommand UseSampleImageAction => UseSampleImageCommand;
+    public IRelayCommand RemoveImageAction => RemoveImageCommand;
 
-    /// <summary>Restores the auto-saved conversation after the page is displayed.</summary>
-    public async Task RestoreCachedChatAsync()
+    private ChatClientDescriptor? SelectedDescriptor => Settings.SelectedDescriptor;
+
+    /// <summary>
+    /// Shows the conversation and the notes that were saved when the app last ran, after the page is displayed.
+    /// </summary>
+    public async Task RestoreChatAsync()
     {
-        if (_recording.RestoreError is { } error)
-        {
-            Chat.StatusMessage = error;
-            return;
-        }
-
-        if (_recording.InteractionCount > 0)
-        {
-            await ReplayAllAsync();
-        }
-    }
-
-    private bool CanChangeChat() => !Chat.IsBusy && !Settings.IsBusy;
-    private bool CanUseChat() => CanChangeChat() && _recording.InteractionCount > 0;
-    private bool CanExportChat(View? _) => CanUseChat();
-    private bool CanPlayReplay() => CanUseChat() && ReferenceEquals(_selectedClient, _replayClient);
-    private bool CanReplayNext() => CanPlayReplay() && _recording.HasReplayRemaining;
-
-    [RelayCommand(CanExecute = nameof(CanChangeChat))]
-    private Task NewChatAsync()
-    {
+        _isRestoring = true;
         try
         {
-            _recording.NewRecording();
-            ClearVisibleChat();
-            _replayIncomplete = false;
-            Chat.StatusMessage = ReferenceEquals(_selectedClient, _replayClient)
-                ? "New chat started. Select a live client to send a message."
-                : $"New chat started. Export before starting another chat to keep a copy.{ImageAvailabilityHint}";
-            RefreshOperationCommands();
+            if (await SavedChat.RestoreAsync(Session, _thread, Notes) is { } restored)
+                StatusMessage = restored;
         }
         catch (Exception exception)
         {
-            Chat.StatusMessage = $"New chat failed: {exception.Message}";
-        }
-        return Task.CompletedTask;
-    }
-
-    [RelayCommand(CanExecute = nameof(CanChangeChat))]
-    private async Task ImportChatFileAsync()
-    {
-        Settings.IsBusy = true;
-        try
-        {
-            var file = await FilePicker.Default.PickAsync(new PickOptions
-            {
-                PickerTitle = "Import a saved chat",
-            });
-            if (file is null)
-            {
-                Chat.StatusMessage = "Import cancelled; current chat unchanged.";
-                return;
-            }
-
-            await using var input = await file.OpenReadAsync();
-            await LoadAndReplayChatAsync(input);
-        }
-        catch (Exception exception)
-        {
-            Chat.StatusMessage = $"Could not import or replay the chat: {exception.Message}";
+            StatusMessage = $"Could not restore the saved conversation: {DisplayText.OneLine(exception.Message)}";
         }
         finally
         {
-            Settings.IsBusy = false;
+            _isRestoring = false;
+            UpdateWelcome();
+            RefreshComposer();
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanChangeChat))]
-    private async Task LoadSampleChatAsync()
+    private bool CanSend() =>
+        IsInputEnabled && !IsResponding && (!string.IsNullOrWhiteSpace(Prompt) || HasSelectedImage) &&
+        (SelectedDescriptor?.SupportsImageInput == true || !HasSelectedImage && !ConversationContainsImage());
+
+    private bool CanSendSuggestion(string? suggestion) => IsInputEnabled && !IsResponding;
+
+    private bool CanStop() => IsResponding;
+
+    private bool CanRetry(ConversationTurn? turn) =>
+        Session.Status == ConversationStatus.Error && turn is { IsFailed: true } &&
+        Session.Turns.Count > 0 && ReferenceEquals(Session.Turns[^1], turn);
+
+    [RelayCommand(CanExecute = nameof(CanSend))]
+    private Task SendAsync()
     {
-        Settings.IsBusy = true;
+        var message = CreateUserMessage(Prompt, _selectedImage);
+        Prompt = string.Empty;
+        ClearSelectedImage();
+        return SendMessageAsync(message);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSendSuggestion))]
+    private Task SendSuggestionAsync(string? suggestion) =>
+        string.IsNullOrWhiteSpace(suggestion)
+            ? Task.CompletedTask
+            : SendMessageAsync(new ChatMessage(ChatRole.User, suggestion));
+
+    private async Task SendMessageAsync(ChatMessage message)
+    {
         try
         {
-            await using var input = await FileSystem.OpenAppPackageFileAsync("playground_chat.json");
-            await LoadAndReplayChatAsync(input);
+            await Session.SendMessageAsync(message);
         }
         catch (Exception exception)
         {
-            Chat.StatusMessage = $"Could not load or replay the example chat: {exception.Message}";
-        }
-        finally
-        {
-            Settings.IsBusy = false;
+            StatusMessage = $"Request failed: {DisplayText.OneLine(exception.Message)}";
         }
     }
 
-    private async Task LoadAndReplayChatAsync(Stream input)
+    [RelayCommand(CanExecute = nameof(CanStop))]
+    private Task StopAsync()
     {
-        await _recording.LoadFileAsync(input);
-        Settings.SelectedClient = _replayClient;
-        if (_recording.InteractionCount == 0)
-        {
-            ClearVisibleChat();
-            _replayIncomplete = false;
-            Chat.StatusMessage = "Imported an empty chat. Select a live client to send a message.";
-        }
-        else
-        {
-            await ReplayAllAsync();
-        }
+        StatusMessage = "Stopping the response\u2026";
+        return Session.CancelAsync();
     }
 
-    [RelayCommand(CanExecute = nameof(CanExportChat))]
-    private async Task ExportChatAsync(View? source)
+    [RelayCommand(CanExecute = nameof(CanRetry))]
+    private async Task RetryAsync(ConversationTurn? turn)
     {
-        if (source is null)
-        {
-            Chat.StatusMessage = "Export chat failed: the Export button is unavailable.";
-            return;
-        }
-
-        Settings.IsBusy = true;
         try
         {
-            var path = _recording.Export();
-            await Share.Default.RequestAsync(new ShareFileRequest
-            {
-                Title = "Export current chat as JSON",
-                File = new ShareFile(path),
-                PresentationSourceBounds = GetPageBounds(source),
-            });
-            Chat.StatusMessage = "Current chat export opened. Choose where to save or share the JSON file.";
+            await Session.RetryAsync();
         }
         catch (Exception exception)
         {
-            Chat.StatusMessage = $"Export chat failed: {exception.Message}";
-        }
-        finally
-        {
-            Settings.IsBusy = false;
+            StatusMessage = $"Retry failed: {DisplayText.OneLine(exception.Message)}";
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanPlayReplay))]
-    private Task ReplayChatAsync() => ReplayAllAsync();
-
-    [RelayCommand(CanExecute = nameof(CanReplayNext))]
-    private Task ReplayNextAsync() => ReplayAsync(playAll: false);
-
-    [RelayCommand(CanExecute = nameof(CanPlayReplay))]
-    private void RestartReplay()
+    /// <summary>Approves a call that waits for approval, so it runs.</summary>
+    [RelayCommand]
+    private void Approve(ToolApprovalBlock? approval)
     {
-        if (_recording.InteractionCount == 0)
-        {
-            Chat.StatusMessage = "There is no chat to replay.";
-            return;
-        }
-
-        _recording.RestartReplay();
-        ClearVisibleChat();
-        _replayIncomplete = true;
-        var turns = _recording.InteractionCount;
-        Chat.StatusMessage = $"Ready to replay {turns} {(turns == 1 ? "turn" : "turns")}. Press Next turn or Play all.";
-        RefreshOperationCommands();
+        if (approval is { IsAwaitingInput: true })
+            approval.Approve();
     }
 
-    private static Rect GetPageBounds(View source)
+    /// <summary>Rejects a call that waits for approval; the model hears that the user declined it.</summary>
+    [RelayCommand]
+    private void Reject(ToolApprovalBlock? approval)
     {
-        double x = 0, y = 0;
-        for (Element? current = source; current is VisualElement view; current = view.Parent)
-        {
-            x += view.X;
-            y += view.Y;
-        }
-
-        return new Rect(x, y, source.Width, source.Height);
+        if (approval is { IsAwaitingInput: true })
+            approval.Reject("The user rejected this call.");
     }
 
-    private async Task SendAsync()
+    /// <summary>Runs a manual UI action that waits for the user.</summary>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task RunActionAsync(UIActionBlock? action)
     {
-        if (Readiness.IsSendBlocked)
-        {
-            Chat.StatusMessage = Readiness.Message;
+        if (action is not { IsAwaitingInput: true })
             return;
-        }
-        var client = _selectedClient;
-        var attachment = Chat.SelectedImage;
-        if (client is null)
-        {
-            Chat.StatusMessage = Settings.ClientStatus;
-            return;
-        }
-        var descriptor = client.GetService<ChatClientDescriptor>()
-            ?? throw new InvalidOperationException("The selected chat client did not expose a ChatClientDescriptor.");
-        if (descriptor.IsReplay)
-        {
-            Chat.StatusMessage = "Replay is read-only. Use Play all or Next turn.";
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(Chat.Prompt) && attachment is null)
-        {
-            Chat.StatusMessage = "Enter a prompt or attach an image before sending.";
-            return;
-        }
-        if (!descriptor.SupportsImageInput && _conversation.HistoryContainsImage)
-        {
-            Chat.StatusMessage = $"This chat contains images. {descriptor.DisplayName} cannot send them; " +
-                "clear the chat or switch to an image-capable client.";
-            return;
-        }
-        if (attachment is not null && !descriptor.SupportsImageInput)
-        {
-            Chat.StatusMessage = $"{descriptor.DisplayName} does not support image input. " +
-                "Switch to an image-capable client or remove the image.";
-            return;
-        }
-
-        // Validate options before taking ownership of the composer input for this turn.
-        var tools = CreateEnabledTools();
-        ChatOptions options;
-        try
-        {
-            options = Settings.CreateChatOptions(tools);
-        }
-        catch (ArgumentException exception)
-        {
-            Chat.StatusMessage = exception.Message;
-            AddError(exception.Message);
-            return;
-        }
-
-        var prompt = Chat.Prompt;
-        var userMessage = CreateUserMessage(prompt, attachment);
-        var userText = string.IsNullOrWhiteSpace(prompt) ? $"Attached {attachment!.FileName}" : prompt.Trim();
-        var useStructuredJson = options.ResponseFormat is ChatResponseFormatJson;
-        Chat.Prompt = string.Empty;
-        Chat.ClearSelectedImage();
-
-        var requestGeneration = ++_requestGeneration;
-        var requestCancellation = new CancellationTokenSource();
-        _requestCancellation = requestCancellation;
-        Chat.IsBusy = true;
-        Settings.IsBusy = true;
-        Chat.StatusMessage = "Sending request…";
 
         try
         {
-            // The conversation produces portable changes; only this view model applies them to MAUI state.
-            await foreach (var change in _conversation.SendTurnAsync(
-                client, userMessage, userText, options, Settings.UseStreaming, useStructuredJson,
-                requestCancellation.Token))
-            {
-                if (IsCurrentRequest(requestGeneration))
-                    await Chat.ApplyTranscriptChangeAsync(change);
-            }
-
-            if (IsCurrentRequest(requestGeneration))
-            {
-                var count = _recording.InteractionCount;
-                Chat.StatusMessage = $"Response complete and auto-saved " +
-                    $"({count} {(count == 1 ? "interaction" : "interactions")}).";
-            }
+            await action.InvokeAsync();
         }
         catch (OperationCanceledException)
         {
-            if (IsCurrentRequest(requestGeneration))
-            {
-                Chat.StatusMessage = "Request cancelled.";
-                AddError("Request cancelled.");
-            }
-        }
-        catch (Exception exception)
-        {
-            if (IsCurrentRequest(requestGeneration))
-            {
-                Chat.StatusMessage = $"Request failed: {exception.Message}";
-                AddError($"Request failed: {exception.Message}");
-            }
-        }
-        finally
-        {
-            requestCancellation.Dispose();
-            if (ReferenceEquals(_requestCancellation, requestCancellation))
-                _requestCancellation = null;
-            if (IsCurrentRequest(requestGeneration))
-            {
-                Chat.IsBusy = false;
-                Settings.IsBusy = false;
-            }
+            // The turn ended before the action could send its result.
         }
     }
 
-    private Task ReplayAllAsync() => ReplayAsync(playAll: true);
+    private bool CanChangeChat() => !IsResponding;
 
-    private async Task ReplayAsync(bool playAll)
+    [RelayCommand(CanExecute = nameof(CanChangeChat))]
+    private async Task NewChatAsync()
     {
-        if (_recording.InteractionCount == 0)
-        {
-            Chat.StatusMessage = "There is no chat to replay.";
-            return;
-        }
-        if (!playAll && !_recording.HasReplayRemaining)
-        {
-            Chat.StatusMessage = "No more turns to replay. Press Play all to start again.";
-            return;
-        }
-
-        var generation = ++_requestGeneration;
-        using var cancellation = new CancellationTokenSource();
-        _requestCancellation = cancellation;
-        Chat.IsBusy = true;
-        Settings.IsBusy = true;
-        _replayIncomplete = true;
-        Chat.StatusMessage = playAll ? "Replaying saved chat…" : "Replaying next turn…";
-
         try
         {
-            if (playAll)
-                _recording.RestartReplay();
-            if (playAll || _recording.ReplayPosition == 0)
-                ClearVisibleChat();
-
-            // Reuse the live turn projector so saved and real responses render identically.
-            do
-            {
-                cancellation.Token.ThrowIfCancellationRequested();
-                var interaction = _recording.PeekNext();
-                var options = ChatRecordingSerializer.ReadOptions(interaction.Request);
-                await foreach (var change in _conversation.ReplayTurnAsync(
-                    _replayClient, interaction.Request, options, interaction.IsStreaming,
-                    ChatRecordingSerializer.IsStructuredJson(interaction.Request), cancellation.Token))
-                {
-                    if (IsCurrentRequest(generation))
-                        await Chat.ApplyTranscriptChangeAsync(change);
-                }
-            }
-            while (playAll && _recording.HasReplayRemaining);
-
-            _replayIncomplete = _recording.HasReplayRemaining;
-            Chat.StatusMessage = _replayIncomplete
-                ? $"Replayed {_recording.ReplayPosition}/{_recording.InteractionCount} turns. Press Next turn or Play all."
-                : $"Replayed {_recording.InteractionCount} " +
-                    $"{(_recording.InteractionCount == 1 ? "turn" : "turns")}. " +
-                    (ReferenceEquals(_selectedClient, _replayClient)
-                        ? "Select a live client to continue."
-                        : $"{SelectedDescriptor?.DisplayName ?? "No client"} selected.");
-        }
-        catch (OperationCanceledException)
-        {
-            ResetFailedReplay();
-            Settings.SelectedClient = _replayClient;
-            Chat.StatusMessage = "Replay cancelled. Press Play all or Next turn to try again.";
+            await SavedChat.ClearAsync(Session, Notes);
+            Prompt = string.Empty;
+            ClearSelectedImage();
+            StatusMessage = $"New chat started.{ImageAvailabilityHint}";
         }
         catch (Exception exception)
         {
-            ResetFailedReplay();
-            Settings.SelectedClient = _replayClient;
-            Chat.StatusMessage = $"Replay failed: {exception.Message}. Press Play all to retry or start a new chat.";
+            StatusMessage = $"New chat failed: {DisplayText.OneLine(exception.Message)}";
         }
         finally
         {
-            if (ReferenceEquals(_requestCancellation, cancellation))
-                _requestCancellation = null;
-            Chat.IsBusy = false;
-            Settings.IsBusy = false;
+            UpdateWelcome();
+            RefreshComposer();
         }
     }
 
-    private void ResetFailedReplay()
+    private bool CanAttachImage() => IsImageSupported && !IsResponding;
+
+    [RelayCommand(CanExecute = nameof(CanAttachImage))]
+    private async Task ChooseImageAsync()
     {
-        ClearVisibleChat();
-        _recording.RestartReplay();
+        try
+        {
+            if (await _imageInput.PickImageAsync() is { } image)
+                SetSelectedImage(image);
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"Could not select image: {DisplayText.OneLine(exception.Message)}";
+        }
     }
 
-    private List<AITool> CreateEnabledTools()
+    [RelayCommand(CanExecute = nameof(CanAttachImage))]
+    private async Task UseSampleImageAsync()
     {
-        var tools = new List<AITool>();
-        if (!Settings.SupportsToolCalling)
-            return tools;
-        if (Settings.UseDateTimeTool)
-            tools.Add(_tools.CurrentLocalDateTime);
-        if (Settings.UseCalculatorTool)
-            tools.Add(_tools.Calculator);
-        if (Settings.UseConnectionStatusTool)
-            tools.Add(_tools.ConnectionStatus);
-        if (Settings.UseImageGenerationTool && SelectedDescriptor?.SupportsImageGeneration == true)
-            tools.Add(new HostedImageGenerationTool());
-        return tools;
+        try
+        {
+            SetSelectedImage(await _imageInput.LoadSampleImageAsync());
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"Could not load the sample image: {DisplayText.OneLine(exception.Message)}";
+        }
     }
 
-    private static ChatMessage CreateUserMessage(string prompt, ImageAttachment? attachment)
+    [RelayCommand]
+    private void RemoveImage() => ClearSelectedImage();
+
+    private void SetSelectedImage(ImageAttachment image)
+    {
+        _selectedImage = image;
+        var previewBytes = image.Bytes;
+        SelectedImageName = image.FileName;
+        SelectedImagePreview = ImageSource.FromStream(() => new MemoryStream(previewBytes, writable: false));
+        OnPropertyChanged(nameof(HasSelectedImage));
+        SendCommand.NotifyCanExecuteChanged();
+        StatusMessage = $"Image ready: {SelectedImageName}";
+    }
+
+    private void ClearSelectedImage()
+    {
+        if (_selectedImage is null)
+            return;
+
+        _selectedImage = null;
+        SelectedImageName = string.Empty;
+        SelectedImagePreview = null;
+        OnPropertyChanged(nameof(HasSelectedImage));
+        SendCommand.NotifyCanExecuteChanged();
+    }
+
+    private static ChatMessage CreateUserMessage(string prompt, ImageAttachment? image)
     {
         var contents = new List<AIContent>();
         if (!string.IsNullOrWhiteSpace(prompt))
             contents.Add(new TextContent(prompt.Trim()));
-        if (attachment is not null)
-            contents.Add(new DataContent(attachment.Bytes, attachment.MediaType));
+        if (image is not null)
+            contents.Add(new DataContent(image.Bytes, image.MediaType));
         return new ChatMessage(ChatRole.User, contents);
     }
 
-    private bool CanSend()
-    {
-        var descriptor = SelectedDescriptor;
-        if (Chat.IsBusy || Settings.IsBusy || Readiness.IsSendBlocked || _recording.RestoreError is not null ||
-            descriptor is null ||
-            string.IsNullOrWhiteSpace(Chat.Prompt) && !Chat.HasSelectedImage)
+    private static void ApplyTheme(AppTheme theme) =>
+        MainThread.BeginInvokeOnMainThread(() =>
         {
-            return false;
-        }
+            if (Application.Current is { } application)
+                application.UserAppTheme = theme;
+        });
 
-        if (_replayIncomplete || descriptor.IsReplay ||
-            (!descriptor.SupportsImageInput &&
-                (Chat.HasSelectedImage || _conversation.HistoryContainsImage)))
-        {
-            return false;
-        }
-
-        return !Settings.SupportsToolCalling ||
-            Settings.ToolMode != ChatToolMode.RequireAny ||
-            Settings.UseDateTimeTool ||
-            Settings.UseCalculatorTool ||
-            Settings.UseConnectionStatusTool ||
-            (Settings.UseImageGenerationTool && descriptor.SupportsImageGeneration);
-    }
-
-    private ChatClientDescriptor? SelectedDescriptor => Settings.SelectedDescriptor;
-
-    private string ImageAvailabilityHint => SelectedDescriptor is { IsReplay: false, SupportsImageInput: false }
+    private string ImageAvailabilityHint => SelectedDescriptor is { SupportsImageInput: false }
         ? " Image input unavailable."
         : string.Empty;
 
+    private void SessionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(AgentContext.Status))
+            return;
+
+        var previous = _status;
+        var status = Session.Status;
+        _status = status;
+        if (!_isRestoring)
+        {
+            switch (status)
+            {
+                case ConversationStatus.Streaming when previous == ConversationStatus.AwaitingInput:
+                    StatusMessage = "Continuing after your decision\u2026";
+                    break;
+                case ConversationStatus.Streaming:
+                    StatusMessage = "Sending request\u2026";
+                    break;
+                case ConversationStatus.AwaitingInput:
+                    StatusMessage = "Waiting for you. Approve, reject, or decide what the chat asks for to continue.";
+                    break;
+                case ConversationStatus.Error:
+                    StatusMessage = $"Request failed: {DisplayText.OneLine(Session.Error?.Message ?? "unknown error.")}";
+                    break;
+                case ConversationStatus.Idle when previous is ConversationStatus.Streaming or ConversationStatus.AwaitingInput:
+                    StatusMessage = Session.Turns.Count > 0 && Session.Turns[^1].IsStopped
+                        ? "Request stopped."
+                        : "Response complete and saved.";
+                    break;
+            }
+        }
+
+        OnPropertyChanged(nameof(IsResponding));
+        OnPropertyChanged(nameof(IsIdle));
+        UpdateBusyState();
+    }
+
     private void ApplyClientSelection(IChatClient? client)
     {
-        var wasReplay = ReferenceEquals(_selectedClient, _replayClient);
         _selectedClient = client;
         var descriptor = SelectedDescriptor;
         Readiness.SetClient(descriptor, Settings.RequestModelId);
-        if (descriptor is null)
-        {
-            Chat.IsReplayClient = false;
-            Chat.IsImageSupported = false;
-            Chat.StatusMessage = Settings.ClientStatus;
-            RefreshOperationCommands();
-            return;
-        }
-
-        var isReplay = descriptor.IsReplay;
-        // Selecting Replay after finishing a recording starts from its first turn.
-        if (isReplay && !wasReplay && _recording.ReplayPosition == _recording.InteractionCount)
-            _recording.RestartReplay();
-        Chat.IsReplayClient = isReplay;
-        UpdateEmptyState();
-        Chat.IsImageSupported = !isReplay && descriptor.SupportsImageInput;
-        Chat.StatusMessage = GetClientStatus(descriptor);
-        RefreshOperationCommands();
+        IsImageSupported = descriptor?.SupportsImageInput == true;
+        StatusMessage = descriptor is null ? Settings.ClientStatus : GetClientStatus(descriptor);
+        RefreshComposer();
+        UpdateWelcome();
     }
 
     private string GetClientStatus(ChatClientDescriptor descriptor)
     {
-        if (descriptor.IsReplay)
-            return _recording.InteractionCount == 0
-                ? "No current chat. Import a recording using More, or select a live client."
-                : "Replay is ready. Press Play all or Next turn.";
-
-        if (_replayIncomplete)
-            return "Finish replay before continuing with a live client, or start a new chat.";
-
-        if (!descriptor.SupportsImageInput && Chat.HasSelectedImage)
+        if (!descriptor.SupportsImageInput && HasSelectedImage)
             return $"{descriptor.Description} The pending image cannot be sent by {descriptor.DisplayName}.";
 
-        if (!descriptor.SupportsImageInput && _conversation.HistoryContainsImage)
+        if (!descriptor.SupportsImageInput && ConversationContainsImage())
             return $"{descriptor.Description} This conversation contains image content " +
                 $"and cannot be sent to {descriptor.DisplayName}.";
 
         return $"{descriptor.DisplayName} selected.{ImageAvailabilityHint}";
     }
 
+    private bool ConversationContainsImage() =>
+        Session.Turns.Any(static turn => turn.RequestBlocks.Concat(turn.ResponseBlocks)
+            .Any(static block => block is MediaContentBlock { Content: DataContent }));
+
+    private void UpdateWelcome()
+    {
+        WelcomeTitle = "Start a real chat request";
+        WelcomeMessage = Suggestions.Count > 0
+            ? "Choose a client, configure options, and send a prompt, or try one of these."
+            : "Choose a client, configure options, and send a prompt.";
+    }
+
     private void SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(SettingsPaneViewModel.SelectedClient))
-            ApplyClientSelection(Settings.SelectedClient);
-        else if (e.PropertyName == nameof(SettingsPaneViewModel.SelectedModelId) &&
-            ReferenceEquals(_selectedClient, Settings.SelectedClient))
-            Readiness.SetClient(SelectedDescriptor, Settings.RequestModelId);
-        else if (e.PropertyName == nameof(SettingsPaneViewModel.IsBusy))
-            RefreshOperationCommands();
-        else if (e.PropertyName is nameof(SettingsPaneViewModel.ToolMode) or
-            nameof(SettingsPaneViewModel.UseDateTimeTool) or
-            nameof(SettingsPaneViewModel.UseCalculatorTool) or
-            nameof(SettingsPaneViewModel.UseConnectionStatusTool) or
-            nameof(SettingsPaneViewModel.UseImageGenerationTool))
-            UpdateChatCanSend();
+        switch (e.PropertyName)
+        {
+            case nameof(SettingsPaneViewModel.SelectedClient):
+                ApplyClientSelection(Settings.SelectedClient);
+                break;
+            case nameof(SettingsPaneViewModel.SelectedModelId)
+                when ReferenceEquals(_selectedClient, Settings.SelectedClient):
+                Readiness.SetClient(SelectedDescriptor, Settings.RequestModelId);
+                break;
+            case nameof(SettingsPaneViewModel.SupportsToolCalling) or
+                nameof(SettingsPaneViewModel.SupportsUIActions) or
+                nameof(SettingsPaneViewModel.UseCalculatorTool) or
+                nameof(SettingsPaneViewModel.UseDateTimeTool) or
+                nameof(SettingsPaneViewModel.UseConnectionStatusTool) or
+                nameof(SettingsPaneViewModel.UseReasoningSummary) or
+                nameof(SettingsPaneViewModel.UseImageGenerationTool):
+                RefreshComposer();
+                UpdateWelcome();
+                break;
+        }
     }
 
-    private void ChatPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void UpdateBusyState()
     {
-        if (e.PropertyName == nameof(ChatAreaViewModel.IsBusy))
-            RefreshOperationCommands();
-        else if (e.PropertyName is nameof(ChatAreaViewModel.Prompt) or
-            nameof(ChatAreaViewModel.HasSelectedImage))
-            UpdateChatCanSend();
-    }
-
-    private void UpdateChatCanSend() => Chat.CanSend = CanSend();
-
-    private void RefreshOperationCommands()
-    {
-        Readiness.IsInteractionBusy = Chat.IsBusy || Settings.IsBusy;
-        // Composer commands refresh in ChatAreaViewModel; these depend on recording and busy state.
-        UpdateChatCanSend();
+        Settings.IsBusy = IsResponding;
+        Readiness.IsInteractionBusy = Settings.IsBusy;
+        RefreshComposer();
         NewChatCommand.NotifyCanExecuteChanged();
-        ImportChatFileCommand.NotifyCanExecuteChanged();
-        ExportChatCommand.NotifyCanExecuteChanged();
-        ReplayChatCommand.NotifyCanExecuteChanged();
-        ReplayNextCommand.NotifyCanExecuteChanged();
-        RestartReplayCommand.NotifyCanExecuteChanged();
+        ChooseImageCommand.NotifyCanExecuteChanged();
+        UseSampleImageCommand.NotifyCanExecuteChanged();
+        SendCommand.NotifyCanExecuteChanged();
+        SendSuggestionCommand.NotifyCanExecuteChanged();
+        StopCommand.NotifyCanExecuteChanged();
+        RetryCommand.NotifyCanExecuteChanged();
     }
 
-    private void Cancel()
+    private void RefreshComposer()
     {
-        _requestCancellation?.Cancel();
-        Chat.StatusMessage = "Cancelling request…";
+        var descriptor = SelectedDescriptor;
+        IsInputEnabled = descriptor is not null && !Readiness.IsSendBlocked;
+        Placeholder = descriptor is null
+            ? "Select a chat client in settings"
+            : $"Message {descriptor.DisplayName}\u2026";
+        SendCommand.NotifyCanExecuteChanged();
+
+        var suggestions = Settings.CreateSuggestions();
+        if (!suggestions.SequenceEqual(Suggestions))
+            Suggestions = suggestions;
     }
-
-    private void ClearVisibleChat()
-    {
-        _conversation.Clear();
-        Chat.ClearConversation();
-        Chat.Prompt = string.Empty;
-        Chat.ClearSelectedImage();
-        UpdateEmptyState();
-    }
-
-    private void UpdateEmptyState()
-    {
-        if (SelectedDescriptor?.IsReplay == true)
-        {
-            var hasRecording = _recording.InteractionCount > 0;
-            Chat.EmptyTitle = hasRecording ? "Recording ready to replay" : "No chat to replay";
-            Chat.EmptySubtitle = hasRecording
-                ? "Open settings to step through turns or play the full recording."
-                : "Send a live message or import a recording to replay.";
-        }
-        else
-        {
-            Chat.EmptyTitle = "Start a real chat request";
-            Chat.EmptySubtitle = "Choose a client, configure options, and send a prompt.";
-        }
-    }
-
-    private bool IsCurrentRequest(long requestGeneration) => requestGeneration == _requestGeneration;
-
-    private void AddError(string text) =>
-        Chat.Messages.Add(new ChatMessageViewModel { Text = text, IsError = true, Label = "Error", ModelId = null });
 }
