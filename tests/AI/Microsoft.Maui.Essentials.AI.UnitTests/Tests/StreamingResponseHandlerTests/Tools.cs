@@ -32,6 +32,26 @@ public partial class StreamingResponseHandlerTests
 		}
 
 		[Fact]
+		public async Task ProcessToolCall_PendingCall_IsNotInformationalAndFinishesWithToolCalls()
+		{
+			var handler = new StreamingResponseHandler();
+
+			handler.ProcessContent("Checking.");
+			handler.ProcessToolCall("call-1", "GetWeather", "{\"location\":\"Boston\"}", informationalOnly: false);
+			handler.Complete(finishReason: ChatFinishReason.ToolCalls);
+
+			var updates = await ReadAll(handler);
+			var response = updates.ToChatResponse();
+
+			var fc = Assert.Single(response.Messages.SelectMany(m => m.Contents).OfType<FunctionCallContent>());
+			Assert.False(fc.InformationalOnly);
+			Assert.Equal("call-1", fc.CallId);
+			Assert.Equal(ChatFinishReason.ToolCalls, response.FinishReason);
+			Assert.Equal("Checking.", response.Text);
+			Assert.Empty(response.Messages.SelectMany(m => m.Contents).OfType<UsageContent>());
+		}
+
+		[Fact]
 		public async Task ProcessToolResult_EmitsWithToolRole()
 		{
 			var handler = new StreamingResponseHandler();

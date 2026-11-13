@@ -227,6 +227,10 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 						case ResponseUpdateTypeNative.ToolResult:
 							handler.ProcessToolResult(update.ToolCallId, update.ToolCallResult);
 							break;
+						case ResponseUpdateTypeNative.PendingToolCall:
+							// Approval mode: the tool did not run; the caller (FunctionInvokingChatClient) invokes it.
+							handler.ProcessToolCall(update.ToolCallId, update.ToolCallName, update.ToolCallArguments, informationalOnly: false);
+							break;
 						default:
 							throw new NotSupportedException($"Unsupported update type: {update.UpdateType}");
 					}
@@ -255,7 +259,8 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				{
 					try
 					{
-						handler.Complete(FromNativeChatResponse(finalResult).Usage);
+						var response = FromNativeChatResponse(finalResult);
+						handler.Complete(response.Usage, response.FinishReason);
 					}
 					catch (Exception ex)
 					{
@@ -380,13 +385,38 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			throw new InvalidOperationException("Apple Intelligence returned a malformed or empty native response.");
 	}
 
-	private static void ValidateCurrentPrompt(ChatMessageNative[] messages)
+	internal static void ValidateCurrentPrompt(ChatMessageNative[] messages)
 	{
-		if (messages[^1].Role != ChatRoleNative.User)
-			throw new ArgumentException(
-				"Apple Intelligence requires the current prompt to be the last User message. " +
-				"System/instructions-only input and trailing non-User messages are not supported.",
-				nameof(messages));
+		if (messages[^1].Role == ChatRoleNative.User || IsToolResultResume(messages))
+			return;
+
+		throw new ArgumentException(
+			"Apple Intelligence requires the current prompt to be the last User message, or the conversation to end " +
+			"with Tool results for every function call in the preceding Assistant message. " +
+			"System/instructions-only input and other trailing non-User messages are not supported.",
+			nameof(messages));
+	}
+
+	/// <summary>
+	/// Returns <see langword="true"/> when the conversation ends with Tool messages that answer exactly the
+	/// function calls of the preceding Assistant message (the shape a <see cref="FunctionInvokingChatClient"/>
+	/// sends after it has invoked the calls). The Swift bridge applies the same rule.
+	/// </summary>
+	internal static bool IsToolResultResume(ChatMessageNative[] messages)
+	{
+		var start = messages.Length;
+		while (start > 0 && messages[start - 1].Role == ChatRoleNative.Tool)
+			start--;
+
+		if (start == messages.Length || start == 0 || messages[start - 1].Role != ChatRoleNative.Assistant)
+			return false;
+
+		var callIds = messages[start - 1].Contents.OfType<FunctionCallContentNative>().Select(c => c.CallId).ToList();
+		var resultIds = messages[start..].SelectMany(m => m.Contents).OfType<FunctionResultContentNative>().Select(r => r.CallId).ToList();
+
+		return callIds.Count > 0 &&
+			callIds.Count == resultIds.Count &&
+			callIds.ToHashSet(StringComparer.Ordinal).SetEquals(resultIds);
 	}
 
 	internal static ChatResponse FromNativeChatResponse(ChatResponseNative? response)
@@ -398,11 +428,19 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			.Select(FromNative)
 			.ToList();
 
+		if (response.HasPendingToolCalls)
+		{
+			// Approval mode: no tool ran natively, so the caller must invoke these calls.
+			foreach (var call in messages.SelectMany(m => m.Contents).OfType<FunctionCallContent>())
+				call.InformationalOnly = false;
+		}
+
 		// Create ChatResponse with all messages and native usage when available.
 		return new ChatResponse(messages)
 		{
 			ModelId = DefaultModelId,
-			Usage = FromNativeUsage(response.Usage)
+			Usage = FromNativeUsage(response.Usage),
+			FinishReason = response.HasPendingToolCalls ? ChatFinishReason.ToolCalls : null
 		};
 	}
 
@@ -560,6 +598,17 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				throw new ArgumentException("Required tool calling needs at least one tool.", nameof(options));
 		}
 
+		// Mirror FunctionInvokingChatClient: any approval-required tool means the caller must approve and invoke
+		// the calls, so the native session vetoes every call and returns it instead of running it.
+		var approvalMode = toolMode is not NoneChatToolMode &&
+			tools is not null &&
+			tools.Any(tool => tool.GetService<ApprovalRequiredAIFunction>() is not null);
+		if (approvalMode && !supportsOS27)
+		{
+			LogApprovalNotEnforced(_logger);
+			approvalMode = false;
+		}
+
 		return new ChatOptionsNative
 		{
 			TopK = ToNative(options.TopK),
@@ -571,13 +620,17 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			ToolCallingMode = toolMode is NoneChatToolMode
 				? ToolCallingModeNative.Disallowed
 				: required ? ToolCallingModeNative.Required : ToolCallingModeNative.Allowed,
+			ApprovalMode = approvalMode,
 			Tools = toolMode is NoneChatToolMode
 				? null
-				: ToNative(tools, cancellationToken, _functionInvocationServices)
+				: ToNative(tools, cancellationToken, _functionInvocationServices, approvalMode)
 		};
 	}
 
-	private AIFunctionToolAdapter[]? ToNative(IList<AITool>? tools, CancellationToken cancellationToken, IServiceProvider? services)
+	[LoggerMessage(LogLevel.Warning, "Tool approval cannot be enforced before Apple OS 27; approval-required tools run without approval.")]
+	private static partial void LogApprovalNotEnforced(ILogger logger);
+
+	private AIFunctionToolAdapter[]? ToNative(IList<AITool>? tools, CancellationToken cancellationToken, IServiceProvider? services, bool approvalMode)
 	{
 		AIFunctionToolAdapter[]? adapters = null;
 
@@ -594,7 +647,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 			adapters = tools
 				.OfType<AIFunction>()
-				.Select(function => new AIFunctionToolAdapter(function, _logger, cancellationToken, services))
+				.Select(function => new AIFunctionToolAdapter(function, _logger, cancellationToken, services, approvalMode))
 				.ToArray();
 		}
 
@@ -654,6 +707,11 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 					_ => "{}"
 				})],
 #pragma warning restore IL3050, IL2026
+
+			// FunctionInvokingChatClient leaves handled approvals in history with an informational call; the
+			// matching call and result are already present, so these wrappers carry nothing for the model.
+			ToolApprovalRequestContent { ToolCall: FunctionCallContent { InformationalOnly: true } } => [],
+			ToolApprovalResponseContent { ToolCall: FunctionCallContent { InformationalOnly: true } } => [],
 
 			// Standard MEAI content is not an optional custom extension.
 			_ when content.GetType().Assembly == typeof(AIContent).Assembly =>
@@ -855,7 +913,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	}
 #endif
 
-	private sealed partial class AIFunctionToolAdapter(AIFunction function, ILogger logger, CancellationToken cancellationToken, IServiceProvider? services) : AIToolNative
+	private sealed partial class AIFunctionToolAdapter(AIFunction function, ILogger logger, CancellationToken cancellationToken, IServiceProvider? services, bool approvalMode) : AIToolNative
 	{
 		// Swift invokes tools on native threads without the managed request context.
 		private readonly NativeCallbackContext _requestContext = new();
@@ -879,6 +937,10 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			try
 			{
 				ArgumentNullException.ThrowIfNull(arguments);
+
+				// The native session vetoes every call in approval mode; never run a tool natively there.
+				if (approvalMode)
+					throw new InvalidOperationException($"Tool '{function.Name}' must be invoked by the caller in approval mode.");
 
 				var argsString = (string)arguments;
 

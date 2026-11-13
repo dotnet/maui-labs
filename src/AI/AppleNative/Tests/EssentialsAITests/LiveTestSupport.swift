@@ -99,22 +99,30 @@ enum LiveTests {
         var contentUpdates: [String] = []
         var toolCalls: [String] = []
         var toolResults: [String] = []
+        var pendingToolCalls: [(id: String, name: String, arguments: String)] = []
         var finalText = ""
+        var response: ChatResponseNative?
         var error: NSError?
     }
 
     static func runClient(
-        prompt: String, schema: String? = nil, streaming: Bool, maxTokens: Int = 256, tools: [any AIToolNative]? = nil,
-        toolCallingMode: ToolCallingModeNative = .allowed, history: [ChatMessageNative] = [], timeout: TimeInterval = 180
+        prompt: String?, schema: String? = nil, streaming: Bool, maxTokens: Int = 256, tools: [any AIToolNative]? = nil,
+        toolCallingMode: ToolCallingModeNative = .allowed, history: [ChatMessageNative] = [], approvalMode: Bool = false,
+        timeout: TimeInterval = 180
     ) async throws -> ClientRun {
-        let message = ChatMessageNative()
-        message.contents = [TextContentNative(text: prompt)]
+        var messages = history
+        if let prompt {
+            let message = ChatMessageNative()
+            message.contents = [TextContentNative(text: prompt)]
+            messages.append(message)
+        }
         let options = ChatOptionsNative()
         options.temperature = 0
         options.maxOutputTokens = NSNumber(value: maxTokens)
         options.responseJsonSchema = schema.map { $0 as NSString }
         options.tools = tools
         options.toolCallingMode = toolCallingMode
+        options.approvalMode = approvalMode
 
         let lock = NSLock()
         var run = ClientRun()
@@ -126,6 +134,8 @@ enum LiveTests {
                 case .content: run.contentUpdates.append(update.text ?? "")
                 case .toolCall: run.toolCalls.append(update.toolCallName ?? "")
                 case .toolResult: run.toolResults.append(update.toolCallResult ?? "")
+                case .pendingToolCall:
+                    run.pendingToolCalls.append((update.toolCallId ?? "", update.toolCallName ?? "", update.toolCallArguments ?? ""))
                 @unknown default: break
                 }
             }
@@ -133,6 +143,7 @@ enum LiveTests {
         let onComplete: (ChatResponseNative?, NSError?) -> Void = { response, error in
             lock.withLock {
                 run.error = error
+                run.response = response
                 run.finalText = response?.messages.flatMap(\.contents)
                     .compactMap { ($0 as? TextContentNative)?.text }.joined() ?? ""
             }
@@ -141,8 +152,8 @@ enum LiveTests {
 
         let client = ChatClientNative()
         let token = streaming
-            ? client.streamResponse(messages: history + [message], options: options, onUpdate: onUpdate, onComplete: onComplete)
-            : client.getResponse(messages: history + [message], options: options, onUpdate: onUpdate, onComplete: onComplete)
+            ? client.streamResponse(messages: messages, options: options, onUpdate: onUpdate, onComplete: onComplete)
+            : client.getResponse(messages: messages, options: options, onUpdate: onUpdate, onComplete: onComplete)
         defer { token?.cancel() }
 
         let result = await XCTWaiter.fulfillment(of: [done], timeout: timeout)

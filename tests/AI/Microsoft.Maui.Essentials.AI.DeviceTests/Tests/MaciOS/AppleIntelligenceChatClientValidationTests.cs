@@ -83,6 +83,89 @@ public class AppleIntelligenceChatClientValidationTests
 
 	private sealed class UnrecognizedContent : AIContent;
 
+	// FunctionInvokingChatClient resumes after invoking calls (possibly split across Tool messages by approval decision).
+	[Theory]
+	[InlineData("single", true)]
+	[InlineData("split", true)]
+	[InlineData("missing", false)]
+	[InlineData("extra", false)]
+	[InlineData("noCalls", false)]
+	public void ValidateCurrentPrompt_ToolResultSuffix_AcceptsOnlyCompleteResults(string shape, bool accepted)
+	{
+		var messages = new List<ChatMessage> { new(ChatRole.User, "Do both") };
+		messages.Add(shape == "noCalls"
+			? new(ChatRole.Assistant, "No calls")
+			: new(ChatRole.Assistant, [new FunctionCallContent("a", "one"), new FunctionCallContent("b", "two")]));
+		switch (shape)
+		{
+			case "single":
+				messages.Add(new(ChatRole.Tool, [new FunctionResultContent("a", "1"), new FunctionResultContent("b", "2")]));
+				break;
+			case "split":
+				messages.Add(new(ChatRole.Tool, [new FunctionResultContent("b", "rejected")]));
+				messages.Add(new(ChatRole.Tool, [new FunctionResultContent("a", "1")]));
+				break;
+			case "missing":
+				messages.Add(new(ChatRole.Tool, [new FunctionResultContent("a", "1")]));
+				break;
+			case "extra":
+				messages.Add(new(ChatRole.Tool, [new FunctionResultContent("a", "1"), new FunctionResultContent("b", "2"), new FunctionResultContent("c", "3")]));
+				break;
+			case "noCalls":
+				messages.Add(new(ChatRole.Tool, [new FunctionResultContent("a", "1")]));
+				break;
+		}
+
+		// Results without a matching preceding call are rejected while mapping, before prompt validation.
+		if (shape is "extra" or "noCalls")
+		{
+			Assert.Throws<ArgumentException>(() => AppleIntelligenceChatClient.ToNative(messages, null).ToArray());
+			return;
+		}
+
+		var native = AppleIntelligenceChatClient.ToNative(messages, null).ToArray();
+
+		Assert.Equal(accepted, AppleIntelligenceChatClient.IsToolResultResume(native));
+		if (accepted)
+			AppleIntelligenceChatClient.ValidateCurrentPrompt(native);
+		else
+			Assert.Throws<ArgumentException>(() => AppleIntelligenceChatClient.ValidateCurrentPrompt(native));
+	}
+
+	// Retained history from a completed FICC approval round must not block the next user turn (R3).
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void ToNative_CompletedApprovalContent_IsSkipped(bool approved)
+	{
+		var call = new FunctionCallContent("a", "guarded") { InformationalOnly = true };
+		var request = new ToolApprovalRequestContent("ficc_a", call);
+		var messages = new List<ChatMessage>
+		{
+			new(ChatRole.User, "Do it"),
+			new(ChatRole.Assistant, [request]),
+			new(ChatRole.User, [request.CreateResponse(approved)]),
+			new(ChatRole.Assistant, [new FunctionCallContent("a", "guarded")]),
+			new(ChatRole.Tool, [new FunctionResultContent("a", approved ? "done" : "rejected")]),
+			new(ChatRole.Assistant, "Finished"),
+			new(ChatRole.User, "Next question"),
+		};
+
+		var native = AppleIntelligenceChatClient.ToNative(messages, null).ToArray();
+
+		Assert.Single(native.SelectMany(m => m.Contents).OfType<FunctionCallContentNative>());
+		AppleIntelligenceChatClient.ValidateCurrentPrompt(native);
+	}
+
+	// Unresolved approval requests must still be rejected; FICC should have handled them.
+	[Fact]
+	public void ToNative_PendingApprovalContent_Throws()
+	{
+		var request = new ToolApprovalRequestContent("ficc_a", new FunctionCallContent("a", "guarded"));
+		Assert.ThrowsAny<Exception>(() => AppleIntelligenceChatClient.ToNative(
+			[new(ChatRole.User, "Do it"), new(ChatRole.Assistant, [request])], null).ToArray());
+	}
+
 	// Inspects Apple's StrictSchemaTransformCache: native structured output requires even optional CLR fields to be required.
 	[Fact]
 	public void ResponseSchema_WithOptionalProperties_RequiresAllNativeFields()

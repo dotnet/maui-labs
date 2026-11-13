@@ -43,6 +43,17 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 		await binding.ToolCallbacks_InheritChatTraceAndSpanAcrossAwaits(streaming);
 	}
 
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task Tools_ApprovalFlowsThroughFunctionInvocation(bool streaming)
+	{
+		var binding = new ToolBinding();
+		await binding.ApprovalRequiredTool_DecisionControlsInvocationAndNextTurnSucceeds(streaming, approve: true);
+		await binding.ApprovalRequiredTool_DecisionControlsInvocationAndNextTurnSucceeds(streaming, approve: false);
+		await binding.PlainTool_WithApprovalToolRegistered_InvokesOnceWithoutApproval(streaming);
+	}
+
 	[Fact]
 	public void ToolStreamValidation_AcceptsWhitespaceButRejectsNullArtifacts()
 	{
@@ -528,7 +539,7 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 			var name = options!.Tools![0].Name;
 			Dictionary<string, object?> arguments = name switch
 			{
-				"lookupRequiredValue" => new() { ["key"] = "secret" },
+				"lookupRequiredValue" or "lookupProtectedValue" or "lookupPublicValue" => new() { ["key"] = "secret" },
 				"capture_formatted" => new()
 				{
 					["id"] = "8d418a4d-fd44-47f4-813d-08b6b40abeca",

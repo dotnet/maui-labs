@@ -267,6 +267,7 @@ public class AppleIntelligenceChatClientConformanceTests
 #pragma warning restore MEAI001
 
 	// Apple's final transcript message becomes the current Prompt; instructions and prior responses cannot fill that role.
+	// A trailing Tool suffix that answers the preceding calls is a valid FunctionInvokingChatClient resume instead.
 	[Theory]
 	[InlineData("assistant", false)]
 	[InlineData("assistant", true)]
@@ -274,20 +275,13 @@ public class AppleIntelligenceChatClientConformanceTests
 	[InlineData("trailing-system", true)]
 	[InlineData("trailing-assistant", false)]
 	[InlineData("trailing-assistant", true)]
-	[InlineData("trailing-tool", false)]
-	[InlineData("trailing-tool", true)]
 	public async Task CurrentPrompt_WithoutFinalUser_RejectsBeforeInference(string scenario, bool streaming)
 	{
 		ChatMessage[] messages = scenario switch
 		{
 			"assistant" => [new(ChatRole.Assistant, "Prior response")],
 			"trailing-system" => [new(ChatRole.User, "Hello"), new(ChatRole.System, "Instructions")],
-			"trailing-assistant" => [new(ChatRole.User, "Hello"), new(ChatRole.Assistant, "Prior response")],
-			_ => [
-				new(ChatRole.User, "Hello"),
-				new(ChatRole.Assistant, [new FunctionCallContent("call-1", "sample")]),
-				new(ChatRole.Tool, [new FunctionResultContent("call-1", "result")])
-			],
+			_ => [new(ChatRole.User, "Hello"), new(ChatRole.Assistant, "Prior response")],
 		};
 		using var client = new AppleIntelligenceChatClient();
 		var options = new ChatOptions { Instructions = "Follow these instructions." };

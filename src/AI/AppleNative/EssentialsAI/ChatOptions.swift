@@ -18,6 +18,9 @@ public class ChatOptionsNative: NSObject {
     @objc public var responseJsonSchema: NSString? = nil
     @objc public var tools: [any AIToolNative]? = nil
     @objc public var toolCallingMode: ToolCallingModeNative = .allowed
+    /// When true (OS 27+), every native tool call is vetoed before it runs and the pending calls are
+    /// returned to the caller so a function-invoking client can apply approval and invoke them.
+    @objc public var approvalMode: Bool = false
 
     func toGenerationOptions() throws -> GenerationOptions {
         if let seed, seed.doubleValue < 0 {
