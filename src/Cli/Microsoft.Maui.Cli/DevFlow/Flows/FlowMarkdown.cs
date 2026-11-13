@@ -39,6 +39,9 @@ public static class FlowMarkdown
         WriteIndented = true,
     };
 
+    private static readonly FlowJsonContext ReadContext = new(ReadOptions);
+    private static readonly FlowJsonContext WriteContext = new(WriteOptions);
+
     /// <summary>Extract and deserialize the authoritative flow payload from a <c>.md</c> document.</summary>
     public static FlowParseResult Parse(string markdown, string? file = null)
     {
@@ -58,7 +61,7 @@ public static class FlowMarkdown
         MauiFlow? flow;
         try
         {
-            flow = JsonSerializer.Deserialize<MauiFlow>(jsonText, ReadOptions);
+            flow = JsonSerializer.Deserialize(jsonText, ReadContext.MauiFlow);
         }
         catch (JsonException ex)
         {
@@ -78,7 +81,7 @@ public static class FlowMarkdown
     /// <summary>Render a flow as a dual-layer <c>.md</c> (human prose + authoritative json block).</summary>
     public static string Serialize(MauiFlow flow)
     {
-        var json = JsonSerializer.Serialize(flow, WriteOptions);
+        var json = JsonSerializer.Serialize(flow, WriteContext.MauiFlow);
         var sb = new StringBuilder();
         sb.Append("# Scenario: ").Append(NoFence(flow.Name)).Append('\n').Append('\n');
         sb.Append("<!-- Recorded by MAUI DevFlow. The fenced ```json maui-test block below is the source of\n");

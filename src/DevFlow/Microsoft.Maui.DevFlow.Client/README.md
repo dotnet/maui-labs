@@ -43,6 +43,18 @@ await client.FillAsync("NameEntry", "Ada Lovelace");
 var tree = await client.GetTreeAsync(maxDepth: 3);
 ```
 
+## Diagnostic reads
+
+For diagnostic capture, use the cancellation-aware network overload when a failed read
+must not look like an empty request list:
+
+```csharp
+var requests = await client.GetNetworkRequestsAsync(100, cancellationToken);
+```
+
+This overload surfaces HTTP and JSON errors. The existing optional-filter overload retains
+its original behavior for compatibility.
+
 ## Requirements
 
 - A consumer targeting `netstandard2.0` or later (including .NET Framework 4.6.2+)
