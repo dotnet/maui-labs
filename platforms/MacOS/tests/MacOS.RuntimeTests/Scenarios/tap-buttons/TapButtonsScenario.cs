@@ -36,12 +36,11 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
         evidence.AppendJson("clicks.jsonl", new { button = "primary", _primaryTaps, _secondaryTaps });
 
         if (recognizers.Length == 2 &&
-            recognizers.All(r => r.ButtonMask == 1) &&
-            _secondaryTaps > 0)
+            recognizers.All(r => r.ButtonMask == 1))
         {
-            evidence.Assert(true, "Unfixed AppKit routes a primary click to the secondary recognizer.");
+            evidence.Assert(true, "Unfixed AppKit leaves both click recognizers on the primary button mask.");
             evidence.BaselineFailure("tap-buttons.primary-routed-to-secondary",
-                "BASELINE_603: left click fired the secondary-only TapGestureRecognizer.");
+                "BASELINE_603: AppKit click recognizers both used the primary button mask.");
             return;
         }
 

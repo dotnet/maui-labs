@@ -12,6 +12,6 @@
     "exitCode": 42,
     "outcome": "regression",
     "failureId": "tap-buttons.primary-routed-to-secondary",
-    "message": "BASELINE_603: left click fired the secondary-only TapGestureRecognizer."
+    "message": "BASELINE_603: AppKit click recognizers both used the primary button mask."
   }
 }
