@@ -22,7 +22,6 @@ public abstract class AppFixtureBase : IAppFixture
     public abstract string Platform { get; }
     public virtual string? DeviceId => null;
     public virtual string? AppIdentifier => null;
-    public virtual Task<string?> CaptureFailureDiagnosticsAsync() => Task.FromResult<string?>(null);
 
     protected AppFixtureBase()
     {

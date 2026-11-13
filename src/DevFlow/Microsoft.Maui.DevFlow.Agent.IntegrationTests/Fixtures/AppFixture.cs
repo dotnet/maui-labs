@@ -26,7 +26,6 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
     public string Platform => _inner.Platform;
     public string? DeviceId => _inner.DeviceId;
     public string? AppIdentifier => _inner.AppIdentifier;
-    public Task<string?> CaptureFailureDiagnosticsAsync() => _inner.CaptureFailureDiagnosticsAsync();
 
     public Task InitializeAsync() => _inner.InitializeAsync();
     public Task DisposeAsync() => _inner.DisposeAsync();
@@ -119,13 +118,6 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
             {
                 Console.Error.WriteLine(
                     $"[DevFlow integration] Could not collect Blazor readiness diagnostics: {ex.Message}");
-                var platformDiagnostics = await CaptureFailureDiagnosticsAsync();
-                if (!string.IsNullOrWhiteSpace(platformDiagnostics))
-                {
-                    Console.Error.WriteLine(
-                        $"[DevFlow integration] Platform failure diagnostics:{Environment.NewLine}" +
-                        platformDiagnostics);
-                }
             }
 
             // A prior test may have left the existing bridge in a stale state after an

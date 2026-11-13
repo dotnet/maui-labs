@@ -3,6 +3,7 @@ using AppKit;
 using CoreGraphics;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Platforms.MacOS.Handlers;
 
 namespace MacOS.RuntimeTests.Scenarios.TapButtons;
 
@@ -28,7 +29,7 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
         var nativeWindow = native.Window
             ?? throw new InvalidOperationException("Tap target is not attached to the AppKit window.");
         var recognizers = native.GestureRecognizers?
-            .OfType<NSClickGestureRecognizer>()
+            .OfType<MacOSTapGestureRecognizer>()
             .ToArray() ?? [];
 
         await SendClickAsync(native, nativeWindow, secondary: false);
@@ -120,19 +121,10 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
 
         var buttonMask = secondary ? (nuint)ButtonsMask.Secondary : (nuint)ButtonsMask.Primary;
         foreach (var recognizer in view.GestureRecognizers?
-            .OfType<NSClickGestureRecognizer>()
+            .OfType<MacOSTapGestureRecognizer>()
             .Where(recognizer => (recognizer.ButtonMask & buttonMask) != 0) ?? [])
         {
-            var action = recognizer.Action
-                ?? throw new InvalidOperationException(
-                    $"AppKit recognizer for button mask {buttonMask} has no action.");
-            var target = recognizer.Target
-                ?? throw new InvalidOperationException(
-                    $"AppKit recognizer for button mask {buttonMask} has no target.");
-            if (!target.RespondsToSelector(action))
-                throw new InvalidOperationException(
-                    $"AppKit recognizer target does not respond to {action}.");
-            target.PerformSelector(action, recognizer, 0);
+            recognizer.InvokeAction();
         }
     }
 

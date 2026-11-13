@@ -278,8 +278,10 @@ jobs:
       DEVFLOW_TEST_PLATFORM: ios
       DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
       DEVFLOW_TEST_IOS_ISOLATED: 'true'
-      # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
-      TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
+      # Xcode 27 currently SIGKILLs the MAUI app while BrowserEngineKit helpers initialize
+      # (dotnet/maui#36047). Keep the rest of the iOS suite running; WebView coverage remains
+      # active on Android and Windows.
+      TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '--filter Category!=WebView' }}
       DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime || '27.0' }}
     steps:
       - uses: actions/checkout@v6
@@ -362,8 +364,9 @@ jobs:
     env:
       DEVFLOW_TEST_PLATFORM: maccatalyst
       DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
-      # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
-      TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
+      # Xcode 27 currently force-terminates Catalyst apps during WebKit startup
+      # (dotnet/maui#36245). Keep all non-WebView integration coverage active.
+      TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '--filter Category!=WebView' }}
     steps:
       - uses: actions/checkout@v6
 
