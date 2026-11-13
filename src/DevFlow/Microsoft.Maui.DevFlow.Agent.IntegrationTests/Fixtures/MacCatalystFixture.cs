@@ -121,7 +121,10 @@ public sealed class MacCatalystFixture : AppFixtureBase
         {
             if (!_disposing)
             {
-                Console.WriteLine(FormatProcessExit(processId, "while the integration tests were running"));
+                Console.WriteLine(FormatProcessExit(
+                    processId,
+                    "while the integration tests were running",
+                    process.ExitCode));
                 try
                 {
                     Console.WriteLine(CaptureProcessDiagnostics(processId));
@@ -198,6 +201,7 @@ public sealed class MacCatalystFixture : AppFixtureBase
         }));
     }
 
-    static string FormatProcessExit(int processId, string context)
-        => $"Mac Catalyst app process {processId} exited {context}.";
+    static string FormatProcessExit(int processId, string context, int? exitCode = null)
+        => $"Mac Catalyst app process {processId} exited {context}" +
+            (exitCode is null ? "." : $" with code {exitCode}.");
 }

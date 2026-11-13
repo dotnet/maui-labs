@@ -103,30 +103,15 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
             new CGPoint(view.Bounds.X + view.Bounds.Width / 2, view.Bounds.Y + view.Bounds.Height / 2), null);
         var down = secondary ? NSEventType.RightMouseDown : NSEventType.LeftMouseDown;
         var up = secondary ? NSEventType.RightMouseUp : NSEventType.LeftMouseUp;
-        var upMask = secondary ? NSEventMask.RightMouseUp : NSEventMask.LeftMouseUp;
-        var dispatched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var monitor = NSEvent.AddLocalMonitorForEventsMatchingMask(upMask, mouseEvent =>
-        {
-            dispatched.TrySetResult();
-            return mouseEvent;
-        });
-
-        try
-        {
-            using var downEvent = NSEvent.MouseEvent(
-                down, point, 0, 0, window.WindowNumber, window.GraphicsContext,
-                1, 1, 1);
-            using var upEvent = NSEvent.MouseEvent(
-                up, point, 0, 0, window.WindowNumber, window.GraphicsContext,
-                2, 1, 0);
-            NSApplication.SharedApplication.PostEvent(downEvent, false);
-            NSApplication.SharedApplication.PostEvent(upEvent, false);
-            await dispatched.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        }
-        finally
-        {
-            NSEvent.RemoveMonitor(monitor);
-        }
+        using var downEvent = NSEvent.MouseEvent(
+            down, point, 0, 0, window.WindowNumber, window.GraphicsContext,
+            1, 1, 1);
+        using var upEvent = NSEvent.MouseEvent(
+            up, point, 0, 0, window.WindowNumber, window.GraphicsContext,
+            2, 1, 0);
+        window.SendEvent(downEvent);
+        window.SendEvent(upEvent);
+        await Task.Yield();
     }
 
     public override Window CreateWindow(IActivationState? activationState)

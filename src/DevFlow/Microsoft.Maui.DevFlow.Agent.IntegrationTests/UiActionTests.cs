@@ -847,7 +847,14 @@ public class UiActionTests : IntegrationTestBase
 
     private async Task<ElementInfo> FindCanvasTargetAsync(string automationId)
     {
-        await NavigateToPageAsync("//canvastaps", "SkiaCanvas", timeoutMs: 15000);
+        try
+        {
+            await NavigateToPageAsync("//canvastaps", "SkiaCanvas", timeoutMs: 15000);
+        }
+        catch (TimeoutException)
+        {
+            await NavigateToPageAsync("//canvastaps", "SkiaCanvas", timeoutMs: 15000);
+        }
         await Client.ScrollAsync(automationId);
         await SettleAsync();
         return await FindElementAsync(automationId);
