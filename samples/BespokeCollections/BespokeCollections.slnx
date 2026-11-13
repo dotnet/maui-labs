@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Core/BespokeCollections.Core.csproj" />
+  <Project Path="Fixture/BespokeCollections.Fixture.csproj" />
+  <Project Path="Tests/BespokeCollections.Tests.csproj" />
+</Solution>
