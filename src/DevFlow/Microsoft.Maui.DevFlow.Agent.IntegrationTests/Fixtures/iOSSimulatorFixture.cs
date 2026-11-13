@@ -210,7 +210,15 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
             Console.Error.WriteLine("[iOSFixture] Restarting CoreSimulatorService and retrying boot once.");
             try
             {
-                await RunProcessAsync("/usr/bin/killall", "-9 CoreSimulatorService", timeoutSeconds: 15);
+                try
+                {
+                    await RunProcessAsync("/usr/bin/killall", "-9 CoreSimulatorService", timeoutSeconds: 15);
+                }
+                catch (TimeoutException ex)
+                {
+                    Console.Error.WriteLine(
+                        $"[iOSFixture] CoreSimulatorService termination did not return; continuing recovery: {ex.Message}");
+                }
                 await Task.Delay(TimeSpan.FromSeconds(5));
 
                 var (_, bootError, bootExitCode) = await RunProcessAsync(

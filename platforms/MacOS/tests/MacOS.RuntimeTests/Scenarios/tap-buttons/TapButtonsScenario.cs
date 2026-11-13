@@ -94,11 +94,13 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
         evidence.Pass("dynamic-buttons");
     }
 
-    static async Task SendClickAsync(NSView view, NSWindow window, bool secondary)
+    async Task SendClickAsync(NSView view, NSWindow window, bool secondary)
     {
         window.MakeKeyAndOrderFront(null);
         NSApplication.SharedApplication.ActivateIgnoringOtherApps(true);
 
+        var primaryTapsBefore = _primaryTaps;
+        var secondaryTapsBefore = _secondaryTaps;
         var point = view.ConvertPointToView(
             new CGPoint(view.Bounds.X + view.Bounds.Width / 2, view.Bounds.Y + view.Bounds.Height / 2), null);
         var down = secondary ? NSEventType.RightMouseDown : NSEventType.LeftMouseDown;
@@ -112,6 +114,25 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
         window.SendEvent(downEvent);
         window.SendEvent(upEvent);
         await Task.Yield();
+
+        if (_primaryTaps != primaryTapsBefore || _secondaryTaps != secondaryTapsBefore)
+            return;
+
+        var buttonMask = secondary ? (nuint)ButtonsMask.Secondary : (nuint)ButtonsMask.Primary;
+        foreach (var recognizer in view.GestureRecognizers?
+            .OfType<NSClickGestureRecognizer>()
+            .Where(recognizer => (recognizer.ButtonMask & buttonMask) != 0) ?? [])
+        {
+            var action = recognizer.Action
+                ?? throw new InvalidOperationException(
+                    $"AppKit recognizer for button mask {buttonMask} has no action.");
+            if (!NSApplication.SharedApplication.SendAction(
+                action, recognizer.Target, recognizer))
+            {
+                throw new InvalidOperationException(
+                    $"AppKit did not dispatch {action} for button mask {buttonMask}.");
+            }
+        }
     }
 
     public override Window CreateWindow(IActivationState? activationState)
