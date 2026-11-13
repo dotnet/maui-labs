@@ -1,7 +1,6 @@
 using AppKit;
 using CoreGraphics;
 using Microsoft.Maui.Controls;
-using System.Runtime.InteropServices;
 
 using Microsoft.Maui.Platforms.MacOS.Platform;
 
@@ -135,10 +134,6 @@ public static class GestureManager
 
 internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
 {
-    [DllImport(ObjCRuntime.Constants.ObjectiveCLibrary, EntryPoint = "objc_msgSend")]
-    static extern void SendMessage(IntPtr receiver, IntPtr selector, nuint argument);
-
-    static readonly IntPtr SetButtonMaskSelector = ObjCRuntime.Selector.GetHandle("setButtonMask:");
     readonly TapGestureRecognizer _tapGesture;
     bool _isConnected;
 
@@ -157,8 +152,7 @@ internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
             UpdateButtonMask();
     }
 
-    internal void UpdateButtonMask() =>
-        SendMessage(Handle, SetButtonMaskSelector, (nuint)_tapGesture.Buttons);
+    internal void UpdateButtonMask() => ButtonMask = (nuint)_tapGesture.Buttons;
 
     public void Disconnect()
     {
