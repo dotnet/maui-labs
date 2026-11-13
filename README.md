@@ -93,6 +93,7 @@ A comprehensive testing, automation, and debugging toolkit for .NET MAUI apps â€
 | [![NuGet: Microsoft.Maui.DevFlow.Blazor.Gtk](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Blazor.Gtk.svg?label=Microsoft.Maui.DevFlow.Blazor.Gtk)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Blazor.Gtk/) | WebKitGTK CDP bridge |
 | [![NuGet: Microsoft.Maui.DevFlow.Client](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Client.svg?label=Microsoft.Maui.DevFlow.Client)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Client/) | Portable (`netstandard2.0`) agent protocol client |
 | [![NuGet: Microsoft.Maui.DevFlow.Driver](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Driver.svg?label=Microsoft.Maui.DevFlow.Driver)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Driver/) | Platform driver library |
+| [![NuGet: Microsoft.Maui.DevFlow.Extensibility](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Extensibility.svg?label=Microsoft.Maui.DevFlow.Extensibility)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Extensibility/) | Contract for writing DevFlow plugins ([guide](docs/DevFlow/plugins.md)) |
 | [![NuGet: Microsoft.Maui.DevFlow.Logging](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Logging.svg?label=Microsoft.Maui.DevFlow.Logging)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Logging/) | Buffered JSONL file logger |
 
 ### AI Extensions

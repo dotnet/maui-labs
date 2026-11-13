@@ -219,6 +219,12 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
     protected override void OnUiOperationSucceeded() => InvalidateUiCapture();
 
+    /// <summary>The MAUI app's service provider, so plugins can take app services.</summary>
+    protected override IServiceProvider? ExtensionServices
+        => _app?.Handler?.MauiContext?.Services
+            ?? IPlatformApplication.Current?.Services
+            ?? base.ExtensionServices;
+
     // ── Lifecycle ─────────────────────────────────────────────────────────
 
     /// <summary>
