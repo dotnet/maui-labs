@@ -125,6 +125,7 @@ public sealed class MacCatalystFixture : AppFixtureBase
                 try
                 {
                     Console.WriteLine(CaptureProcessDiagnostics(processId));
+                    Console.WriteLine(CaptureCrashReports());
                 }
                 catch (Exception ex)
                 {
@@ -168,6 +169,33 @@ public sealed class MacCatalystFixture : AppFixtureBase
         diagnostics.WaitForExit();
         return $"Unified log for process {processId} (exit {diagnostics.ExitCode}):{Environment.NewLine}" +
             stdout + stderr;
+    }
+
+    static string CaptureCrashReports()
+    {
+        Thread.Sleep(TimeSpan.FromSeconds(2));
+        var reportsDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Library", "Logs", "DiagnosticReports");
+        if (!Directory.Exists(reportsDirectory))
+            return $"Crash report directory does not exist: {reportsDirectory}";
+
+        var cutoff = DateTime.UtcNow.AddMinutes(-2);
+        var reports = Directory.EnumerateFiles(reportsDirectory, "DevFlow.Sample*")
+            .Where(path => File.GetLastWriteTimeUtc(path) >= cutoff)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .Take(2)
+            .ToArray();
+        if (reports.Length == 0)
+            return "No recent DevFlow.Sample crash reports were found.";
+
+        return string.Join(Environment.NewLine, reports.Select(path =>
+        {
+            var contents = File.ReadAllText(path);
+            if (contents.Length > 64 * 1024)
+                contents = contents[..(64 * 1024)];
+            return $"Crash report {path}:{Environment.NewLine}{contents}";
+        }));
     }
 
     static string FormatProcessExit(int processId, string context)

@@ -206,7 +206,33 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
             {
                 Console.Error.WriteLine($"[iOSFixture] Boot log collection also timed out: {ex.Message}");
             }
-            throw;
+
+            Console.Error.WriteLine("[iOSFixture] Restarting CoreSimulatorService and retrying boot once.");
+            try
+            {
+                await RunProcessAsync("/usr/bin/killall", "-9 CoreSimulatorService", timeoutSeconds: 15);
+                await Task.Delay(TimeSpan.FromSeconds(5));
+
+                var (_, bootError, bootExitCode) = await RunProcessAsync(
+                    "xcrun", $"simctl boot {udid}", timeoutSeconds: 60);
+                if (bootExitCode != 0 &&
+                    !bootError.Contains("current state: Booted", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"simctl boot failed after restarting CoreSimulatorService: {bootError}");
+                }
+
+                await RunProcessCheckedAsync("xcrun", $"simctl bootstatus {udid} -b", timeoutSeconds: 300);
+                Console.WriteLine(
+                    $"[iOSFixture] Simulator {udid} boot recovered in {timer.Elapsed.TotalSeconds:F1}s.");
+            }
+            catch (Exception recoveryException)
+            {
+                throw new TimeoutException(
+                    $"Simulator {udid} did not boot and CoreSimulatorService recovery failed: " +
+                    recoveryException.Message,
+                    recoveryException);
+            }
         }
     }
 
