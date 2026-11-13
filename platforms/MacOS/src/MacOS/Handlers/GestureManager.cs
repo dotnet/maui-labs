@@ -208,6 +208,8 @@ internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
     internal void UpdateButtonMask() =>
         ButtonMask = (nuint)_tapGesture.Buttons;
 
+    internal void InvokeAction() => HandleTap(this);
+
     public void Disconnect()
     {
         if (!_isConnected)
