@@ -52,5 +52,6 @@ internal enum ResponseUpdateTypeNative : long
 {
 	Content = 0,
 	ToolCall = 1,
-	ToolResult = 2
+	ToolResult = 2,
+	PendingToolCall = 3
 }

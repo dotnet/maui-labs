@@ -5,6 +5,8 @@ import FoundationModels
 public class ChatResponseNative: NSObject, @unchecked Sendable {
     @objc public var messages: [ChatMessageNative]
     @objc public let usage: UsageDetailsNative?
+    /// True when the response ends in tool calls that were not executed and must be invoked by the caller.
+    @objc public var hasPendingToolCalls: Bool = false
     
     @objc public init(messages: [ChatMessageNative]) {
         self.messages = messages

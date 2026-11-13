@@ -28,6 +28,10 @@ public class AppleIntelligenceChatClientFunctionCallingTestsBase : ChatClientFun
 	protected override bool PreservesToolActivityContext => true;
 
 	protected override bool PreservesToolCancellation => true;
+
+	// OS 26 has no tool-call hook, so approval-required tools still run natively (with a warning).
+	protected override bool SupportsToolApproval =>
+		OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27);
 }
 
 [Collection(nameof(AppleIntelligenceCollection))]

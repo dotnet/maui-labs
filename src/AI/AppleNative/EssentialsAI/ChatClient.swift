@@ -151,7 +151,16 @@ public class ChatClientNative: NSObject {
                 }
             )
 
-        return executeTask(methodName, messages, options, toolWatcher, callbacks, onComplete) { session, prompt, schema, genOptions in
+        let onPendingToolCall: (Transcript.ToolCall) -> Void = { call in
+            let update = ResponseUpdateNative(
+                updateType: .pendingToolCall, toolCallId: call.id, toolCallName: call.toolName,
+                toolCallArguments: call.arguments.jsonString)
+            textDeltas.toolCall {
+                callbacks.dispatch { onUpdate(update) }
+            }
+        }
+
+        return executeTask(methodName, messages, options, toolWatcher, callbacks, onComplete, onPendingToolCall: onPendingToolCall) { session, prompt, schema, genOptions in
 
             if let jsonSchema = schema {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -326,11 +335,13 @@ public class ChatClientNative: NSObject {
         }
 #endif
 
-        // The last message is the prompt; everything before is the transcript history.
+        // The last message is the prompt; everything before is the transcript history. A request that
+        // ends in tool results for the preceding assistant tool calls resumes the turn with no new prompt.
         guard let lastMessage = messages.last else {
             throw NSError.chatError(.invalidRole, description: "No messages found in conversation")
         }
-        let otherMessages = Array(messages.dropLast())
+        let isResume = try Self.isToolResultResume(messages)
+        let otherMessages = isResume ? messages : Array(messages.dropLast())
 
         let model = SystemLanguageModel.default
         let hasImages = messages.contains(where: { message in message.contents.contains(where: { $0 is ImageContentNative }) })
@@ -354,7 +365,7 @@ public class ChatClientNative: NSObject {
 #endif
 
         let transcript = try Transcript(entries: otherMessages.flatMap(self.toTranscriptEntries))
-        let prompt = try self.toPrompt(message: lastMessage)
+        let prompt = isResume ? Prompt { "" } : try self.toPrompt(message: lastMessage)
 
         // Parse the JSON schema from the options
         let schema: GenerationSchema? = try {
@@ -378,8 +389,11 @@ public class ChatClientNative: NSObject {
             throw NSError.chatError(.invalidContent, description: "Apple Intelligence system model is unavailable: \(availability)")
         }
 
+        // A resumed turn already satisfied any required tool call, so forcing another would loop.
+        let requestedMode = options?.toolCallingMode ?? .allowed
         let session = Self.makeSession(model: model, tools: tools, transcript: transcript,
-                                       toolCallingMode: options?.toolCallingMode ?? .allowed)
+                                       toolCallingMode: isResume && requestedMode == .required ? .allowed : requestedMode,
+                                       approvalMode: Self.isApprovalMode(options))
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -391,12 +405,96 @@ public class ChatClientNative: NSObject {
     }
 
     static func makeSession(
-        model: SystemLanguageModel, tools: [ToolNative], transcript: Transcript, toolCallingMode: ToolCallingModeNative
+        model: SystemLanguageModel, tools: [ToolNative], transcript: Transcript, toolCallingMode: ToolCallingModeNative,
+        approvalMode: Bool = false
     ) -> LanguageModelSession {
-        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *), toolCallingMode == .required {
-            return LanguageModelSession(profile: RequiredToolProfile(model: model, tools: tools), history: transcript)
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *), toolCallingMode == .required || (approvalMode && !tools.isEmpty) {
+            let profile = ToolCallProfile(
+                model: model, tools: tools,
+                requireToolCall: toolCallingMode == .required,
+                vetoToolCalls: approvalMode)
+            return LanguageModelSession(profile: profile, history: transcript)
         }
         return LanguageModelSession(model: model, tools: tools, transcript: transcript)
+    }
+
+    /// Approval mode needs the OS 27 `onToolCall` hook; on earlier systems tools keep running natively.
+    static func isApprovalMode(_ options: ChatOptionsNative?) -> Bool {
+        guard let options, options.approvalMode, options.toolCallingMode != .disallowed, options.tools?.isEmpty == false else {
+            return false
+        }
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+            return true
+        }
+        return false
+    }
+
+    /// True when the request ends in tool messages whose results cover every call of the preceding assistant message.
+    static func isToolResultResume(_ messages: [ChatMessageNative]) throws -> Bool {
+        guard let last = messages.last, last.role == .tool else {
+            return false
+        }
+
+        var index = messages.count - 1
+        var resultIds = Set<String>()
+        while index >= 0, messages[index].role == .tool {
+            for content in messages[index].contents {
+                if let result = content as? FunctionResultContentNative {
+                    resultIds.insert(result.callId)
+                }
+            }
+            index -= 1
+        }
+
+        guard index >= 0, messages[index].role == .assistant else {
+            throw NSError.chatError(.invalidRole, description: "Tool results must follow an assistant message with tool calls.")
+        }
+        let callIds = Set(messages[index].contents.compactMap { ($0 as? FunctionCallContentNative)?.callId })
+        guard !callIds.isEmpty, callIds == resultIds else {
+            throw NSError.chatError(.invalidContent, description: "Tool results must answer every tool call of the preceding assistant message.")
+        }
+        return true
+    }
+
+    /// Returns the current request's transcript suffix when it ends in tool calls that were vetoed for approval.
+    @available(iOS 27.0, macOS 27.0, visionOS 27.0, *)
+    static func pendingToolCallEntries(error: Error, transcript: Transcript) -> [Transcript.Entry]? {
+        guard let toolError = error as? LanguageModelSession.ToolCallError, toolError.underlyingError is ApprovalVeto else {
+            return nil
+        }
+        let entries = Array(transcript)
+        let promptIndex = entries.lastIndex(where: { if case .prompt = $0 { return true } else { return false } })
+        let start = promptIndex.map { $0 + 1 } ?? 0
+        guard let callsIndex = entries[start...].lastIndex(where: { if case .toolCalls = $0 { return true } else { return false } }),
+              !entries[(callsIndex + 1)...].contains(where: { if case .toolOutput = $0 { return true } else { return false } }) else {
+            return nil
+        }
+        return Array(entries[start...callsIndex])
+    }
+
+    private func makePendingResponse(
+        _ entries: [Transcript.Entry], _ onPendingToolCall: ((Transcript.ToolCall) -> Void)?
+    ) throws -> ChatResponseNative {
+        if let onPendingToolCall, case .toolCalls(let calls)? = entries.last {
+            for call in calls {
+                onPendingToolCall(call)
+            }
+        }
+        let messages = try entries.filter { !Self.isEmptyPrompt($0) }.compactMap(self.fromTranscriptEntry)
+        let response = ChatResponseNative(messages: messages, usage: nil)
+        response.hasPendingToolCalls = true
+        return response
+    }
+
+    /// Resumed turns append an empty prompt entry that must not surface as a user message.
+    static func isEmptyPrompt(_ entry: Transcript.Entry) -> Bool {
+        guard case .prompt(let prompt) = entry else {
+            return false
+        }
+        return prompt.segments.allSatisfy { segment in
+            if case .text(let text) = segment { return text.content.isEmpty }
+            return false
+        }
     }
 
     private func toUsageDetailsNative<Content>(
@@ -425,6 +523,7 @@ public class ChatClientNative: NSObject {
         _ toolWatcher: ToolCallWatcher?,
         _ callbacks: CallbackDispatcher,
         _ onComplete: @escaping (ChatResponseNative?, NSError?) -> Void,
+        onPendingToolCall: ((Transcript.ToolCall) -> Void)? = nil,
         operation:
             @escaping (LanguageModelSession, Prompt, GenerationSchema?, GenerationOptions) async throws
             -> (String, ArraySlice<Transcript.Entry>, UsageDetailsNative?)
@@ -443,17 +542,19 @@ public class ChatClientNative: NSObject {
         }
 
         let task = Task {
+            var preparedSession: LanguageModelSession?
             do {
                 try Task.checkCancellation()
 
                 let (session, prompt, schema, genOptions) = try await self.prepareSession(methodName, messages, options, toolWatcher)
+                preparedSession = session
 
                 let result = try await operation(session, prompt, schema, genOptions)
 
                 try Task.checkCancellation()
 
                 // Convert transcript entries to messages
-                let transcriptMessages = try result.1.compactMap(self.fromTranscriptEntry)
+                let transcriptMessages = try result.1.filter { !Self.isEmptyPrompt($0) }.compactMap(self.fromTranscriptEntry)
                 guard !result.0.isEmpty, !transcriptMessages.isEmpty else {
                     throw NSError.chatError(.invalidContent, description: "Apple Intelligence returned an empty native response.")
                 }
@@ -470,6 +571,20 @@ public class ChatClientNative: NSObject {
 
                 callbacks.dispatch { onComplete(response, nil) }
             } catch {
+                if !Task.isCancelled, !(error is CancellationError), Self.isApprovalMode(options),
+                   #available(iOS 27.0, macOS 27.0, visionOS 27.0, *),
+                   let session = preparedSession,
+                   let pending = Self.pendingToolCallEntries(error: error, transcript: session.transcript),
+                   let response = try? self.makePendingResponse(pending, onPendingToolCall) {
+#if APPLE_INTELLIGENCE_LOGGING_ENABLED
+                    if let log = AppleIntelligenceLogger.log {
+                        log("[\(methodName)] Returning pending tool calls for approval: \(self.formatResponseDetailed(response))")
+                    }
+#endif
+                    callbacks.dispatch { onComplete(response, nil) }
+                    return
+                }
+
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Failed: \(error.localizedDescription)")
@@ -768,10 +883,17 @@ extension SessionPropertyValues {
     @SessionPropertyEntry var essentialsAIRequiredToolCallCount: Int = 0
 }
 
+/// Thrown from `onToolCall` so FoundationModels stops before running any tool that the caller must approve.
+struct ApprovalVeto: Error {}
+
+/// Session profile for tool calls that need more than the plain session: a required first tool call
+/// and/or approval mode, where every call is vetoed before it runs and the transcript keeps the calls.
 @available(iOS 27.0, macOS 27.0, visionOS 27.0, *)
-struct RequiredToolProfile: LanguageModelSession.DynamicProfile {
+struct ToolCallProfile: LanguageModelSession.DynamicProfile {
     let model: SystemLanguageModel
     let tools: [any Tool]
+    var requireToolCall: Bool = true
+    var vetoToolCalls: Bool = false
 
     @SessionProperty(\.essentialsAIRequiredToolCallCount) var toolCallCount
 
@@ -782,8 +904,15 @@ struct RequiredToolProfile: LanguageModelSession.DynamicProfile {
     var body: some LanguageModelSession.DynamicProfile {
         Profile { tools }
             .model(model)
-            .toolCallingMode(Self.toolCallingMode(for: toolCallCount))
-            .onToolCall { toolCallCount += 1 }
+            .toolCallingMode(requireToolCall ? Self.toolCallingMode(for: toolCallCount) : nil)
+            .transcriptErrorHandlingPolicy(vetoToolCalls ? .preserveTranscript : nil)
+            .onToolCall { (_: Transcript.ToolCall) in
+                toolCallCount += 1
+                if vetoToolCalls {
+                    // Every call in the batch is vetoed because batches run in parallel.
+                    throw ApprovalVeto()
+                }
+            }
     }
 }
 

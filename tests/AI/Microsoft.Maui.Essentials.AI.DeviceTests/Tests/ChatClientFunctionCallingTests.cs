@@ -270,6 +270,184 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		return response;
 	}
 
+	// Tool approval is owned by FunctionInvokingChatClient; clients must surface approval calls to it, not run them.
+	protected virtual bool SupportsToolApproval => true;
+
+	private IChatClient CreateApprovalClient()
+	{
+		var client = EnableFunctionCalling(new T());
+		return client.GetService<FunctionInvokingChatClient>() is null
+			? client.AsBuilder().UseFunctionInvocation().Build()
+			: client;
+	}
+
+	[Theory]
+	[InlineData(false, false, false)]
+	[InlineData(false, false, true)]
+	[InlineData(false, true, false)]
+	[InlineData(false, true, true)]
+	[InlineData(true, false, false)]
+	[InlineData(true, false, true)]
+	[InlineData(true, true, false)]
+	[InlineData(true, true, true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ToolFailure_WithManagedInvocation_ReturnsErrorResultAndContinues(
+		bool streaming, bool requiresApproval, bool includeDetailedErrors)
+	{
+		if (!SupportsToolApproval)
+			return;
+
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+		var calls = 0;
+		var protectedCalls = 0;
+		var failure = new InvalidOperationException("PRIVATE_TOOL_FAILURE_9274");
+		var failing = AIFunctionFactory.Create(async Task<string> () =>
+		{
+			Interlocked.Increment(ref calls);
+			await Task.Yield();
+			throw failure;
+		}, name: "read_local_value", description: "Reads the local value. Call only once; if it fails, explain the failure without retrying.");
+		var guarded = new ApprovalRequiredAIFunction(AIFunctionFactory.Create(() =>
+		{
+			Interlocked.Increment(ref protectedCalls);
+			return "DELETED";
+		}, name: "delete_local_data", description: "Deletes local data. Never call unless the user explicitly asks to delete data."));
+		using var client = CreateApprovalClient();
+		var invocation = client.GetService<FunctionInvokingChatClient>();
+		Assert.NotNull(invocation);
+		invocation.IncludeDetailedErrors = includeDetailedErrors;
+		var options = new ChatOptions
+		{
+			Tools = requiresApproval ? [new ApprovalRequiredAIFunction(failing)] : [failing, guarded],
+			MaxOutputTokens = 256,
+			AllowMultipleToolCalls = false
+		};
+		ConfigureBaselineSamplingOptions(options);
+		List<ChatMessage> messages =
+		[
+			new(ChatRole.System, "Call read_local_value once. If it fails, give a short final answer explaining the failure. Do not retry or call another tool."),
+			new(ChatRole.User, "Read the local value using read_local_value. Do not delete anything.")
+		];
+
+		var response = await GetRequiredToolResponseAsync(client, [.. messages], options, streaming, timeout.Token);
+		if (requiresApproval)
+		{
+			Assert.Equal(0, calls);
+			var request = Assert.Single(response.Messages.SelectMany(message => message.Contents)
+				.OfType<ToolApprovalRequestContent>());
+			Assert.Equal(failing.Name, Assert.IsType<FunctionCallContent>(request.ToolCall).Name);
+			messages.AddRange(response.Messages);
+			messages.Add(new(ChatRole.User, [request.CreateResponse(approved: true)]));
+			response = await GetRequiredToolResponseAsync(client, [.. messages], options, streaming, timeout.Token);
+		}
+
+		Assert.Equal(1, calls);
+		Assert.Equal(0, protectedCalls);
+		Assert.DoesNotContain(response.Messages.SelectMany(message => message.Contents),
+			content => content is ToolApprovalRequestContent);
+		var result = Assert.Single(response.Messages.SelectMany(message => message.Contents)
+			.OfType<FunctionResultContent>());
+		Assert.Same(failure, result.Exception);
+		Assert.Equal(includeDetailedErrors
+			? $"Error: Function failed. Exception: {failure.Message}"
+			: "Error: Function failed.", Assert.IsType<string>(result.Result));
+		Assert.False(string.IsNullOrWhiteSpace(response.Text));
+	}
+
+	[Theory]
+	[InlineData(false, true)]
+	[InlineData(false, false)]
+	[InlineData(true, true)]
+	[InlineData(true, false)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ApprovalRequiredTool_DecisionControlsInvocationAndNextTurnSucceeds(bool streaming, bool approve)
+	{
+		if (!SupportsToolApproval)
+			return;
+
+		using var source = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+		var calls = 0;
+		var tool = new ApprovalRequiredAIFunction(AIFunctionFactory.Create((string key) =>
+		{
+			Interlocked.Increment(ref calls);
+			return "PROTECTED_VALUE_77";
+		}, name: "lookupProtectedValue", description: "Looks up the protected value for a key."));
+		using var client = CreateApprovalClient();
+		var options = new ChatOptions { Tools = [tool], MaxOutputTokens = 256 };
+		ConfigureBaselineSamplingOptions(options);
+		List<ChatMessage> messages =
+		[
+			new(ChatRole.System, "Use the tool to look up values. After the tool returns, answer with the returned value. If the tool is rejected, say it was not allowed."),
+			new(ChatRole.User, "Call lookupProtectedValue for key secret, then tell me the value.")
+		];
+
+		var first = await GetRequiredToolResponseAsync(client, [.. messages], options, streaming, source.Token);
+
+		Assert.Equal(0, calls);
+		var requests = first.Messages.SelectMany(m => m.Contents).OfType<ToolApprovalRequestContent>().ToList();
+		Assert.NotEmpty(requests);
+		Assert.All(requests, request => Assert.Equal(tool.Name, Assert.IsType<FunctionCallContent>(request.ToolCall).Name));
+
+		messages.AddRange(first.Messages);
+		messages.Add(new ChatMessage(ChatRole.User, [.. requests.Select(request => (AIContent)request.CreateResponse(approve))]));
+		var final = await GetRequiredToolResponseAsync(client, [.. messages], options, streaming, source.Token);
+
+		Assert.Equal(approve ? requests.Count : 0, calls);
+		Assert.DoesNotContain(final.Messages.SelectMany(m => m.Contents), content => content is ToolApprovalRequestContent);
+		Assert.False(string.IsNullOrWhiteSpace(final.Text));
+		if (approve)
+			Assert.Contains("PROTECTED_VALUE_77", final.Text, StringComparison.Ordinal);
+
+		// Completed approval content stays in retained history and must not break the next turn.
+		messages.AddRange(final.Messages);
+		messages.Add(new ChatMessage(ChatRole.User, "Thank you. Reply with a short goodbye."));
+		var nextOptions = new ChatOptions { MaxOutputTokens = 64 };
+		ConfigureBaselineSamplingOptions(nextOptions);
+		var next = await GetRequiredToolResponseAsync(client, [.. messages], nextOptions, streaming, source.Token);
+
+		Assert.False(string.IsNullOrWhiteSpace(next.Text));
+		Assert.Equal(approve ? requests.Count : 0, calls);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task PlainTool_WithApprovalToolRegistered_InvokesOnceWithoutApproval(bool streaming)
+	{
+		if (!SupportsToolApproval)
+			return;
+
+		using var source = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+		var plainCalls = 0;
+		var protectedCalls = 0;
+		var plain = AIFunctionFactory.Create((string key) =>
+		{
+			Interlocked.Increment(ref plainCalls);
+			return "PUBLIC_VALUE_31";
+		}, name: "lookupPublicValue", description: "Looks up the public value for a key.");
+		var guarded = new ApprovalRequiredAIFunction(AIFunctionFactory.Create(() =>
+		{
+			Interlocked.Increment(ref protectedCalls);
+			return "DELETED";
+		}, name: "deleteAllData", description: "Permanently deletes all user data. Never call this unless explicitly asked to delete data."));
+		using var client = CreateApprovalClient();
+		var options = new ChatOptions { Tools = [plain, guarded], MaxOutputTokens = 256 };
+		ConfigureBaselineSamplingOptions(options);
+		ChatMessage[] messages =
+		[
+			new(ChatRole.System, "After receiving the tool value, answer with that value and do not call again."),
+			new(ChatRole.User, "Call lookupPublicValue for key secret, then tell me the value.")
+		];
+
+		var response = await GetRequiredToolResponseAsync(client, messages, options, streaming, source.Token);
+
+		Assert.DoesNotContain(response.Messages.SelectMany(m => m.Contents), content => content is ToolApprovalRequestContent);
+		Assert.Equal(1, plainCalls);
+		Assert.Equal(0, protectedCalls);
+		Assert.Contains("PUBLIC_VALUE_31", response.Text, StringComparison.Ordinal);
+	}
+
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]

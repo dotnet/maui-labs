@@ -123,6 +123,67 @@ and a session-local tool-call counter: it starts required, then becomes allowed
 after the first tool call so generation can finish with text. Request generation
 options do not override that dynamic mode. See the shared guide for the MEAI mode mapping.
 
+## Tool approval (human in the loop)
+
+Foundation Models has no approval API, so native execution cannot pause for a
+human. When `ChatOptions.Tools` contains an `ApprovalRequiredAIFunction` (and
+`ToolMode` is not `None`), the client switches to **approval mode** on OS 27+ and
+behaves like a non-invoking MEAI client:
+
+1. A `DynamicProfile.onToolCall` vetoes **every** call in the batch before it
+   runs (batches run in parallel, so vetoing only the approval call could still
+   run and lose sibling side effects).
+2. The preserved transcript's pending `toolCalls` are returned as
+   non-informational `FunctionCallContent` (`FinishReason = ToolCalls`), keeping
+   any text generated before the batch. Call ids are the native transcript ids.
+3. `FunctionInvokingChatClient` (`UseFunctionInvocation`) creates the approval
+   requests, invokes approved and plain calls, and rejects the rest, exactly as
+   for Azure/OpenAI.
+4. The next request ends in Tool results that cover the preceding assistant
+   calls; the client resumes the native session with `toolOutput` entries and an
+   empty prompt (resume turns use auto tool mode, even if `Required` was set).
+
+Notes:
+
+- `UseFunctionInvocation` is required for approval tools; without it callers
+  receive the pending calls, as with any non-invoking client.
+- In approval mode tools run through FICC, so DI services come from
+  `FunctionInvokingChatClient.FunctionInvocationServices`, not the services passed
+  to the Apple client constructor.
+- Tools added only through FICC `AdditionalTools` are not visible to the inner
+  client and do not enable approval mode.
+- Usage may be missing on pending-call responses.
+- Completed approval content left in history is skipped; unresolved approval
+  content is rejected.
+- OS 26 has no dynamic profiles: tools still run natively and a warning is logged
+  that approval cannot be enforced.
+- **Breaking change:** with approval tools present, tools are no longer executed
+  natively; the calls are returned for the function-invocation layer to run.
+
+## Tool failures
+
+In normal native execution, an unhandled managed tool exception is logged and
+returned to Foundation Models as an `NSError`. Foundation Models aborts generation,
+so both `GetResponseAsync` and `GetStreamingResponseAsync` fault with an
+`NSErrorException`. A stream may already have emitted text or an informational
+tool call, but no successful tool result is fabricated. Caller cancellation
+remains cancellation.
+
+Adding `UseFunctionInvocation()` alone does not change this behavior: native
+tools execute inside the inner Apple client, before the function-invocation layer
+can handle their exceptions.
+
+On OS 27+, **approval mode** delegates all tool invocations to
+`FunctionInvokingChatClient`, including plain tools registered alongside an
+approval-required tool. That layer can send failed invocations back to the model
+as `FunctionResultContent` and continue generation. MEAI 10.4.1 sends
+`"Error: Function failed."` by default, preserves the exception in
+`FunctionResultContent.Exception`, and includes the exception message in the
+model-visible result only when `IncludeDetailedErrors` is enabled. Its
+`MaximumConsecutiveErrorsPerRequest` defaults to 3; setting it to zero makes tool
+exceptions terminate immediately. This managed recovery does not apply to the
+OS 26 native fallback.
+
 ## Native schema mapping
 
 Response and tool-parameter schemas preserve nullable values independently of parent
