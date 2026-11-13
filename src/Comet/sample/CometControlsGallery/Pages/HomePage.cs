@@ -59,7 +59,7 @@ namespace CometControlsGallery.Pages
 								.FontSize(14),
 							Text("\u2022 CoreGraphics-backed ICanvas for GraphicsView")
 								.FontSize(14),
-							Text("\u2022 .NET 10 / MAUI 10")
+							Text("\u2022 .NET 11 / MAUI 11")
 								.FontSize(14),
 							Text($"\u2022 Runtime: {RuntimeInformation.FrameworkDescription}")
 								.FontSize(14)

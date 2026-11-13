@@ -14,7 +14,7 @@ on:
       target-framework:
         required: true
         type: string
-        description: 'Target framework to run tests against (e.g. net10.0-maccatalyst, net10.0-android)'
+        description: 'Target framework to run tests against (e.g. net11.0-maccatalyst, net11.0-android)'
       filter:
         required: false
         type: string
@@ -35,11 +35,6 @@ on:
         type: string
         default: 'maui macos maccatalyst'
         description: 'Space-separated list of workloads to install (only used when install-workloads is true)'
-      workload-version:
-        required: false
-        type: string
-        default: '10.0.203'
-        description: 'Workload version to install (pinned for reproducibility)'
       xcode-version:
         required: false
         type: string
@@ -79,7 +74,7 @@ jobs:
 
       - name: Install workloads
         if: inputs.install-workloads
-        run: dotnet workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
+        run: pwsh -NoProfile -File "${{ github.workspace }}/eng/install-workloads.ps1" -Workloads "${{ inputs.workloads }}"
 
       - name: Build and run device tests
         shell: pwsh

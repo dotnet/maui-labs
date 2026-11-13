@@ -77,9 +77,9 @@ public static class GestureManager
         var recognizer = new MacOSTapGestureRecognizer(tap)
         {
             NumberOfClicksRequired = (nint)tap.NumberOfTapsRequired,
-            ButtonMask = (nuint)tap.Buttons,
         };
         view.AddGestureRecognizer(recognizer);
+        recognizer.UpdateButtonMask();
 
         // AppKit delivers events only to the hit-test view's own gesture recognizers,
         // not ancestors. Intercept child hit testing so clicks on child views
@@ -135,6 +135,12 @@ public static class GestureManager
 internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
 {
     readonly TapGestureRecognizer _tapGesture;
+    static readonly System.Reflection.MethodInfo? _sendTapped =
+        typeof(TapGestureRecognizer).GetMethod(
+            "SendTapped",
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.Public |
+            System.Reflection.BindingFlags.NonPublic);
     bool _isConnected;
 
     public MacOSTapGestureRecognizer(TapGestureRecognizer tapGesture)
@@ -149,8 +155,10 @@ internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
     void OnTapGesturePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(TapGestureRecognizer.Buttons))
-            ButtonMask = (nuint)_tapGesture.Buttons;
+            UpdateButtonMask();
     }
+
+    internal void UpdateButtonMask() => ButtonMask = (nuint)_tapGesture.Buttons;
 
     public void Disconnect()
     {
@@ -171,22 +179,19 @@ internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
     [Foundation.Export("handleTap:")]
     void HandleTap(NSGestureRecognizer recognizer)
     {
-        // SendTapped internally calls Command.Execute, so do NOT call it separately.
-        var sendTapped = typeof(TapGestureRecognizer).GetMethod(
-            "SendTapped", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        if (sendTapped != null)
+        if ((_tapGesture as IElement)?.FindParentOfType<View>() is { } parent)
         {
-            var parent = (_tapGesture as IElement)?.FindParentOfType<View>();
-            var parameters = sendTapped.GetParameters();
-            if (parameters.Length == 1)
-                sendTapped.Invoke(_tapGesture, new object?[] { parent });
-            else if (parameters.Length == 2)
-                sendTapped.Invoke(_tapGesture, new object?[] { parent, null });
-        }
-        else
-        {
-            // Fallback if SendTapped is not found
-            _tapGesture.Command?.Execute(_tapGesture.CommandParameter);
+            if (_sendTapped is not null)
+            {
+                var parameters = _sendTapped.GetParameters();
+                _sendTapped.Invoke(
+                    _tapGesture,
+                    parameters.Length == 1 ? [parent] : [parent, null]);
+            }
+            else if (_tapGesture.Command?.CanExecute(_tapGesture.CommandParameter) == true)
+            {
+                _tapGesture.Command.Execute(_tapGesture.CommandParameter);
+            }
         }
     }
 }
@@ -234,17 +239,16 @@ internal class MacOSPanGestureRecognizer : NSPanGestureRecognizer
 internal class MacOSPointerTrackingArea : NSTrackingArea
 {
     readonly PointerGestureRecognizer _pointerGesture;
-    static readonly System.Reflection.MethodInfo? _sendEntered;
-    static readonly System.Reflection.MethodInfo? _sendExited;
-    static readonly System.Reflection.MethodInfo? _sendMoved;
-
-    static MacOSPointerTrackingArea()
-    {
-        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        _sendEntered = typeof(PointerGestureRecognizer).GetMethod("SendPointerEntered", flags);
-        _sendExited = typeof(PointerGestureRecognizer).GetMethod("SendPointerExited", flags);
-        _sendMoved = typeof(PointerGestureRecognizer).GetMethod("SendPointerMoved", flags);
-    }
+    static readonly System.Reflection.BindingFlags _methodFlags =
+        System.Reflection.BindingFlags.Instance |
+        System.Reflection.BindingFlags.Public |
+        System.Reflection.BindingFlags.NonPublic;
+    static readonly System.Reflection.MethodInfo? _sendEntered =
+        typeof(PointerGestureRecognizer).GetMethod("SendPointerEntered", _methodFlags);
+    static readonly System.Reflection.MethodInfo? _sendExited =
+        typeof(PointerGestureRecognizer).GetMethod("SendPointerExited", _methodFlags);
+    static readonly System.Reflection.MethodInfo? _sendMoved =
+        typeof(PointerGestureRecognizer).GetMethod("SendPointerMoved", _methodFlags);
 
     public MacOSPointerTrackingArea(NSView view, PointerGestureRecognizer pointerGesture)
         : base(view.Bounds,
@@ -286,20 +290,29 @@ internal class MacOSPointerTrackingArea : NSTrackingArea
 
     public void FireEntered(View? sender, NSEvent? theEvent = null)
     {
+        if (sender is null)
+            return;
+
         Func<IElement?, Point?>? getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
-        _sendEntered?.Invoke(_pointerGesture, new object?[] { sender!, getPos, null, ButtonsMask.Primary });
+        _sendEntered?.Invoke(_pointerGesture, [sender, getPos, null, ButtonsMask.Primary]);
     }
 
     public void FireExited(View? sender, NSEvent? theEvent = null)
     {
+        if (sender is null)
+            return;
+
         Func<IElement?, Point?>? getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
-        _sendExited?.Invoke(_pointerGesture, new object?[] { sender!, getPos, null, ButtonsMask.Primary });
+        _sendExited?.Invoke(_pointerGesture, [sender, getPos, null, ButtonsMask.Primary]);
     }
 
     public void FireMoved(View? sender, NSEvent? theEvent = null)
     {
+        if (sender is null)
+            return;
+
         Func<IElement?, Point?>? getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
-        _sendMoved?.Invoke(_pointerGesture, new object?[] { sender!, getPos, null, ButtonsMask.Primary });
+        _sendMoved?.Invoke(_pointerGesture, [sender, getPos, null, ButtonsMask.Primary]);
     }
 }
 
@@ -323,11 +336,6 @@ internal static class GestureExtensions
         return null;
     }
 
-    public static void SendTapped(this IGestureRecognizer recognizer, View? view)
-    {
-        if (recognizer is TapGestureRecognizer tap)
-            tap.Command?.Execute(tap.CommandParameter);
-    }
 }
 
 /// <summary>

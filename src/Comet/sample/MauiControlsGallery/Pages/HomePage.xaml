@@ -20,7 +20,7 @@
                     <Label Text="• Mirrors the CometControlsGallery page structure" FontSize="14" />
                     <Label Text="• Used for visual parity comparison with Comet" FontSize="14" />
                     <Label Text="• Targets Mac Catalyst and iOS" FontSize="14" />
-                    <Label Text=".NET 10 / MAUI 10" FontSize="14" TextColor="Gray" />
+                    <Label Text=".NET 11 / MAUI 11" FontSize="14" TextColor="Gray" />
                 </VerticalStackLayout>
             </Border>
             <Label Text="Use the flyout menu on the left to explore different control demos."

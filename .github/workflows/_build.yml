@@ -42,17 +42,12 @@ on:
         required: false
         type: boolean
         default: true
-        description: 'Install MAUI workloads and Android SDK (not needed for net10.0-only projects)'
+        description: 'Install MAUI workloads and Android SDK (not needed for net11.0-only projects)'
       workloads:
         required: false
         type: string
-        default: 'maui ios maccatalyst macos maui-tizen'
+        default: 'maui ios maccatalyst macos'
         description: 'Space-separated list of workloads to install (only used when install-workloads is true)'
-      workload-version:
-        required: false
-        type: string
-        default: '10.0.203'
-        description: 'Workload version to install (pinned for reproducibility)'
       os:
         required: false
         type: string
@@ -82,7 +77,7 @@ on:
         required: false
         type: string
         default: 'src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj'
-        description: 'Project path for InstallAndroidDependencies target. Must target net10.0-android.'
+        description: 'Project path for InstallAndroidDependencies target. Must target net11.0-android.'
 
 env:
   CI_PACKAGE_VERSION_SUFFIX: ci.${{ github.run_number }}.${{ github.run_attempt }}
@@ -117,6 +112,13 @@ jobs:
         if: inputs.xcode-version != '' && runner.os == 'macOS'
         run: sudo xcode-select -s /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer
 
+      - name: Setup Java
+        if: inputs.install-workloads && inputs.android-project != ''
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
@@ -130,21 +132,21 @@ jobs:
       # matches the later cibuild invocation.
       - name: Install workloads (Windows)
         if: inputs.install-workloads && runner.os == 'Windows'
-        run: eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
+        run: pwsh -NoProfile -File "${{ github.workspace }}/eng/install-workloads.ps1" -DotNet "${{ github.workspace }}/eng/common/dotnet.cmd" -Workloads "${{ inputs.workloads }}"
         shell: cmd
 
       - name: Install workloads (Unix)
         if: inputs.install-workloads && runner.os != 'Windows'
-        run: ./eng/common/dotnet.sh workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
+        run: pwsh -NoProfile -File "${{ github.workspace }}/eng/install-workloads.ps1" -DotNet "${{ github.workspace }}/eng/common/dotnet.sh" -Workloads "${{ inputs.workloads }}"
 
       - name: Install Android SDK dependencies (Windows)
         if: inputs.install-workloads && runner.os == 'Windows' && inputs.android-project != ''
-        run: eng\common\dotnet.cmd build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
+        run: eng\common\dotnet.cmd build -t:InstallAndroidDependencies -f net11.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
         shell: cmd
 
       - name: Install Android SDK dependencies (macOS)
         if: inputs.install-workloads && runner.os == 'macOS' && inputs.android-project != ''
-        run: ./eng/common/dotnet.sh build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
+        run: ./eng/common/dotnet.sh build -t:InstallAndroidDependencies -f net11.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
 
       # cibuild.cmd/.sh hardcode -pack -publish, and Arcade's publish step errors out with
       # "ItemsToPush is not specified" when a filter contains nothing packable (e.g. sample
@@ -167,12 +169,14 @@ jobs:
         if: runner.os == 'macOS' && !inputs.test-only && inputs.build-target-framework == ''
         run: >
           ./eng/common/build.sh
-          --restore --build --test --ci
+          --restore --build --test
+          ${{ matrix.os == 'xcode-27' && '--binaryLog /p:ContinuousIntegrationBuild=true' || '--ci' }}
           ${{ inputs.pack && '--pack --publish' || '' }}
           --configuration Release
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
+          ${{ matrix.os == 'xcode-27' && '/p:JavaSdkDirectory=$JAVA_HOME' || '' }}
           ${{ inputs.build-arguments }}
           ${{ inputs.skip-xcode-version-validation && '/p:ValidateXcodeVersion=false' || '' }}
 
@@ -262,7 +266,7 @@ jobs:
 
           dotnet publish src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj \
             -c Release \
-            -f net10.0 \
+            -f net11.0 \
             -r "$rid" \
             -p:PublishAot=true \
             -p:PublishTrimmed=true \
@@ -270,7 +274,7 @@ jobs:
             -p:TreatWarningsAsErrors=true \
             --self-contained true
 
-          publish_dir="artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/$rid/publish"
+          publish_dir="artifacts/bin/Microsoft.Maui.Cli/Release/net11.0/$rid/publish"
           cli_path="$publish_dir/maui"
           commands_json="$(mktemp)"
           agents_json="$(mktemp)"

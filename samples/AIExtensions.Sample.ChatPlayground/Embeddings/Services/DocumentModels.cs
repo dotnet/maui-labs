@@ -16,7 +16,7 @@ internal sealed record StoredDocument(
     string Text,
     DateTimeOffset ImportedAtUtc)
 {
-    public ImportedDocument Summary =>
+    public ImportedDocument CreateSummary() =>
         new(Id, Name, Text.Length, ImportedAtUtc);
 }
 

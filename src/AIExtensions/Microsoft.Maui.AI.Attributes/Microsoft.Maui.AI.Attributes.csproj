@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <RootNamespace>Microsoft.Maui.AI.Attributes</RootNamespace>
     <PackageId>Microsoft.Maui.AI.Attributes</PackageId>
     <Description>Attributes and source generator for exporting .NET methods as Microsoft.Extensions.AI tools, with first-class dependency injection support.</Description>

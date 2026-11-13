@@ -575,12 +575,12 @@ setDefault?.Invoke(null, new object[] { new WPFPreferences() });
 ```
 D:\repos\rmarinho\maui.wpf\
 ├── BACKEND_IMPLEMENTATION_CHECKLIST.md
-├── Directory.Build.props          # Centralized: BaseTargetFramework=net10.0, MauiVersion=10.0.31
+├── Directory.Build.props          # Centralized: BaseTargetFramework=net11.0, MauiVersion=11.0.10
 ├── Maui.WPF.sln
 ├── README.md
 ├── build.slnf                     # Solution filter for CI (libraries only)
 ├── .github/
-│   ├── workflows/build.yml        # CI: windows-latest, .NET 10, build + NuGet publish
+│   ├── workflows/build.yml        # CI: windows-latest, .NET 11, build + NuGet publish
 │   └── copilot-instructions.md
 ├── samples/
 │   ├── Maui.Controls.Sample/      # ControlGallery — comprehensive demo
@@ -708,5 +708,5 @@ D:\repos\rmarinho\maui.wpf\
 
 *Last updated: 2026-02-26*
 *Branch: `more-controls`*
-*Target Framework: `net10.0` | MAUI Version: `10.0.31`*
+*Target Framework: `net11.0` | MAUI Version: `11.0.10`*
 

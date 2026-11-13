@@ -31,7 +31,7 @@ public class UpdateCommandTests
 	{
 		var home = Path.Combine(Path.GetTempPath(), "cli home", ".dotnet", "tools");
 		var shim = Path.Combine(home, OperatingSystem.IsWindows() ? "maui.exe" : "maui");
-		var payload = Path.Combine(home, ".store", "microsoft.maui.cli", "1.0.0", "tools", "net10.0", "any");
+		var payload = Path.Combine(home, ".store", "microsoft.maui.cli", "1.0.0", "tools", "net11.0", "any");
 		Assert.True(UpdateCommand.IsGlobalInstall(shim, payload, home));
 		Assert.False(UpdateCommand.IsGlobalInstall(null, payload, home));
 		Assert.False(UpdateCommand.IsGlobalInstall(Path.Combine(home, "other"), payload, home));

@@ -25,7 +25,7 @@ function hashBytes(buf) {
   return acc >>> 0;
 }
 
-// Derive a coarse platform name from a TFM like "net10.0-android" when the broker
+// Derive a coarse platform name from a TFM like "net11.0-android" when the broker
 // registration doesn't carry an explicit platform field.
 function platformFromTfm(tfm) {
   const s = String(tfm || "").toLowerCase();

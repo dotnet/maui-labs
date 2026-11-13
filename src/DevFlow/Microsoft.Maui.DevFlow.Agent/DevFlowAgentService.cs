@@ -850,7 +850,22 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                     : new BGProcessingTaskRequest(identifier);
                 taskRequest.EarliestBeginDate = null;
 
-                BGTaskScheduler.Shared.Submit(taskRequest, out var error);
+                NSError? error;
+                if (OperatingSystem.IsIOSVersionAtLeast(27) ||
+                    OperatingSystem.IsMacCatalystVersionAtLeast(27))
+                {
+                    var completion = new TaskCompletionSource<NSError?>(
+                        TaskCreationOptions.RunContinuationsAsynchronously);
+                    BGTaskScheduler.Shared.Submit(
+                        taskRequest,
+                        submitError => completion.TrySetResult(submitError));
+                    error = await completion.Task;
+                }
+                else
+                {
+                    BGTaskScheduler.Shared.Submit(taskRequest, out error);
+                }
+
                 if (error != null)
                     submitError = $"{error.LocalizedDescription} {DescribeBgTaskSchedulerError(error, identifier)}".Trim();
             }

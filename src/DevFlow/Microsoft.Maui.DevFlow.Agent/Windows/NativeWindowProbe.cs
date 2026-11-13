@@ -222,7 +222,7 @@ public sealed class NativeWindowProbe
                 continue;
 
             var prefix = $"native:hwnd:0x{hwnd.ToInt64():X}";
-            var info = WalkAutomationElement(window, prefix, [rootIndex++], nativeObjects, 0, depth, isRoot: true);
+            var info = WalkAutomationElement(window, prefix, (int[])[rootIndex++], nativeObjects, 0, depth, isRoot: true);
             if (info is null)
                 continue;
 
@@ -631,7 +631,7 @@ public sealed class NativeWindowProbe
         // caller's cache. The returned ElementInfo's root id is rewritten to match
         // the supplied id so it round-trips with the request that produced it.
         var scratch = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-        var info = WalkAutomationElement(element, id, [0], scratch, 0, depth, isRoot: true);
+        var info = WalkAutomationElement(element, id, (int[])[0], scratch, 0, depth, isRoot: true);
         if (info is not null)
         {
             info.Id = id;
@@ -859,7 +859,7 @@ public sealed class NativeWindowProbe
             foreach (var candidate in FindDialogCandidates(root, hwnd))
             {
                 var prefix = $"native:hwnd:0x{hwnd.ToInt64():X}:dialog:{dialogIndex++}";
-                var info = WalkAutomationElement(candidate, prefix, [rootIndex++], nativeObjects, 0, depth, isRoot: true);
+                var info = WalkAutomationElement(candidate, prefix, (int[])[rootIndex++], nativeObjects, 0, depth, isRoot: true);
                 if (info is null)
                     continue;
 
@@ -1263,7 +1263,7 @@ public sealed class NativeWindowProbe
             if (child is null)
                 continue;
 
-            var childInfo = WalkAutomationElement(child, prefix, [.. path, index++], nativeObjects, depth + 1, maxDepth, isRoot: false);
+            var childInfo = WalkAutomationElement(child, prefix, (int[])[.. path, index++], nativeObjects, depth + 1, maxDepth, isRoot: false);
             if (childInfo is not null)
             {
                 info.Children ??= [];

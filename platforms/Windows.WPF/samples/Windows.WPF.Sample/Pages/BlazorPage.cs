@@ -11,7 +11,7 @@ public class BlazorPage : ContentPage
 		// The WPF Blazor hybrid path depends on Microsoft.AspNetCore.Components.WebView.Wpf which
 		// internally hosts a WebView2CompositionControl. Its WPF ControlTemplate references types
 		// from Microsoft.Windows.SDK.NET (the WinRT projection assembly). When the host project
-		// targets plain `net10.0-windows` (no Windows SDK version), that assembly is unresolvable
+		// targets plain `net11.0-windows` (no Windows SDK version), that assembly is unresolvable
 		// and WPF throws FileNotFoundException from ApplyTemplate during the measure pass — too
 		// late to catch inside a handler. Probe at construction by attempting to load the assembly
 		// by full identity; if it isn't resolvable, render a fallback explaining the limitation.

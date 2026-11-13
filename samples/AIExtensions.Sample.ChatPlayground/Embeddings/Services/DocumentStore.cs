@@ -51,7 +51,7 @@ public sealed class DocumentStore : IDisposable
             await Task.Run(() => AtomicFile.WriteAllText(
                 DocumentPath(document.Id), JsonSerializer.Serialize(document)), cancellationToken).ConfigureAwait(false);
             _documents.Add(document.Id, document);
-            return document.Summary;
+            return document.CreateSummary();
         }
         finally
         {
@@ -66,7 +66,7 @@ public sealed class DocumentStore : IDisposable
         {
             await EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
             return _documents.Values.OrderByDescending(document => document.ImportedAtUtc)
-                .Select(document => document.Summary).ToArray();
+                .Select(document => document.CreateSummary()).ToArray();
         }
         finally
         {

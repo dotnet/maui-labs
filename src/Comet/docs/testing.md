@@ -7,7 +7,7 @@ behavior, and the build requirements specific to this project.
 
 ## Prerequisites
 
-Comet tests target `net10.0` and reference the Comet assembly built for Mac
+Comet tests target `net11.0` and reference the Comet assembly built for Mac
 Catalyst. Before running tests, you must build the source generator and the
 framework in the correct order:
 
@@ -25,7 +25,7 @@ dotnet build tests/Comet.Tests/Comet.Tests.csproj -c Release
 dotnet test tests/Comet.Tests/Comet.Tests.csproj --no-build -c Release
 ```
 
-The test project references `src/Comet/bin/$(Configuration)/net10.0-maccatalyst/Comet.dll`
+The test project references `src/Comet/bin/$(Configuration)/net11.0-maccatalyst/Comet.dll`
 directly via a `<Reference>` element rather than a `<ProjectReference>`. If
 Comet has not been built for Mac Catalyst, the test project will fail to compile
 with a missing assembly error.

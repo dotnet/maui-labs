@@ -7,7 +7,7 @@ agent wire protocol: `AgentClient`, the element and protocol DTOs, and their ser
 
 The package targets `netstandard2.0` as well as modern .NET, so a .NET Framework test harness (for
 example Visual Studio Apex tests) drives a running app through exactly the same protocol code as a
-.NET 10 `dotnet watch` or VS Code test run. The DTOs are defined once, here, so the harnesses cannot
+.NET 11 `dotnet watch` or VS Code test run. The DTOs are defined once, here, so the harnesses cannot
 drift in how they serialize or interpret the protocol.
 
 Use [`Microsoft.Maui.DevFlow.Driver`](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Driver/)

@@ -33,16 +33,16 @@ jobs:
     with:
       project-path: platforms/MacOS/MacOS.slnx
       project-name: macos-appkit
-      os: '["macos-latest"]'
+      os: '["xcode-27"]'
       install-workloads: true
       run-tests: true
       pack: true
-      xcode-version: '26.3'
+      xcode-version: '27.0'
 
   native-runtime:
     name: AppKit runtime (${{ matrix.scenario }}, ${{ matrix.maui-version || 'default' }})
     needs: build
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -81,24 +81,24 @@ jobs:
             maui-version: ''
           - scenario: bundle-resources
             maui-version: ''
-            workloads: 'macos maui maui-tizen'
+            workloads: 'macos maui'
             packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages
     steps:
       - uses: actions/checkout@v6
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+        run: sudo xcode-select -s /Applications/Xcode_27.0.app/Contents/Developer
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
       - name: Install pinned scenario workloads
-        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --version 10.0.203
+        run: pwsh -NoProfile -File "${{ github.workspace }}/eng/install-workloads.ps1" -DotNet "${{ github.workspace }}/eng/common/dotnet.sh" -Workloads "${{ matrix.workloads || 'macos' }}"
       - name: Download requested product packages
         if: matrix.packages == true
         uses: actions/download-artifact@v8
         with:
-          name: packages-macos-appkit-macos-latest
+          name: packages-macos-appkit-xcode-27
           path: artifacts/runtime-packages
       - name: Verify shared runner contracts
         run: python3 -B -m unittest discover -s platforms/MacOS/tests/MacOS.RuntimeTests -p 'test_*.py'

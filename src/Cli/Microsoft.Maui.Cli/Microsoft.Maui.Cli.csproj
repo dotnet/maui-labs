@@ -2,9 +2,12 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <!-- Multi-target net9.0 and net10.0 so `dotnet tool install` works on both
+    <!-- Multi-target net9.0 and net11.0 so `dotnet tool install` works on both
          SDKs. dotnet picks the highest compatible TFM at install time. -->
-    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net9.0;net11.0</TargetFrameworks>
+    <!-- Preserve the .NET 9 tool asset by allowing the compatible package graph selected below,
+         rather than promoting transitive dependencies to the repository-wide .NET 11 versions. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
     <RootNamespace>Microsoft.Maui.Cli</RootNamespace>
     <AssemblyName>maui</AssemblyName>
     <PackAsTool>true</PackAsTool>
@@ -24,27 +27,27 @@
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0'">
     <!-- Let the latest packaged tool TFM run on newer major runtimes. -->
     <RollForward>Major</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" VersionOverride="$(MicrosoftExtensionsCompatibilityVersion)" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" VersionOverride="$(MicrosoftExtensionsCompatibilityVersion)" />
     <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="Websocket.Client" />
     <PackageReference Include="Xamarin.Android.Tools.AndroidSdk" />
     <PackageReference Include="Xamarin.Apple.Tools.MaciOS" />
-    <!-- XenoAtom.Terminal.UI requires .NET 10 (uses C# 14 extension members).
+    <!-- XenoAtom.Terminal.UI requires .NET 10 or later (uses C# 14 extension members).
          On net9.0 we fall back to JSON output for the network monitor. -->
-    <PackageReference Include="XenoAtom.Terminal.UI" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="XenoAtom.Terminal.UI" Condition="'$(TargetFramework)' == 'net11.0'" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
-    <!-- Exclude sources that depend on XenoAtom.Terminal.UI on non-net10 targets. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net11.0'">
+    <!-- Exclude sources that depend on XenoAtom.Terminal.UI on older targets. -->
     <Compile Remove="DevFlow\NetworkMonitorTui.cs" />
   </ItemGroup>
 
@@ -64,7 +67,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.ProfilingHelper\Microsoft.Maui.ProfilingHelper.csproj" />
     <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
-    <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" Condition="'$(TargetFramework)' == 'net11.0'" />
   </ItemGroup>
 
   <ItemGroup>

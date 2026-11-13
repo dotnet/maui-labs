@@ -70,7 +70,7 @@ assertions as `appkit-runtime-shell-sections-default`. See the
 
 ## Prerequisites
 
-- .NET 10 SDK
+- .NET 11 SDK
 - macOS 14 (Sonoma) or later
 - Xcode command line tools (for `sips` / `iconutil` — used by the icon build target)
 
@@ -95,7 +95,7 @@ dotnet run
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-macos</TargetFramework>
+    <TargetFramework>net11.0-macos</TargetFramework>
     <OutputType>Exe</OutputType>
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
@@ -231,7 +231,7 @@ run at 10.0.70 with an exact missing-subscription baseline and bounded fixed run
 ## Unit tests
 
 The platform-neutral tests exercise the backend's managed lifecycle code using real MAUI
-windows and handlers. They target `net10.0` and do not require AppKit, Xcode, or MAUI workloads:
+windows and handlers. They target `net11.0` and do not require AppKit, Xcode, or MAUI workloads:
 
 ```bash
 dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj

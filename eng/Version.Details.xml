@@ -3,35 +3,35 @@
   <ProductDependencies>
     <!-- dotnet/android-tools: Android SDK tooling (SdkManager, AdbRunner, JdkInstaller, etc.)
          Built in dotnet/android; manually pinned from the dotnet11-workloads feed. -->
-    <Dependency Name="Xamarin.Android.Tools.AndroidSdk" Version="37.2.1-preview.14">
+    <Dependency Name="Xamarin.Android.Tools.AndroidSdk" Version="37.2.1-preview.36">
       <Uri>https://github.com/dotnet/android</Uri>
-      <Sha>d73c903c550512212332fa7818b4612e7419e786</Sha>
+      <Sha>e5cdeb4ebc2517df09e1efa7fff1fb98d8e6e67c</Sha>
     </Dependency>
     <!-- dotnet/maui -->
-    <Dependency Name="Microsoft.Maui.Controls" Version="10.0.41">
+    <Dependency Name="Microsoft.Maui.Controls" Version="11.0.10">
       <Uri>https://github.com/dotnet/maui</Uri>
-      <Sha>d15964ef4f0a6d0740b655ba7c6be9b96be8b187</Sha>
+      <Sha>87182d7bcbbc9af30bc6dd81991aa6fd1ab3cd35</Sha>
     </Dependency>
-    <Dependency Name="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.41">
+    <Dependency Name="Microsoft.AspNetCore.Components.WebView.Maui" Version="11.0.10">
       <Uri>https://github.com/dotnet/maui</Uri>
-      <Sha>d15964ef4f0a6d0740b655ba7c6be9b96be8b187</Sha>
+      <Sha>87182d7bcbbc9af30bc6dd81991aa6fd1ab3cd35</Sha>
     </Dependency>
     <!-- dotnet/runtime -->
-    <Dependency Name="Microsoft.Extensions.Http" Version="10.0.5">
+    <Dependency Name="Microsoft.Extensions.Http" Version="11.0.1">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>946e7e7c7b6d968a5a4ad8edca6cb8c4781229de</Sha>
     </Dependency>
-    <Dependency Name="Microsoft.Extensions.Hosting" Version="10.0.5">
+    <Dependency Name="Microsoft.Extensions.Hosting" Version="11.0.1">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>946e7e7c7b6d968a5a4ad8edca6cb8c4781229de</Sha>
     </Dependency>
-    <Dependency Name="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5">
+    <Dependency Name="Microsoft.Extensions.Logging.Abstractions" Version="11.0.1">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>946e7e7c7b6d968a5a4ad8edca6cb8c4781229de</Sha>
     </Dependency>
-    <Dependency Name="System.Text.Json" Version="10.0.5">
+    <Dependency Name="System.Text.Json" Version="11.0.1">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>946e7e7c7b6d968a5a4ad8edca6cb8c4781229de</Sha>
     </Dependency>
     <Dependency Name="Xamarin.Apple.Tools.MaciOS" Version="1.0.0-preview.1.26521.1">
       <Uri>https://github.com/dotnet/macios-devtools</Uri>
@@ -39,9 +39,9 @@
     </Dependency>
   </ProductDependencies>
   <ToolsetDependencies>
-    <Dependency Name="Microsoft.DotNet.Arcade.Sdk" Version="10.0.0-beta.26357.114">
+    <Dependency Name="Microsoft.DotNet.Arcade.Sdk" Version="11.0.0-beta.26561.113">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>83a6690d3eeb4c9ca654a7dfe094f4d7409da71e</Sha>
+      <Sha>946e7e7c7b6d968a5a4ad8edca6cb8c4781229de</Sha>
     </Dependency>
   </ToolsetDependencies>
 </Dependencies>

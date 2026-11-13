@@ -15,7 +15,7 @@ Platform-specific setup and usage for .NET MAUI apps running on macOS via Platfo
 ## Overview
 
 macOS (AppKit) apps use the community `Platform.Maui.MacOS` packages to run MAUI on native
-AppKit (not Mac Catalyst). The TFM is `net10.0-macos`. Like Linux/GTK, macOS apps typically
+AppKit (not Mac Catalyst). The TFM is `net11.0-macos`. Like Linux/GTK, macOS apps typically
 use a **separate app head project** rather than adding `-macos` to the standard MAUI project's
 TargetFrameworks.
 
@@ -50,14 +50,14 @@ The app project needs the Platform.Maui.MacOS packages plus the standard MAUI De
   <PackageReference Include="Platform.Maui.MacOS.BlazorWebView" Version="*" />  <!-- Blazor only -->
   <PackageReference Include="Platform.Maui.Essentials.MacOS" Version="*" />
 
-  <!-- MAUI DevFlow (standard packages — they include net10.0-macos support) -->
+  <!-- MAUI DevFlow (standard packages — they include net11.0-macos support) -->
   <PackageReference Include="Microsoft.Maui.DevFlow.Agent" Version="*" />
   <PackageReference Include="Microsoft.Maui.DevFlow.Blazor" Version="*" />  <!-- Blazor only -->
 </ItemGroup>
 ```
 
 The standard `Microsoft.Maui.DevFlow.Agent` and `Microsoft.Maui.DevFlow.Blazor` packages include
-`net10.0-macos` targets — no separate macOS-specific MAUI DevFlow packages needed.
+`net11.0-macos` targets — no separate macOS-specific MAUI DevFlow packages needed.
 
 ## Registration
 
@@ -125,10 +125,10 @@ macOS apps do NOT use `-t:Run`. Build first, then launch with `open`:
 
 ```bash
 # Build
-dotnet build -f net10.0-macos path/to/MyApp.MacOS
+dotnet build -f net11.0-macos path/to/MyApp.MacOS
 
 # Find and launch the .app bundle
-open path/to/MyApp.MacOS/bin/Debug/net10.0-macos/osx-arm64/AppName.app
+open path/to/MyApp.MacOS/bin/Debug/net11.0-macos/osx-arm64/AppName.app
 ```
 
 **Code signing:** A clean `dotnet build` produces a valid ad-hoc signature. Do NOT manually
@@ -137,7 +137,7 @@ clean rebuild: `rm -rf bin obj && dotnet build`.
 
 **Finding the .app bundle:**
 ```bash
-find bin/Debug/net10.0-macos -name "*.app" -maxdepth 3
+find bin/Debug/net11.0-macos -name "*.app" -maxdepth 3
 ```
 
 ## Network Setup
@@ -164,7 +164,7 @@ Chobitsu.js is auto-injected via the Blazor JS module initializer — no manual 
 
 | Feature | Mac Catalyst | macOS (AppKit) |
 |---------|-------------|----------------|
-| TFM | `net10.0-maccatalyst` | `net10.0-macos` |
+| TFM | `net11.0-maccatalyst` | `net11.0-macos` |
 | Base framework | UIKit via Catalyst | AppKit |
 | Packages | Standard MAUI | Platform.Maui.MacOS |
 | Project structure | Standard MAUI single-project | Separate app head project |
@@ -184,7 +184,7 @@ Chobitsu.js is auto-injected via the Blazor JS module initializer — no manual 
 
 ### SIGKILL on Launch (Code Signature Invalid)
 **Cause:** Manually re-signing the app bundle or corrupted build artifacts.
-**Fix:** Clean rebuild: `rm -rf bin obj && dotnet build -f net10.0-macos`.
+**Fix:** Clean rebuild: `rm -rf bin obj && dotnet build -f net11.0-macos`.
 Never use `codesign` manually — the build produces a valid ad-hoc signature.
 
 ### Blazor Page Shows "Loading..." Indefinitely

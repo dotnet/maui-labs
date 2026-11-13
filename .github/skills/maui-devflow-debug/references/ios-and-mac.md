@@ -121,9 +121,9 @@ If sandbox must stay enabled (e.g. testing App Store builds), add `network.serve
 See [setup.md Step 5](setup.md#5-mac-catalyst-entitlements) for the full sandbox-enabled plist.
 
 ```bash
-dotnet build -f net10.0-maccatalyst                          # build only
-dotnet build -f net10.0-maccatalyst -t:Run                   # build + run
-open path/to/bin/Debug/net10.0-maccatalyst/maccatalyst-arm64/AppName.app  # run existing
+dotnet build -f net11.0-maccatalyst                          # build only
+dotnet build -f net11.0-maccatalyst -t:Run                   # build + run
+open path/to/bin/Debug/net11.0-maccatalyst/maccatalyst-arm64/AppName.app  # run existing
 ```
 
 ### iOS Simulator
@@ -138,7 +138,7 @@ for r in d['devices'].values():
 " 2>/dev/null | head -1)
 
 # Build and deploy
-dotnet build -f net10.0-ios -t:Run -p:_DeviceName=:v2:udid=$UDID
+dotnet build -f net11.0-ios -t:Run -p:_DeviceName=:v2:udid=$UDID
 ```
 
 The `-t:Run` target keeps the process alive while the app runs — it **blocks until the app exits**.
@@ -150,7 +150,7 @@ Check the project file for `<TargetFrameworks>`:
 ```bash
 grep -i TargetFramework *.csproj
 ```
-Common values: `net9.0-ios`, `net9.0-maccatalyst`, `net10.0-ios`, `net10.0-maccatalyst`.
+Common values: `net9.0-ios`, `net9.0-maccatalyst`, `net11.0-ios`, `net11.0-maccatalyst`.
 
 ## Apple CLI Tool
 
@@ -216,13 +216,13 @@ the standard error envelope:
   desktop session.
 - **"Unable to lookup in current state: Shutdown"**: Simulator not booted. Run `xcrun simctl boot <UDID>`.
 - **Build error NETSDK1005 "Assets file doesn't have a target"**: Wrong TFM. Check
-  `<TargetFrameworks>` in .csproj and use matching version (e.g. `net10.0-ios` not `net9.0-ios`).
+  `<TargetFrameworks>` in .csproj and use matching version (e.g. `net11.0-ios` not `net9.0-ios`).
 - **Agent not connecting after deploy**: The app may still be launching. Poll
   `maui devflow ui status` every few seconds. If it hasn't connected after ~60-90s, read the
   async shell output from `dotnet build -t:Run` for build/launch errors.
 - **Mac Catalyst app name vs binary name**: The `.app` bundle name may differ from the project
   name (e.g. `MauiTodo.app` vs `SampleMauiApp`). Check the `ApplicationTitle` in .csproj.
-  Find the bundle: `find bin/Debug/net10.0-maccatalyst -name "*.app" -maxdepth 3`
+  Find the bundle: `find bin/Debug/net11.0-maccatalyst -name "*.app" -maxdepth 3`
 
 ## Permission & Dialog Handling
 

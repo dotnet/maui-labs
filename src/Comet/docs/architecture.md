@@ -289,8 +289,8 @@ dotnet build src/Comet/Comet.csproj -c Release
 
 ### Multi-Targeting
 
-`Comet.csproj` targets `net10.0-android`, `net10.0-ios`, `net10.0-maccatalyst`,
-and `net10.0-windows`. Platform-specific code is included/excluded by
+`Comet.csproj` targets `net11.0-android`, `net11.0-ios`, `net11.0-maccatalyst`,
+and `net11.0-windows`. Platform-specific code is included/excluded by
 `Directory.Build.targets` using file naming conventions:
 
 | File Pattern | Included For |
@@ -312,7 +312,7 @@ The test project (`tests/Comet.Tests/`) references the Mac Catalyst DLL
 directly (not a project reference):
 
 ```
-src/Comet/bin/$(Configuration)/net10.0-maccatalyst/Comet.dll
+src/Comet/bin/$(Configuration)/net11.0-maccatalyst/Comet.dll
 ```
 
 This means Comet must be built for Mac Catalyst before tests can compile.

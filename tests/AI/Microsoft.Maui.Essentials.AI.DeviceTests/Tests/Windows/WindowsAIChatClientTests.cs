@@ -117,7 +117,7 @@ public class WindowsAIChatClientMessagesTests : ChatClientMessagesTestsBase<Wind
 		var user = new ChatMessage(ChatRole.User, "Hello");
 
 		var (systemPrompt, history) = WindowsAIChatClient.NormalizeChatMessages(
-			[new(ChatRole.System, " \t"), user], new ChatOptions { Instructions = "\r\n" });
+			(ChatMessage[])[new(ChatRole.System, " \t"), user], new ChatOptions { Instructions = "\r\n" });
 
 		Assert.Empty(systemPrompt);
 		Assert.Same(user, Assert.Single(history));
@@ -202,7 +202,7 @@ public class WindowsAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<
 		AssertStrictObject(details, "category", "items");
 		var item = details.GetProperty("properties").GetProperty("items").GetProperty("items");
 		AssertStrictObject(item, "name", "score");
-		Assert.Equal(["summary"], source.RootElement.GetProperty("required").EnumerateArray()
+		Assert.Equal((string[])["summary"], source.RootElement.GetProperty("required").EnumerateArray()
 			.Select(value => value.GetString()));
 	}
 
@@ -255,7 +255,7 @@ public class WindowsAIChatClientValidationTests
 		var options = new ChatOptions { ToolMode = ChatToolMode.RequireAny };
 
 		await Assert.ThrowsAsync<NotSupportedException>(() =>
-			client.GetResponseAsync([new ChatMessage(ChatRole.User, "Hello")], options));
+			client.GetResponseAsync((ChatMessage[])[new ChatMessage(ChatRole.User, "Hello")], options));
 	}
 
 	// Windows replays tool history as named pretty-JSON text, not native tool messages; exact formatting is adapter-specific.
@@ -320,7 +320,7 @@ public class WindowsAIChatClientValidationTests
 
 		Assert.Equal(
 			string.Join(Environment.NewLine + Environment.NewLine, "Tool result:", "Call ID: call-1", json),
-			WindowsAIChatClient.ConvertToPrompt([message]));
+			WindowsAIChatClient.ConvertToPrompt((ChatMessage[])[message]));
 	}
 
 	// Windows treats orphaned results as text context; cloud tool protocols can reject this malformed history.

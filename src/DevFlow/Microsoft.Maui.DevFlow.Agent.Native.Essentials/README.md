@@ -87,7 +87,7 @@ Controls concept with no Essentials equivalent.
 
 ## Platform support
 
-`net10.0-android`, `net10.0-ios`, `net10.0-maccatalyst`, `net10.0-macos`.
+`net11.0-android`, `net11.0-ios`, `net11.0-maccatalyst`, `net11.0-macos`.
 
 ## Links
 

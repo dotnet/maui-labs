@@ -304,7 +304,7 @@ public class UnsupportedCapabilityTests
     public void BrokerRegistration_IsStampedWithTheBackendFramework()
     {
         using var service = new DevFlowAgentService(new AgentOptions { Port = GetFreePort() });
-        var registration = new BrokerRegistration("proj.csproj", "net10.0-ios", "iOS", "SampleApp");
+        var registration = new BrokerRegistration("proj.csproj", "net11.0-ios", "iOS", "SampleApp");
 
         service.SetBrokerRegistration(registration);
 

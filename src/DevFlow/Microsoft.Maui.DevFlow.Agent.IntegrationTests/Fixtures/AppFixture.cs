@@ -138,6 +138,18 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
                 }
             }
 
+            try
+            {
+                Console.Error.WriteLine(
+                    $"[DevFlow integration] Blazor readiness diagnostics for {Platform}:{Environment.NewLine}" +
+                    await Client.GetLogsAsync(limit: 500));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"[DevFlow integration] Could not collect Blazor readiness diagnostics: {ex.Message}");
+            }
+
             throw new TimeoutException(
                 $"Blazor readiness failed on {Platform}: bridge/contexts did not stabilize within {timeoutMs}ms (recovery {recoveryTimeoutMs}ms).");
         }

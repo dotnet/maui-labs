@@ -28,7 +28,7 @@ public class CompareApps
     }
 
     static bool WinUIAvailable =>
-        File.Exists(@"D:\repos\davidortinau\ControlGallery\src\ControlGallery\bin\Debug\net10.0-windows10.0.19041.0\win-x64\ControlGallery.exe");
+        File.Exists(@"D:\repos\davidortinau\ControlGallery\src\ControlGallery\bin\Debug\net11.0-windows10.0.19041.0\win-x64\ControlGallery.exe");
 
     [Theory]
     [InlineData("Home")]

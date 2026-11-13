@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
-    <TargetFrameworks Condition="'$(UseXcode27Preview)' != 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst;net10.0-macos</TargetFrameworks>
-    <TargetFrameworks Condition="'$(UseXcode27Preview)' == 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios27.0;net10.0-maccatalyst27.0;net10.0-macos27.0</TargetFrameworks>
-    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+    <TargetFrameworks>net11.0;net11.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="'$(UseXcode27Preview)' != 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net11.0-ios;net11.0-maccatalyst;net11.0-macos</TargetFrameworks>
+    <TargetFrameworks Condition="'$(UseXcode27Preview)' == 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net11.0-ios27.0;net11.0-maccatalyst27.0;net11.0-macos27.0</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net11.0-windows10.0.19041.0</TargetFrameworks>
     <AssemblyName>Microsoft.Maui.Essentials.AI</AssemblyName>
     <RootNamespace>Microsoft.Maui.Essentials.AI</RootNamespace>
     <UseMaui>true</UseMaui>
@@ -43,9 +43,6 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
   <ItemGroup Condition="$(TargetFramework.Contains('-android'))">
     <PackageReference Include="Xamarin.AndroidX.Lifecycle.Process" />
@@ -62,8 +59,7 @@
     <PackageReference Include="Xamarin.KotlinX.Coroutines.Core" />
     <PackageReference Include="Xamarin.KotlinX.Coroutines.Guava" />
     <PackageReference Include="Xamarin.KotlinX.Coroutines.Reactive" />
-    <!-- Keep separate archives on .NET 10: its Gradle 9 init-script bug blocks fused AARs (dotnet/android#10738).
-         Explicit inclusion binds only the bridge and packages Google runtimes unbound; revisit fusion on .NET 11. -->
+    <!-- Bind only the bridge and package Google runtime archives separately. -->
     <AndroidGradleProject
       Include="../AndroidNative/EssentialsAI/build.gradle.kts"
       CreateAndroidLibrary="false"
@@ -109,7 +105,7 @@
   <ItemGroup Condition=" $(TargetFramework.Contains('-windows')) ">
     <PackageReference Include="Microsoft.WindowsAppSDK.AI" VersionOverride="$(MicrosoftWindowsAppSDKAIVersion)" />
   </ItemGroup>
-  <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
+  <!-- Exclude Apple-only files from non-Apple TFMs (including net11.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
     <Compile Remove="Platform\MaciOS\**\*.cs" />
   </ItemGroup>

@@ -28,7 +28,7 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
         await WithBuildLockAsync(async () =>
         {
             var projectPath = GetSampleProjectPath("ios");
-            await BuildSampleAsync(projectPath, "net10.0-ios",
+            await BuildSampleAsync(projectPath, "net11.0-ios",
                 $"-p:_DeviceTarget=simulator -p:RuntimeIdentifier={GetSimulatorRuntimeIdentifier()}");
 
             var appBundle = FindSimulatorAppBundle();
@@ -206,7 +206,49 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
             {
                 Console.Error.WriteLine($"[iOSFixture] Boot log collection also timed out: {ex.Message}");
             }
-            throw;
+
+            if (!string.Equals(
+                Environment.GetEnvironmentVariable("CI"),
+                "true",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                throw;
+            }
+
+            Console.Error.WriteLine("[iOSFixture] Restarting CoreSimulatorService and retrying boot once.");
+            try
+            {
+                try
+                {
+                    await RunProcessAsync("/usr/bin/killall", "-9 CoreSimulatorService", timeoutSeconds: 15);
+                }
+                catch (TimeoutException ex)
+                {
+                    Console.Error.WriteLine(
+                        $"[iOSFixture] CoreSimulatorService termination did not return; continuing recovery: {ex.Message}");
+                }
+                await Task.Delay(TimeSpan.FromSeconds(5));
+
+                var (_, bootError, bootExitCode) = await RunProcessAsync(
+                    "xcrun", $"simctl boot {udid}", timeoutSeconds: 60);
+                if (bootExitCode != 0 &&
+                    !bootError.Contains("current state: Booted", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"simctl boot failed after restarting CoreSimulatorService: {bootError}");
+                }
+
+                await RunProcessCheckedAsync("xcrun", $"simctl bootstatus {udid} -b", timeoutSeconds: 300);
+                Console.WriteLine(
+                    $"[iOSFixture] Simulator {udid} boot recovered in {timer.Elapsed.TotalSeconds:F1}s.");
+            }
+            catch (Exception recoveryException)
+            {
+                throw new TimeoutException(
+                    $"Simulator {udid} did not boot and CoreSimulatorService recovery failed: " +
+                    recoveryException.Message,
+                    recoveryException);
+            }
         }
     }
 
@@ -326,7 +368,7 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
 
     static string FindSimulatorAppBundle()
     {
-        var binDir = Path.Combine(GetSampleBuildOutputRoot("ios"), "net10.0-ios", GetSimulatorRuntimeIdentifier());
+        var binDir = Path.Combine(GetSampleBuildOutputRoot("ios"), "net11.0-ios", GetSimulatorRuntimeIdentifier());
 
         if (!Directory.Exists(binDir))
             throw new InvalidOperationException($"iOS simulator build output not found at: {binDir}");

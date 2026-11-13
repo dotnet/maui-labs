@@ -4,7 +4,7 @@ This guide walks you through creating your first .NET MAUI app running on Window
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later
+- [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) or later
 - MAUI workload: `dotnet workload install maui`
 
 ## Quick Start
@@ -35,7 +35,7 @@ cause a package downgrade.
 
 ## Using the NuGet Package Directly
 
-Use a `net10.0-windows` project with `UseMaui` and `UseWPF` enabled. For a
+Use a `net11.0-windows` project with `UseMaui` and `UseWPF` enabled. For a
 code-only entry point, also set `EnableDefaultApplicationDefinition` and
 `EnableDefaultPageItems` to `false`, as the template does.
 

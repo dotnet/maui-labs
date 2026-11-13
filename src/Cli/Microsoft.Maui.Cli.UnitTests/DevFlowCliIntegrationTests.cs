@@ -280,7 +280,7 @@ public class DevFlowCliIntegrationTests
                 {
                     Id = "agent-1",
                     Project = "/src/App.csproj",
-                    Tfm = "net10.0-windows10.0.19041.0",
+                    Tfm = "net11.0-windows10.0.19041.0",
                     Platform = "Windows",
                     AppName = "SampleApp",
                     Port = 9223,
@@ -334,7 +334,7 @@ public class DevFlowCliIntegrationTests
             {
                 Id = "android-agent",
                 Project = "/src/App.csproj",
-                Tfm = "net10.0-android",
+                Tfm = "net11.0-android",
                 Platform = "Android",
                 AppName = "SampleApp",
                 Port = 9223,
@@ -409,7 +409,7 @@ public class DevFlowCliIntegrationTests
                 {
                     Id = "android-agent",
                     Project = "/src/App.csproj",
-                    Tfm = "net10.0-android",
+                    Tfm = "net11.0-android",
                     Platform = "Android",
                     AppName = "SampleApp",
                     Port = 9223,
@@ -909,7 +909,7 @@ public class DevFlowCliIntegrationTests
             {
                 Id = "agent-mac",
                 Project = "/src/App.csproj",
-                Tfm = "net10.0-maccatalyst",
+                Tfm = "net11.0-maccatalyst",
                 Platform = "MacCatalyst",
                 AppName = "TargetApp",
                 Port = server.Port,
@@ -919,7 +919,7 @@ public class DevFlowCliIntegrationTests
             {
                 Id = "agent-ios",
                 Project = "/src/Other.csproj",
-                Tfm = "net10.0-ios",
+                Tfm = "net11.0-ios",
                 Platform = "iOS",
                 AppName = "OtherApp",
                 Port = server.Port + 1,
@@ -960,7 +960,7 @@ public class DevFlowCliIntegrationTests
             {
                 Id = "agent-mac",
                 Project = "/src/App.csproj",
-                Tfm = "net10.0-maccatalyst",
+                Tfm = "net11.0-maccatalyst",
                 Platform = "MacCatalyst",
                 AppName = "OnlyApp",
                 Port = server.Port,
@@ -998,7 +998,7 @@ public class DevFlowCliIntegrationTests
             {
                 Id = "agent-mac",
                 Project = "/src/App.csproj",
-                Tfm = "net10.0-maccatalyst",
+                Tfm = "net11.0-maccatalyst",
                 Platform = "MacCatalyst",
                 AppName = "TargetApp",
                 Port = server.Port,
@@ -1008,7 +1008,7 @@ public class DevFlowCliIntegrationTests
             {
                 Id = "agent-ios",
                 Project = "/src/Other.csproj",
-                Tfm = "net10.0-ios",
+                Tfm = "net11.0-ios",
                 Platform = "iOS",
                 AppName = "OtherApp",
                 Port = server.Port + 1,
@@ -1050,7 +1050,7 @@ public class DevFlowCliIntegrationTests
             {
                 Id = "agent-mac",
                 Project = "/src/App.csproj",
-                Tfm = "net10.0-maccatalyst",
+                Tfm = "net11.0-maccatalyst",
                 Platform = "MacCatalyst",
                 AppName = "TargetApp",
                 Port = server.Port,
@@ -1060,7 +1060,7 @@ public class DevFlowCliIntegrationTests
             {
                 Id = "agent-ios",
                 Project = "/src/Other.csproj",
-                Tfm = "net10.0-ios",
+                Tfm = "net11.0-ios",
                 Platform = "iOS",
                 AppName = "OtherApp",
                 Port = server.Port + 1,

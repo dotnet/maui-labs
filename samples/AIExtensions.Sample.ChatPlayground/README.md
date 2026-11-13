@@ -65,7 +65,7 @@ may contain sensitive data. Diagnostics are not exported automatically.
 
 ## Run the sample
 
-Use the repository's pinned .NET 10 SDK and matching MAUI workload.
+Use the repository's pinned .NET 11 SDK and matching MAUI workload.
 Run the following commands from the repository root.
 
 ### Apple
@@ -74,10 +74,10 @@ Apple builds require Xcode 27. For Mac Catalyst:
 
 ```sh
 dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst27.0 -p:UseXcode27Preview=true
 ```
 
-Use `net10.0-ios27.0` for iOS and select a device with `--device <device-id>`.
+Use `net11.0-ios27.0` for iOS and select a device with `--device <device-id>`.
 Use `--list-devices` to list available targets. Enable Apple Intelligence and
 install the English sentence-embedding asset for the corresponding features;
 the asset may be absent on simulators.
@@ -85,7 +85,7 @@ the asset may be absent on simulators.
 ### Windows
 
 ```powershell
-dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj -f net10.0-windows10.0.19041.0
+dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj -f net11.0-windows10.0.19041.0
 ```
 
 Keep the Windows sample MSIX-packaged for on-device AI. It bundles an
@@ -108,7 +108,7 @@ See the [Android guide](../../docs/ai/gemini-nano-android.md).
 
 ```sh
 dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
-  -f net10.0-android --device <device-id>
+  -f net11.0-android --device <device-id>
 ```
 
 ### Model readiness

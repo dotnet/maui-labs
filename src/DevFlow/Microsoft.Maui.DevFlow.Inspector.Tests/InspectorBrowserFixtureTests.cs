@@ -358,9 +358,18 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Expect(Page.Locator("body"))
                 .ToHaveAttributeAsync("data-fixture-held-decode-started", "true");
             var requestsBeforeTap = Volatile.Read(ref stateRequests);
+            var tapRefreshStarted = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            Page.Request += (_, request) =>
+            {
+                if (IsStateUrl(request.Url)
+                    && Volatile.Read(ref stateRequests) > requestsBeforeTap)
+                    tapRefreshStarted.TrySetResult();
+            };
 
             await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
             await _screenshotHeld.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await tapRefreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.Equal(requestsBeforeTap + 1, Volatile.Read(ref stateRequests));
             await Expect(Page.Locator("body")).Not
                 .ToHaveAttributeAsync("data-fixture-retry-scheduled", "true");
@@ -692,11 +701,20 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 Interlocked.Increment(ref stateRequests);
         };
         var requestsBeforeTap = Volatile.Read(ref stateRequests);
+        var firstRefreshStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        Page.Request += (_, request) =>
+        {
+            if (IsStateUrl(request.Url)
+                && Volatile.Read(ref stateRequests) > requestsBeforeTap)
+                firstRefreshStarted.TrySetResult();
+        };
 
         try
         {
             await button.ClickAsync();
             await _screenshotHeld.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await firstRefreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
             await Expect(hint).ToBeVisibleAsync();
             Assert.Equal(requestsBeforeTap + 1, Volatile.Read(ref stateRequests));
 

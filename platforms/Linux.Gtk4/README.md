@@ -374,7 +374,7 @@ Since there is no official `-linux` TFM (Target Framework Moniker) from Microsof
 
 ```
 MyApp/                              ← Your existing multi-targeted MAUI project
-├── MyApp.csproj                       (net10.0-android;net10.0-ios;...)
+├── MyApp.csproj                       (net11.0-android;net11.0-ios;...)
 ├── App.cs
 ├── MainPage.xaml
 ├── ViewModels/
@@ -385,7 +385,7 @@ MyApp/                              ← Your existing multi-targeted MAUI projec
     └── ...
 
 MyApp.Linux/                        ← New Linux-specific project
-├── MyApp.Linux.csproj                 (net10.0, references Microsoft.Maui.Platforms.Linux.Gtk4)
+├── MyApp.Linux.csproj                 (net11.0, references Microsoft.Maui.Platforms.Linux.Gtk4)
 ├── Program.cs                         (GtkMauiApplication entry point)
 └── MauiProgram.cs                     (builder.UseMauiAppLinuxGtk4<App>())
 ```
@@ -415,7 +415,7 @@ dotnet run --project MyApp.Linux
 
 ### Why a separate project?
 
-The platform-specific TFMs (`net10.0-android`, `net10.0-ios`, etc.) are powered by .NET workloads that Microsoft ships. Creating a custom `net10.0-linux` TFM would require building and distributing a full .NET workload — complex infrastructure that's unnecessary for most use cases.
+The platform-specific TFMs (`net11.0-android`, `net11.0-ios`, etc.) are powered by .NET workloads that Microsoft ships. Creating a custom `net11.0-linux` TFM would require building and distributing a full .NET workload — complex infrastructure that's unnecessary for most use cases.
 
 The separate project approach works with standard `dotnet build`/`dotnet run`, is NuGet-distributable, and keeps your existing MAUI project unchanged.
 

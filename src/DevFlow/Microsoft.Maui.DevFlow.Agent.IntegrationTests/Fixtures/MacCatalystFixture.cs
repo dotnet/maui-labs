@@ -17,7 +17,7 @@ public sealed class MacCatalystFixture : AppFixtureBase
         await WithBuildLockAsync(async () =>
         {
             var projectPath = GetSampleProjectPath("maccatalyst");
-            await BuildSampleAsync(projectPath, "net10.0-maccatalyst");
+            await BuildSampleAsync(projectPath, "net11.0-maccatalyst");
 
             var appPath = FindAppBundle();
             LaunchApp(appPath);
@@ -36,9 +36,17 @@ public sealed class MacCatalystFixture : AppFixtureBase
         _appProcess?.Dispose();
     }
 
+    protected override string? GetPlatformStartupFailure()
+    {
+        if (_appProcess is not { HasExited: true } process)
+            return null;
+
+        return FormatProcessExit(process.Id, "before the DevFlow agent became ready");
+    }
+
     static string FindAppBundle()
     {
-        var sampleBinDir = Path.Combine(GetSampleBuildOutputRoot("maccatalyst"), "net10.0-maccatalyst");
+        var sampleBinDir = Path.Combine(GetSampleBuildOutputRoot("maccatalyst"), "net11.0-maccatalyst");
 
         if (!Directory.Exists(sampleBinDir))
             throw new InvalidOperationException($"Build output directory not found: {sampleBinDir}");
@@ -67,16 +75,55 @@ public sealed class MacCatalystFixture : AppFixtureBase
 
         var executablePath = executables[0];
 
-        var psi = new ProcessStartInfo(executablePath)
+        var launch = new ProcessStartInfo("/usr/bin/open")
         {
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+        launch.ArgumentList.Add("--env");
+        launch.ArgumentList.Add($"DEVFLOW_TEST_PORT={AgentPort}");
+        launch.ArgumentList.Add("-n");
+        launch.ArgumentList.Add(appBundlePath);
 
-        psi.Environment["DEVFLOW_TEST_PORT"] = AgentPort.ToString();
+        using var launcher = Process.Start(launch)
+            ?? throw new InvalidOperationException($"Failed to launch {appBundlePath} with LaunchServices.");
+        var stdout = launcher.StandardOutput.ReadToEnd();
+        var stderr = launcher.StandardError.ReadToEnd();
+        launcher.WaitForExit();
+        if (launcher.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"LaunchServices failed to launch {appBundlePath} with code {launcher.ExitCode}.{Environment.NewLine}" +
+                $"STDOUT:{Environment.NewLine}{stdout}{Environment.NewLine}" +
+                $"STDERR:{Environment.NewLine}{stderr}");
+        }
 
-        _appProcess = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to launch {executablePath}");
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        Process? process = null;
+        while (process == null && DateTime.UtcNow < deadline)
+        {
+            process = FindProcess(executablePath);
+
+            if (process == null)
+                Thread.Sleep(100);
+        }
+
+        if (process == null)
+            throw new InvalidOperationException($"LaunchServices started {appBundlePath}, but its process was not found.");
+
+        _appProcess = process;
     }
+
+    static Process? FindProcess(string executablePath)
+    {
+        var candidates = Process.GetProcessesByName(Path.GetFileName(executablePath));
+        var process = candidates.FirstOrDefault();
+        foreach (var extra in candidates.Skip(1))
+            extra.Dispose();
+        return process;
+    }
+
+    static string FormatProcessExit(int processId, string context)
+        => $"Mac Catalyst app process {processId} exited {context}.";
 }

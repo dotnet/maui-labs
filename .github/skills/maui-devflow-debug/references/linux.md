@@ -4,7 +4,7 @@ Platform-specific setup and usage for .NET MAUI apps running on Linux via Micros
 
 ## Overview
 
-Microsoft.Maui.Platforms.Linux.Gtk4 apps target `net10.0` (not a platform-specific TFM like `net10.0-ios`) and use
+Microsoft.Maui.Platforms.Linux.Gtk4 apps target `net11.0` (not a platform-specific TFM like `net11.0-ios`) and use
 GTK4 via GirCore bindings. MAUI DevFlow provides dedicated Linux packages that work with
 this architecture.
 
@@ -131,7 +131,7 @@ Only the driver backend should reach for `xdotool` or `ydotool`.
 | Feature | Standard MAUI | Linux/GTK |
 |---------|--------------|-----------|
 | NuGet packages | `Agent`, `Blazor` | `Agent.Gtk`, `Blazor.Gtk` |
-| TFM | `net10.0-<platform>` | `net10.0` |
+| TFM | `net11.0-<platform>` | `net11.0` |
 | Build command | `dotnet build -f $TFM -t:Run` | `dotnet run --project <path>` |
 | Agent startup | Automatic (lifecycle hook) | Automatic (first GTK window created) |
 | Network | Varies by platform | Direct localhost |

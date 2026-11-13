@@ -4,7 +4,7 @@ The DevFlow CLI includes an [MCP (Model Context Protocol)](https://modelcontextp
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (see `global.json` for exact version)
+- [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) (see `global.json` for exact version)
 - [Node.js](https://nodejs.org/) (for the MCP Inspector)
 - The `maui` CLI built from source (see [Building](#build-the-cli) below)
 
@@ -18,18 +18,18 @@ The built executable is at:
 
 ```
 # macOS / Linux
-artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/maui
+artifacts/bin/Microsoft.Maui.Cli/Release/net11.0/maui
 
 # Windows
-artifacts\bin\Microsoft.Maui.Cli\Release\net10.0\maui.exe
+artifacts\bin\Microsoft.Maui.Cli\Release\net11.0\maui.exe
 ```
 
-> **Tip:** The project multi-targets `net9.0` and `net10.0`. Both outputs are produced — use the `net10.0` one. You can also run via `dotnet artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/maui.dll` on any platform.
+> **Tip:** The project multi-targets `net9.0` and `net11.0`. Both outputs are produced — use the `net11.0` one. You can also run via `dotnet artifacts/bin/Microsoft.Maui.Cli/Release/net11.0/maui.dll` on any platform.
 
 Verify the MCP command is available:
 
 ```bash
-./artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/maui devflow mcp --help
+./artifacts/bin/Microsoft.Maui.Cli/Release/net11.0/maui devflow mcp --help
 ```
 
 ## Testing with the MCP Inspector
@@ -39,7 +39,7 @@ The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a web-
 ### Launch the inspector
 
 ```bash
-npx @modelcontextprotocol/inspector ./artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/maui devflow mcp
+npx @modelcontextprotocol/inspector ./artifacts/bin/Microsoft.Maui.Cli/Release/net11.0/maui devflow mcp
 ```
 
 This opens a web UI at **http://localhost:6274**.
@@ -65,7 +65,7 @@ maui devflow broker start
 dotnet run --project path/to/your/MauiApp
 
 # Terminal 3: Launch the MCP Inspector
-npx @modelcontextprotocol/inspector ./artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/maui devflow mcp
+npx @modelcontextprotocol/inspector ./artifacts/bin/Microsoft.Maui.Cli/Release/net11.0/maui devflow mcp
 ```
 
 Then in the inspector:
@@ -97,7 +97,7 @@ For a quick smoke test without Node.js, you can send a raw MCP initialize reques
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}' \
-  | ./artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/maui devflow mcp
+  | ./artifacts/bin/Microsoft.Maui.Cli/Release/net11.0/maui devflow mcp
 ```
 
 A successful response includes the server name, version, and capabilities.

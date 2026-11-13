@@ -165,19 +165,20 @@ namespace Microsoft.Maui.Handlers.WPF
 			{
 				if (recognizer is not Microsoft.Maui.Controls.TapGestureRecognizer tap) continue;
 
-				if (tap.Command != null && tap.Command.CanExecute(tap.CommandParameter))
-				{
-					tap.Command.Execute(tap.CommandParameter);
-					return;
-				}
-
 				var sendTapped = typeof(Microsoft.Maui.Controls.TapGestureRecognizer).GetMethod(
-					"SendTapped", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+					"SendTapped",
+					System.Reflection.BindingFlags.Instance |
+					System.Reflection.BindingFlags.Public |
+					System.Reflection.BindingFlags.NonPublic);
 				if (sendTapped != null)
 				{
 					var ps = sendTapped.GetParameters();
 					if (ps.Length == 1) sendTapped.Invoke(tap, new object?[] { mauiView });
 					else if (ps.Length == 2) sendTapped.Invoke(tap, new object?[] { mauiView, null });
+				}
+				else if (tap.Command?.CanExecute(tap.CommandParameter) == true)
+				{
+					tap.Command.Execute(tap.CommandParameter);
 				}
 				return;
 			}

@@ -29,7 +29,7 @@ internal static class ProfileCommandDiagnostics
 			"Neither 'dnx' nor the required dotnet diagnostics tools were found.",
 			[
 				"Install the global tools: `dotnet tool install -g dotnet-trace` and `dotnet tool install -g dotnet-dsrouter`.",
-				"Or use a .NET 10 SDK with `dnx` available on PATH: https://dot.net/download"
+				"Or use a .NET 11 SDK with `dnx` available on PATH: https://dot.net/download"
 			]);
 	}
 

@@ -83,7 +83,7 @@ jobs:
       - name: Install Playwright Chromium
         shell: pwsh
         run: |
-          & .\artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Release\net10.0\playwright.ps1 install chromium
+          & .\artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Release\net11.0\playwright.ps1 install chromium
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run real Inspector browser regressions without a native agent
@@ -124,7 +124,7 @@ jobs:
           $project = 'src\DevFlow\Microsoft.Maui.DevFlow.Client.Tests\Microsoft.Maui.DevFlow.Client.Tests.csproj'
           dotnet build $project --configuration Release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          foreach ($framework in @('net472', 'net10.0')) {
+          foreach ($framework in @('net472', 'net11.0')) {
             for ($iteration = 1; $iteration -le 5; $iteration++) {
               $logName = "client-retry-$framework-$iteration.trx"
               dotnet test $project --configuration Release --framework $framework --no-build --no-restore `
@@ -293,9 +293,6 @@ jobs:
       project-name: devflow-samples-native
       run-tests: false
       pack: false
-      os: '["macos-latest"]'
-      # App heads enforce the Apple SDK's Xcode requirement, which libraries do not, so this job
-      # has to pin Xcode even though the library job above gets away without it. Keep in step with
-      # the version the pinned .NET for iOS/macOS asks for — see https://aka.ms/xcode-requirement.
-      xcode-version: '26.3'
+      os: '["xcode-27"]'
+      xcode-version: '27.0'
       android-project: samples/DevFlow.Sample.Native/Android/DevFlow.Sample.Native.Android.csproj

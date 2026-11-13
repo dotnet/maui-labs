@@ -29,8 +29,8 @@ require_maccatalyst_target() {
 	local project_path="$1"
 	local label="$2"
 
-	if ! grep -q "net10.0-maccatalyst" "$project_path"; then
-		echo "${label} must target net10.0-maccatalyst for the macOS validation lane: $project_path" >&2
+	if ! grep -q "net11.0-maccatalyst" "$project_path"; then
+		echo "${label} must target net11.0-maccatalyst for the macOS validation lane: $project_path" >&2
 		exit 1
 	fi
 }
@@ -94,8 +94,8 @@ dotnet build "${repo_root}/src/Comet/Comet.csproj" -c "$configuration"
 dotnet build "${repo_root}/tests/Comet.Tests/Comet.Tests.csproj" -c "$configuration"
 
 echo "==> Building Phase 9 sample artifacts"
-dotnet build "$counter_sample" -c "$configuration" -f net10.0-maccatalyst
-dotnet build "$coffee_sample" -c "$configuration" -f net10.0-maccatalyst
+dotnet build "$counter_sample" -c "$configuration" -f net11.0-maccatalyst
+dotnet build "$coffee_sample" -c "$configuration" -f net11.0-maccatalyst
 
 echo "==> Running focused Phase 9 validation gate"
 COMET_PHASE9_COUNTER_SAMPLE_PROJECT="$counter_sample" \

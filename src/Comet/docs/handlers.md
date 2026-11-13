@@ -376,10 +376,10 @@ include or exclude files based on the target framework:
 
 | Suffix / Folder | Included When |
 |-----------------|---------------|
-| `*.iOS.cs` or `iOS/` | `net10.0-ios` or `net10.0-maccatalyst` |
-| `*.Android.cs` or `Android/` | `net10.0-android` |
-| `*.Windows.cs` or `Windows/` | `net10.0-windows` |
-| `*.Mac.cs` or `MacCatalyst/` | `net10.0-maccatalyst` |
+| `*.iOS.cs` or `iOS/` | `net11.0-ios` or `net11.0-maccatalyst` |
+| `*.Android.cs` or `Android/` | `net11.0-android` |
+| `*.Windows.cs` or `Windows/` | `net11.0-windows` |
+| `*.Mac.cs` or `MacCatalyst/` | `net11.0-maccatalyst` |
 | `*.Standard.cs` or `Standard/` | `netstandard` or `net6.0`/`net7.0` |
 
 This allows a single project to contain all platform implementations. The build

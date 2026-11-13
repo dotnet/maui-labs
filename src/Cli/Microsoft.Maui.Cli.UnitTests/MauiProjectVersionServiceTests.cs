@@ -299,7 +299,7 @@ public class MauiProjectVersionServiceTests
 		var projectPath = directory.WriteFile("Tool.csproj", """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
+			    <TargetFramework>net11.0</TargetFramework>
 			  </PropertyGroup>
 			</Project>
 			""");
@@ -329,7 +329,7 @@ public class MauiProjectVersionServiceTests
 		var projectPath = directory.WriteFile("App.csproj", """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
+			    <TargetFramework>net11.0</TargetFramework>
 			  </PropertyGroup>
 			  <ItemGroup>
 			    <PackageReference Include="Microsoft.Maui.Controls" />
@@ -377,7 +377,7 @@ public class MauiProjectVersionServiceTests
 		var projectPath = directory.WriteFile("App.csproj", """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
+			    <TargetFramework>net11.0</TargetFramework>
 			    <MauiVersion>10.0.60</MauiVersion>
 			  </PropertyGroup>
 			  <ItemGroup>

@@ -28,10 +28,7 @@ public static class MenuBarManager
 
     static void ClearWindowMenu()
     {
-        // AppKit accepts nil here, but the .NET property setter rejects it.
-        using var key = new NSString("windowsMenu");
-        using var values = NSDictionary.FromObjectAndKey(NSNull.Null, key);
-        NSApplication.SharedApplication.SetValuesForKeysWithDictionary(values);
+        NSApplication.SharedApplication.WindowsMenu = new NSMenu();
     }
 
     /// <summary>
@@ -41,10 +38,10 @@ public static class MenuBarManager
     public static void SetupDefaultMenuBar(MacOSMenuBarOptions? options = null)
     {
         _options = options ?? new MacOSMenuBarOptions();
-        ClearWindowMenu();
 
         var mainMenu = new NSMenu();
         NSApplication.SharedApplication.MainMenu = mainMenu;
+        ClearWindowMenu();
 
         AddDefaultAppMenu(mainMenu);
 
@@ -66,8 +63,8 @@ public static class MenuBarManager
 
         // Keep the application menu (index 0) if it exists
         var appMenuItem = mainMenu.Count > 0 ? mainMenu.ItemAt(0) : null;
-        ClearWindowMenu();
         mainMenu.RemoveAllItems();
+        ClearWindowMenu();
 
         if (appMenuItem != null)
             mainMenu.AddItem(appMenuItem);
