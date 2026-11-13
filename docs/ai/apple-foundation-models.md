@@ -160,6 +160,30 @@ Notes:
 - **Breaking change:** with approval tools present, tools are no longer executed
   natively; the calls are returned for the function-invocation layer to run.
 
+## Tool failures
+
+In normal native execution, an unhandled managed tool exception is logged and
+returned to Foundation Models as an `NSError`. Foundation Models aborts generation,
+so both `GetResponseAsync` and `GetStreamingResponseAsync` fault with an
+`NSErrorException`. A stream may already have emitted text or an informational
+tool call, but no successful tool result is fabricated. Caller cancellation
+remains cancellation.
+
+Adding `UseFunctionInvocation()` alone does not change this behavior: native
+tools execute inside the inner Apple client, before the function-invocation layer
+can handle their exceptions.
+
+On OS 27+, **approval mode** delegates all tool invocations to
+`FunctionInvokingChatClient`, including plain tools registered alongside an
+approval-required tool. That layer can send failed invocations back to the model
+as `FunctionResultContent` and continue generation. MEAI 10.4.1 sends
+`"Error: Function failed."` by default, preserves the exception in
+`FunctionResultContent.Exception`, and includes the exception message in the
+model-visible result only when `IncludeDetailedErrors` is enabled. Its
+`MaximumConsecutiveErrorsPerRequest` defaults to 3; setting it to zero makes tool
+exceptions terminate immediately. This managed recovery does not apply to the
+OS 26 native fallback.
+
 ## Native schema mapping
 
 Response and tool-parameter schemas preserve nullable values independently of parent

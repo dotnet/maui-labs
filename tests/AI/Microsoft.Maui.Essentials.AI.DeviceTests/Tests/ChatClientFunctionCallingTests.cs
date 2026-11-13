@@ -282,6 +282,79 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Theory]
+	[InlineData(false, false, false)]
+	[InlineData(false, false, true)]
+	[InlineData(false, true, false)]
+	[InlineData(false, true, true)]
+	[InlineData(true, false, false)]
+	[InlineData(true, false, true)]
+	[InlineData(true, true, false)]
+	[InlineData(true, true, true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ToolFailure_WithManagedInvocation_ReturnsErrorResultAndContinues(
+		bool streaming, bool requiresApproval, bool includeDetailedErrors)
+	{
+		if (!SupportsToolApproval)
+			return;
+
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+		var calls = 0;
+		var protectedCalls = 0;
+		var failure = new InvalidOperationException("PRIVATE_TOOL_FAILURE_9274");
+		var failing = AIFunctionFactory.Create(async Task<string> () =>
+		{
+			Interlocked.Increment(ref calls);
+			await Task.Yield();
+			throw failure;
+		}, name: "read_local_value", description: "Reads the local value. Call only once; if it fails, explain the failure without retrying.");
+		var guarded = new ApprovalRequiredAIFunction(AIFunctionFactory.Create(() =>
+		{
+			Interlocked.Increment(ref protectedCalls);
+			return "DELETED";
+		}, name: "delete_local_data", description: "Deletes local data. Never call unless the user explicitly asks to delete data."));
+		using var client = CreateApprovalClient();
+		var invocation = client.GetService<FunctionInvokingChatClient>();
+		Assert.NotNull(invocation);
+		invocation.IncludeDetailedErrors = includeDetailedErrors;
+		var options = new ChatOptions
+		{
+			Tools = requiresApproval ? [new ApprovalRequiredAIFunction(failing)] : [failing, guarded],
+			MaxOutputTokens = 256,
+			AllowMultipleToolCalls = false
+		};
+		ConfigureBaselineSamplingOptions(options);
+		List<ChatMessage> messages =
+		[
+			new(ChatRole.System, "Call read_local_value once. If it fails, give a short final answer explaining the failure. Do not retry or call another tool."),
+			new(ChatRole.User, "Read the local value using read_local_value. Do not delete anything.")
+		];
+
+		var response = await GetRequiredToolResponseAsync(client, [.. messages], options, streaming, timeout.Token);
+		if (requiresApproval)
+		{
+			Assert.Equal(0, calls);
+			var request = Assert.Single(response.Messages.SelectMany(message => message.Contents)
+				.OfType<ToolApprovalRequestContent>());
+			Assert.Equal(failing.Name, Assert.IsType<FunctionCallContent>(request.ToolCall).Name);
+			messages.AddRange(response.Messages);
+			messages.Add(new(ChatRole.User, [request.CreateResponse(approved: true)]));
+			response = await GetRequiredToolResponseAsync(client, [.. messages], options, streaming, timeout.Token);
+		}
+
+		Assert.Equal(1, calls);
+		Assert.Equal(0, protectedCalls);
+		Assert.DoesNotContain(response.Messages.SelectMany(message => message.Contents),
+			content => content is ToolApprovalRequestContent);
+		var result = Assert.Single(response.Messages.SelectMany(message => message.Contents)
+			.OfType<FunctionResultContent>());
+		Assert.Same(failure, result.Exception);
+		Assert.Equal(includeDetailedErrors
+			? $"Error: Function failed. Exception: {failure.Message}"
+			: "Error: Function failed.", Assert.IsType<string>(result.Result));
+		Assert.False(string.IsNullOrWhiteSpace(response.Text));
+	}
+
+	[Theory]
 	[InlineData(false, true)]
 	[InlineData(false, false)]
 	[InlineData(true, true)]

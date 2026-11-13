@@ -54,6 +54,44 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 		await binding.PlainTool_WithApprovalToolRegistered_InvokesOnceWithoutApproval(streaming);
 	}
 
+	[Theory]
+	[InlineData(false, false, false)]
+	[InlineData(false, false, true)]
+	[InlineData(false, true, false)]
+	[InlineData(false, true, true)]
+	[InlineData(true, false, false)]
+	[InlineData(true, false, true)]
+	[InlineData(true, true, false)]
+	[InlineData(true, true, true)]
+	public Task Tools_ManagedFailuresPreserveExceptionAndControlModelDetails(
+		bool streaming, bool requiresApproval, bool includeDetailedErrors) =>
+		new ToolBinding().ToolFailure_WithManagedInvocation_ReturnsErrorResultAndContinues(
+			streaming, requiresApproval, includeDetailedErrors);
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task Tools_ZeroFailureBudget_RethrowsOriginalException(bool streaming)
+	{
+		using var client = new FunctionInvokingChatClient(new ToolControlClient());
+		Assert.Equal(3, client.MaximumConsecutiveErrorsPerRequest);
+		client.MaximumConsecutiveErrorsPerRequest = 0;
+		var failure = new InvalidOperationException("Tool unavailable");
+		var tool = AIFunctionFactory.Create(string () => throw failure, name: "unavailable_tool");
+		ChatMessage[] messages = [new(ChatRole.User, "Call unavailable_tool.")];
+		var options = new ChatOptions { Tools = [tool] };
+
+		var actual = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync(messages, options).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync(messages, options);
+		});
+
+		Assert.Same(failure, actual);
+	}
+
 	[Fact]
 	public void ToolStreamValidation_AcceptsWhitespaceButRejectsNullArtifacts()
 	{
