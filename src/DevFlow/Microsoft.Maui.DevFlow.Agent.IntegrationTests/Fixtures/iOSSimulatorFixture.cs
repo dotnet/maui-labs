@@ -19,6 +19,26 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
     public override string? DeviceId => _simulatorUdid;
     public override string? AppIdentifier => _appBundleId;
 
+    public override async Task<string?> CaptureFailureDiagnosticsAsync()
+    {
+        if (_simulatorUdid == null || _appBundleId == null)
+            return null;
+
+        try
+        {
+            var (stdout, stderr, exitCode) = await RunProcessAsync(
+                "xcrun",
+                $"simctl spawn {_simulatorUdid} log show --last 3m --style compact " +
+                $"--predicate \"process == 'DevFlow.Sample' OR eventMessage CONTAINS '{_appBundleId}'\"",
+                timeoutSeconds: 30);
+            return $"iOS Simulator app log (exit {exitCode}):{Environment.NewLine}{stdout}{stderr}";
+        }
+        catch (TimeoutException ex)
+        {
+            return $"iOS Simulator app log collection timed out: {ex.Message}";
+        }
+    }
+
     protected override async Task InitializePlatformAsync()
     {
         var (udid, alreadyBooted) = await FindOrBootSimulatorAsync();

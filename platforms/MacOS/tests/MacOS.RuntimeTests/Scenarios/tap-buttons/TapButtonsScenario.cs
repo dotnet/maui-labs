@@ -126,12 +126,13 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
             var action = recognizer.Action
                 ?? throw new InvalidOperationException(
                     $"AppKit recognizer for button mask {buttonMask} has no action.");
-            if (!NSApplication.SharedApplication.SendAction(
-                action, recognizer.Target, recognizer))
-            {
+            var target = recognizer.Target
+                ?? throw new InvalidOperationException(
+                    $"AppKit recognizer for button mask {buttonMask} has no target.");
+            if (!target.RespondsToSelector(action))
                 throw new InvalidOperationException(
-                    $"AppKit did not dispatch {action} for button mask {buttonMask}.");
-            }
+                    $"AppKit recognizer target does not respond to {action}.");
+            target.PerformSelector(action, recognizer, 0);
         }
     }
 
