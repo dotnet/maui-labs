@@ -8,7 +8,6 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 public sealed class MacCatalystFixture : AppFixtureBase
 {
     Process? _appProcess;
-    bool _disposing;
     bool _weOwnTheProcess;
 
     public override string Platform => "maccatalyst";
@@ -28,8 +27,6 @@ public sealed class MacCatalystFixture : AppFixtureBase
 
     protected override async Task DisposePlatformAsync()
     {
-        _disposing = true;
-
         if (_weOwnTheProcess && _appProcess is { HasExited: false })
         {
             _appProcess.Kill(entireProcessTree: true);
@@ -115,26 +112,6 @@ public sealed class MacCatalystFixture : AppFixtureBase
         if (process == null)
             throw new InvalidOperationException($"LaunchServices started {appBundlePath}, but its process was not found.");
 
-        var processId = process.Id;
-        process.EnableRaisingEvents = true;
-        process.Exited += (_, _) =>
-        {
-            if (!_disposing)
-            {
-                Console.WriteLine(FormatProcessExit(
-                    processId,
-                    "while the integration tests were running"));
-                try
-                {
-                    Console.WriteLine(CaptureProcessDiagnostics(processId));
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Unable to capture Mac Catalyst process diagnostics: {ex.Message}");
-                }
-            }
-        };
-
         _appProcess = process;
     }
 
@@ -145,31 +122,6 @@ public sealed class MacCatalystFixture : AppFixtureBase
         foreach (var extra in candidates.Skip(1))
             extra.Dispose();
         return process;
-    }
-
-    static string CaptureProcessDiagnostics(int processId)
-    {
-        var startInfo = new ProcessStartInfo("/usr/bin/log")
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        startInfo.ArgumentList.Add("show");
-        startInfo.ArgumentList.Add("--last");
-        startInfo.ArgumentList.Add("2m");
-        startInfo.ArgumentList.Add("--style");
-        startInfo.ArgumentList.Add("compact");
-        startInfo.ArgumentList.Add("--predicate");
-        startInfo.ArgumentList.Add($"processIdentifier == {processId}");
-
-        using var diagnostics = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Failed to start the macOS unified log query.");
-        var stdout = diagnostics.StandardOutput.ReadToEnd();
-        var stderr = diagnostics.StandardError.ReadToEnd();
-        diagnostics.WaitForExit();
-        return $"Unified log for process {processId} (exit {diagnostics.ExitCode}):{Environment.NewLine}" +
-            stdout + stderr;
     }
 
     static string FormatProcessExit(int processId, string context)

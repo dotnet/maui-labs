@@ -15,7 +15,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="MacOS.RuntimeTests" />
     <InternalsVisibleTo Include="Microsoft.Maui.Platforms.MacOS.BlazorWebView" />
     <!-- Lets VisualTreeWalker's MACOS branch reuse ToolbarItemInvocationOutcome (see
          Platform/ToolbarItemInvocationOutcome.cs) without making it public API. -->

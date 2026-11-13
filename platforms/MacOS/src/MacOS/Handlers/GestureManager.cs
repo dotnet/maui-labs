@@ -154,8 +154,6 @@ internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
 
     internal void UpdateButtonMask() => ButtonMask = (nuint)_tapGesture.Buttons;
 
-    internal void InvokeAction() => HandleTap(this);
-
     public void Disconnect()
     {
         if (!_isConnected)
@@ -223,17 +221,6 @@ internal class MacOSPanGestureRecognizer : NSPanGestureRecognizer
 internal class MacOSPointerTrackingArea : NSTrackingArea
 {
     readonly PointerGestureRecognizer _pointerGesture;
-    static readonly System.Reflection.MethodInfo? _sendEntered;
-    static readonly System.Reflection.MethodInfo? _sendExited;
-    static readonly System.Reflection.MethodInfo? _sendMoved;
-
-    static MacOSPointerTrackingArea()
-    {
-        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        _sendEntered = typeof(PointerGestureRecognizer).GetMethod("SendPointerEntered", flags);
-        _sendExited = typeof(PointerGestureRecognizer).GetMethod("SendPointerExited", flags);
-        _sendMoved = typeof(PointerGestureRecognizer).GetMethod("SendPointerMoved", flags);
-    }
 
     public MacOSPointerTrackingArea(NSView view, PointerGestureRecognizer pointerGesture)
         : base(view.Bounds,
@@ -275,20 +262,29 @@ internal class MacOSPointerTrackingArea : NSTrackingArea
 
     public void FireEntered(View? sender, NSEvent? theEvent = null)
     {
+        if (sender is null)
+            return;
+
         Func<IElement?, Point?>? getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
-        _sendEntered?.Invoke(_pointerGesture, new object?[] { sender!, getPos, null, ButtonsMask.Primary });
+        _pointerGesture.SendPointerEntered(sender, getPos);
     }
 
     public void FireExited(View? sender, NSEvent? theEvent = null)
     {
+        if (sender is null)
+            return;
+
         Func<IElement?, Point?>? getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
-        _sendExited?.Invoke(_pointerGesture, new object?[] { sender!, getPos, null, ButtonsMask.Primary });
+        _pointerGesture.SendPointerExited(sender, getPos);
     }
 
     public void FireMoved(View? sender, NSEvent? theEvent = null)
     {
+        if (sender is null)
+            return;
+
         Func<IElement?, Point?>? getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
-        _sendMoved?.Invoke(_pointerGesture, new object?[] { sender!, getPos, null, ButtonsMask.Primary });
+        _pointerGesture.SendPointerMoved(sender, getPos);
     }
 }
 
@@ -312,11 +308,6 @@ internal static class GestureExtensions
         return null;
     }
 
-    public static void SendTapped(this IGestureRecognizer recognizer, View? view)
-    {
-        if (recognizer is TapGestureRecognizer tap)
-            tap.Command?.Execute(tap.CommandParameter);
-    }
 }
 
 /// <summary>
