@@ -4,6 +4,10 @@
     recycles the view of each block on its own, and a long conversation costs only the rows on screen. Each turn is its
     request and response blocks, then a row of its own once it ended, which says whether it was stopped, or why it
     failed with Retry. The templates of all of them are in ChatTemplates.xaml.
+
+    ChatArea.xaml.cs keeps the end of the list in view while turns are added or stream in, and stops following when the
+    user scrolls up to read (replacing ItemsUpdatingScrollMode="KeepLastItemInView", which is broken in MAUI 10.0.41 per
+    dotnet/maui#35802 and does not follow growing items; upstream proposal: dotnet/maui#40211).
 -->
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
@@ -19,9 +23,9 @@
         </ResourceDictionary>
     </ContentView.Resources>
 
-    <CollectionView ItemsSource="{Binding Items}"
+    <CollectionView x:Name="ConversationView"
+                    ItemsSource="{Binding Items}"
                     ItemTemplate="{StaticResource BlockTemplates}"
-                    ItemsUpdatingScrollMode="KeepLastItemInView"
                     SelectionMode="None"
                     Margin="16,0"
                     AutomationId="Conversation">
