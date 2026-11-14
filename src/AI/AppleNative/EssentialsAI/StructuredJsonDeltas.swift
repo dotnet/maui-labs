@@ -7,6 +7,7 @@ import FoundationModels
 /// Foundation Models reports completion per node (`isComplete`), so the adapter never has to
 /// infer whether a string may still grow or a number is final. State is scoped to one response
 /// and must only be mutated from the task that consumes the stream.
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
 struct StructuredJsonDeltas {
 
     enum Failure: Error, Equatable, LocalizedError {

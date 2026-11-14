@@ -2,6 +2,7 @@ import Foundation
 import FoundationModels
 
 /// Swift wrapper that makes an AIToolBase conform to FoundationModels.Tool protocol
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
 final class ToolNative: Tool {
     let tool: AIToolNative
     let onToolCall: (@Sendable (String, String, String) -> Void)?  // id, name, arguments

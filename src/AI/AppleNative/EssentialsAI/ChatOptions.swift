@@ -8,6 +8,7 @@ public enum ToolCallingModeNative: Int {
     case required = 2
 }
 
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
 @objc(ChatOptionsNative)
 public class ChatOptionsNative: NSObject {
     @objc public var topK: NSNumber? = nil
