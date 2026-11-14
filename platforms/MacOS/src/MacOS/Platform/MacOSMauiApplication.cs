@@ -99,6 +99,29 @@ public abstract class MacOSMauiApplication : NSApplicationDelegate, IPlatformApp
         FireLifecycleEvents<MacOSLifecycle.DidUnhide>(del => del(notification));
     }
 
+    /// <summary>
+    /// Clicking the Dock icon (or opening the app again from Finder) while it has no visible window.
+    /// A minimized window is restored; when every window has been closed a new one is created through
+    /// <see cref="IApplication.CreateWindow"/>, as Mac Catalyst does with a new scene.
+    /// </summary>
+    public override bool ApplicationShouldHandleReopen(NSApplication sender, bool hasVisibleWindows)
+    {
+        if (hasVisibleWindows)
+            return true;
+
+        var minimized = _windows
+            .Select(w => w.Handler?.PlatformView as NSWindow)
+            .FirstOrDefault(w => w is { IsMiniaturized: true });
+
+        if (minimized != null)
+            BringToFront(minimized);
+        else if (_windows.Count == 0 && _applicationContext != null)
+            CreatePlatformWindow(_applicationContext);
+
+        // handled here - AppKit's default would only deminiaturize, and does nothing without a window
+        return false;
+    }
+
     [Export("applicationWillTerminate:")]
     public void ApplicationWillTerminate(NSNotification notification)
     {
@@ -145,6 +168,23 @@ public abstract class MacOSMauiApplication : NSApplicationDelegate, IPlatformApp
 
         virtualWindow.Created();
         virtualWindow.Activated();
+    }
+
+    /// <summary>
+    /// Restores <paramref name="window"/> if it is minimized and makes it the key window of the active app.
+    /// </summary>
+    internal static void BringToFront(NSWindow window)
+    {
+        if (window.IsMiniaturized)
+            window.Deminiaturize(null);
+
+        // Activate() is only a request under macOS 14's cooperative activation and is ignored while the app is
+        // in the background - e.g. "Show window" from a status-bar item - leaving the window on screen but not key.
+        // The deprecated call still brings the app forward.
+#pragma warning disable CA1422
+        NSApplication.SharedApplication.ActivateIgnoringOtherApps(true);
+#pragma warning restore CA1422
+        window.MakeKeyAndOrderFront(null);
     }
 
     internal void AddWindow(IWindow window) => _windows.Add(window);

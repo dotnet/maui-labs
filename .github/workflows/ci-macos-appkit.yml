@@ -75,6 +75,8 @@ jobs:
           - scenario: tap-buttons
           - scenario: focus-state
             maui-version: ''
+          - scenario: window-reopen
+            maui-version: ''
           - scenario: menu-localization
             packages: true
           - scenario: collection-view-grid

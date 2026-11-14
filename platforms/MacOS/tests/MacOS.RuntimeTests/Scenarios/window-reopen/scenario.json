@@ -1,0 +1,20 @@
+{
+  "name": "window-reopen",
+  "expectedCases": 4,
+  "expectedAssertions": 12,
+  "evidence": [
+    "windows.jsonl",
+    "assertions.txt"
+  ],
+  "baseline": {
+    "source": "platforms/MacOS/src/MacOS/Handlers/ApplicationHandler.cs",
+    "replace": {
+      "old": "            [nameof(IApplication.ActivateWindow)] = MapActivateWindow,\n",
+      "new": ""
+    },
+    "exitCode": 42,
+    "outcome": "regression",
+    "failureId": "window-reopen.activate-ignored",
+    "message": "BASELINE_ACTIVATE: Application.ActivateWindow left a minimized window in the Dock."
+  }
+}
