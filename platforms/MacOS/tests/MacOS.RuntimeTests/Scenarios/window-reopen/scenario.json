@@ -1,7 +1,7 @@
 {
   "name": "window-reopen",
-  "expectedCases": 3,
-  "expectedAssertions": 9,
+  "expectedCases": 4,
+  "expectedAssertions": 12,
   "evidence": [
     "windows.jsonl",
     "assertions.txt"

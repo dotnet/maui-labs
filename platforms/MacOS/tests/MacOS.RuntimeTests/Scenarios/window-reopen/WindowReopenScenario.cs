@@ -10,8 +10,8 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("window-reopen", 3, context => new WindowReopenScenario().CreateDelegate(context),
-            ExpectedAssertions: 9));
+        ScenarioRegistry.Register(new("window-reopen", 4, context => new WindowReopenScenario().CreateDelegate(context),
+            ExpectedAssertions: 12));
 }
 
 /// <summary>
@@ -75,6 +75,19 @@ sealed class WindowReopenScenario : MauiRuntimeScenario
         }
         evidence.Assert(nativeWindow.IsVisible, "ActivateWindow restores the minimized window.", "window-reopen.activate");
         evidence.Pass("activate-minimized");
+
+        // Application.ActivateWindow while the app is in the background ("Show window" from a menu-bar item).
+        // Deactivate() is only a request under cooperative activation; hiding (⌘H) always gives up active.
+        NSApplication.SharedApplication.Hide(NSApplication.SharedApplication);
+        var inactive = await WaitForAsync(() => !NSApplication.SharedApplication.Active && !nativeWindow.IsVisible);
+        evidence.Assert(inactive, "The hidden app is no longer active.", "window-reopen.deactivate");
+
+        application.ActivateWindow(window);
+        var foreground = await WaitForAsync(() => NSApplication.SharedApplication.Active && nativeWindow.IsKeyWindow);
+        evidence.AppendJson("windows.jsonl", new { step = "activate-inactive", visible = nativeWindow.IsVisible, active = NSApplication.SharedApplication.Active, key = nativeWindow.IsKeyWindow });
+        evidence.Assert(NSApplication.SharedApplication.Active, "ActivateWindow makes the app active.", "window-reopen.activate-app");
+        evidence.Assert(foreground, "ActivateWindow makes the window key.", "window-reopen.activate-key");
+        evidence.Pass("activate-inactive");
 
         // Dock icon clicked while the only window is minimized
         minimized = await MinimizeAsync(nativeWindow);

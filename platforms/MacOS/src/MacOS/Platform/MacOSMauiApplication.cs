@@ -178,7 +178,12 @@ public abstract class MacOSMauiApplication : NSApplicationDelegate, IPlatformApp
         if (window.IsMiniaturized)
             window.Deminiaturize(null);
 
-        NSApplication.SharedApplication.Activate();
+        // Activate() is only a request under macOS 14's cooperative activation and is ignored while the app is
+        // in the background - e.g. "Show window" from a status-bar item - leaving the window on screen but not key.
+        // The deprecated call still brings the app forward.
+#pragma warning disable CA1422
+        NSApplication.SharedApplication.ActivateIgnoringOtherApps(true);
+#pragma warning restore CA1422
         window.MakeKeyAndOrderFront(null);
     }
 
