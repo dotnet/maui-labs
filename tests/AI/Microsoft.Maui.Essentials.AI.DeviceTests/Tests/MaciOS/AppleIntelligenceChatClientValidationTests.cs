@@ -1,6 +1,7 @@
 #if IOS || MACCATALYST
 using Foundation;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.AI;
 using Xunit;
@@ -106,6 +107,74 @@ public class AppleIntelligenceChatClientValidationTests
 			Assert.Contains(name, required);
 		}
 		Assert.False(schema.Value.GetProperty("additionalProperties").GetBoolean());
+	}
+
+	// Nullable CLR members produce "type": ["<type>", "null"]. The strict transform must accept the array form (it used to
+	// read "type" as a string and throw "The node must be of type 'JsonValue'") and still title nullable objects.
+	[Fact]
+	public void ResponseSchema_WithNullableProperties_KeepsNullableTypesAndTitlesObjects()
+	{
+		var format = Assert.IsType<ChatResponseFormatJson>(
+			ChatResponseFormat.ForJsonSchema<NullableResponse>(JsonSerializerOptions.Web));
+
+		var schema = AppleIntelligenceChatClient.StrictSchemaTransformCache.GetOrCreateTransformedSchema(format);
+
+		Assert.NotNull(schema);
+		var properties = schema.Value.GetProperty("properties");
+		foreach (var (name, type) in new[] { ("quantity", "number"), ("count", "integer"), ("name", "string"), ("detail", "object") })
+		{
+			var types = properties.GetProperty(name).GetProperty("type").EnumerateArray().Select(t => t.GetString()).ToArray();
+			Assert.Contains(type, types);
+			Assert.Contains("null", types);
+		}
+		Assert.True(properties.GetProperty("detail").TryGetProperty("title", out _));
+		var required = schema.Value.GetProperty("required").EnumerateArray().Select(value => value.GetString()).ToArray();
+		Assert.Equal(["quantity", "count", "name", "detail"], required);
+	}
+
+	[Theory]
+	[InlineData("\"object\"", "object", true)]
+	[InlineData("\"string\"", "object", false)]
+	[InlineData("[\"object\", \"null\"]", "object", true)]
+	[InlineData("[\"number\", \"null\"]", "object", false)]
+	[InlineData("[]", "object", false)]
+	[InlineData("42", "object", false)]
+	public void AllowsType_ReadsStringAndArrayTypeKeywords(string json, string type, bool expected)
+		=> Assert.Equal(expected, AppleIntelligenceChatClient.AllowsType(JsonNode.Parse(json), type));
+
+	public sealed class NullableResponse
+	{
+		public double? Quantity { get; set; }
+
+		public int? Count { get; set; }
+
+		public string? Name { get; set; }
+
+		public NullableDetail? Detail { get; set; }
+	}
+
+	public sealed class NullableDetail
+	{
+		public string Note { get; set; } = string.Empty;
+	}
+
+	// The native session honors nullable members: the strict schema requires each field, which may be null.
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithNullableSchema_ReturnsParsableResponse()
+	{
+		var client = new AppleIntelligenceChatClient();
+		var options = new ChatOptions
+		{
+			ResponseFormat = ChatResponseFormat.ForJsonSchema<NullableResponse>(JsonSerializerOptions.Web)
+		};
+
+		var response = await client.GetResponseAsync(
+			[new ChatMessage(ChatRole.User, "A store receipt line reads \"POOL SALT 40 LB\". Give its quantity and name; leave count and detail empty.")],
+			options);
+
+		var parsed = JsonSerializer.Deserialize<NullableResponse>(response.Text!, JsonSerializerOptions.Web);
+		Assert.NotNull(parsed);
 	}
 
 	// Apple's native strict-schema path forces all optional fields across repeated requests; JSON Schema generally permits omission.
