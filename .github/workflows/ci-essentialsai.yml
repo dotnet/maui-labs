@@ -50,6 +50,7 @@ jobs:
       project-path: src/AI/EssentialsAI.slnf
       project-name: essentialsai
       os: '["xcode-27"]'
+      xcode-version: '27.2'
       run-tests: true
       pack: true
       skip-xcode-version-validation: true
