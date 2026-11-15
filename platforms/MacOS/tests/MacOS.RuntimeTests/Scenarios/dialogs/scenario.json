@@ -8,8 +8,8 @@
   "baseline": {
     "source": "platforms/MacOS/src/MacOS/Platform/AlertManagerSubscription.cs",
     "replace": {
-      "old": "static readonly Type? IAlertManagerSubscriptionType = typeof(Window).Assembly\n        .GetType(\"Microsoft.Maui.Controls.Platform.IAlertManagerSubscription\")\n        ?? AlertManagerType?.GetNestedType(\"IAlertManagerSubscription\", BindingFlags.Public | BindingFlags.NonPublic);\n\n    public static void Register(IServiceCollection services)\n    {\n        if (IAlertManagerSubscriptionType == null)\n            throw new NotSupportedException($\"Cannot register AppKit dialogs: IAlertManagerSubscription was not found in {typeof(Window).Assembly.FullName}.\");",
-      "new": "static readonly Type? IAlertManagerSubscriptionType = AlertManagerType?\n        .GetNestedType(\"IAlertManagerSubscription\", BindingFlags.Public | BindingFlags.NonPublic);\n\n    public static void Register(IServiceCollection services)\n    {\n        if (IAlertManagerSubscriptionType == null)\n            return;"
+      "old": "    public static void Register(IServiceCollection services)\n        => services.AddSingleton<IAlertManagerSubscription, AlertManagerSubscription>();",
+      "new": "    public static void Register(IServiceCollection services)\n    {\n    }"
     },
     "exitCode": 1,
     "outcome": "failed",

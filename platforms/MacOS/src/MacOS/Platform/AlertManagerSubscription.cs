@@ -1,58 +1,32 @@
-using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Internals;
+using Microsoft.Maui.Controls.Platform;
 using AppKit;
 
 using Microsoft.Maui.Platforms.MacOS.Handlers;
 
 namespace Microsoft.Maui.Platforms.MacOS.Platform;
 
-#pragma warning disable IL2026, IL2060, IL2080, IL2111 // Reflection required for internal IAlertManagerSubscription
-
-public class AlertManagerSubscription : DispatchProxy
+/// <summary>
+/// Presents MAUI alerts, prompts and action sheets as native AppKit <see cref="NSAlert"/> sheets.
+/// MAUI's <c>AlertManager</c> resolves the registered <see cref="IAlertManagerSubscription"/>
+/// from the window's services and forwards every <c>DisplayAlertAsync</c>,
+/// <c>DisplayPromptAsync</c> and <c>DisplayActionSheetAsync</c> request to it.
+/// </summary>
+public class AlertManagerSubscription : IAlertManagerSubscription
 {
-    static readonly Type? AlertManagerType = typeof(Window).Assembly
-        .GetType("Microsoft.Maui.Controls.Platform.AlertManager");
-
-    // MAUI 10.0.70 moved the interface out of AlertManager.
-    static readonly Type? IAlertManagerSubscriptionType = typeof(Window).Assembly
-        .GetType("Microsoft.Maui.Controls.Platform.IAlertManagerSubscription")
-        ?? AlertManagerType?.GetNestedType("IAlertManagerSubscription", BindingFlags.Public | BindingFlags.NonPublic);
-
     public static void Register(IServiceCollection services)
-    {
-        if (IAlertManagerSubscriptionType == null)
-            throw new NotSupportedException($"Cannot register AppKit dialogs: IAlertManagerSubscription was not found in {typeof(Window).Assembly.FullName}.");
+        => services.AddSingleton<IAlertManagerSubscription, AlertManagerSubscription>();
 
-        var proxyType = typeof(AlertManagerSubscription<>).MakeGenericType(IAlertManagerSubscriptionType);
-        var createMethod = typeof(DispatchProxy)
-            .GetMethods(BindingFlags.Public | BindingFlags.Static)
-            .First(m => m.Name == "Create" && m.GetGenericArguments().Length == 2)
-            .MakeGenericMethod(IAlertManagerSubscriptionType, proxyType);
+    void IAlertManagerSubscription.OnAlertRequested(Page sender, AlertArguments arguments)
+        => OnAlertRequested(sender, arguments);
 
-        var proxy = createMethod.Invoke(null, null)!;
-        services.AddSingleton(IAlertManagerSubscriptionType, proxy);
-    }
+    void IAlertManagerSubscription.OnPromptRequested(Page sender, PromptArguments arguments)
+        => OnPromptRequested(sender, arguments);
 
-    internal static void HandleInvoke(MethodInfo? method, object?[]? args)
-    {
-        if (method == null || args == null)
-            return;
-
-        switch (method.Name)
-        {
-            case "OnAlertRequested":
-                OnAlertRequested(args[0] as Page, args[1] as AlertArguments);
-                break;
-            case "OnPromptRequested":
-                OnPromptRequested(args[0] as Page, args[1] as PromptArguments);
-                break;
-            case "OnActionSheetRequested":
-                OnActionSheetRequested(args[0] as Page, args[1] as ActionSheetArguments);
-                break;
-        }
-    }
+    void IAlertManagerSubscription.OnActionSheetRequested(Page sender, ActionSheetArguments arguments)
+        => OnActionSheetRequested(sender, arguments);
 
     static void OnAlertRequested(Page? sender, AlertArguments? arguments)
     {
@@ -287,16 +261,5 @@ public class AlertManagerSubscription : DispatchProxy
 
         var app = NSApplication.SharedApplication;
         return app.KeyWindow ?? app.MainWindow;
-    }
-
-    protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
-}
-
-public class AlertManagerSubscription<T> : DispatchProxy
-{
-    protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
-    {
-        AlertManagerSubscription.HandleInvoke(targetMethod, args);
-        return null;
     }
 }

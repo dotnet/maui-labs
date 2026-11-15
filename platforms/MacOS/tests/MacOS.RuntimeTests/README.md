@@ -1,16 +1,17 @@
 # Shared AppKit runtime tests
 
 This is the renamed/generalized `LayoutRegressionTests` application, not a second
-test app. Portable `MacOS.Tests` remains a separate `net10.0` xUnit project.
+test app. Portable `MacOS.Tests` remains a separate `net11.0` xUnit project.
 Native scenarios share one executable, project, process bootstrap and CI runner.
 Every launch selects exactly one registered scenario in a fresh process.
 
 The dialog scenarios replace the standalone `AlertRegistrationProbe` app:
-`dialog-registration` checks the actual MAUI-consumed subscription, AppKit proxy
-and singleton registration across MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110.
-`dialogs` runs at 10.0.70, first restoring only the legacy registration logic to
-prove the missing service in a real window, then verifying fixed native action
-sheets, prompts and alerts with visible-sheet captures and typed task results.
+`dialog-registration` checks that MAUI consumes the public `IAlertManagerSubscription`
+and that the AppKit implementation is registered once as a singleton. `dialogs`
+first removes the registration to prove the missing service in a real window, then
+verifies fixed native action sheets, prompts and alerts with visible-sheet captures
+and typed task results. `--maui-version` overrides `MicrosoftMauiControlsNet11Version`
+when a scenario needs a specific MAUI 11 build.
 A timeout is a failure, not accepted baseline evidence.
 
 | Scenario | Cases | Before/fixed behavior |
@@ -19,7 +20,7 @@ A timeout is a failure, not accepted baseline evidence.
 | `contentview-clipping` | 19 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, Entry replacement, redraw cost, scale-only visibility and extent, native owner relayout, scaled collections, composite scroll cost and layout changes, Auto Layout toolbar geometry, autoresizing, scale/anchor resets, nonuniform scale, combined rotation/mirroring with translation, and zero/collapsed transitions (198 assertions) |
 | `collection-view-grid` | 4 | Incorrect composed-card measurements and grid rows / tall cards, live Span changes, resize remeasurement, and spanning headers (8 assertions) |
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
-| `dialog-registration` | 1 | Fixed subscription, proxy and singleton registration across four MAUI versions |
+| `dialog-registration` | 1 | Consumed public subscription, AppKit implementation and singleton registration |
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
 | `window-page-reset` | 1 | Sheets survive root replacement / native button opens nested modal sheets, then resets Window.Page and verifies both sheets and MAUI modal state are cleared |
 | `picker` | 19 | Unselected null-title Picker displays January / selection, title, items and native activation transitions |
@@ -40,11 +41,11 @@ backend and Essentials `.nupkg` files (default: `artifacts/runtime-packages`).
 
 ## Run on macOS
 
-Use the repository SDK, macOS workload 10.0.203 and Xcode 26.3:
+Use the repository SDK (.NET 11), the .NET 11 workload set 11.0.100.1 and Xcode 27.2:
 
 ```sh
 export NUGET_PACKAGES="$PWD/.packages"
-./eng/common/dotnet.sh workload install macos --version 10.0.203
+./eng/common/dotnet.sh workload install macos --version 11.0.100.1
 python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
   --scenario layout --evidence "$PWD/artifacts/layout-run"
 ```

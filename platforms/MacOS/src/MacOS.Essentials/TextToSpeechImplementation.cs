@@ -1,4 +1,3 @@
-using System.Reflection;
 using AppKit;
 using Microsoft.Maui.Media;
 
@@ -11,23 +10,10 @@ class TextToSpeechImplementation : ITextToSpeech
     readonly Lazy<NSSpeechSynthesizer> _synthesizer = new(() =>
         new NSSpeechSynthesizer { Delegate = new SpeechDelegate() });
 
-    static readonly ConstructorInfo? _localeCtor = typeof(Locale)
-        .GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic, null,
-            new[] { typeof(string), typeof(string), typeof(string), typeof(string) }, null);
-
-    static Locale CreateLocale(string language, string? country, string name, string id)
-    {
-        if (_localeCtor is not null)
-            return (Locale)_localeCtor.Invoke(new object?[] { language, country, name, id });
-        // Fallback: create via reflection on fields if constructor changes
-        var locale = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(Locale));
-        return (Locale)locale;
-    }
-
     public Task<IEnumerable<Locale>> GetLocalesAsync() =>
         Task.FromResult(NSSpeechSynthesizer.AvailableVoices
             .Select(voice => NSSpeechSynthesizer.AttributesForVoice(voice))
-            .Select(attr => CreateLocale(
+            .Select(attr => new Locale(
                 attr["VoiceLanguage"]?.ToString() ?? "",
                 null,
                 attr["VoiceName"]?.ToString() ?? "",
