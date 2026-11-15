@@ -59,7 +59,7 @@ jobs:
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
 
       - name: Run tests
-        run: dotnet test Microsoft.Maui.Testing.Tests/Microsoft.Maui.Testing.Tests.csproj
+        run: dotnet test --project Microsoft.Maui.Testing.Tests/Microsoft.Maui.Testing.Tests.csproj
 
       - name: Pack
         shell: pwsh

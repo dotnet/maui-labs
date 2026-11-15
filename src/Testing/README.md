@@ -134,7 +134,7 @@ MyApp.Tests/
 ```console
 cd src/Testing
 dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
-dotnet test Microsoft.Maui.Testing.Tests/Microsoft.Maui.Testing.Tests.csproj
+dotnet test --project Microsoft.Maui.Testing.Tests/Microsoft.Maui.Testing.Tests.csproj
 dotnet pack Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
 dotnet pack templates/Microsoft.Maui.Testing.Templates.csproj
 ```
