@@ -768,6 +768,11 @@ These options apply to all `maui devflow` subcommands:
 
 ## Platform Support
 
+DevFlow targets .NET 11: the agent packages ship `net11.0` / `net11.0-<platform>` assets and the
+MAUI-based packages require .NET MAUI 11.0.0 or later. `Microsoft.Maui.DevFlow.Client` stays
+portable (`netstandard2.0` and `net8.0`) and `Microsoft.Maui.DevFlow.Driver` targets `net9.0`, so
+the `maui` CLI and test harnesses on older runtimes can still consume them.
+
 | Platform | Status |
 |----------|--------|
 | Mac Catalyst | ✅ |

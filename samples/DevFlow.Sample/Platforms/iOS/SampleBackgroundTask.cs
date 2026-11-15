@@ -33,19 +33,21 @@ public static class SampleBackgroundTask
     /// </summary>
     public static void Register()
     {
-        BGTaskScheduler.Shared.Register(SyncTaskIdentifier, null, task =>
-        {
-            Preferences.Set(RunCountPreference, Preferences.Get(RunCountPreference, 0) + 1);
-            Preferences.Set(LastRunPreference, DateTime.UtcNow.ToString("O"));
-            Console.WriteLine($"[DevFlow.Sample] BGTask '{SyncTaskIdentifier}' executed.");
-            if (Preferences.Get(ReschedulePreference, false))
-                Console.WriteLine($"[DevFlow.Sample] BGTask reschedule: {Schedule()}");
-            task.SetTaskCompleted(true);
-        });
+        BGTaskScheduler.Shared.Register(SyncTaskIdentifier, null, task => _ = RunAsync(task));
+    }
+
+    private static async Task RunAsync(BGTask task)
+    {
+        Preferences.Set(RunCountPreference, Preferences.Get(RunCountPreference, 0) + 1);
+        Preferences.Set(LastRunPreference, DateTime.UtcNow.ToString("O"));
+        Console.WriteLine($"[DevFlow.Sample] BGTask '{SyncTaskIdentifier}' executed.");
+        if (Preferences.Get(ReschedulePreference, false))
+            await LogScheduleAsync("reschedule");
+        task.SetTaskCompleted(true);
     }
 
     /// <summary>Submits the task with a far-future begin date so it stays pending until forced.</summary>
-    public static string Schedule()
+    public static async Task<string> ScheduleAsync()
     {
         var request = new BGProcessingTaskRequest(SyncTaskIdentifier)
         {
@@ -54,8 +56,38 @@ public static class SampleBackgroundTask
             RequiresExternalPower = false
         };
 
-        BGTaskScheduler.Shared.Submit(request, out var error);
+        var error = await SubmitAsync(request);
         return error != null ? $"submit failed: {error.LocalizedDescription}" : "submitted";
+    }
+
+    /// <summary>Schedules the task and writes the outcome to the console; never throws.</summary>
+    public static async Task LogScheduleAsync(string label)
+    {
+        try
+        {
+            Console.WriteLine($"[DevFlow.Sample] BGTask {label}: {await ScheduleAsync()}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DevFlow.Sample] BGTask {label} failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// iOS / Mac Catalyst 27 obsolete the synchronous <c>Submit(request, out error)</c> because it
+    /// cannot report every error condition; use the completion-handler overload where it exists.
+    /// </summary>
+    private static Task<NSError?> SubmitAsync(BGTaskRequest request)
+    {
+        if (OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27))
+        {
+            var completion = new TaskCompletionSource<NSError?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            BGTaskScheduler.Shared.Submit(request, error => completion.TrySetResult(error));
+            return completion.Task;
+        }
+
+        BGTaskScheduler.Shared.Submit(request, out var submitError);
+        return Task.FromResult(submitError);
     }
 
 #if DEBUG
@@ -87,7 +119,7 @@ public static class SampleBackgroundTask
 #endif
 
     [DevFlowAction("bgtask-schedule", Description = "Submit the sample BGTask request so it becomes pending")]
-    public static string ScheduleAction() => Schedule();
+    public static Task<string> ScheduleAction() => ScheduleAsync();
 
     [DevFlowAction("bgtask-run-count", Description = "How many times the sample BGTask handler has executed")]
     public static string RunCount() =>

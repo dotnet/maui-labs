@@ -850,7 +850,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                     : new BGProcessingTaskRequest(identifier);
                 taskRequest.EarliestBeginDate = null;
 
-                BGTaskScheduler.Shared.Submit(taskRequest, out var error);
+                var error = await SubmitBgTaskRequestAsync(taskRequest);
                 if (error != null)
                     submitError = $"{error.LocalizedDescription} {DescribeBgTaskSchedulerError(error, identifier)}".Trim();
             }
@@ -940,6 +940,24 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                  "in Info.plist and register a launch handler for it before the app finishes launching.",
             _ => string.Empty
         };
+    }
+
+    /// <summary>
+    /// Submits a BGTask request and returns the scheduler's error, if any. iOS / Mac Catalyst 27
+    /// obsolete the synchronous <c>Submit(request, out error)</c> because it cannot report every
+    /// error condition, so the completion-handler overload is used where it exists.
+    /// </summary>
+    private static async Task<NSError?> SubmitBgTaskRequestAsync(BGTaskRequest request)
+    {
+        if (OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27))
+        {
+            var completion = new TaskCompletionSource<NSError?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            BGTaskScheduler.Shared.Submit(request, error => completion.TrySetResult(error));
+            return await completion.Task;
+        }
+
+        BGTaskScheduler.Shared.Submit(request, out var submitError);
+        return submitError;
     }
 
     private static async Task<bool> IsBgTaskPendingAsync(string identifier)

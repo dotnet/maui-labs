@@ -23,14 +23,7 @@ public class AppDelegate : MauiUIApplicationDelegate
 
 		var result = base.FinishedLaunching(application, launchOptions);
 
-		try
-		{
-			Console.WriteLine($"[DevFlow.Sample] BGTask schedule: {SampleBackgroundTask.Schedule()}");
-		}
-		catch (Exception ex)
-		{
-			Console.WriteLine($"[DevFlow.Sample] BGTask schedule failed: {ex.Message}");
-		}
+		_ = SampleBackgroundTask.LogScheduleAsync("schedule");
 
 		return result;
 	}

@@ -80,6 +80,7 @@ A comprehensive testing, automation, and debugging toolkit for .NET MAUI apps �
 - **Real-time streaming** — WebSocket channels for logs, network requests, sensor data, profiler samples, and UI events
 - **Storage access** — read/write app preferences and secure storage
 - **Device introspection** — battery, connectivity, geolocation, display info, and permissions
+- Requires .NET 11; the MAUI-based packages require .NET MAUI 11.0.0 or later
 
 | Package | Description |
 |---------|-------------|

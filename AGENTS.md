@@ -23,7 +23,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 
 ### Technology Stack
 
-- **.NET 10** (SDK version pinned in `global.json`, `rollForward: latestMinor`)
+- **.NET 11 SDK** (pinned in `global.json`, `rollForward: latestMinor`). Most products still target `net10.0`; **DevFlow targets `net11.0` with .NET MAUI 11**, opted in through `UseMaui11Packages` in `Directory.Packages.props`
 - **C#** with `LangVersion: latest`, file-scoped namespaces
 - **Microsoft.DotNet.Arcade.Sdk** for build infrastructure
 - **Central Package Management** — all versions in `Directory.Packages.props`
@@ -35,7 +35,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 
 ### Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (see `global.json` for exact version)
+- [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) (see `global.json` for exact version)
 - MAUI workload: `dotnet workload install maui`
 
 ### Build Commands

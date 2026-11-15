@@ -73,6 +73,11 @@ public class BackgroundJobPlatformTests
                     return true;
                 }
                 private static string DescribeBgTaskSchedulerError(NSError error, string identifier) => "";
+                private static Task<NSError?> SubmitBgTaskRequestAsync(BGTaskRequest request)
+                {
+                    BGTaskScheduler.Shared.Submit(request, out var error);
+                    return Task.FromResult(error);
+                }
             }
             public class NSError { public string LocalizedDescription => "error"; }
             public class BGTaskRequest { public object? EarliestBeginDate { get; set; } }

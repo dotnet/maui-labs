@@ -15,9 +15,9 @@
   <!-- Dependencies flowing via darc/maestro (match Version.Details.xml) -->
   <PropertyGroup Label="Dotnet MAUI">
     <MicrosoftMauiControlsVersion>10.0.41</MicrosoftMauiControlsVersion>
-    <!-- Minimum MAUI version required by DevFlow shipping packages.
-         Kept low so consumers can use any compatible MAUI 10.0.x release. -->
-    <DevFlowMauiMinVersion>10.0.20</DevFlowMauiMinVersion>
+    <!-- Minimum MAUI version required by DevFlow shipping packages (which target net11.0).
+         Kept low so consumers can use any compatible MAUI 11.0.x release. -->
+    <DevFlowMauiMinVersion>11.0.0</DevFlowMauiMinVersion>
     <MicrosoftMauiControlsCompatibilityVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsCompatibilityVersion>
     <MicrosoftMauiEssentialsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiEssentialsVersion>
     <MicrosoftAspNetCoreComponentsWebViewVersion>10.0.3</MicrosoftAspNetCoreComponentsWebViewVersion>
@@ -26,6 +26,9 @@
     <!-- MAUI 11 baseline for products that have moved to net11.0 TFMs (DevFlow, macOS AppKit,
          Linux GTK4). Products still on net10.0 keep MicrosoftMauiControlsVersion above. -->
     <MicrosoftMauiControlsNet11Version>11.0.10</MicrosoftMauiControlsNet11Version>
+    <!-- Blazor WebView core matching MAUI 11 (Microsoft.AspNetCore.Components.WebView.Maui 11.0.x
+         depends on 11.0.0). Applied together with MicrosoftMauiControlsNet11Version. -->
+    <MicrosoftAspNetCoreComponentsWebViewNet11Version>11.0.0</MicrosoftAspNetCoreComponentsWebViewNet11Version>
   </PropertyGroup>
   <PropertyGroup Label="AndroidX">
     <!-- WorkManager: used by DevFlow.Sample to exercise background job inspection/triggering.
@@ -39,6 +42,8 @@
     <XamarinAndroidXWorkRuntimeVersion>2.10.0.5</XamarinAndroidXWorkRuntimeVersion>
     <XamarinAndroidXKtxFacadeVersion>1.3.0.1</XamarinAndroidXKtxFacadeVersion>
     <XamarinAndroidXLifecycleServiceVersion>2.9.2.1</XamarinAndroidXLifecycleServiceVersion>
+    <!-- MAUI 11 resolves AndroidX.Core 1.19, which needs Lifecycle.Runtime 2.11.x. -->
+    <XamarinAndroidXLifecycleServiceNet11Version>2.11.0.1</XamarinAndroidXLifecycleServiceNet11Version>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
     <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
@@ -52,6 +57,10 @@
     <MicrosoftExtensionsConfigurationJsonVersion>10.0.5</MicrosoftExtensionsConfigurationJsonVersion>
     <MicrosoftExtensionsConfigurationUserSecretsVersion>10.0.5</MicrosoftExtensionsConfigurationUserSecretsVersion>
     <SystemTextJsonVersion>10.0.5</SystemTextJsonVersion>
+    <!-- Microsoft.Extensions.* line required by MAUI 11 (its packages depend on >= 11.0.0).
+         Applied only to projects that opt into MAUI 11 (UseMaui11Packages in
+         Directory.Packages.props); everything else keeps the 10.0 versions above. -->
+    <MicrosoftExtensionsNet11Version>11.0.0</MicrosoftExtensionsNet11Version>
   </PropertyGroup>
   <PropertyGroup Label="AI">
     <MicrosoftExtensionsAIVersion>10.4.1</MicrosoftExtensionsAIVersion>
@@ -117,6 +126,8 @@
     <MicrosoftWindowsAppSDKVersion_Experimental>2.5.4-experimental</MicrosoftWindowsAppSDKVersion_Experimental>
     <!-- Windows: enables dotnet run for packaged MSIX apps -->
     <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.3.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>
+    <!-- Microsoft.Maui.Core 11 (Windows) depends on WinApp >= 0.7.1; applied with MAUI 11 only. -->
+    <MicrosoftWindowsSDKBuildToolsWinAppNet11Version>0.7.1</MicrosoftWindowsSDKBuildToolsWinAppNet11Version>
   </PropertyGroup>
   <PropertyGroup Label="Testing">
     <MicrosoftNETTestSdkVersion>18.3.0</MicrosoftNETTestSdkVersion>

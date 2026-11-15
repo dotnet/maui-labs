@@ -56,13 +56,13 @@ public class SampleSyncWorker : Worker
         // Builder.Build() is typed as the WorkRequest base in the AndroidX binding,
         // but EnqueueUniqueWork requires the OneTimeWorkRequest it actually returns.
         var request = (OneTimeWorkRequest)new OneTimeWorkRequest.Builder(Java.Lang.Class.FromType(typeof(SampleSyncWorker)))
-            .SetInputData(data)
-            .SetInitialDelay(1, TimeUnit.Days!)
+            .SetInputData(data)!
+            .SetInitialDelay(1, TimeUnit.Days!)!
             .AddTag(WorkName)
             .Build()!;
 
         WorkManager.GetInstance(context)
-            .EnqueueUniqueWork(WorkName, ExistingWorkPolicy.Replace, request);
+            .EnqueueUniqueWork(WorkName, ExistingWorkPolicy.Replace!, request);
     }
 
     /// <summary>

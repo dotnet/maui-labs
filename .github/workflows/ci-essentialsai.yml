@@ -55,6 +55,7 @@ jobs:
       workload-version: '10.0.401'
       skip-xcode-version-validation: true
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
+      android-target-framework: net10.0-android
 
   # Step 2: Build on Windows — downloads native .resources.zip from macOS build
   # via pre-build-artifact so AppleBindings.targets includes them during pack.
@@ -70,6 +71,7 @@ jobs:
       workload-version: '10.0.401'
       pre-build-artifact: native-apple-essentialsai
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
+      android-target-framework: net10.0-android
 
   # Step 3: Run device tests on Mac Catalyst via DeviceRunners + dotnet test.
   device-tests-maccatalyst:

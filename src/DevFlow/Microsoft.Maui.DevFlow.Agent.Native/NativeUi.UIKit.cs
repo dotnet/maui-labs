@@ -196,13 +196,14 @@ internal static partial class NativeUi
         for (nuint i = 0; i < targets.Count; i++)
         {
             var entry = targets.GetItem<NSObject>(i);
-            var target = entry.ValueForKey(new NSString("target"));
-            var action = entry.ValueForKey(new NSString("action"));
-            if (target == null || action == null) continue;
-
-            var selector = new Selector(action.ToString());
-            if (target.RespondsToSelector(selector))
-                target.PerformSelector(selector, recognizer, 0);
+            var target = entry?.ValueForKey(new NSString("target"));
+            var actionName = entry?.ValueForKey(new NSString("action"))?.ToString();
+            if (target != null && !string.IsNullOrEmpty(actionName))
+            {
+                var selector = new Selector(actionName);
+                if (target.RespondsToSelector(selector))
+                    target.PerformSelector(selector, recognizer, 0);
+            }
         }
 
         return true;

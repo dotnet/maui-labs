@@ -164,4 +164,44 @@
     <PackageVersion Include="ZXing.Net.Maui.Controls" Version="$(ZXingNetMauiVersion)" />
   </ItemGroup>
 
+  <!-- .NET MAUI 11 (and the Microsoft.Extensions.* 11.0 line it requires) for products that have
+       moved to net11.0 TFMs. MAUI 11 packages only carry net11.0 assets, so they must not leak
+       into products still on net10.0: products opt in through UseMaui11Packages. DevFlow
+       (src/DevFlow and its samples) opts in by project name, matching the MSBuildProjectName
+       scoping used elsewhere in this file. Other products can opt in by adding their prefix below
+       or by setting UseMaui11Packages=true in their own Directory.Build.props or project file;
+       item conditions are evaluated after every property, so such values are honored here.
+       This block must stay at the end of the file: PackageVersion Update only applies to items
+       declared above it. -->
+  <PropertyGroup>
+    <UseMaui11Packages Condition="$(MSBuildProjectName.StartsWith('Microsoft.Maui.DevFlow.')) or $(MSBuildProjectName.StartsWith('DevFlow.'))">true</UseMaui11Packages>
+  </PropertyGroup>
+  <ItemGroup Label="MAUI 11" Condition="'$(UseMaui11Packages)' == 'true'">
+    <PackageVersion Update="Microsoft.Maui.Controls" Version="$(MicrosoftMauiControlsNet11Version)" />
+    <PackageVersion Update="Microsoft.Maui.Core" Version="$(MicrosoftMauiControlsNet11Version)" />
+    <PackageVersion Update="Microsoft.Maui.Essentials" Version="$(MicrosoftMauiControlsNet11Version)" />
+    <PackageVersion Update="Microsoft.AspNetCore.Components.WebView" Version="$(MicrosoftAspNetCoreComponentsWebViewNet11Version)" />
+    <PackageVersion Update="Microsoft.Maui.Controls.Maps" Version="$(MicrosoftMauiControlsNet11Version)" />
+    <PackageVersion Update="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MicrosoftMauiControlsNet11Version)" />
+    <!-- Microsoft.Maui.Controls.Compatibility has no MAUI 11 release (the last is 11.0.0-preview.6),
+         so it keeps the MAUI 10 version; it only arrives transitively (e.g. via MauiIcons). -->
+    <!-- MAUI 11 depends on Microsoft.Extensions.* >= 11.0.0. With transitive pinning on, leaving
+         these at the 10.0 line would be a package downgrade (NU1109). -->
+    <PackageVersion Update="Microsoft.Extensions.Configuration.Binder" Version="$(MicrosoftExtensionsNet11Version)" />
+    <PackageVersion Update="Microsoft.Extensions.Configuration.Json" Version="$(MicrosoftExtensionsNet11Version)" />
+    <PackageVersion Update="Microsoft.Extensions.Configuration.UserSecrets" Version="$(MicrosoftExtensionsNet11Version)" />
+    <PackageVersion Update="Microsoft.Extensions.DependencyInjection" Version="$(MicrosoftExtensionsNet11Version)" />
+    <PackageVersion Update="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(MicrosoftExtensionsNet11Version)" />
+    <PackageVersion Update="Microsoft.Extensions.Hosting" Version="$(MicrosoftExtensionsNet11Version)" />
+    <PackageVersion Update="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftExtensionsNet11Version)" />
+    <PackageVersion Update="Microsoft.Extensions.Http" Version="$(MicrosoftExtensionsNet11Version)" />
+    <PackageVersion Update="Microsoft.Extensions.Logging.Abstractions" Version="$(MicrosoftExtensionsNet11Version)" />
+    <PackageVersion Update="Microsoft.Extensions.Logging.Console" Version="$(MicrosoftExtensionsNet11Version)" />
+    <PackageVersion Update="Microsoft.Extensions.Logging.Debug" Version="$(MicrosoftExtensionsNet11Version)" />
+    <!-- Kept matched to the Lifecycle.Runtime that the MAUI 11 AndroidX baseline resolves. -->
+    <PackageVersion Update="Xamarin.AndroidX.Lifecycle.Service" Version="$(XamarinAndroidXLifecycleServiceNet11Version)" />
+    <!-- Microsoft.Maui.Core 11 on Windows depends on a newer WinApp build-tools package. -->
+    <PackageVersion Update="Microsoft.Windows.SDK.BuildTools.WinApp" Version="$(MicrosoftWindowsSDKBuildToolsWinAppNet11Version)" />
+  </ItemGroup>
+
 </Project>

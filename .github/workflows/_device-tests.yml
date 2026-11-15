@@ -38,8 +38,8 @@ on:
       workload-version:
         required: false
         type: string
-        default: '10.0.203'
-        description: 'Workload version to install (pinned for reproducibility)'
+        default: '11.0.100.1'
+        description: 'Workload set version to install (pinned for reproducibility; must match the SDK band in global.json)'
       xcode-version:
         required: false
         type: string

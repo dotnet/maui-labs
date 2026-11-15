@@ -6,10 +6,10 @@ These instructions guide GitHub Copilot and other AI code generation tools when 
 
 DevFlow targets multiple platforms via multi-targeting. The pattern:
 
-- **`Microsoft.Maui.DevFlow.Agent.Abstractions`** targets `net10.0` — all platform-agnostic code lives here (HTTP server, routing, `DevFlowAgentService` base class). No MAUI dependency.
-- **`Microsoft.Maui.DevFlow.Agent.Core`** targets `net10.0` — MAUI UI backend (`MauiDevFlowAgentService`, `VisualTreeWalker`). Depends on `Agent.Abstractions`.
-- **`Microsoft.Maui.DevFlow.Agent`** targets `net10.0-android`, `net10.0-ios`, `net10.0-maccatalyst`, `net10.0-macos`, `net10.0-windows10.0.19041.0` — platform-specific overrides.
-- **`Microsoft.Maui.DevFlow.Agent.Gtk`** targets `net10.0` — Linux/GTK-specific code.
+- **`Microsoft.Maui.DevFlow.Agent.Abstractions`** targets `net11.0` — all platform-agnostic code lives here (HTTP server, routing, `DevFlowAgentService` base class). No MAUI dependency.
+- **`Microsoft.Maui.DevFlow.Agent.Core`** targets `net11.0` — MAUI UI backend (`MauiDevFlowAgentService`, `VisualTreeWalker`). Depends on `Agent.Abstractions`.
+- **`Microsoft.Maui.DevFlow.Agent`** targets `net11.0-android`, `net11.0-ios`, `net11.0-maccatalyst`, `net11.0-macos`, `net11.0-windows10.0.19041.0` — platform-specific overrides. DevFlow resolves .NET MAUI 11 (see `UseMaui11Packages` in `Directory.Packages.props`).
+- **`Microsoft.Maui.DevFlow.Agent.Gtk`** targets `net11.0` — Linux/GTK-specific code.
 
 Use `#if` directives for platform code in multi-targeting projects:
 
