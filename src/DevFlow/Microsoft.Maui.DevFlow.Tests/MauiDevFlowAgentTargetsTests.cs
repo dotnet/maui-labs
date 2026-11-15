@@ -55,7 +55,6 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
               <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
               <PropertyGroup>
                 <TargetFramework>net11.0</TargetFramework>
-                <UseMaui11Packages>true</UseMaui11Packages>
                 <Configuration>{{configuration}}</Configuration>
                 <DevFlowXamlSourceMapsEnabled>{{enabled}}</DevFlowXamlSourceMapsEnabled>
                 <EnableDefaultMauiItems>false</EnableDefaultMauiItems>
