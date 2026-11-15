@@ -10,9 +10,9 @@ public class LinuxFilePicker : IFilePicker
 		return results?.FirstOrDefault();
 	}
 
-	public async Task<IEnumerable<FileResult?>> PickMultipleAsync(PickOptions? options)
+	public async Task<IEnumerable<FileResult>?> PickMultipleAsync(PickOptions? options)
 	{
-		return await PickInternalAsync(true, options) ?? Enumerable.Empty<FileResult?>();
+		return await PickInternalAsync(true, options) ?? Enumerable.Empty<FileResult>();
 	}
 
 	private async Task<List<FileResult>?> PickInternalAsync(bool multiple, PickOptions? options)

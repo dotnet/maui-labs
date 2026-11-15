@@ -200,7 +200,7 @@ extends:
                 $(_OfficialBuildArgs)
               displayName: Build and Test AppProjectReference
 
-          # The Linux GTK4 NuGet packages are pure managed (net10.0) assemblies
+          # The Linux GTK4 NuGet packages are pure managed (net11.0) assemblies
           # using GirCore for GTK/WebKit bindings, so they build and pack on Windows.
           # Running on Windows is required so MicroBuild/ESRP can sign the DLLs —
           # signing does not execute on Linux agents.

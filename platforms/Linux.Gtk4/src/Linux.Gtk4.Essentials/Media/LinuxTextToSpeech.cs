@@ -8,29 +8,10 @@ public class LinuxTextToSpeech : ITextToSpeech
 {
 	public Task<IEnumerable<Locale>> GetLocalesAsync()
 	{
-		// Locale has an internal constructor — create via reflection
+		// MAUI 11 exposes Locale's constructor publicly.
 		var culture = CultureInfo.CurrentCulture;
-		try
-		{
-			var ctor = typeof(Locale).GetConstructor(
-				System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
-				null, new[] { typeof(string), typeof(string), typeof(string), typeof(string) }, null);
-			if (ctor is not null)
-			{
-				var locale = (Locale)ctor.Invoke(new object[] {
-					culture.TwoLetterISOLanguageName, culture.Name, culture.DisplayName, culture.Name });
-				return Task.FromResult<IEnumerable<Locale>>(new[] { locale });
-			}
-			else
-			{
-				System.Diagnostics.Debug.WriteLine("LinuxTextToSpeech: Could not find Locale constructor via reflection. Locale list will be empty.");
-			}
-		}
-		catch (Exception ex)
-		{
-			System.Diagnostics.Debug.WriteLine($"LinuxTextToSpeech: Failed to create Locale via reflection: {ex.Message}");
-		}
-		return Task.FromResult<IEnumerable<Locale>>(Array.Empty<Locale>());
+		var locale = new Locale(culture.TwoLetterISOLanguageName, culture.Name, culture.DisplayName, culture.Name);
+		return Task.FromResult<IEnumerable<Locale>>(new[] { locale });
 	}
 
 	public async Task SpeakAsync(string text, SpeechOptions? options = null, CancellationToken cancelToken = default)

@@ -56,7 +56,7 @@ public class WebViewPage : ContentPage
 				    Click me (JavaScript test)
 				</button>
 				<hr style="border-color: rgba(255,255,255,0.3);">
-				<p style="font-size: 12px; opacity: 0.7;">WebKitGTK + GirCore.WebKit-6.0 + .NET MAUI 10</p>
+				<p style="font-size: 12px; opacity: 0.7;">WebKitGTK + GirCore.WebKit-6.0 + .NET MAUI 11</p>
 				</body>
 				</html>
 				"""

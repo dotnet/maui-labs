@@ -5,7 +5,11 @@
     <LangVersion>preview</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <MauiVersion>10.0.41</MauiVersion>
+    <!-- Linux GTK4 targets .NET 11 / MAUI 11 (other products may still be on MAUI 10).
+         MauiVersion can be overridden (-p:MauiVersion=...) to run compatibility tests. -->
+    <MauiVersion>$(MicrosoftMauiControlsNet11Version)</MauiVersion>
+    <!-- Microsoft.AspNetCore.Components.WebView.Maui 11.x requires Components.WebView 11.x. -->
+    <GtkAspNetCoreComponentsWebViewVersion>11.0.0</GtkAspNetCoreComponentsWebViewVersion>
     <!-- Set to false when the maui-labs DevFlow projects should not be referenced by the sample -->
     <EnableMauiDevFlow Condition="'$(EnableMauiDevFlow)' == ''">false</EnableMauiDevFlow>
   </PropertyGroup>

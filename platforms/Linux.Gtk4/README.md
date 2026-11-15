@@ -62,7 +62,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **ControlTemplate** — Full ContentPresenter and TemplatedView support via `IContentView` handler mapping.
 - **Font icons** — Embedded font registration with fontconfig/Pango, FontImageSource rendering via Cairo. FontAwesome and custom icon fonts work out of the box.
 - **FormattedText** — Rich text via Pango markup: Span colors, fonts, sizes, bold/italic, underline/strikethrough, character spacing.
-- **Alerts & Dialogs** — `DisplayAlert`, `DisplayActionSheet`, `DisplayPromptAsync` via native GTK4 modal windows. Registration supports both the nested MAUI 10.0.41–10.0.60 subscription interface and the top-level 10.0.70+ interface; an unrecognized contract fails during registration instead of leaving dialog tasks pending.
+- **Alerts & Dialogs** — `DisplayAlert`, `DisplayActionSheet`, `DisplayPromptAsync` via native GTK4 modal windows. Implemented against MAUI 11's public `IAlertManagerSubscription` contract and registered through DI.
 - **Modal Pages** — `PushModalAsync` presents pages as native GTK4 dialog windows by default, with attached properties for custom sizing, content-fit sizing, and inline (legacy) presentation via `GtkPage`.
 - **Brushes & Gradients** — SolidColorBrush, LinearGradientBrush, RadialGradientBrush via CSS gradients.
 - **MenuBar** — `MenuBarItem` / `MenuFlyoutItem` via `Gtk.PopoverMenuBar`, integrated into Window and NavigationPage handlers via `GtkMenuBarManager` (not a standalone handler).
@@ -234,7 +234,8 @@ store an encryption key beside the encrypted data.
 
 | Requirement | Version |
 |---|---|
-| .NET SDK | 10.0+ |
+| .NET SDK | 11.0+ |
+| .NET MAUI | 11.0.10+ |
 | GTK 4 libraries | 4.12+ (system package) |
 | WebKitGTK *(Blazor only)* | 6.x (system package) |
 
@@ -374,7 +375,7 @@ Since there is no official `-linux` TFM (Target Framework Moniker) from Microsof
 
 ```
 MyApp/                              ← Your existing multi-targeted MAUI project
-├── MyApp.csproj                       (net10.0-android;net10.0-ios;...)
+├── MyApp.csproj                       (net11.0-android;net11.0-ios;...)
 ├── App.cs
 ├── MainPage.xaml
 ├── ViewModels/
@@ -385,7 +386,7 @@ MyApp/                              ← Your existing multi-targeted MAUI projec
     └── ...
 
 MyApp.Linux/                        ← New Linux-specific project
-├── MyApp.Linux.csproj                 (net10.0, references Microsoft.Maui.Platforms.Linux.Gtk4)
+├── MyApp.Linux.csproj                 (net11.0, references Microsoft.Maui.Platforms.Linux.Gtk4)
 ├── Program.cs                         (GtkMauiApplication entry point)
 └── MauiProgram.cs                     (builder.UseMauiAppLinuxGtk4<App>())
 ```
@@ -415,7 +416,7 @@ dotnet run --project MyApp.Linux
 
 ### Why a separate project?
 
-The platform-specific TFMs (`net10.0-android`, `net10.0-ios`, etc.) are powered by .NET workloads that Microsoft ships. Creating a custom `net10.0-linux` TFM would require building and distributing a full .NET workload — complex infrastructure that's unnecessary for most use cases.
+The platform-specific TFMs (`net11.0-android`, `net11.0-ios`, etc.) are powered by .NET workloads that Microsoft ships. Creating a custom `net11.0-linux` TFM would require building and distributing a full .NET workload — complex infrastructure that's unnecessary for most use cases.
 
 The separate project approach works with standard `dotnet build`/`dotnet run`, is NuGet-distributable, and keeps your existing MAUI project unchanged.
 
@@ -472,7 +473,7 @@ dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
 ```
 
 The `ci-linux-gtk4.yml` compatibility matrix runs `AlertManagerSubscriptionTests`
-in this existing project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
+in this existing project against each supported MAUI 11 release (currently 11.0.10)
 through the shared build workflow's targeted test mode. These managed registration
 checks do not require GTK initialization and do not claim native UI coverage.
 
@@ -525,11 +526,11 @@ From the repository root on Linux, use the shared class runner (PowerShell 7,
 ```bash
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass CollectionViewHandlerTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkBlazorWebViewLifetimeTests
-pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSignalLifetimeTests -MauiVersion 10.0.70
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSignalLifetimeTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass PickerSelectionTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSynchronizationContextTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass ContentViewRootLayoutTests
-pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass StartupLayoutTests -MauiVersion 10.0.70
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass StartupLayoutTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkTransformTests
 ```
 
