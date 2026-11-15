@@ -190,7 +190,7 @@ class RuntimeRunner:
         if properties["RuntimeTestScenario"] != self.name:
             raise ValueError("Build selector must match the registered scenario.")
         if self.maui_version:
-            properties["MicrosoftMauiControlsVersion"] = self.maui_version
+            properties["MicrosoftMauiControlsNet11Version"] = self.maui_version
         arguments = []
         for key, value in properties.items():
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) or "\n" in str(value):

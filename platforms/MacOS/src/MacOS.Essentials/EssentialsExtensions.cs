@@ -87,7 +87,7 @@ public static class EssentialsExtensions
         SetStaticField(typeof(Screenshot), "defaultImplementation", new ScreenshotImplementation());
 
         // Stubs for APIs not available on macOS desktop
-        SetStaticField(typeof(PhoneDialer), "currentImplementation", new PhoneDialerImplementation());
+        SetStaticField(typeof(PhoneDialer), "defaultImplementation", new PhoneDialerImplementation());
         SetStaticField(typeof(Sms), "defaultImplementation", new SmsImplementation());
         SetStaticField(typeof(Flashlight), "defaultImplementation", new FlashlightImplementation());
         SetStaticField(typeof(Accelerometer), "defaultImplementation", new AccelerometerImplementation());

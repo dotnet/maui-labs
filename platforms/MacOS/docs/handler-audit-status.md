@@ -30,7 +30,7 @@ Items marked `[x]` have a handler or implementation present. Items marked `[ ]` 
 ### AppKit Interop
 - [x] **NSResponder Chain** — Used by gesture recognizers, mouse events in handlers, first responder for Entry/Editor
 - [x] **NSEvent Handling** — Mouse events (click, hover, drag), keyboard events via NSTextField/NSTextView
-- [x] **NSGestureRecognizer Integration** — `GestureManager` with `NSClickGestureRecognizer`, `NSPanGestureRecognizer`, `NSTrackingArea` for pointer
+- [x] **NSGestureRecognizer Integration** — `GestureManager` with `NSClickGestureRecognizer`, `NSPanGestureRecognizer`, `NSPressGestureRecognizer`, `NSTrackingArea` for pointer
 - [x] **NSAccessibility** — VoiceOver via SemanticScreenReader, semantic properties mapped to AccessibilityLabel/Help/Role
 
 ---
@@ -150,7 +150,7 @@ Attached properties on `MacOSWindow` for native titlebar configuration:
 
 | Dialog | Status | Notes |
 |--------|--------|-------|
-| [x] **DisplayAlert** | ✅ | Title, message, accept/cancel buttons via `NSAlert` + `RunModal()`; managed by `AlertManagerSubscription` with reflection-based AlertManager proxy |
+| [x] **DisplayAlert** | ✅ | Title, message, accept/cancel buttons via `NSAlert` sheets; `AlertManagerSubscription` implements MAUI 11's public `IAlertManagerSubscription` |
 | [x] **DisplayActionSheet** | ✅ | Multi-button action sheet via `NSAlert` with button mapping; supports destruction buttons (`HasDestructiveAction`), cancel button |
 | [x] **DisplayPromptAsync** | ✅ | Text input dialog via `NSAlert` with `NSTextField` accessory view, placeholder, initial value support |
 
@@ -160,14 +160,14 @@ Attached properties on `MacOSWindow` for native titlebar configuration:
 
 | Gesture | Status | Notes |
 |---------|--------|-------|
-| [x] **TapGestureRecognizer** | ✅ | `MacOSTapGestureRecognizer` wrapping `NSClickGestureRecognizer` with NumberOfTapsRequired, Command |
+| [x] **TapGestureRecognizer** | ✅ | `MacOSTapGestureRecognizer` wrapping `NSClickGestureRecognizer` with NumberOfTapsRequired, Buttons, Command, tap position |
 | [x] **PanGestureRecognizer** | ✅ | `MacOSPanGestureRecognizer` wrapping `NSPanGestureRecognizer` with translation tracking |
 | [x] **SwipeGestureRecognizer** | ✅ | `MacOSSwipeGestureRecognizer` using `NSPanGestureRecognizer` with velocity threshold for swipe detection |
 | [x] **PinchGestureRecognizer** | ✅ | `MacOSPinchGestureRecognizer` wrapping `NSMagnificationGestureRecognizer` for trackpad pinch-to-zoom |
 | [x] **PointerGestureRecognizer** | ✅ | `MacOSPointerTrackingArea` using `NSTrackingArea` for mouseEntered/mouseExited/mouseMoved |
 | [ ] **DragGestureRecognizer** | ❌ | Not implemented |
 | [ ] **DropGestureRecognizer** | ❌ | Not implemented |
-| [ ] **LongPressGestureRecognizer** | ❌ | Not implemented (no `NSPressGestureRecognizer` mapping) |
+| [x] **LongPressGestureRecognizer** | ✅ | `MacOSLongPressGestureRecognizer` wrapping `NSPressGestureRecognizer` with MinimumPressDuration, AllowableMovement, Started/Running/Completed/Canceled states and position (NumberOfTouchesRequired has no mouse equivalent) |
 
 ---
 
@@ -552,7 +552,6 @@ Features from standard MAUI that do not yet have macOS handlers:
 | **TitleView** | No `NavigationPage.TitleView` support — navigation chrome rendered via NSToolbar only |
 | **DragGestureRecognizer** | No `NSDraggingSource` integration |
 | **DropGestureRecognizer** | No `NSDraggingDestination` integration |
-| **LongPressGestureRecognizer** | No `NSPressGestureRecognizer` mapping |
 | **CollectionView drag-and-drop / reordering** | No native drag-reorder support |
 
 ---
@@ -634,7 +633,7 @@ Notable controls that do not have tvOS handlers:
 | **Basic Controls** | 14 of 14 | 14 | ✅ All basic controls with full image source support |
 | **Collection Controls** | 7 of 7 | 7 | ✅ All collection controls |
 | **Input Controls** | 4 of 4 | 4 | ✅ All input controls |
-| **Gesture Recognizers** | 5 of 8 | 8 | Missing: Drag, Drop, LongPress |
+| **Gesture Recognizers** | 6 of 8 | 8 | Missing: Drag, Drop |
 | **Shapes** | 1 handler | 6 types | Single ShapeViewHandler covers all shape types |
 | **Essentials (Real)** | 22 of 22 | 22 | ✅ Includes Email, Screenshot, HapticFeedback |
 | **Essentials (Stubs)** | 7 stubs | 7 | Vibration, Flashlight, PhoneDialer, SMS, 3 sensors |

@@ -459,7 +459,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: eng\common\dotnet.cmd workload install maui macos --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui macos --version 11.0.100.1
               displayName: Install MAUI and macOS workloads
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)

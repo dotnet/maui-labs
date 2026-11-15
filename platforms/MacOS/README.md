@@ -6,9 +6,9 @@ This backend lets MAUI applications run as true native macOS apps that use AppKi
 (`NSWindow`, `NSButton`, `NSScrollView`, etc.) and follow standard macOS UI conventions
 (menu bar, toolbar, sidebar flyout, native dialogs, etc.).
 
-Dialog registration supports both the nested MAUI 10.0.41-10.0.60 subscription
-interface and the top-level interface in 10.0.70+. An unrecognized contract fails
-during registration instead of leaving alert, prompt, or action-sheet tasks pending.
+The backend targets `net11.0-macos` and .NET MAUI 11. Alerts, prompts, and action
+sheets are presented through MAUI 11's public `IAlertManagerSubscription` contract as
+native `NSAlert` sheets.
 
 > **Inspiration:** Originally based on the
 > [shinyorg/mauiplatforms](https://github.com/shinyorg/mauiplatforms) project. The Xamarin.Forms
@@ -70,7 +70,7 @@ assertions as `appkit-runtime-shell-sections-default`. See the
 
 ## Prerequisites
 
-- .NET 10 SDK
+- .NET 11 SDK with the `macos` workload (and `maui` for app projects)
 - macOS 14 (Sonoma) or later
 - Xcode command line tools (for `sips` / `iconutil` — used by the icon build target)
 
@@ -95,7 +95,7 @@ dotnet run
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-macos</TargetFramework>
+    <TargetFramework>net11.0-macos</TargetFramework>
     <OutputType>Exe</OutputType>
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
@@ -223,15 +223,15 @@ version matrix entry or scoped fixture assets without another application/projec
 Portable `MacOS.Tests` remains independent of native AppKit execution.
 
 The same host also registers `dialog-registration` (consumed MAUI interface,
-AppKit proxy and singleton contract) and `dialogs` (real Page action sheet, prompt
-and alert completion with native-sheet screenshots). The existing AppKit workflow
-tests registration on MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110; native dialogs
-run at 10.0.70 with an exact missing-subscription baseline and bounded fixed run.
+AppKit implementation and singleton contract) and `dialogs` (real Page action sheet,
+prompt and alert completion with native-sheet screenshots). Both run against the
+repository's MAUI 11 version; native dialogs use an exact missing-subscription
+baseline and a bounded fixed run.
 
 ## Unit tests
 
 The platform-neutral tests exercise the backend's managed lifecycle code using real MAUI
-windows and handlers. They target `net10.0` and do not require AppKit, Xcode, or MAUI workloads:
+windows and handlers. They target `net11.0` and do not require AppKit, Xcode, or MAUI workloads:
 
 ```bash
 dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj

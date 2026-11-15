@@ -39,6 +39,9 @@ public static class GestureManager
                 case PointerGestureRecognizer pointer:
                     AddPointerGesture(platformView, pointer);
                     break;
+                case LongPressGestureRecognizer longPress:
+                    AddLongPressGesture(platformView, longPress);
+                    break;
             }
         }
     }
@@ -54,13 +57,15 @@ public static class GestureManager
         var toRemove = new List<NSGestureRecognizer>();
         foreach (var gr in view.GestureRecognizers)
         {
-            if (gr is MacOSTapGestureRecognizer or MacOSPanGestureRecognizer or MacOSSwipeGestureRecognizer or MacOSPinchGestureRecognizer)
+            if (gr is MacOSTapGestureRecognizer or MacOSPanGestureRecognizer or MacOSSwipeGestureRecognizer or MacOSPinchGestureRecognizer or MacOSLongPressGestureRecognizer)
                 toRemove.Add(gr);
         }
         foreach (var gr in toRemove)
         {
             if (gr is MacOSTapGestureRecognizer tap)
                 tap.Disconnect();
+            else if (gr is MacOSLongPressGestureRecognizer longPress)
+                longPress.Disconnect();
             view.RemoveGestureRecognizer(gr);
         }
 
@@ -130,6 +135,40 @@ public static class GestureManager
         var area = new MacOSPointerTrackingArea(view, pointer);
         view.AddTrackingArea(area);
     }
+
+    static void AddLongPressGesture(NSView view, LongPressGestureRecognizer longPress)
+    {
+        view.AddGestureRecognizer(new MacOSLongPressGestureRecognizer(longPress));
+
+        // Same as taps: a press on a child view (e.g. a Label's NSTextField) must still
+        // reach this view's recognizer.
+        if (view is MacOSContainerView container)
+            container.InterceptChildHitTesting = true;
+    }
+
+    /// <summary>
+    /// Builds the <c>getPosition</c> callback MAUI gesture event args expose, converting the
+    /// recognizer's location into MAUI's top-left origin coordinate space, either relative to
+    /// the recognizing view or to the requested element's platform view.
+    /// </summary>
+    internal static Func<IElement?, Point?> CreateGetPosition(NSGestureRecognizer recognizer)
+    {
+        return relativeTo =>
+        {
+            var target = recognizer.View;
+            if (relativeTo is View { Handler.PlatformView: NSView relativeView })
+                target = relativeView;
+
+            if (target is null)
+                return null;
+
+            var location = recognizer.LocationInView(target);
+            if (!target.IsFlipped)
+                location.Y = target.Bounds.Height - location.Y;
+
+            return new Point(location.X, location.Y);
+        };
+    }
 }
 
 internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
@@ -171,23 +210,11 @@ internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
     [Foundation.Export("handleTap:")]
     void HandleTap(NSGestureRecognizer recognizer)
     {
-        // SendTapped internally calls Command.Execute, so do NOT call it separately.
-        var sendTapped = typeof(TapGestureRecognizer).GetMethod(
-            "SendTapped", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        if (sendTapped != null)
-        {
-            var parent = (_tapGesture as IElement)?.FindParentOfType<View>();
-            var parameters = sendTapped.GetParameters();
-            if (parameters.Length == 1)
-                sendTapped.Invoke(_tapGesture, new object?[] { parent });
-            else if (parameters.Length == 2)
-                sendTapped.Invoke(_tapGesture, new object?[] { parent, null });
-        }
-        else
-        {
-            // Fallback if SendTapped is not found
-            _tapGesture.Command?.Execute(_tapGesture.CommandParameter);
-        }
+        // SendTapped executes Command and raises Tapped, so do NOT execute the command separately.
+        // It requires the owning view, which a detached recognizer no longer has.
+        var parent = (_tapGesture as IElement)?.FindParentOfType<View>();
+        if (parent is not null)
+            _tapGesture.SendTapped(parent, GestureManager.CreateGetPosition(recognizer));
     }
 }
 
@@ -234,17 +261,6 @@ internal class MacOSPanGestureRecognizer : NSPanGestureRecognizer
 internal class MacOSPointerTrackingArea : NSTrackingArea
 {
     readonly PointerGestureRecognizer _pointerGesture;
-    static readonly System.Reflection.MethodInfo? _sendEntered;
-    static readonly System.Reflection.MethodInfo? _sendExited;
-    static readonly System.Reflection.MethodInfo? _sendMoved;
-
-    static MacOSPointerTrackingArea()
-    {
-        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        _sendEntered = typeof(PointerGestureRecognizer).GetMethod("SendPointerEntered", flags);
-        _sendExited = typeof(PointerGestureRecognizer).GetMethod("SendPointerExited", flags);
-        _sendMoved = typeof(PointerGestureRecognizer).GetMethod("SendPointerMoved", flags);
-    }
 
     public MacOSPointerTrackingArea(NSView view, PointerGestureRecognizer pointerGesture)
         : base(view.Bounds,
@@ -284,23 +300,28 @@ internal class MacOSPointerTrackingArea : NSTrackingArea
         };
     }
 
+    // The PointerGestureRecognizer Send* methods require the owning view; a recognizer that
+    // has been detached from its view has nothing to report against.
     public void FireEntered(View? sender, NSEvent? theEvent = null)
     {
-        Func<IElement?, Point?>? getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
-        _sendEntered?.Invoke(_pointerGesture, new object?[] { sender!, getPos, null, ButtonsMask.Primary });
+        if (sender is not null)
+            _pointerGesture.SendPointerEntered(sender, GetPositionFor(theEvent));
     }
 
     public void FireExited(View? sender, NSEvent? theEvent = null)
     {
-        Func<IElement?, Point?>? getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
-        _sendExited?.Invoke(_pointerGesture, new object?[] { sender!, getPos, null, ButtonsMask.Primary });
+        if (sender is not null)
+            _pointerGesture.SendPointerExited(sender, GetPositionFor(theEvent));
     }
 
     public void FireMoved(View? sender, NSEvent? theEvent = null)
     {
-        Func<IElement?, Point?>? getPos = theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
-        _sendMoved?.Invoke(_pointerGesture, new object?[] { sender!, getPos, null, ButtonsMask.Primary });
+        if (sender is not null)
+            _pointerGesture.SendPointerMoved(sender, GetPositionFor(theEvent));
     }
+
+    Func<IElement?, Point?>? GetPositionFor(NSEvent? theEvent)
+        => theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
 }
 
 internal static class GestureExtensions
@@ -424,6 +445,85 @@ internal class MacOSPinchGestureRecognizer : NSMagnificationGestureRecognizer
             case NSGestureRecognizerState.Ended:
             case NSGestureRecognizerState.Cancelled:
                 controller.SendPinchEnded(parent!);
+                break;
+        }
+    }
+}
+
+/// <summary>
+/// Long press using NSPressGestureRecognizer, mirroring the MAUI iOS/Mac Catalyst mapping of
+/// UILongPressGestureRecognizer states onto <see cref="LongPressGestureRecognizer.SendLongPressing"/>
+/// and <see cref="LongPressGestureRecognizer.SendLongPressed"/>.
+/// </summary>
+internal class MacOSLongPressGestureRecognizer : NSPressGestureRecognizer
+{
+    readonly LongPressGestureRecognizer _longPressGesture;
+    bool _isConnected;
+
+    public MacOSLongPressGestureRecognizer(LongPressGestureRecognizer longPressGesture)
+    {
+        _longPressGesture = longPressGesture;
+        _longPressGesture.PropertyChanged += OnLongPressGesturePropertyChanged;
+        _isConnected = true;
+        UpdateFromGesture();
+        Action = new ObjCRuntime.Selector("handleLongPress:");
+        Target = this;
+    }
+
+    void OnLongPressGesturePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(LongPressGestureRecognizer.MinimumPressDuration) ||
+            e.PropertyName == nameof(LongPressGestureRecognizer.AllowableMovement))
+            UpdateFromGesture();
+    }
+
+    // NumberOfTouchesRequired has no mouse equivalent: NSPressGestureRecognizer only counts
+    // touches for Touch Bar input, so it is left at AppKit's default.
+    void UpdateFromGesture()
+    {
+        MinimumPressDuration = _longPressGesture.MinimumPressDuration / 1000.0;
+        AllowableMovement = (nfloat)_longPressGesture.AllowableMovement;
+    }
+
+    public void Disconnect()
+    {
+        if (!_isConnected)
+            return;
+
+        _longPressGesture.PropertyChanged -= OnLongPressGesturePropertyChanged;
+        _isConnected = false;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            Disconnect();
+        base.Dispose(disposing);
+    }
+
+    [Foundation.Export("handleLongPress:")]
+    void HandleLongPress(NSPressGestureRecognizer recognizer)
+    {
+        var parent = (_longPressGesture as IElement)?.FindParentOfType<View>();
+        if (parent is null)
+            return;
+
+        var getPosition = GestureManager.CreateGetPosition(recognizer);
+        switch (recognizer.State)
+        {
+            case NSGestureRecognizerState.Began:
+                _longPressGesture.SendLongPressing(parent, GestureStatus.Started, getPosition);
+                break;
+            case NSGestureRecognizerState.Changed:
+                _longPressGesture.SendLongPressing(parent, GestureStatus.Running, getPosition);
+                break;
+            case NSGestureRecognizerState.Ended:
+                _longPressGesture.SendLongPressed(parent, getPosition);
+                _longPressGesture.SendLongPressing(parent, GestureStatus.Completed, getPosition);
+                break;
+            case NSGestureRecognizerState.Cancelled:
+            case NSGestureRecognizerState.Failed:
+                _longPressGesture.SendLongPressing(parent, GestureStatus.Canceled, getPosition);
                 break;
         }
     }

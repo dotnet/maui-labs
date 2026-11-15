@@ -153,6 +153,32 @@ public class GesturesPage : ContentPage
 		};
 		pointerBox.GestureRecognizers.Add(pointerGesture);
 
+		// Long press gesture demo (MAUI 11)
+		var longPressBox = new Border
+		{
+			BackgroundColor = Colors.MediumPurple,
+			WidthRequest = 150,
+			HeightRequest = 80,
+			HorizontalOptions = LayoutOptions.Start,
+			StrokeThickness = 0,
+			StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle { CornerRadius = 8 },
+		};
+		var longPressLabel = new Label { Text = "Press and hold the box", FontSize = 14 };
+		var longPressGesture = new LongPressGestureRecognizer { MinimumPressDuration = 600 };
+		longPressGesture.LongPressing += (s, e) =>
+		{
+			longPressLabel.Text = $"Long press: {e.Status}";
+			longPressBox.BackgroundColor = e.Status == GestureStatus.Started || e.Status == GestureStatus.Running
+				? Colors.Gold
+				: Colors.MediumPurple;
+		};
+		longPressGesture.LongPressed += (s, e) =>
+		{
+			var pos = e.GetPosition(longPressBox);
+			longPressLabel.Text = $"Long pressed at ({pos?.X:F0}, {pos?.Y:F0})";
+		};
+		longPressBox.GestureRecognizers.Add(longPressGesture);
+
 		Content = new ScrollView
 		{
 			Content = new VerticalStackLayout
@@ -189,6 +215,12 @@ public class GesturesPage : ContentPage
 					SectionHeader("PointerGestureRecognizer"),
 					pointerLabel,
 					pointerBox,
+
+					Separator(),
+
+					SectionHeader("LongPressGestureRecognizer"),
+					longPressLabel,
+					longPressBox,
 				}
 			}
 		};
