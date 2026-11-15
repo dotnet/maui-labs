@@ -1,8 +1,6 @@
 using System;
 using System.IO;
-using System.Reflection;
 using System.Text;
-using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Maui.Handlers;
@@ -61,81 +59,14 @@ namespace Microsoft.Maui.Handlers.WPF
 		{
 			try
 			{
-				var rawMessage = e.TryGetWebMessageAsString();
-				if (string.IsNullOrEmpty(rawMessage)) return;
-
-				// HybridWebView messages: "N|methodName|callbackId|jsonArgs"
-				var pipeIndex = rawMessage.IndexOf('|');
-				if (pipeIndex == -1) return;
-
-				var messageType = rawMessage.Substring(0, pipeIndex);
-				var messageContent = rawMessage.Substring(pipeIndex + 1);
-
-				if (messageType == "__InvokeDotNet")
-				{
-					HandleInvokeDotNet(messageContent);
-				}
-				else if (messageType == "__RawMessage")
-				{
-					// Fire RawMessageReceived on the virtual view
-					var rmrMethod = VirtualView?.GetType().GetMethod("OnRawMessageReceived",
-						BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-					rmrMethod?.Invoke(VirtualView, new object[] { messageContent });
-				}
+				// Only the page served from the app origin may talk to .NET.
+				var fromAppOrigin = Uri.TryCreate(e.Source, UriKind.Absolute, out var source) && AppOriginUri.IsBaseOf(source);
+				if (fromAppOrigin && VirtualView is IHybridWebView hybridWebView)
+					HybridWebViewProtocol.HandleWebMessage(hybridWebView, e.TryGetWebMessageAsString());
 			}
 			catch (Exception ex)
 			{
 				System.Diagnostics.Debug.WriteLine($"[HybridWebView] Message error: {ex.Message}");
-			}
-		}
-
-		void HandleInvokeDotNet(string content)
-		{
-			try
-			{
-				// Get the invoke target from the virtual view
-				var targetProp = VirtualView?.GetType().GetProperty("JSInvokeTarget",
-					BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-				var target = targetProp?.GetValue(VirtualView);
-				if (target == null) return;
-
-				// Parse: methodName|callbackId|jsonArgs
-				var parts = content.Split(new[] { '|' }, 3);
-				if (parts.Length < 2) return;
-
-				var methodName = parts[0];
-				var callbackId = parts[1];
-				var jsonArgs = parts.Length > 2 ? parts[2] : "[]";
-
-				var method = target.GetType().GetMethod(methodName,
-					BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
-				if (method == null) return;
-
-				var parameters = method.GetParameters();
-				var args = new object?[parameters.Length];
-
-				if (!string.IsNullOrEmpty(jsonArgs) && jsonArgs != "[]")
-				{
-					using var doc = JsonDocument.Parse(jsonArgs);
-					var arr = doc.RootElement;
-					for (int i = 0; i < parameters.Length && i < arr.GetArrayLength(); i++)
-					{
-						args[i] = JsonSerializer.Deserialize(arr[i].GetRawText(), parameters[i].ParameterType);
-					}
-				}
-
-				var result = method.Invoke(target, args);
-
-				if (!string.IsNullOrEmpty(callbackId))
-				{
-					var resultJson = result != null ? JsonSerializer.Serialize(result) : "null";
-					var js = $"window.__HybridWebView__DispatchResult('{callbackId}', {resultJson})";
-					_ = PlatformView.ExecuteScriptAsync(js);
-				}
-			}
-			catch (Exception ex)
-			{
-				System.Diagnostics.Debug.WriteLine($"[HybridWebView] InvokeDotNet error: {ex.Message}");
 			}
 		}
 
@@ -162,9 +93,9 @@ namespace Microsoft.Maui.Handlers.WPF
 				}
 
 				// Handle __hwvInvokeDotNet (POST from JS)
-				if (relativePath == "__hwvInvokeDotNet")
+				if (relativePath == HybridWebViewProtocol.InvokeDotNetPath)
 				{
-					HandleInvokeDotNetRequest(e);
+					_ = HandleInvokeDotNetRequestAsync(e);
 					return;
 				}
 
@@ -194,37 +125,51 @@ namespace Microsoft.Maui.Handlers.WPF
 			}
 		}
 
-		void HandleInvokeDotNetRequest(CoreWebView2WebResourceRequestedEventArgs e)
+		async Task HandleInvokeDotNetRequestAsync(CoreWebView2WebResourceRequestedEventArgs e)
 		{
+			var environment = PlatformView.CoreWebView2.Environment!;
+			var deferral = e.GetDeferral();
 			try
 			{
+				var headers = e.Request.Headers;
+				var hasToken = headers.Contains(HybridWebViewProtocol.InvokeTokenHeaderName) &&
+					headers.GetHeader(HybridWebViewProtocol.InvokeTokenHeaderName) == HybridWebViewProtocol.InvokeTokenHeaderValue;
+				var isPost = string.Equals(e.Request.Method, "POST", StringComparison.OrdinalIgnoreCase);
+				if (!hasToken || !isPost || VirtualView is not IHybridWebView hybridWebView)
+				{
+					e.Response = environment.CreateWebResourceResponse(null, 400, "Bad Request", "");
+					return;
+				}
+
 				var body = "";
 				if (e.Request.Content is Stream requestStream)
 				{
 					using var reader = new StreamReader(requestStream);
-					body = reader.ReadToEnd();
+					body = await reader.ReadToEndAsync();
 				}
 
 				// Also check header for body
+				if (string.IsNullOrEmpty(body) && headers.Contains(HybridWebViewProtocol.RequestBodyHeaderName))
+					body = headers.GetHeader(HybridWebViewProtocol.RequestBodyHeaderName) ?? "";
+
 				if (string.IsNullOrEmpty(body))
 				{
-					body = e.Request.Headers.GetHeader("X-Maui-Request-Body") ?? "";
+					e.Response = environment.CreateWebResourceResponse(null, 400, "Bad Request", "");
+					return;
 				}
 
-				if (!string.IsNullOrEmpty(body))
-				{
-					HandleInvokeDotNet(body);
-				}
-
-				var responseBytes = Encoding.UTF8.GetBytes("{}");
-				var responseStream = new MemoryStream(responseBytes);
-				e.Response = PlatformView.CoreWebView2.Environment!.CreateWebResourceResponse(
-					responseStream, 200, "OK", "Content-Type: application/json");
+				var responseBytes = await HybridWebViewProtocol.InvokeDotNetAsync(hybridWebView, body);
+				e.Response = environment.CreateWebResourceResponse(
+					new MemoryStream(responseBytes), 200, "OK", "Content-Type: application/json");
 			}
-			catch
+			catch (Exception ex)
 			{
-				e.Response = PlatformView.CoreWebView2.Environment!.CreateWebResourceResponse(
-					null, 500, "Internal Server Error", "");
+				System.Diagnostics.Debug.WriteLine($"[HybridWebView] InvokeDotNet request error: {ex.Message}");
+				e.Response = environment.CreateWebResourceResponse(null, 500, "Internal Server Error", "");
+			}
+			finally
+			{
+				deferral.Complete();
 			}
 		}
 
@@ -232,7 +177,7 @@ namespace Microsoft.Maui.Handlers.WPF
 		{
 			// The HybridWebView JS is embedded in Microsoft.Maui.dll
 			var mauiAsm = typeof(Microsoft.Maui.IView).Assembly;
-			var stream = mauiAsm.GetManifestResourceStream("Microsoft.Maui.Platform.HybridWebView.hybridwebview.js");
+			var stream = mauiAsm.GetManifestResourceStream("_framework/hybridwebview.js");
 			if (stream != null) return stream;
 
 			// Try other common names
@@ -244,18 +189,13 @@ namespace Microsoft.Maui.Handlers.WPF
 				}
 			}
 
-			// Fallback: minimal script that enables basic JS→.NET communication
+			// Fallback: minimal script for raw messages, in the same wire format as MAUI's script.
 			var fallbackJs = @"
-window.__HybridWebView = {
-    SendInvokeMessageToDotNet: function(methodName, paramValues) {
-        var msg = '__InvokeDotNet|' + methodName + '||' + JSON.stringify(paramValues || []);
-        window.chrome.webview.postMessage(msg);
-    },
+window.HybridWebView = window.HybridWebView || {
     SendRawMessage: function(message) {
-        window.chrome.webview.postMessage('__RawMessage|' + message);
+        window.chrome.webview.postMessage(encodeURIComponent('__RawMessage|' + encodeURIComponent(message)));
     }
 };
-window.__HybridWebView__DispatchResult = function(callbackId, result) {};
 ";
 			return new MemoryStream(Encoding.UTF8.GetBytes(fallbackJs));
 		}

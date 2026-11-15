@@ -94,6 +94,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		LayoutGeneration++;
 		SetupVisualStateTracking(platformView);
 		ApplyTransitionCss(platformView);
+		SetupGestures(platformView);
 		if (VirtualView is Microsoft.Maui.Controls.Page)
 		{
 			_pageAllocationObserver = new Platform.GtkAllocationObserver(platformView, (width, height) =>
@@ -117,6 +118,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		_pageAllocationObserver = null;
 		_zIndexMap.TryRemove(platformView.Handle.DangerousGetHandle(), out _);
 		CleanupContextFlyout(platformView);
+		CleanupGestures(platformView);
 		CleanupVisualStateTracking(platformView);
 		RemoveTransitionCss(platformView);
 		foreach (var (context, provider) in _cssProviders.Values)
@@ -127,6 +129,37 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		_cssProviders.Clear();
 		_cssStyles.Clear();
 		base.DisconnectHandler(platformView);
+	}
+
+	// The MAUI view whose GestureRecognizers collection this handler observes.
+	Microsoft.Maui.Controls.View? _gestureView;
+
+	void SetupGestures(Gtk.Widget widget)
+	{
+		if (VirtualView is not Microsoft.Maui.Controls.View mauiView)
+			return;
+
+		_gestureView = mauiView;
+		((System.Collections.Specialized.INotifyCollectionChanged)mauiView.GestureRecognizers)
+			.CollectionChanged += OnGestureRecognizersChanged;
+		Platform.GtkGestureExtensions.AttachGestures(widget, mauiView);
+	}
+
+	void CleanupGestures(Gtk.Widget widget)
+	{
+		if (_gestureView is not null)
+		{
+			((System.Collections.Specialized.INotifyCollectionChanged)_gestureView.GestureRecognizers)
+				.CollectionChanged -= OnGestureRecognizersChanged;
+			_gestureView = null;
+		}
+		Platform.GtkGestureExtensions.RemoveAttachedGestures(widget);
+	}
+
+	void OnGestureRecognizersChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+	{
+		if (PlatformView is { } widget && _gestureView is { } view)
+			Platform.GtkGestureExtensions.AttachGestures(widget, view);
 	}
 
 	void SetupVisualStateTracking(Gtk.Widget widget)

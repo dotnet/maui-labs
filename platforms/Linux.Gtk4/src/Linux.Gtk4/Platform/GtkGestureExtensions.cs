@@ -1,216 +1,233 @@
 using Microsoft.Maui;
+using Microsoft.Maui.Controls;
 using Microsoft.Maui.Graphics;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 
 /// <summary>
 /// Gesture recognizer support for GTK4.
-/// Maps MAUI gesture recognizers to GTK4 gesture controllers.
+/// Maps MAUI gesture recognizers to GTK4 gesture controllers through the public MAUI 11
+/// gesture APIs (<c>SendTapped</c>, <c>SendPointer*</c>, <c>SendSwiped</c> and the
+/// <see cref="IPanGestureController"/>/<see cref="IPinchGestureController"/> interfaces).
 /// </summary>
 public static class GtkGestureExtensions
 {
-// Track attached controllers per widget to enable cleanup
-private static readonly System.Collections.Concurrent.ConcurrentDictionary<nint, List<Gtk.EventController>> _attachedControllers = new();
+	const uint SecondaryMouseButton = 3;
 
-/// <summary>
-/// Attaches MAUI gesture recognizers to a GTK widget.
-/// Removes any previously attached gesture controllers first to prevent accumulation.
-/// </summary>
-public static void AttachGestures(Gtk.Widget widget, IView view)
-{
-if (view is not Microsoft.Maui.Controls.View mauiView)
-return;
+	// Track attached controllers per widget to enable cleanup
+	private static readonly System.Collections.Concurrent.ConcurrentDictionary<nint, List<Gtk.EventController>> _attachedControllers = new();
 
-RemoveAttachedGestures(widget);
+	/// <summary>
+	/// Attaches MAUI gesture recognizers to a GTK widget.
+	/// Removes any previously attached gesture controllers first to prevent accumulation.
+	/// </summary>
+	public static void AttachGestures(Gtk.Widget widget, IView view)
+	{
+		if (view is not View mauiView)
+			return;
 
-var controllers = new List<Gtk.EventController>();
+		RemoveAttachedGestures(widget);
 
-foreach (var recognizer in mauiView.GestureRecognizers)
-{
-switch (recognizer)
-{
-case Microsoft.Maui.Controls.TapGestureRecognizer tapRecognizer:
-controllers.AddRange(AttachTapGesture(widget, tapRecognizer));
-break;
-case Microsoft.Maui.Controls.PanGestureRecognizer panRecognizer:
-controllers.AddRange(AttachPanGesture(widget, panRecognizer));
-break;
-case Microsoft.Maui.Controls.PointerGestureRecognizer pointerRecognizer:
-controllers.AddRange(AttachPointerGesture(widget, pointerRecognizer));
-break;
-case Microsoft.Maui.Controls.SwipeGestureRecognizer swipeRecognizer:
-controllers.AddRange(AttachSwipeGesture(widget, swipeRecognizer));
-break;
-case Microsoft.Maui.Controls.PinchGestureRecognizer pinchRecognizer:
-controllers.AddRange(AttachPinchGesture(widget, pinchRecognizer));
-break;
-}
-}
+		var controllers = new List<Gtk.EventController>();
 
-if (controllers.Count > 0)
-_attachedControllers[widget.Handle.DangerousGetHandle()] = controllers;
-}
+		foreach (var recognizer in mauiView.GestureRecognizers)
+		{
+			switch (recognizer)
+			{
+				case TapGestureRecognizer tapRecognizer:
+					controllers.AddRange(AttachTapGesture(widget, tapRecognizer));
+					break;
+				case PanGestureRecognizer panRecognizer:
+					controllers.AddRange(AttachPanGesture(widget, panRecognizer));
+					break;
+				case PointerGestureRecognizer pointerRecognizer:
+					controllers.AddRange(AttachPointerGesture(widget, pointerRecognizer));
+					break;
+				case SwipeGestureRecognizer swipeRecognizer:
+					controllers.AddRange(AttachSwipeGesture(widget, swipeRecognizer));
+					break;
+				case PinchGestureRecognizer pinchRecognizer:
+					controllers.AddRange(AttachPinchGesture(widget, pinchRecognizer));
+					break;
+			}
+		}
 
-/// <summary>
-/// Removes all gesture controllers previously attached by <see cref="AttachGestures"/>.
-/// </summary>
-public static void RemoveAttachedGestures(Gtk.Widget widget)
-{
-if (_attachedControllers.TryRemove(widget.Handle.DangerousGetHandle(), out var controllers))
-{
-foreach (var c in controllers)
-widget.RemoveController(c);
-}
-}
+		if (controllers.Count > 0)
+			_attachedControllers[widget.Handle.DangerousGetHandle()] = controllers;
+	}
 
-private static Gtk.EventController[] AttachTapGesture(Gtk.Widget widget, Microsoft.Maui.Controls.TapGestureRecognizer recognizer)
-{
-var gesture = Gtk.GestureClick.New();
-gesture.OnReleased += (_, args) =>
-{
-recognizer.Command?.Execute(recognizer.CommandParameter);
-};
-widget.AddController(gesture);
-return [gesture];
-}
+	/// <summary>
+	/// Removes all gesture controllers previously attached by <see cref="AttachGestures"/>.
+	/// </summary>
+	public static void RemoveAttachedGestures(Gtk.Widget widget)
+	{
+		if (_attachedControllers.TryRemove(widget.Handle.DangerousGetHandle(), out var controllers))
+		{
+			foreach (var c in controllers)
+				widget.RemoveController(c);
+		}
+	}
 
-private static Gtk.EventController[] AttachPanGesture(Gtk.Widget widget, Microsoft.Maui.Controls.PanGestureRecognizer recognizer)
-{
-var gesture = Gtk.GestureDrag.New();
-int gestureId = 0;
+	private static Gtk.EventController[] AttachTapGesture(Gtk.Widget widget, TapGestureRecognizer recognizer)
+	{
+		var gesture = Gtk.GestureClick.New();
+		gesture.SetButton(0); // all buttons; filtered against TapGestureRecognizer.Buttons
+		gesture.OnReleased += (_, args) =>
+		{
+			// SendTapped executes Command and raises Tapped; it requires the owning view.
+			var sender = PanGestureTracker.FindParentView(recognizer);
+			var button = ToButtonsMask(gesture.GetCurrentButton());
+			if (sender is not null && (recognizer.Buttons & button) != 0 && args.NPress >= recognizer.NumberOfTapsRequired)
+				recognizer.SendTapped(sender, CreateGetPosition(widget, args.X, args.Y));
+		};
+		widget.AddController(gesture);
+		return [gesture];
+	}
 
-gesture.OnDragBegin += (_, args) =>
-{
-gestureId++;
-InvokePanUpdated(recognizer, GestureStatus.Started, gestureId, 0, 0);
-};
-gesture.OnDragUpdate += (_, args) =>
-{
-InvokePanUpdated(recognizer, GestureStatus.Running, gestureId, args.OffsetX, args.OffsetY);
-};
-gesture.OnDragEnd += (_, args) =>
-{
-InvokePanUpdated(recognizer, GestureStatus.Completed, gestureId, 0, 0);
-};
-widget.AddController(gesture);
-return [gesture];
-}
+	private static Gtk.EventController[] AttachPanGesture(Gtk.Widget widget, PanGestureRecognizer recognizer)
+	{
+		var gesture = Gtk.GestureDrag.New();
+		var tracker = new PanGestureTracker(recognizer);
 
-/// <summary>
-/// Raises PanUpdated event on a PanGestureRecognizer via reflection,
-/// since the event can only be invoked from within the declaring class.
-/// </summary>
-private static void InvokePanUpdated(
-Microsoft.Maui.Controls.PanGestureRecognizer recognizer,
-GestureStatus status, int gestureId, double totalX, double totalY)
-{
-var method = typeof(Microsoft.Maui.Controls.PanGestureRecognizer)
-.GetMethod("SendPan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-if (method != null)
-{
-try { method.Invoke(recognizer, [status, gestureId, totalX, totalY]); }
-catch { /* ignore reflection failures */ }
-return;
-}
+		gesture.OnDragBegin += (_, _) => tracker.Begin();
+		gesture.OnDragUpdate += (_, args) => tracker.Update(args.OffsetX, args.OffsetY);
+		// GTK emits cancel before drag-end; the tracker ignores the end of a canceled pan.
+		gesture.OnCancel += (_, _) => tracker.Cancel();
+		gesture.OnDragEnd += (_, _) => tracker.End();
 
-// Fallback: try SendPanUpdated
-var method2 = typeof(Microsoft.Maui.Controls.PanGestureRecognizer)
-.GetMethod("SendPanUpdated", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-if (method2 != null)
-{
-try
-{
-var eventArgs = new Microsoft.Maui.Controls.PanUpdatedEventArgs(status, gestureId, totalX, totalY);
-method2.Invoke(recognizer, [eventArgs]);
-}
-catch { /* ignore reflection failures */ }
-}
-}
+		widget.AddController(gesture);
+		return [gesture];
+	}
 
-private static Gtk.EventController[] AttachPointerGesture(Gtk.Widget widget, Microsoft.Maui.Controls.PointerGestureRecognizer recognizer)
-{
-var motion = Gtk.EventControllerMotion.New();
+	private static Gtk.EventController[] AttachPointerGesture(Gtk.Widget widget, PointerGestureRecognizer recognizer)
+	{
+		var motion = Gtk.EventControllerMotion.New();
+		double lastX = 0, lastY = 0;
 
-motion.OnEnter += (_, args) =>
-{
-recognizer.PointerEnteredCommand?.Execute(recognizer.PointerEnteredCommandParameter);
-};
-motion.OnMotion += (_, args) =>
-{
-recognizer.PointerMovedCommand?.Execute(recognizer.PointerMovedCommandParameter);
-};
-motion.OnLeave += (_, _) =>
-{
-recognizer.PointerExitedCommand?.Execute(recognizer.PointerExitedCommandParameter);
-};
+		// The PointerGestureRecognizer Send* methods execute the commands and raise the events;
+		// they require the owning view.
+		motion.OnEnter += (_, args) =>
+		{
+			lastX = args.X;
+			lastY = args.Y;
+			var sender = PanGestureTracker.FindParentView(recognizer);
+			if (sender is not null)
+				recognizer.SendPointerEntered(sender, CreateGetPosition(widget, lastX, lastY));
+		};
+		motion.OnMotion += (_, args) =>
+		{
+			lastX = args.X;
+			lastY = args.Y;
+			var sender = PanGestureTracker.FindParentView(recognizer);
+			if (sender is not null)
+				recognizer.SendPointerMoved(sender, CreateGetPosition(widget, lastX, lastY));
+		};
+		motion.OnLeave += (_, _) =>
+		{
+			var sender = PanGestureTracker.FindParentView(recognizer);
+			if (sender is not null)
+				recognizer.SendPointerExited(sender, CreateGetPosition(widget, lastX, lastY));
+		};
 
-// Pointer press/release
-var click = Gtk.GestureClick.New();
-click.OnPressed += (_, args) =>
-{
-recognizer.PointerPressedCommand?.Execute(recognizer.PointerPressedCommandParameter);
-};
-click.OnReleased += (_, args) =>
-{
-recognizer.PointerReleasedCommand?.Execute(recognizer.PointerReleasedCommandParameter);
-};
+		// Pointer press/release
+		var click = Gtk.GestureClick.New();
+		click.SetButton(0); // all buttons
+		click.OnPressed += (_, args) =>
+		{
+			var sender = PanGestureTracker.FindParentView(recognizer);
+			if (sender is not null)
+				recognizer.SendPointerPressed(sender, CreateGetPosition(widget, args.X, args.Y), button: ToButtonsMask(click.GetCurrentButton()));
+		};
+		click.OnReleased += (_, args) =>
+		{
+			var sender = PanGestureTracker.FindParentView(recognizer);
+			if (sender is not null)
+				recognizer.SendPointerReleased(sender, CreateGetPosition(widget, args.X, args.Y), button: ToButtonsMask(click.GetCurrentButton()));
+		};
 
-widget.AddController(motion);
-widget.AddController(click);
-return [motion, click];
-}
+		widget.AddController(motion);
+		widget.AddController(click);
+		return [motion, click];
+	}
 
-private static Gtk.EventController[] AttachSwipeGesture(Gtk.Widget widget, Microsoft.Maui.Controls.SwipeGestureRecognizer recognizer)
-{
-var gesture = Gtk.GestureSwipe.New();
-gesture.OnSwipe += (_, args) =>
-{
-var mauiView = recognizer.Parent as Microsoft.Maui.Controls.View;
-if (mauiView == null) return;
+	private static Gtk.EventController[] AttachSwipeGesture(Gtk.Widget widget, SwipeGestureRecognizer recognizer)
+	{
+		var gesture = Gtk.GestureSwipe.New();
+		gesture.OnSwipe += (_, args) =>
+		{
+			var mauiView = recognizer.Parent as View;
+			if (mauiView == null) return;
 
-double vx = args.VelocityX;
-double vy = args.VelocityY;
-SwipeDirection direction;
+			double vx = args.VelocityX;
+			double vy = args.VelocityY;
+			SwipeDirection direction;
 
-if (Math.Abs(vx) > Math.Abs(vy))
-direction = vx > 0 ? SwipeDirection.Right : SwipeDirection.Left;
-else
-direction = vy > 0 ? SwipeDirection.Down : SwipeDirection.Up;
+			if (Math.Abs(vx) > Math.Abs(vy))
+				direction = vx > 0 ? SwipeDirection.Right : SwipeDirection.Left;
+			else
+				direction = vy > 0 ? SwipeDirection.Down : SwipeDirection.Up;
 
-if (recognizer.Direction.HasFlag(direction))
-recognizer.SendSwiped(mauiView, direction);
-};
-widget.AddController(gesture);
-return [gesture];
-}
+			if (recognizer.Direction.HasFlag(direction))
+				recognizer.SendSwiped(mauiView, direction);
+		};
+		widget.AddController(gesture);
+		return [gesture];
+	}
 
-private static Gtk.EventController[] AttachPinchGesture(Gtk.Widget widget, Microsoft.Maui.Controls.PinchGestureRecognizer recognizer)
-{
-var gesture = Gtk.GestureZoom.New();
-var controller = (Microsoft.Maui.Controls.IPinchGestureController)recognizer;
-double startScale = 1.0;
-var sender = recognizer.Parent as Microsoft.Maui.Controls.Element ?? recognizer;
+	private static Gtk.EventController[] AttachPinchGesture(Gtk.Widget widget, PinchGestureRecognizer recognizer)
+	{
+		var gesture = Gtk.GestureZoom.New();
+		var controller = (IPinchGestureController)recognizer;
+		double startScale = 1.0;
+		var sender = recognizer.Parent as Element ?? recognizer;
 
-gesture.OnBegin += (_, _) =>
-{
-startScale = gesture.GetScaleDelta();
-if (startScale <= 0) startScale = 1.0;
-controller.SendPinchStarted(sender, new Point(0, 0));
-};
-gesture.OnScaleChanged += (_, args) =>
-{
-controller.SendPinch(sender, args.Scale / startScale, new Point(0, 0));
-};
-gesture.OnEnd += (_, _) =>
-{
-controller.SendPinchEnded(sender);
-};
-gesture.OnCancel += (_, _) =>
-{
-controller.SendPinchCanceled(sender);
-};
+		gesture.OnBegin += (_, _) =>
+		{
+			startScale = gesture.GetScaleDelta();
+			if (startScale <= 0) startScale = 1.0;
+			controller.SendPinchStarted(sender, new Point(0, 0));
+		};
+		gesture.OnScaleChanged += (_, args) =>
+		{
+			controller.SendPinch(sender, args.Scale / startScale, new Point(0, 0));
+		};
+		gesture.OnEnd += (_, _) =>
+		{
+			controller.SendPinchEnded(sender);
+		};
+		gesture.OnCancel += (_, _) =>
+		{
+			controller.SendPinchCanceled(sender);
+		};
 
-widget.AddController(gesture);
-return [gesture];
-}
+		widget.AddController(gesture);
+		return [gesture];
+	}
+
+	/// <summary>Maps a GDK button number to the MAUI button mask (button 3 is the secondary button).</summary>
+	internal static ButtonsMask ToButtonsMask(uint button) =>
+		button == SecondaryMouseButton ? ButtonsMask.Secondary : ButtonsMask.Primary;
+
+	static Func<IElement?, Point?> CreateGetPosition(Gtk.Widget widget, double x, double y) =>
+		relativeTo => ResolvePosition(widget, x, y, relativeTo);
+
+	/// <summary>
+	/// Converts a position in <paramref name="widget"/>'s coordinates for MAUI's <c>GetPosition(relativeTo)</c>.
+	/// A <see langword="null"/> <paramref name="relativeTo"/> yields window coordinates, as MAUI does on
+	/// Windows and iOS; an element without a GTK platform view, or in an unrelated widget tree, yields
+	/// <see langword="null"/>.
+	/// </summary>
+	static Point? ResolvePosition(Gtk.Widget widget, double x, double y, IElement? relativeTo)
+	{
+		var target = relativeTo is null
+			? widget.GetRoot() as Gtk.Widget
+			: relativeTo.Handler?.PlatformView as Gtk.Widget;
+		if (target is null)
+			return null;
+		if (target.Handle.DangerousGetHandle() == widget.Handle.DangerousGetHandle())
+			return new Point(x, y);
+		return widget.TranslateCoordinates(target, x, y, out var destX, out var destY)
+			? new Point(destX, destY)
+			: null;
+	}
 }

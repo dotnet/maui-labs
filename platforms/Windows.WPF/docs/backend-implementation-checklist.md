@@ -199,8 +199,8 @@
 
 | Gesture | Status | Notes |
 |---------|--------|-------|
-| [x] **TapGestureRecognizer** | ✅ | `GestureManager` — `MouseLeftButtonUp` with reflection for `SendTapped` |
-| [x] **PointerGestureRecognizer** | ✅ | `GestureManager` — `MouseEnter`/`Leave`/`Move` with reflection for `SendPointerEntered`/`Exited`/`Moved` |
+| [x] **TapGestureRecognizer** | ✅ | `GestureManager` — `MouseLeftButtonUp` → public `SendTapped` |
+| [x] **PointerGestureRecognizer** | ✅ | `GestureManager` — `MouseEnter`/`Leave`/`Move` → public `SendPointerEntered`/`Exited`/`Moved` |
 | [x] **PanGestureRecognizer** | ✅ | `GestureManager` — mouse capture + delta tracking, PanStarted/Running/Completed |
 | [x] **SwipeGestureRecognizer** | ✅ | `GestureManager` — threshold-based direction detection |
 | [x] **PinchGestureRecognizer** | ✅ | Ctrl+MouseWheel zoom via `GestureManager` |
@@ -503,13 +503,14 @@ Every handler inherits these property mappings from `RemapForControls()` in `App
 | Event | Status | Notes |
 |-------|--------|-------|
 | [x] **App Launched** | ✅ | `MauiWPFApplication.OnStartup` |
-| [x] **App Activated** | ✅ | `LifecycleManager` → `Application.Activated` → `Window.OnActivated` |
-| [x] **App Deactivated** | ✅ | `LifecycleManager` → `Application.Deactivated` → `Window.OnDeactivated` |
-| [x] **App Terminating** | ✅ | `LifecycleManager` → `Application.Exit` → `Window.OnStopped` + `ThemeManager.Shutdown` |
-| [x] **Window Created** | ✅ | Via `ApplicationHandler.CreatePlatformElement` |
-| [x] **Window Activated** | ✅ | `LifecycleManager.RegisterWindowLifecycleEvents` → `Window.Activated` |
-| [x] **Window Deactivated** | ✅ | `LifecycleManager` → `Window.Deactivated` |
-| [x] **Window Closing** | ✅ | `LifecycleManager` → `Window.Closing` → `OnBackgrounding` + `Window.Closed` → `OnDestroying` |
+| [x] **App Activated** | ✅ | Reported per window: WPF `Window.Activated` → `IWindow.Activated()` (not forwarded again at app level) |
+| [x] **App Deactivated** | ✅ | Reported per window: WPF `Window.Deactivated` → `IWindow.Deactivated()` |
+| [x] **App Terminating** | ✅ | `LifecycleManager` → `Application.Exit` → `IWindow.Stopped()` for windows still open + `ThemeManager.Shutdown` |
+| [x] **Window Created** | ✅ | `CreatePlatformWindow` → `IWindow.Created()` before `Show()` (raises `Application.OnStart`) |
+| [x] **Window Activated** | ✅ | `WindowHandler` → `WindowLifecycleTracker` → `IWindow.Activated()` |
+| [x] **Window Deactivated** | ✅ | `WindowHandler` → `WindowLifecycleTracker` → `IWindow.Deactivated()` |
+| [x] **Window Stopped / Resumed** | ✅ | Minimize → `IWindow.Stopped()` + `IWindow.Backgrounding(IPersistedState)`; restore/activate → `IWindow.Resumed()` |
+| [x] **Window Closed** | ✅ | `Window.Closed` → `Deactivated`/`Stopped`/`Backgrounding` if not already raised, then `IWindow.Destroying()`. Each event fires exactly once. |
 
 ---
 

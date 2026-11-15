@@ -135,14 +135,9 @@ namespace Microsoft.Maui.Handlers.WPF
 			{
 				try
 				{
-					var cmd = flyoutItem.Command;
-					if (cmd?.CanExecute(flyoutItem.CommandParameter) == true)
-						cmd.Execute(flyoutItem.CommandParameter);
-
-					// Also invoke Clicked event via reflection
-					var method = typeof(Microsoft.Maui.Controls.MenuFlyoutItem).GetMethod("OnClicked",
-						System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-					method?.Invoke(flyoutItem, null);
+					// IMenuElement.Clicked (IMenuItemController.Activate) executes the command and
+					// raises Clicked, as MAUI's Windows MenuFlyoutItemHandler does.
+					((IMenuElement)flyoutItem).Clicked();
 				}
 				catch { }
 			};

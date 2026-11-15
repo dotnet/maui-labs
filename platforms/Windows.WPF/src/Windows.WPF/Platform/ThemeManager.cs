@@ -90,7 +90,10 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		{
 			try
 			{
-				// PlatformAppTheme has a public setter at runtime but is hidden at compile time
+				// MAUI 11's Application.PlatformAppTheme has a private setter. The public route,
+				// IApplication.ThemeChanged(), can only re-read AppInfo.RequestedTheme: it cannot apply
+				// an explicit theme (SetUserTheme), and without UseWPFEssentials() AppInfo reports
+				// Unspecified. Keep setting the property directly until MAUI exposes a setter.
 				var prop = typeof(Microsoft.Maui.Controls.Application).GetProperty("PlatformAppTheme",
 					System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
 				prop?.SetValue(app, theme);

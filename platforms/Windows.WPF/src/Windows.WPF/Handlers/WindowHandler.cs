@@ -55,8 +55,14 @@ namespace Microsoft.Maui.Handlers.WPF
 		EventHandler? _onLocationChanged;
 		EventHandler? _onActivated;
 		EventHandler? _onDeactivated;
-		System.ComponentModel.CancelEventHandler? _onClosing;
+		EventHandler? _onStateChanged;
 		EventHandler? _onClosed;
+
+		/// <summary>
+		/// Forwards the WPF window lifecycle to <see cref="IWindow"/>. It is the only place the
+		/// backend raises window lifecycle events, so each one fires exactly once.
+		/// </summary>
+		internal WindowLifecycleTracker? Lifecycle { get; private set; }
 
 		protected override void ConnectHandler(PlatformView platformView)
 		{
@@ -88,21 +94,26 @@ namespace Microsoft.Maui.Handlers.WPF
 			platformView.LocationChanged += _onLocationChanged;
 
 			// Forward window lifecycle to IWindow so cross-platform code receives
-			// Activated / Deactivated / Stopped / Destroying as on every other backend.
-			_onActivated = (s, e) => VirtualView?.Activated();
-			_onDeactivated = (s, e) => VirtualView?.Deactivated();
-			_onClosing = (s, e) =>
+			// Created / Activated / Deactivated / Stopped / Resumed / Backgrounding / Destroying
+			// as on every other backend. Created is raised by CreatePlatformWindow before Show.
+			var lifecycle = new WindowLifecycleTracker(VirtualView ?? throw new InvalidOperationException($"{nameof(VirtualView)} should have been set by base class."));
+			Lifecycle = lifecycle;
+			_onActivated = (s, e) => lifecycle.Activate();
+			_onDeactivated = (s, e) => lifecycle.Deactivate();
+			_onStateChanged = (s, e) =>
 			{
-				// IWindow.BackButtonClicked / Stopped semantics: notify Stopped before close.
-				try { VirtualView?.Stopped(); } catch { }
+				if (platformView.WindowState == WindowState.Minimized)
+					lifecycle.Stop();
+				else
+					lifecycle.Resume();
 			};
 			_onClosed = (s, e) =>
 			{
-				try { VirtualView?.Destroying(); } catch { }
+				try { lifecycle.Destroy(); } catch { }
 			};
 			platformView.Activated += _onActivated;
 			platformView.Deactivated += _onDeactivated;
-			platformView.Closing += _onClosing;
+			platformView.StateChanged += _onStateChanged;
 			platformView.Closed += _onClosed;
 
 			// Set an initial frame in case the window is already sized.
@@ -157,10 +168,11 @@ namespace Microsoft.Maui.Handlers.WPF
 				platformView.Activated -= _onActivated;
 			if (_onDeactivated != null)
 				platformView.Deactivated -= _onDeactivated;
-			if (_onClosing != null)
-				platformView.Closing -= _onClosing;
+			if (_onStateChanged != null)
+				platformView.StateChanged -= _onStateChanged;
 			if (_onClosed != null)
 				platformView.Closed -= _onClosed;
+			Lifecycle = null;
 
 			base.DisconnectHandler(platformView);
 		}

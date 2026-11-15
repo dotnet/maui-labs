@@ -36,6 +36,10 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			windowHandler.SetMauiContext(mauiContext);
 			windowHandler.SetVirtualView(window);
 
+			// IWindow.Created (and with it Application.OnStart) precedes the first activation,
+			// as MAUI's WindowsLifecycle.OnWindowCreated does on WinUI.
+			windowHandler.Lifecycle?.Create();
+
 			// Dispose the per-window DI scope when the window closes so transient
 			// services and any IDisposable scoped registrations are released.
 			winuiWndow.Closed += (_, _) =>

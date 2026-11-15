@@ -147,21 +147,17 @@ namespace Microsoft.Maui.Handlers.WPF
 								(byte)(c.Alpha * 255), (byte)(c.Red * 255),
 								(byte)(c.Green * 255), (byte)(c.Blue * 255)));
 					}
-					mi.Click += (s, e) =>
-					{
-						si.Command?.Execute(si.CommandParameter);
-						try
-						{
-							var method = typeof(Microsoft.Maui.Controls.SwipeItem).GetMethod("OnInvoked",
-								System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-							method?.Invoke(si, null);
-						}
-						catch { }
-					};
+					mi.Click += (s, e) => InvokeSwipeItem(si);
 					menu.Items.Add(mi);
 				}
 			}
 		}
+
+		/// <summary>
+		/// Invokes a swipe item through the public <see cref="ISwipeItem.OnInvoked"/>, which executes
+		/// the command (when it can execute) and raises <c>Clicked</c> and <c>Invoked</c>.
+		/// </summary>
+		internal static void InvokeSwipeItem(ISwipeItem item) => item.OnInvoked();
 
 		static void MapContent(SwipeViewHandler handler, Microsoft.Maui.Controls.SwipeView view)
 		{
