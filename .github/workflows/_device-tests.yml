@@ -14,7 +14,7 @@ on:
       target-framework:
         required: true
         type: string
-        description: 'Target framework to run tests against (e.g. net10.0-maccatalyst, net10.0-android)'
+        description: 'Target framework to run tests against (e.g. net11.0-maccatalyst, net11.0-android)'
       filter:
         required: false
         type: string
@@ -44,7 +44,7 @@ on:
         required: false
         type: string
         default: ''
-        description: 'Xcode version to select on macOS (e.g. "26.3"). Empty uses runner default.'
+        description: 'Xcode version to select on macOS (e.g. "27.2"). Empty uses runner default.'
       native-deps:
         required: false
         type: string
@@ -59,8 +59,6 @@ on:
 jobs:
   device-tests:
     runs-on: ${{ inputs.os }}
-    env:
-      UseXcode27Preview: ${{ endsWith(inputs.target-framework, '27.0') && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v6
 
