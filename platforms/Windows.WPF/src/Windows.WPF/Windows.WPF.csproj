@@ -22,6 +22,10 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="$(MauiVersion)" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="HandlerTests" />
+  </ItemGroup>
+
   <!-- Include MSBuild targets for MAUI asset processing -->
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />

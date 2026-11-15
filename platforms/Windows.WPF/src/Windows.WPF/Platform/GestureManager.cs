@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Maui.Controls;
 using MauiDragEventArgs = Microsoft.Maui.Controls.DragEventArgs;
@@ -346,14 +347,29 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 		static void AddDropGesture(FrameworkElement view, DropGestureRecognizer drop)
 		{
+			// The operation negotiated by the last DragOver, reported back to the source on Drop.
+			var negotiated = DragDropEffects.None;
+
 			view.AllowDrop = drop.AllowDrop;
+
+			// WPF only raises DragOver/Drop on elements whose AllowDrop is set, so a binding that
+			// enables dropping later must reach the platform view.
+			System.ComponentModel.PropertyChangedEventHandler allowDropHandler = (s, e) =>
+			{
+				if (e.PropertyName == DropGestureRecognizer.AllowDropProperty.PropertyName)
+					view.AllowDrop = drop.AllowDrop;
+			};
+			drop.PropertyChanged += allowDropHandler;
 
 			DragEventHandler dragOverHandler = (s, e) =>
 			{
 				e.Handled = true;
 				var args = new MauiDragEventArgs(GetDataPackage(e.Data));
 				drop.SendDragOver(args);
-				e.Effects = drop.AllowDrop ? ToDragDropEffects(args.AcceptedOperation) : DragDropEffects.None;
+				negotiated = drop.AllowDrop
+					? NegotiateEffects(args.AcceptedOperation, e.AllowedEffects)
+					: DragDropEffects.None;
+				e.Effects = negotiated;
 			};
 
 			DragEventHandler dragLeaveHandler = (s, e) =>
@@ -364,6 +380,8 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			DragEventHandler dropHandler = async (s, e) =>
 			{
 				e.Handled = true;
+				// Must be set before the first await: DoDragDrop returns this to the drag source.
+				e.Effects = negotiated;
 				try
 				{
 					await drop.SendDrop(new DropEventArgs(GetDataPackage(e.Data).View));
@@ -380,9 +398,11 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 			GetCleanups(view).Add(new GestureCleanup(() =>
 			{
+				drop.PropertyChanged -= allowDropHandler;
 				view.DragOver -= dragOverHandler;
 				view.DragLeave -= dragLeaveHandler;
 				view.Drop -= dropHandler;
+				view.ClearValue(UIElement.AllowDropProperty);
 			}));
 		}
 
@@ -401,8 +421,40 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			return external;
 		}
 
-		static DragDropEffects ToDragDropEffects(DataPackageOperation operation) =>
-			operation == DataPackageOperation.None ? DragDropEffects.None : DragDropEffects.Copy;
+		/// <summary>
+		/// Maps the operation a MAUI <c>DragOver</c> handler accepted onto WPF effects, limited to
+		/// what the drag source allows (a move-only source cannot be answered with a copy).
+		/// </summary>
+		internal static DragDropEffects NegotiateEffects(DataPackageOperation accepted, DragDropEffects allowed) =>
+			ToDragDropEffects(accepted & ToDataPackageOperation(allowed));
+
+		/// <summary>
+		/// Maps MAUI's <see cref="DataPackageOperation"/> flags onto WPF <see cref="DragDropEffects"/>,
+		/// preserving Copy, Move and Copy | Move.
+		/// </summary>
+		internal static DragDropEffects ToDragDropEffects(DataPackageOperation operation)
+		{
+			var effects = DragDropEffects.None;
+			if (operation.HasFlag(DataPackageOperation.Copy))
+				effects |= DragDropEffects.Copy;
+			if (operation.HasFlag(DataPackageOperation.Move))
+				effects |= DragDropEffects.Move;
+			return effects;
+		}
+
+		/// <summary>
+		/// Maps WPF <see cref="DragDropEffects"/> onto MAUI's <see cref="DataPackageOperation"/>.
+		/// Link and Scroll have no MAUI equivalent and are dropped.
+		/// </summary>
+		internal static DataPackageOperation ToDataPackageOperation(DragDropEffects effects)
+		{
+			var operation = DataPackageOperation.None;
+			if (effects.HasFlag(DragDropEffects.Copy))
+				operation |= DataPackageOperation.Copy;
+			if (effects.HasFlag(DragDropEffects.Move))
+				operation |= DataPackageOperation.Move;
+			return operation;
+		}
 
 		#endregion
 
@@ -563,19 +615,64 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		#endregion
 
 		/// <summary>
-		/// Builds the <c>getPosition</c> callback MAUI gesture event args expose: the pointer
-		/// position relative to the requested element's platform view, or to the recognizing view.
+		/// Builds the <c>getPosition</c> callback MAUI gesture event args expose. The pointer position
+		/// is captured now, so args queried later still report where the gesture happened.
 		/// </summary>
 		static Func<IElement?, MauiPoint?> CreateGetPosition(FrameworkElement view, MouseDevice mouse)
 		{
-			return relativeTo =>
+			var positionInView = mouse.GetPosition(view);
+			return relativeTo => ResolvePosition(view, positionInView, relativeTo);
+		}
+
+		/// <summary>
+		/// Converts a position in <paramref name="view"/>'s coordinates for MAUI's
+		/// <c>GetPosition(relativeTo)</c>.
+		/// </summary>
+		/// <remarks>
+		/// A <see langword="null"/> <paramref name="relativeTo"/> yields window coordinates (relative to
+		/// the root of the view's visual tree, i.e. the WPF window's client area) for taps, pointer and
+		/// long-press events alike. That is what MAUI 11 returns on Windows
+		/// (<c>TappedRoutedEventArgs.GetPosition(null)</c>) and iOS/Mac Catalyst
+		/// (<c>UIGestureRecognizer.LocationInView(null)</c>), and the documented contract of
+		/// <see cref="LongPressedEventArgs.GetPosition"/>. Any other element is resolved through its
+		/// handler's platform view; an element without one, or in an unrelated visual tree that is not
+		/// on screen, yields <see langword="null"/>.
+		/// </remarks>
+		internal static MauiPoint? ResolvePosition(UIElement view, System.Windows.Point positionInView, IElement? relativeTo)
+		{
+			var target = relativeTo is null
+				? GetVisualRoot(view)
+				: relativeTo.Handler?.PlatformView as UIElement;
+			if (target is null)
+				return null;
+
+			if (ReferenceEquals(target, view))
+				return new MauiPoint(positionInView.X, positionInView.Y);
+
+			if (view.FindCommonVisualAncestor(target) is not null)
 			{
-				IInputElement target = relativeTo is VisualElement { Handler.PlatformView: UIElement relativeView }
-					? relativeView
-					: view;
-				var position = mouse.GetPosition(target);
-				return new MauiPoint(position.X, position.Y);
-			};
+				var translated = view.TranslatePoint(positionInView, target);
+				return new MauiPoint(translated.X, translated.Y);
+			}
+
+			// Another window (e.g. a modal page) is reached through screen coordinates.
+			if (PresentationSource.FromVisual(view) is null || PresentationSource.FromVisual(target) is null)
+				return null;
+
+			var onTarget = target.PointFromScreen(view.PointToScreen(positionInView));
+			return new MauiPoint(onTarget.X, onTarget.Y);
+		}
+
+		static UIElement GetVisualRoot(UIElement view)
+		{
+			DependencyObject root = view;
+			var parent = VisualTreeHelper.GetParent(root);
+			while (parent is not null)
+			{
+				root = parent;
+				parent = VisualTreeHelper.GetParent(root);
+			}
+			return root as UIElement ?? view;
 		}
 
 		static View? FindParentView(IGestureRecognizer recognizer)

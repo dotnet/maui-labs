@@ -63,6 +63,8 @@
     <MicrosoftExtensionsConfigurationJsonVersion>11.0.0</MicrosoftExtensionsConfigurationJsonVersion>
     <MicrosoftExtensionsConfigurationUserSecretsVersion>11.0.0</MicrosoftExtensionsConfigurationUserSecretsVersion>
     <SystemTextJsonVersion>11.0.0</SystemTextJsonVersion>
+    <!-- WPF TextToSpeech (net11.0-windows); dotnet-public mirrors the nuget.org package. -->
+    <SystemSpeechVersion>11.0.0</SystemSpeechVersion>
     <!-- The 11.0 packages above only support net10.0+ on .NETCoreApp. Down-level TFMs
          (net8.0/net9.0/netstandard2.0/net472) use these instead; see Directory.Packages.props. -->
     <MicrosoftExtensionsDownlevelVersion>10.0.5</MicrosoftExtensionsDownlevelVersion>

@@ -4,6 +4,7 @@ using Microsoft.Maui.Devices.Sensors;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.ApplicationModel.Communication;
 using Microsoft.Maui.Media;
+using System.Speech.Synthesis;
 
 // Suppress unused event warnings — these events are required by MAUI interfaces
 // but are never fired in desktop stub implementations (no physical sensors).
@@ -272,89 +273,70 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 		}
 	}
 
+	/// <summary>
+	/// Text-to-speech over the installed Windows (SAPI) voices, through the System.Speech package.
+	/// System.Speech is not part of the modern Windows Desktop shared framework, so this assembly
+	/// references the package and it ships with the app.
+	/// </summary>
 	public class WPFTextToSpeech : ITextToSpeech
 	{
-		const string SpeechAssemblyName = "System.Speech, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35";
-
 		public Task<IEnumerable<Locale>> GetLocalesAsync()
 		{
-			// MAUI 11 exposes Locale's constructor publicly. Report one Locale per enabled
-			// System.Speech voice, the same synthesizer SpeakAsync uses.
+			// MAUI 11 exposes Locale's constructor publicly. Report one Locale per enabled voice,
+			// the same synthesizer SpeakAsync uses.
 			return Task.Run<IEnumerable<Locale>>(() =>
 			{
 				try
 				{
-					var speechAssembly = System.Reflection.Assembly.Load(SpeechAssemblyName);
-					var synthType = speechAssembly.GetType("System.Speech.Synthesis.SpeechSynthesizer");
-					if (synthType == null) return Array.Empty<Locale>();
-
-					var synth = Activator.CreateInstance(synthType);
-					try
-					{
-						var voices = synthType.GetMethod("GetInstalledVoices", Type.EmptyTypes)?.Invoke(synth, null)
-							as System.Collections.IEnumerable;
-						if (voices == null) return Array.Empty<Locale>();
-
-						return voices.Cast<object>()
-							.Where(voice => voice.GetType().GetProperty("Enabled")?.GetValue(voice) is true)
-							.Select(voice => voice.GetType().GetProperty("VoiceInfo")?.GetValue(voice))
-							.OfType<object>()
-							.Select(CreateLocale)
-							.ToList();
-					}
-					finally
-					{
-						(synth as IDisposable)?.Dispose();
-					}
+					using var synth = new SpeechSynthesizer();
+					return synth.GetInstalledVoices()
+						.Where(voice => voice.Enabled)
+						.Select(voice => CreateLocale(voice.VoiceInfo))
+						.ToList();
 				}
-				catch
+				catch (Exception ex) when (ex is PlatformNotSupportedException or InvalidOperationException
+					or System.Runtime.InteropServices.COMException)
 				{
+					// No speech runtime (e.g. Windows Server Core).
 					return Array.Empty<Locale>();
 				}
 			});
 		}
 
-		static Locale CreateLocale(object voiceInfo)
+		static Locale CreateLocale(VoiceInfo voice)
 		{
-			var voiceType = voiceInfo.GetType();
-			var culture = voiceType.GetProperty("Culture")?.GetValue(voiceInfo) as System.Globalization.CultureInfo;
-			var name = voiceType.GetProperty("Name")?.GetValue(voiceInfo) as string ?? culture?.DisplayName ?? string.Empty;
-			var id = voiceType.GetProperty("Id")?.GetValue(voiceInfo) as string ?? name;
+			var culture = voice.Culture;
 			var country = culture == null || culture.IsNeutralCulture || culture.Name.Length == 0
 				? string.Empty
 				: new System.Globalization.RegionInfo(culture.Name).TwoLetterISORegionName;
-			return new Locale(culture?.TwoLetterISOLanguageName ?? string.Empty, country, name, id);
+			return new Locale(culture?.TwoLetterISOLanguageName ?? string.Empty, country, voice.Name, voice.Id);
 		}
 
 		public async Task SpeakAsync(string text, SpeechOptions? options = null, CancellationToken cancelToken = default)
 		{
 			if (string.IsNullOrWhiteSpace(text)) return;
 
-			// Use System.Speech.Synthesis.SpeechSynthesizer via reflection to avoid
-			// spawning PowerShell (which would be vulnerable to command injection).
-			// System.Speech.dll is available on all Windows desktop installations.
 			await Task.Run(() =>
 			{
 				try
 				{
-					var speechAssembly = System.Reflection.Assembly.Load(SpeechAssemblyName);
-					var synthType = speechAssembly.GetType("System.Speech.Synthesis.SpeechSynthesizer");
-					if (synthType == null) return;
+					using var synth = new SpeechSynthesizer();
+					synth.SetOutputToDefaultAudioDevice();
 
-					var synth = Activator.CreateInstance(synthType);
-					if (synth == null) return;
+					// Locales from GetLocalesAsync carry the voice name.
+					var voiceName = options?.Locale?.Name;
+					if (!string.IsNullOrEmpty(voiceName))
+						synth.SelectVoice(voiceName);
+					if (options?.Volume is float volume)
+						synth.Volume = (int)Math.Round(Math.Clamp(volume, 0f, 1f) * 100);
 
-					try
-					{
-						var speakMethod = synthType.GetMethod("Speak", new[] { typeof(string) });
-						speakMethod?.Invoke(synth, new object[] { text });
-					}
-					finally
-					{
-						(synth as IDisposable)?.Dispose();
-					}
+					synth.Speak(text);
 				}
-				catch { }
+				catch (Exception ex) when (ex is PlatformNotSupportedException or InvalidOperationException
+					or ArgumentException or System.Runtime.InteropServices.COMException)
+				{
+					System.Diagnostics.Debug.WriteLine($"[WPFTextToSpeech] Speech failed: {ex.Message}");
+				}
 			}, cancelToken);
 		}
 	}

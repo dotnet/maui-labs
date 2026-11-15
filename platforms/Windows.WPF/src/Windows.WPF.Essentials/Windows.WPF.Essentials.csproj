@@ -18,6 +18,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Essentials" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.Maui.Core" Version="$(MauiVersion)" />
+    <!-- TextToSpeech: System.Speech is not in the Windows Desktop shared framework on modern .NET. -->
+    <PackageReference Include="System.Speech" Version="$(SystemSpeechVersion)" />
   </ItemGroup>
 
   <ItemGroup>

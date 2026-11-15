@@ -161,11 +161,12 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		static void FireTapGestures(View mauiView)
 		{
-			var tap = mauiView.GestureRecognizers.OfType<Microsoft.Maui.Controls.TapGestureRecognizer>().FirstOrDefault();
-			if (tap != null)
+			var taps = mauiView.GestureRecognizers.OfType<Microsoft.Maui.Controls.TapGestureRecognizer>().ToList();
+			if (taps.Count > 0)
 			{
 				// SendTapped executes Command and raises Tapped.
-				tap.SendTapped(mauiView);
+				var tap = SelectTapRecognizer(taps);
+				tap?.SendTapped(mauiView);
 				return;
 			}
 
@@ -182,6 +183,17 @@ namespace Microsoft.Maui.Handlers.WPF
 				}
 			}
 		}
+
+		/// <summary>
+		/// Picks the recognizer that handles an item selection: the first one whose command can
+		/// execute (or that has no command and only raises <c>Tapped</c>), skipping recognizers
+		/// whose command is disabled. When every command is disabled the first recognizer still
+		/// raises <c>Tapped</c>, as a native tap would.
+		/// </summary>
+		internal static Microsoft.Maui.Controls.TapGestureRecognizer? SelectTapRecognizer(
+			IReadOnlyList<Microsoft.Maui.Controls.TapGestureRecognizer> taps)
+			=> taps.FirstOrDefault(tap => tap.Command?.CanExecute(tap.CommandParameter) ?? true)
+				?? taps.FirstOrDefault();
 
 		static void MapItemsSource(CollectionViewHandler handler, Microsoft.Maui.Controls.CollectionView view)
 		{

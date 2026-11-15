@@ -56,6 +56,26 @@ function Invoke-MSBuild {
     }
 }
 
+# Evaluates a property the way the build sees it. Directory.Build.props defines MauiVersion as a
+# reference to MicrosoftMauiControlsNet11Version (eng/Versions.props), so its raw XML is not a version.
+function Get-MSBuildProperty {
+    param([string] $Project, [string] $Name)
+    $arguments = @($Project, "-getProperty:$Name", '-nologo')
+    if ($SdkDirectory) {
+        $value = & $dotnet (Join-Path $SdkDirectory 'MSBuild.dll') @arguments
+    } else {
+        $value = & $dotnet msbuild @arguments
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Evaluating $Name for $Project failed with exit code $LASTEXITCODE"
+    }
+    $value = ([string] ($value -join "`n")).Trim()
+    if (-not $value -or $value.Contains('$(')) {
+        throw "$Name did not evaluate to a concrete value for ${Project}: '$value'"
+    }
+    return $value
+}
+
 # Prevent the generated consumer from inheriting the repository's MAUI versions or build imports.
 foreach ($file in @('Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props')) {
     Set-Content (Join-Path $work $file) '<Project />'
@@ -143,8 +163,8 @@ foreach ($id in @('Microsoft.Maui.Platforms.Windows.WPF', 'Microsoft.Maui.Platfo
         throw "$id must use the packed version $PackageVersion, not '$($references[$id])'."
     }
 }
-[xml] $platformProps = Get-Content (Join-Path $platform 'Directory.Build.props') -Raw
-$mauiVersion = [string] ($platformProps.SelectSingleNode('//MauiVersion').InnerText)
+# The template project substitutes __MAUI_VERSION__ with its evaluated MauiVersion.
+$mauiVersion = Get-MSBuildProperty $templateProject 'MauiVersion'
 if ($references['Microsoft.Maui.Controls'] -ne $mauiVersion) {
     throw "Microsoft.Maui.Controls must explicitly match the backend's MauiVersion ($mauiVersion)."
 }
