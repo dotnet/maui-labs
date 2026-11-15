@@ -92,10 +92,10 @@ public static class GoCommands
 				Console.Error.WriteLine("Error: File must be a .cs file.");
 				return 1;
 			}
-#if NET10_0_OR_GREATER
+#if NET11_0_OR_GREATER
 			return await Microsoft.Maui.Go.Server.GoDevServer.RunSingleFileAsync(filePath, port, showQr, ct);
 #else
-			Console.Error.WriteLine("Error: 'maui go' dev server requires the .NET 10 build of the CLI.");
+			Console.Error.WriteLine("Error: 'maui go' dev server requires the .NET 11 build of the CLI.");
 			return 1;
 #endif
 		}
@@ -117,7 +117,7 @@ public static class GoCommands
 			return 1;
 		}
 
-#if NET10_0_OR_GREATER
+#if NET11_0_OR_GREATER
 		// Single .cs file → single-file mode
 		if (csFiles.Length == 1)
 		{
@@ -138,7 +138,7 @@ public static class GoCommands
 			Console.Error.WriteLine($"    maui go {Path.GetFileName(f)}");
 		return 1;
 #else
-		Console.Error.WriteLine("Error: 'maui go' dev server requires the .NET 10 build of the CLI.");
+		Console.Error.WriteLine("Error: 'maui go' dev server requires the .NET 11 build of the CLI.");
 		return 1;
 #endif
 	}
