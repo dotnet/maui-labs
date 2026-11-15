@@ -1,0 +1,18 @@
+{
+  "name": "long-press-children",
+  "expectedCases": 5,
+  "expectedAssertions": 13,
+  "evidence": ["events.jsonl", "assertions.txt"],
+  "fixedEvidence": ["positions.json"],
+  "baseline": {
+    "source": "platforms/MacOS/src/MacOS/Platform/MacOSContainerView.cs",
+    "replace": {
+      "old": "            if (child != null && child != this && IsInsideInteractiveDescendant(child, this))\n                return child;\n",
+      "new": ""
+    },
+    "exitCode": 42,
+    "outcome": "regression",
+    "failureId": "long-press-children.button-click-stolen",
+    "message": "BASELINE_LONGPRESS: a LongPressGestureRecognizer on the parent layout swallowed the Button click."
+  }
+}

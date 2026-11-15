@@ -26,6 +26,7 @@ A timeout is a failure, not accepted baseline evidence.
 | `picker` | 19 | Unselected null-title Picker displays January / selection, title, items and native activation transitions |
 | `background-reset` | 4 | Cleared Grid background keeps its colour / direct clears, DataTrigger exit, ContentView, Picker and ImageButton (10 assertions) |
 | `tap-buttons` | 3 | Left click routed to secondary recognizer / primary, secondary and dynamic `Buttons` changes |
+| `long-press-children` | 5 | Button click swallowed by a parent layout's long-press recognizer / child Button click, Entry focus, long press on a Label, and `GetPosition` for null (window), the layout, the page and an unattached element, plus tap positions (13 assertions) |
 | `focus-state` | 5 | Entry is first responder but `IsFocused` stays false / Entry, focus moves, Editor, `Unfocus()` with ordered Focused/Unfocused events, focus redirected from an `Unfocused` handler (13 assertions) |
 | `bundle-resources` | 4 | Linked image missing / assets included and loaded from the built app bundle |
 | `menu-localization` | 5 per launch | English defaults in a German app / native bundle localization, app overrides, localized app names, responder actions, custom-menu replacement and option resets |

@@ -11,9 +11,11 @@ public class MacOSContainerView : NSView
     public Func<double, double, Graphics.Size>? CrossPlatformMeasure { get; set; }
     public Func<Graphics.Rect, Graphics.Size>? CrossPlatformArrange { get; set; }
 
-    /// When true, HitTest returns this view for clicks on children so that
-    /// NSGestureRecognizers attached here receive the events (AppKit only
-    /// delivers events to the gesture recognizer's own view, not ancestors).
+    /// When true, HitTest returns this view for clicks on non-interactive children
+    /// (e.g. a Label's NSTextField) so that NSGestureRecognizers attached here receive
+    /// the events. Interactive descendants (buttons, editable or selectable text,
+    /// other enabled controls, nested gesture owners) keep their hits, the way UIKit
+    /// lets a child UIControl handle its own touches under an ancestor's recognizer.
     public bool InterceptChildHitTesting { get; set; }
 
     /// <summary>
@@ -61,6 +63,11 @@ public class MacOSContainerView : NSView
             if (child != null && child != this && IsInsideDescendantScrollView(child, this))
                 return child;
 
+            // A press on a child control (Button, Entry, Switch, ...) belongs to that
+            // control, or to a nested view that owns its own gesture recognizers.
+            if (child != null && child != this && IsInsideInteractiveDescendant(child, this))
+                return child;
+
             // Otherwise intercept: return this view so our gesture recognizers
             // receive the event
             var local = ConvertPointFromView(point, Superview);
@@ -91,6 +98,32 @@ public class MacOSContainerView : NSView
         }
         return false;
     }
+
+    /// <summary>
+    /// Check if child, or one of its ancestors below container, handles mouse input itself.
+    /// </summary>
+    internal static bool IsInsideInteractiveDescendant(NSView child, NSView container)
+    {
+        var current = child;
+        while (current != null && current != container)
+        {
+            if (IsInteractive(current))
+                return true;
+            current = current.Superview;
+        }
+        return false;
+    }
+
+    static bool IsInteractive(NSView view) => view switch
+    {
+        // Labels are non-editable, non-selectable text fields and stay interceptable.
+        NSTextField textField => textField.Enabled && (textField.Editable || textField.Selectable),
+        NSImageView imageView => imageView.Enabled && imageView.Editable,
+        NSControl control => control.Enabled,
+        // Covers the field editor of a focused Entry as well as Editor.
+        NSTextView textView => textView.Editable || textView.Selectable,
+        _ => view.GestureRecognizers is { Length: > 0 },
+    };
 
     bool ShouldApplySafeArea()
     {

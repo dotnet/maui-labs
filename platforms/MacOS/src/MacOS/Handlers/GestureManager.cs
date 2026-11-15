@@ -86,9 +86,9 @@ public static class GestureManager
         };
         view.AddGestureRecognizer(recognizer);
 
-        // AppKit delivers events only to the hit-test view's own gesture recognizers,
-        // not ancestors. Intercept child hit testing so clicks on child views
+        // Intercept child hit testing so clicks on non-interactive child views
         // (e.g. Label NSTextFields) still fire this view's gesture recognizer.
+        // Interactive children (buttons, entries) keep their own clicks.
         if (view is MacOSContainerView container)
             container.InterceptChildHitTesting = true;
     }
@@ -140,34 +140,79 @@ public static class GestureManager
     {
         view.AddGestureRecognizer(new MacOSLongPressGestureRecognizer(longPress));
 
-        // Same as taps: a press on a child view (e.g. a Label's NSTextField) must still
-        // reach this view's recognizer.
+        // Same as taps: a press on a non-interactive child view (e.g. a Label's
+        // NSTextField) must still reach this view's recognizer, while child controls
+        // such as a Button or Entry keep handling their own clicks.
         if (view is MacOSContainerView container)
             container.InterceptChildHitTesting = true;
     }
 
     /// <summary>
-    /// Builds the <c>getPosition</c> callback MAUI gesture event args expose, converting the
-    /// recognizer's location into MAUI's top-left origin coordinate space, either relative to
-    /// the recognizing view or to the requested element's platform view.
+    /// Builds the <c>getPosition</c> callback MAUI gesture event args expose from the
+    /// recognizer's current location. See <see cref="ResolvePosition"/> for the contract.
     /// </summary>
     internal static Func<IElement?, Point?> CreateGetPosition(NSGestureRecognizer recognizer)
     {
-        return relativeTo =>
+        // Snapshot the location now: the args can be queried after the recognizer has moved on.
+        var locationInWindow = recognizer.LocationInView(null);
+        var window = recognizer.View?.Window;
+        return relativeTo => ResolvePosition(locationInWindow, window, relativeTo);
+    }
+
+    /// <summary>
+    /// Builds the <c>getPosition</c> callback for an AppKit mouse event.
+    /// </summary>
+    internal static Func<IElement?, Point?> CreateGetPosition(NSEvent theEvent, NSWindow? fallbackWindow)
+    {
+        var locationInWindow = theEvent.LocationInWindow;
+        var window = theEvent.Window ?? fallbackWindow;
+        return relativeTo => ResolvePosition(locationInWindow, window, relativeTo);
+    }
+
+    /// <summary>
+    /// Converts a location in <paramref name="window"/>'s base coordinates into MAUI's
+    /// top-left origin coordinate space.
+    /// </summary>
+    /// <remarks>
+    /// <para>A <see langword="null"/> <paramref name="relativeTo"/> yields window coordinates
+    /// (relative to the window's content view) for every gesture type. This is what the MAUI 11
+    /// iOS/Mac Catalyst backend (<c>UIGestureRecognizer.LocationInView(null)</c>) and the Windows
+    /// backend (<c>TappedRoutedEventArgs.GetPosition(null)</c>) return, and it is the documented
+    /// contract of <see cref="LongPressedEventArgs.GetPosition"/>.</para>
+    /// <para>Any other element is resolved through its handler's platform view (a page, layout
+    /// or view; a <see cref="Window"/> maps to its content view). An element without a
+    /// connected AppKit view yields <see langword="null"/>.</para>
+    /// </remarks>
+    internal static Point? ResolvePosition(CGPoint locationInWindow, NSWindow? window, IElement? relativeTo)
+    {
+        if (window is null)
+            return null;
+
+        NSView? target = relativeTo is null
+            ? window.ContentView
+            : relativeTo.Handler?.PlatformView switch
+            {
+                NSView view => view,
+                NSWindow platformWindow => platformWindow.ContentView,
+                _ => null,
+            };
+
+        var targetWindow = target?.Window;
+        if (target is null || targetWindow is null)
+            return null;
+
+        // An element in another window (e.g. a modal sheet) is reached through screen space.
+        if (targetWindow != window)
         {
-            var target = recognizer.View;
-            if (relativeTo is View { Handler.PlatformView: NSView relativeView })
-                target = relativeView;
+            var onScreen = window.ConvertPointToScreen(locationInWindow);
+            locationInWindow = targetWindow.ConvertPointFromScreen(onScreen);
+        }
 
-            if (target is null)
-                return null;
+        var location = target.ConvertPointFromView(locationInWindow, null);
+        if (!target.IsFlipped)
+            location.Y = target.Bounds.Height - location.Y;
 
-            var location = recognizer.LocationInView(target);
-            if (!target.IsFlipped)
-                location.Y = target.Bounds.Height - location.Y;
-
-            return new Point(location.X, location.Y);
-        };
+        return new Point(location.X, location.Y);
     }
 }
 
@@ -273,33 +318,6 @@ internal class MacOSPointerTrackingArea : NSTrackingArea
 
     public PointerGestureRecognizer Recognizer => _pointerGesture;
 
-    static Func<IElement?, Point?> CreateGetPosition(NSView view, NSEvent? theEvent)
-    {
-        return (IElement? relativeTo) =>
-        {
-            if (theEvent == null) return null;
-            // Get mouse location in window coordinates, convert to view
-            var locInView = view.ConvertPointFromView(theEvent.LocationInWindow, null);
-            // Flip Y for MAUI (top-left origin) if view is not flipped
-            if (!view.IsFlipped)
-                locInView.Y = view.Bounds.Height - locInView.Y;
-
-            if (relativeTo == null)
-                return new Microsoft.Maui.Graphics.Point(locInView.X, locInView.Y);
-
-            // If relativeTo is the same element, return position in that element's coordinate space
-            if (relativeTo is View relView && relView.Handler?.PlatformView is NSView relNative)
-            {
-                var locInRel = relNative.ConvertPointFromView(theEvent.LocationInWindow, null);
-                if (!relNative.IsFlipped)
-                    locInRel.Y = relNative.Bounds.Height - locInRel.Y;
-                return new Microsoft.Maui.Graphics.Point(locInRel.X, locInRel.Y);
-            }
-
-            return new Microsoft.Maui.Graphics.Point(locInView.X, locInView.Y);
-        };
-    }
-
     // The PointerGestureRecognizer Send* methods require the owning view; a recognizer that
     // has been detached from its view has nothing to report against.
     public void FireEntered(View? sender, NSEvent? theEvent = null)
@@ -321,7 +339,7 @@ internal class MacOSPointerTrackingArea : NSTrackingArea
     }
 
     Func<IElement?, Point?>? GetPositionFor(NSEvent? theEvent)
-        => theEvent != null && Owner is NSView view ? CreateGetPosition(view, theEvent) : null;
+        => theEvent != null && Owner is NSView view ? GestureManager.CreateGetPosition(theEvent, view.Window) : null;
 }
 
 internal static class GestureExtensions

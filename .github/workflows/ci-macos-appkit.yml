@@ -69,6 +69,8 @@ jobs:
           - scenario: background-reset
             maui-version: ''
           - scenario: tap-buttons
+          - scenario: long-press-children
+            maui-version: ''
           - scenario: focus-state
             maui-version: ''
           - scenario: menu-localization
