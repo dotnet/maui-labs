@@ -41,11 +41,11 @@ backend and Essentials `.nupkg` files (default: `artifacts/runtime-packages`).
 
 ## Run on macOS
 
-Use the repository SDK (.NET 11), the .NET 11 workload set 11.0.100.1 and Xcode 27.2:
+Use the repository SDK (.NET 11), the workload manifests pinned in `eng/workloads.json` and Xcode 27.2:
 
 ```sh
 export NUGET_PACKAGES="$PWD/.packages"
-./eng/common/dotnet.sh workload install macos --version 11.0.100.1
+./eng/common/dotnet.sh workload install macos --from-rollback-file eng/workloads.json
 python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
   --scenario layout --evidence "$PWD/artifacts/layout-run"
 ```

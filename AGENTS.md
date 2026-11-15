@@ -74,7 +74,7 @@ npm ci
 ### Build Troubleshooting
 
 - If restore fails, check `NuGet.config` — feeds are internal dnceng proxies, not nuget.org
-- If workload errors occur: `dotnet workload install maui macos maui-tizen --version 11.0.100.1` (the workload set pinned in `.github/workflows/_build.yml`; 10.x workload sets cannot be installed on SDK 11)
+- If workload errors occur: `dotnet workload install maui macos maui-tizen --from-rollback-file eng/workloads.json` (the manifest versions CI pins; the matching workload set package is only published to nuget.org, so CI installs from this rollback file against the dnceng feeds)
 - Apple app heads need Xcode 27 (the .NET 11 Apple packs recommend 27.2); see https://aka.ms/xcode-requirement
 - SDK version mismatch: check `global.json` vs `dotnet --version`
 

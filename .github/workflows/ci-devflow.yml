@@ -294,7 +294,7 @@ jobs:
       run-tests: false
       pack: false
       # App heads enforce the Apple SDK's Xcode requirement, which libraries do not. The .NET 11
-      # Apple packs in the pinned 11.0.100.1 workload set need Xcode 27, which macos-latest does
+      # Apple packs pinned by eng/workloads.json need Xcode 27, which macos-latest does
       # not have yet, so this job uses the Xcode 27 runner (as ci-testing / ci-essentialsai do).
       # The runner's Xcode minor can differ from the one the packs recommend (27.2), so the
       # exact-version check is skipped. See https://aka.ms/xcode-requirement.

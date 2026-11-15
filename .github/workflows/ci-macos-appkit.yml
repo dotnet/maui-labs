@@ -33,19 +33,18 @@ jobs:
     with:
       project-path: platforms/MacOS/MacOS.slnx
       project-name: macos-appkit
-      os: '["macos-latest"]'
+      # net11.0-macos needs the macOS 27.2 pack, which requires Xcode 27; macos-latest doesn't have it.
+      os: '["xcode-27"]'
       install-workloads: true
-      # net11.0-macos needs the .NET 11 workload set (macOS 27.2 pack, Xcode 27.2).
       workloads: 'maui macos'
-      workload-version: '11.0.100.1'
       run-tests: true
       pack: true
-      xcode-version: '27.2'
+      skip-xcode-version-validation: true
 
   native-runtime:
     name: AppKit runtime (${{ matrix.scenario }}, ${{ matrix.maui-version || 'default' }})
     needs: build
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -82,20 +81,24 @@ jobs:
             packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages
+      # Same as the build job: use the runner's Xcode 27 without the exact pack/Xcode match check.
+      ValidateXcodeVersion: 'false'
     steps:
       - uses: actions/checkout@v6
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_27.2.app/Contents/Developer
+        run: |
+          if [ -d /Applications/Xcode_27.2.app ]; then sudo xcode-select -s /Applications/Xcode_27.2.app/Contents/Developer; fi
+          xcodebuild -version
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
       - name: Install pinned scenario workloads
-        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --version 11.0.100.1
+        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --from-rollback-file eng/workloads.json
       - name: Download requested product packages
         if: matrix.packages == true
         uses: actions/download-artifact@v8
         with:
-          name: packages-macos-appkit-macos-latest
+          name: packages-macos-appkit-xcode-27
           path: artifacts/runtime-packages
       - name: Verify shared runner contracts
         run: python3 -B -m unittest discover -s platforms/MacOS/tests/MacOS.RuntimeTests -p 'test_*.py'

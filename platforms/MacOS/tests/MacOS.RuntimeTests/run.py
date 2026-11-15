@@ -186,7 +186,8 @@ class RuntimeRunner:
         properties["RuntimeTestBuildTarget"] = "Publish" if publish else "Build"
         properties.setdefault("RuntimeTestScenario", self.name)
         properties.setdefault("ContinuousIntegrationBuild", "true")
-        properties.setdefault("ValidateXcodeVersion", "true")
+        # CI runners whose default Xcode differs from the pack's exact version opt out through the environment.
+        properties.setdefault("ValidateXcodeVersion", os.environ.get("ValidateXcodeVersion", "true"))
         if properties["RuntimeTestScenario"] != self.name:
             raise ValueError("Build selector must match the registered scenario.")
         if self.maui_version:

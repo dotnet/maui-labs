@@ -114,7 +114,7 @@ extends:
               displayName: Provision .NET SDK via Arcade
             # DevFlow packages are built on Windows, including Apple library TFMs.
             # DevFlow targets net11.0: the workload set must match the SDK 11 band in global.json.
-            - script: eng\common\dotnet.cmd workload install maui maui-android ios maccatalyst macos maui-tizen --version 11.0.100.1
+            - script: eng\common\dotnet.cmd workload install maui maui-android ios maccatalyst macos maui-tizen --from-rollback-file $(Build.SourcesDirectory)\eng\workloads.json
               displayName: Install MAUI and Apple workloads
             - pwsh: |
                 $arguments = @(
@@ -262,7 +262,7 @@ extends:
                 echo "##vso[task.setvariable variable=DEVELOPER_DIR]$DEVELOPER_DIR"
               displayName: Select and verify Xcode 27
             # Essentials.AI targets net11.0: the workload set must match the SDK 11 band in global.json.
-            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 11.0.100.1
+            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --from-rollback-file $(Build.SourcesDirectory)/eng/workloads.json
               displayName: Install MAUI workloads
             - script: |
                 set -euo pipefail
@@ -344,7 +344,7 @@ extends:
                 path: '$(Build.SourcesDirectory)/artifacts/bin'
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: eng\common\dotnet.cmd workload install maui maui-android macos maui-tizen --version 11.0.100.1
+            - script: eng\common\dotnet.cmd workload install maui maui-android macos maui-tizen --from-rollback-file $(Build.SourcesDirectory)\eng\workloads.json
               displayName: Install MAUI workloads
             - pwsh: |
                 $ErrorActionPreference = 'Stop'
@@ -452,7 +452,7 @@ extends:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
             # WPF targets net11.0-windows: the workload set must match the SDK 11 band in global.json.
-            - script: eng\common\dotnet.cmd workload install maui --version 11.0.100.1
+            - script: eng\common\dotnet.cmd workload install maui --from-rollback-file $(Build.SourcesDirectory)\eng\workloads.json
               displayName: Install MAUI workload
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -479,7 +479,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: eng\common\dotnet.cmd workload install maui macos --version 11.0.100.1
+            - script: eng\common\dotnet.cmd workload install maui macos --from-rollback-file $(Build.SourcesDirectory)\eng\workloads.json
               displayName: Install MAUI and macOS workloads
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
