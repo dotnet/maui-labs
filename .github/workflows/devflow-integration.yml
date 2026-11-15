@@ -282,7 +282,7 @@ jobs:
       # (dotnet/maui#36047). Keep the rest of the iOS suite running; WebView coverage remains
       # active on Android and Windows.
       TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '--filter Category!=WebView' }}
-      DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime || '27.0' }}
+      DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime || '27.2' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -290,7 +290,7 @@ jobs:
         run: |
           # Keep Xcode aligned with the pinned SDK's workload manifests.
           COMPATIBLE="${COMPATIBLE:-}"
-          for candidate in /Applications/Xcode_27.0.app /Applications/Xcode_27.0.0.app; do
+          for candidate in /Applications/Xcode_27.2.app /Applications/Xcode_27.2.0.app; do
             if [[ -d "$candidate" ]]; then
               COMPATIBLE="$candidate"
               break
@@ -379,7 +379,7 @@ jobs:
         run: |
           # Keep Xcode aligned with the pinned SDK's workload manifests.
           COMPATIBLE="${COMPATIBLE:-}"
-          for candidate in /Applications/Xcode_27.0.app /Applications/Xcode_27.0.0.app; do
+          for candidate in /Applications/Xcode_27.2.app /Applications/Xcode_27.2.0.app; do
             if [[ -d "$candidate" ]]; then
               COMPATIBLE="$candidate"
               break
@@ -455,7 +455,7 @@ jobs:
         run: |
           # Keep Xcode aligned with the pinned SDK's workload manifests.
           COMPATIBLE="${COMPATIBLE:-}"
-          for candidate in /Applications/Xcode_27.0.app /Applications/Xcode_27.0.0.app; do
+          for candidate in /Applications/Xcode_27.2.app /Applications/Xcode_27.2.0.app; do
             if [[ -d "$candidate" ]]; then
               COMPATIBLE="$candidate"
               break

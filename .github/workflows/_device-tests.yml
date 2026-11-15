@@ -55,7 +55,7 @@ jobs:
   device-tests:
     runs-on: ${{ inputs.os }}
     env:
-      UseXcode27Preview: ${{ endsWith(inputs.target-framework, '27.0') && 'true' || 'false' }}
+      UseXcode27Preview: ${{ endsWith(inputs.target-framework, '27.2') && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v6
 

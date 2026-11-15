@@ -37,7 +37,7 @@ jobs:
       install-workloads: true
       run-tests: true
       pack: true
-      xcode-version: '27.0'
+      xcode-version: '27.2'
 
   native-runtime:
     name: AppKit runtime (${{ matrix.scenario }}, ${{ matrix.maui-version || 'default' }})
@@ -88,7 +88,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_27.0.app/Contents/Developer
+        run: sudo xcode-select -s /Applications/Xcode_27.2.app/Contents/Developer
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json

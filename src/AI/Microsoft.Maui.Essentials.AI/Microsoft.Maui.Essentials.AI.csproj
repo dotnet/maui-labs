@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFrameworks>net11.0;net11.0-android</TargetFrameworks>
     <TargetFrameworks Condition="'$(UseXcode27Preview)' != 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net11.0-ios;net11.0-maccatalyst;net11.0-macos</TargetFrameworks>
-    <TargetFrameworks Condition="'$(UseXcode27Preview)' == 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net11.0-ios27.0;net11.0-maccatalyst27.0;net11.0-macos27.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(UseXcode27Preview)' == 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net11.0-ios27.2;net11.0-maccatalyst27.2;net11.0-macos27.2</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net11.0-windows10.0.19041.0</TargetFrameworks>
     <AssemblyName>Microsoft.Maui.Essentials.AI</AssemblyName>
     <RootNamespace>Microsoft.Maui.Essentials.AI</RootNamespace>

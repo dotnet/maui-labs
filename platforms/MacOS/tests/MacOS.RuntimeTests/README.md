@@ -40,7 +40,7 @@ backend and Essentials `.nupkg` files (default: `artifacts/runtime-packages`).
 
 ## Run on macOS
 
-Use the repository SDK, pinned macOS workload set and Xcode 27.0:
+Use the repository SDK, pinned macOS workload set and Xcode 27.2:
 
 ```sh
 export NUGET_PACKAGES="$PWD/.packages"

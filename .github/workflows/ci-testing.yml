@@ -31,9 +31,9 @@ jobs:
       Configuration: Release
     strategy:
       matrix:
-        # The .NET 11 iOS/Mac Catalyst packs the template restores need Xcode 27, which
-        # macos-latest does not have yet. The runner's minor (27.1) is newer than the one
-        # the packs pin (27.0), so the smoke build skips that exact-version check.
+        # The .NET 11 iOS/Mac Catalyst packs the template restores need Xcode 27.2, which
+        # macos-latest does not have yet. The xcode-27 image supplies a compatible Xcode;
+        # skip exact-version validation so an image patch update does not block the smoke build.
         os: [xcode-27, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
