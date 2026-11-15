@@ -2,7 +2,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging;
 using Microsoft.Maui;
 using Microsoft.Maui.Animations;
 using Microsoft.Maui.Controls;
@@ -91,22 +90,22 @@ public static partial class AppHostBuilderExtensions
 
 	static MauiAppBuilder SetupDefaults(this MauiAppBuilder builder)
 	{
-		// Register AppInfo so AppInfo.RequestedTheme returns GTK's system theme
-		GtkAppInfoImplementation.Register();
+		// Fallback IAppInfo so AppInfo.RequestedTheme (and therefore Application.PlatformAppTheme)
+		// follows GTK's theme even without the Essentials package. MAUI's Essentials initializer
+		// assigns it to the AppInfo facade; AddLinuxGtk4Essentials() supersedes it with LinuxAppInfo.
+		builder.Services.TryAddSingleton<Microsoft.Maui.ApplicationModel.IAppInfo, GtkAppInfoImplementation>();
 
 		builder.Services.AddSingleton<IDispatcherProvider>(svc => new GtkDispatcherProvider());
 
+		// MAUI's Essentials initializer bridges MainThread (IsMainThread, BeginInvokeOnMainThread)
+		// from the application dispatcher it finds under this key. GtkDispatcher always targets
+		// the default GLib main context, independent of the thread that builds the app.
+		// ConfigureEssentials also applies ConfigureDispatching, which provides the scoped IDispatcher.
+		builder.Services.TryAddKeyedSingleton<IDispatcher>(typeof(IApplication), (_, _) => new GtkDispatcher());
+		builder.ConfigureEssentials();
+
 		// Register GTK alert/dialog handler for DisplayAlert/ActionSheet/Prompt
 		GtkAlertManager.Register(builder.Services);
-
-		builder.Services.AddScoped(svc =>
-		{
-			var provider = svc.GetRequiredService<IDispatcherProvider>();
-			if (DispatcherProvider.SetCurrent(provider))
-				svc.GetService<ILogger<Dispatcher>>()?.LogWarning("Replaced an existing DispatcherProvider.");
-
-			return Dispatcher.GetForCurrentThread()!;
-		});
 
 		builder.Services.RemoveAll<IFontRegistrar>();
 		builder.Services.RemoveAll<IFontManager>();

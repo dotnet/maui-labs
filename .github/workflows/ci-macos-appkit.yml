@@ -60,6 +60,8 @@ jobs:
             maui-version: ''
           - scenario: dialog-registration
             maui-version: ''
+          - scenario: essentials
+            maui-version: ''
           - scenario: dialogs
             maui-version: ''
           - scenario: window-page-reset

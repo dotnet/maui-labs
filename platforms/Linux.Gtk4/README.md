@@ -274,7 +274,7 @@ dotnet run
 
 The packaged template pins its GTK4 package references to the package version produced
 by the same build. Essentials is enabled by default: the generated `MauiProgram.cs`
-calls `AddLinuxGtk4Essentials()` to register Linux services and static API defaults,
+calls `AddLinuxGtk4Essentials()` to register Linux services, which MAUI assigns to the static APIs,
 including `SemanticScreenReader`. Use `--essentials false` to omit both the package
 and registration, or `--blazor true` to include the BlazorWebView package.
 
@@ -331,12 +331,21 @@ If you added the optional Essentials package, also import
 `builder.AddLinuxGtk4Essentials()` before `builder.Build()`. Adding the package
 alone does not replace MAUI's portable Essentials implementations.
 
-When `Build()` returns, all registered static Essentials facades use the same
-instances as dependency injection, including application overrides registered
+`AddLinuxGtk4Essentials()` only registers services in dependency injection. MAUI 11's
+Essentials initializer (`ConfigureEssentials()`) assigns each registration to its static
+facade during `Build()`, so when `Build()` returns all registered static Essentials facades
+use the same instances as dependency injection, including application overrides registered
 before or after `AddLinuxGtk4Essentials()`. Call statics after `Build()`, not while
 configuring the builder. Unsupported desktop capabilities retain their existing
 stub behavior. Facades are process-wide: the most recently built app sets their
-instances, and callers must not use them after disposing that app.
+instances, and disposing that app restores the previous ones.
+
+`UseMauiAppLinuxGtk4()` registers the GTK dispatcher as the MAUI application dispatcher, so
+`MainThread.IsMainThread` and `MainThread.BeginInvokeOnMainThread` work after `Build()`, with
+or without the Essentials package. `IsMainThread` is true on the thread that owns the default
+GLib main context, i.e. while the GTK main loop runs. Without the Essentials package the
+backend also registers a minimal `IAppInfo` so `AppInfo.RequestedTheme` follows the GTK
+theme; `AddLinuxGtk4Essentials()` replaces it.
 
 `FileSystem.AppDataDirectory` and `CacheDirectory` use `XDG_DATA_HOME` and
 `XDG_CACHE_HOME`, falling back to `~/.local/share` and `~/.cache`, respectively,

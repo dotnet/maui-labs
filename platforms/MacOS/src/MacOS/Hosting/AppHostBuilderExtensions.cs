@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Animations;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Dispatching;
@@ -91,6 +90,13 @@ public static partial class AppHostBuilderExtensions
     {
         builder.Services.AddSingleton<IDispatcherProvider>(svc => new MacOSDispatcherProvider());
 
+        // MAUI's Essentials initializer bridges MainThread (IsMainThread, BeginInvokeOnMainThread)
+        // from the application dispatcher it finds under this key. MacOSDispatcher always targets
+        // the AppKit main queue, so the bridge works even if the app is built off the main thread.
+        // ConfigureEssentials also applies ConfigureDispatching, which provides the scoped IDispatcher.
+        builder.Services.TryAddKeyedSingleton<IDispatcher>(typeof(IApplication), (_, _) => new MacOSDispatcher());
+        builder.ConfigureEssentials();
+
         // Replace the default System.Timers.Timer-based ticker with one using NSTimer on the main run loop.
         // This ensures animation property updates happen on the main thread (required for AppKit).
         builder.Services.Replace(ServiceDescriptor.Scoped<ITicker>(svc => new MacOSTicker()));
@@ -108,15 +114,6 @@ public static partial class AppHostBuilderExtensions
             new MacOSFontManager(svc.GetRequiredService<IFontRegistrar>(), svc)));
 
         AlertManagerSubscription.Register(builder.Services);
-
-        builder.Services.AddScoped(svc =>
-        {
-            var provider = svc.GetRequiredService<IDispatcherProvider>();
-            if (DispatcherProvider.SetCurrent(provider))
-                svc.GetService<ILogger<Dispatcher>>()?.LogWarning("Replaced an existing DispatcherProvider.");
-
-            return Dispatcher.GetForCurrentThread()!;
-        });
 
         builder.ConfigureMauiHandlers(handlers =>
         {

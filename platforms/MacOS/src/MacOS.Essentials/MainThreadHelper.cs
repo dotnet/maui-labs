@@ -4,8 +4,9 @@ using CoreFoundation;
 namespace Microsoft.Maui.Platforms.MacOS.Essentials;
 
 /// <summary>
-/// MainThread helper for macOS. Use instead of Microsoft.Maui.ApplicationModel.MainThread
-/// which throws NotImplementedException on unsupported platforms.
+/// AppKit main-thread helper that works without a built <c>MauiApp</c>.
+/// After <c>UseMauiAppMacOS</c> builds the app, <c>Microsoft.Maui.ApplicationModel.MainThread</c>
+/// also works: MAUI bridges it from the macOS application dispatcher.
 /// </summary>
 public static class MainThreadHelper
 {

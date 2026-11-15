@@ -11,7 +11,6 @@ using Microsoft.Maui.Controls.Hosting;
 using Microsoft.Maui.Handlers.WPF;
 using Microsoft.Maui.Platforms.Windows.WPF;
 using Microsoft.Maui.Controls.Platform.WPF;
-using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Maui.Controls.Hosting.WPF
 {
@@ -111,14 +110,19 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 				// Current and putting it in the DI container.
 				new WPFDispatcherProvider());
 
-			builder.Services.AddScoped(svc =>
-			{
-				var provider = svc.GetRequiredService<IDispatcherProvider>();
-				if (DispatcherProvider.SetCurrent(provider))
-					svc.GetService<ILogger<Dispatcher>>()?.LogWarning("Replaced an existing DispatcherProvider with one from the service provider.");
+			// MAUI's Essentials initializer bridges MainThread (IsMainThread, BeginInvokeOnMainThread)
+			// from the application dispatcher it finds under this key. Use the WPF application's UI
+			// dispatcher when there is one, so the bridge does not depend on the thread that builds
+			// the app. Otherwise MAUI falls back to the dispatcher of the building thread.
+			// ConfigureEssentials also applies ConfigureDispatching, which provides the scoped IDispatcher.
+			if (System.Windows.Application.Current?.Dispatcher is { } applicationDispatcher)
+				builder.Services.TryAddKeyedSingleton<IDispatcher>(typeof(IApplication), new WPFDispatcher(applicationDispatcher));
+			builder.ConfigureEssentials();
 
-				return Dispatcher.GetForCurrentThread()!;
-			});
+			// Fallback IDeviceInfo so OnIdiom/OnPlatform resolve to Desktop/WinUI without the Essentials
+			// package. MAUI's Essentials initializer assigns it to the DeviceInfo facade;
+			// UseWPFEssentials() supersedes it with WPFDeviceInfo.
+			builder.Services.TryAddSingleton<Microsoft.Maui.Devices.IDeviceInfo, WPFDeviceInfoFallback>();
 
 			// Register WPF-specific animation ticker (runs on dispatcher thread)
 			builder.Services.AddSingleton<Microsoft.Maui.Animations.Ticker>(new Microsoft.Maui.Platforms.Windows.WPF.WPFTicker());

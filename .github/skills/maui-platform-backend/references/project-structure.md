@@ -92,7 +92,7 @@ platforms/[Platform.Name]/
 │   │   ├── Communication/                       # Email, PhoneDialer, SMS, Contacts
 │   │   ├── DataTransfer/                        # Clipboard, Share
 │   │   ├── Devices/                             # Battery, DeviceDisplay, DeviceInfo, Haptic, Vibration
-│   │   ├── Hosting/                             # EssentialsExtensions.cs (DI + SetDefault reflection)
+│   │   ├── Hosting/                             # EssentialsExtensions.cs (DI + ConfigureEssentials)
 │   │   ├── Media/                               # MediaPicker, TextToSpeech, Screenshot
 │   │   ├── Networking/                          # Connectivity
 │   │   ├── Sensors/                             # Accelerometer, Gyroscope, etc.

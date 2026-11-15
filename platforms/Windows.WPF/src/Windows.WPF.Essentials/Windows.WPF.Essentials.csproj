@@ -27,7 +27,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\..\Shared\Essentials\EssentialsInitializer.cs" Link="Hosting\EssentialsInitializer.cs" />
     <None Include="../../README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 

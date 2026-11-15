@@ -14,11 +14,20 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 {
 	public static class EssentialsExtensions
 	{
+		/// <summary>
+		/// Registers the WPF Essentials implementations in dependency injection.
+		/// MAUI's Essentials initializer (applied by <c>ConfigureEssentials</c>) assigns each
+		/// registration to its static facade (<c>AppInfo.Current</c>, <c>Preferences.Default</c>, ...)
+		/// when the app is built, so the static APIs and dependency injection share one instance.
+		/// Registrations use TryAdd: an app can register its own implementation before calling
+		/// this method, or after it with <c>AddSingleton</c>.
+		/// </summary>
 		public static MauiAppBuilder UseWPFEssentials(this MauiAppBuilder builder)
 		{
 			// Core services
 			builder.Services.TryAddSingleton<IClipboard, WPFClipboard>();
 			builder.Services.TryAddSingleton<IConnectivity, WPFConnectivity>();
+			RemoveBackendFallback<IDeviceInfo>(builder.Services);
 			builder.Services.TryAddSingleton<IDeviceInfo, WPFDeviceInfo>();
 			builder.Services.TryAddSingleton<IDeviceDisplay, WPFDeviceDisplay>();
 			builder.Services.TryAddSingleton<IAppInfo, WPFAppInfo>();
@@ -67,10 +76,22 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 			// App Actions
 			builder.Services.TryAddSingleton<IAppActions, WPFAppActions>();
 
-			builder.Services.TryAddEnumerable(
-				ServiceDescriptor.Singleton<IMauiInitializeService, EssentialsInitializer>());
+			builder.ConfigureEssentials();
 
 			return builder;
+		}
+
+		// UseMauiAppWPF() registers a minimal IDeviceInfo so OnIdiom works without this package.
+		// Drop that fallback (any registration implemented in the backend assembly) so the full
+		// implementation wins whichever extension runs first; app registrations are kept.
+		static void RemoveBackendFallback<TService>(IServiceCollection services)
+		{
+			var backend = typeof(Microsoft.Maui.Platforms.Windows.WPF.MauiWPFApplication).Assembly;
+			var fallbacks = services
+				.Where(d => d.ServiceType == typeof(TService) && !d.IsKeyedService && d.ImplementationType?.Assembly == backend)
+				.ToList();
+			foreach (var fallback in fallbacks)
+				services.Remove(fallback);
 		}
 	}
 }

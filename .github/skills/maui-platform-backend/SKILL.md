@@ -99,9 +99,9 @@ Use the full checklist in [references/implementation-checklist.md](references/im
 ## ❌ Critical Anti-patterns
 
 1. **Don't reimplement layout** — MAUI's `CrossPlatformMeasure`/`CrossPlatformArrange` handles all positioning. Your handler just sets native view frames/bounds.
-2. **Don't skip the DispatchProxy workaround for alerts** — `AlertManager` and `IAlertManagerSubscription` are internal. You MUST use `DispatchProxy` + reflection. There is no alternative.
-3. **Don't use `MainThread.BeginInvokeOnMainThread`** — it throws on custom backends. Use `Application.Current?.Dispatcher.Dispatch()` instead.
-4. **Don't forget `SetDefault()` reflection for Essentials** — DI registration alone is NOT sufficient. Static `XXX.Default` properties still throw without the reflection workaround.
+2. **Don't intercept alerts by reflection** — `IAlertManagerSubscription` is public in MAUI 11. Implement it and register it as a DI singleton; MAUI's `Window` subscribes its `AlertManager` itself when the page handler changes.
+3. **Don't forget the application dispatcher** — MAUI 11 bridges `MainThread` from the keyed `IDispatcher` under `typeof(IApplication)` (or the building thread's dispatcher). Register it in `UseMauiApp*` and call `builder.ConfigureEssentials()`, or `MainThread` throws.
+4. **Don't set Essentials facades by reflection** — register implementations in DI and call `builder.ConfigureEssentials()`; MAUI 11 assigns the static `XXX.Default` / `XXX.Current` properties during `Build()`.
 5. **Don't use the old naming convention** — it's `Microsoft.Maui.Platforms.[Platform.Name]`, NOT `Platform.Maui.[Platform]`. New backends live in `platforms/` in maui-labs, not standalone repos.
 6. **Don't eagerly create Shell page content** — only create content for the currently visible page. Eager creation triggers crashes (null references, premature layout). Discovered empirically across macOS and GTK4 backends.
 7. **Don't skip the image fallback chain** — `NSImage(fileName)` and similar APIs crash on missing files. Always implement a fallback chain (bundle resource → file path → named image → null).

@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
@@ -295,21 +294,9 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 			GtkMenuBarManager.ApplyToWindow(handler.PlatformView, page);
 		}
 
-		// Ensure AlertManager.Subscribe() is called so DI-registered
-		// IAlertManagerSubscription gets picked up for DisplayAlert etc.
-		if (window is Microsoft.Maui.Controls.Window mauiWindow)
-		{
-			try
-			{
-				var amProp = typeof(Microsoft.Maui.Controls.Window).GetProperty("AlertManager",
-					BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-				var alertManager = amProp?.GetValue(mauiWindow);
-				var subscribe = alertManager?.GetType().GetMethod("Subscribe",
-					BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-				subscribe?.Invoke(alertManager, null);
-			}
-			catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"AlertManager setup failed: {ex.Message}"); }
-		}
+		// No AlertManager wiring here: MAUI's Window subscribes its AlertManager when the page
+		// handler changes and resolves the public IAlertManagerSubscription that
+		// GtkAlertManager.Register adds to DI.
 	}
 
 	public static void MapWidth(WindowHandler handler, IWindow window)

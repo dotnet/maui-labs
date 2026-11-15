@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.ApplicationModel;
@@ -7,14 +6,22 @@ using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Storage;
 #if WPF
 using Microsoft.Maui.Platforms.Windows.WPF.Essentials;
+using Microsoft.Maui.Controls.Hosting.WPF;
+using BackendFallbackService = Microsoft.Maui.Devices.IDeviceInfo;
+using EssentialsImplementation = Microsoft.Maui.Platforms.Windows.WPF.Essentials.WPFDeviceInfo;
 #else
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
+using BackendFallbackService = Microsoft.Maui.ApplicationModel.IAppInfo;
+using EssentialsImplementation = Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.AppModel.LinuxAppInfo;
 #endif
 
 [assembly: Xunit.CollectionBehavior(DisableTestParallelization = true)]
 
 namespace Essentials.Tests;
 
+// The facades are assigned by MAUI 11's Essentials initializer (ConfigureEssentials) from the
+// DI registrations the backend adds, and restored when the MauiApp is disposed.
 public class StaticFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     [Xunit.Fact]
@@ -67,8 +74,10 @@ public class StaticFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
                 var facade = serviceType.Assembly.GetType($"{serviceType.Namespace}.{serviceType.Name[1..]}", throwOnError: true)!;
                 var property = facade.GetProperty("Current") ?? facade.GetProperty("Default");
                 Assert.NotNull(property);
-                Assert.Same(app.Services.GetRequiredService(serviceType), property.GetValue(null));
-                output.WriteLine($"{facade.Name}.{property.Name} == DI {serviceType.Name}");
+                var implementation = app.Services.GetRequiredService(serviceType);
+                Assert.Same(implementation, property.GetValue(null));
+                Assert.StartsWith("Microsoft.Maui.Platforms.", implementation.GetType().Assembly.GetName().Name);
+                output.WriteLine($"{facade.Name}.{property.Name} == DI {serviceType.Name} ({implementation.GetType().Name})");
             }
         });
     }
@@ -95,6 +104,76 @@ public class StaticFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
         });
     }
 
+    [Xunit.Fact]
+    public void Dispose_RestoresTheFacadesItAssigned()
+    {
+        Run(() =>
+        {
+            var before = FileSystem.Current;
+            var app = CreateBuilder().Build();
+            var injected = app.Services.GetRequiredService<IFileSystem>();
+            Assert.Same(injected, FileSystem.Current);
+            app.Dispose();
+            Assert.NotSame(injected, FileSystem.Current);
+            Assert.Same(before, FileSystem.Current);
+        });
+    }
+
+    [Xunit.Fact]
+    public void Build_BackendOnly_UsesBackendFallback()
+    {
+        Run(() =>
+        {
+            using var app = AddBackend(MauiApp.CreateBuilder()).Build();
+            var fallback = app.Services.GetRequiredService<BackendFallbackService>();
+            Assert.Equal(GetBackendAssembly(), fallback.GetType().Assembly);
+#if WPF
+            Assert.Same(fallback, DeviceInfo.Current);
+            Assert.Equal(DeviceIdiom.Desktop, DeviceInfo.Idiom);
+#else
+            Assert.Same(fallback, AppInfo.Current);
+#endif
+        });
+    }
+
+    [Xunit.Theory]
+    [Xunit.InlineData(true)]
+    [Xunit.InlineData(false)]
+    public void Build_BackendAndEssentials_EssentialsReplaceBackendFallback(bool essentialsFirst)
+    {
+        Run(() =>
+        {
+            var builder = MauiApp.CreateBuilder();
+            if (essentialsFirst)
+                AddEssentials(builder);
+            AddBackend(builder);
+            if (!essentialsFirst)
+                AddEssentials(builder);
+            Assert.Single(builder.Services, d => d.ServiceType == typeof(BackendFallbackService));
+            using var app = builder.Build();
+            var implementation = Assert.IsType<EssentialsImplementation>(app.Services.GetRequiredService<BackendFallbackService>());
+#if WPF
+            Assert.Same(implementation, DeviceInfo.Current);
+#else
+            Assert.Same(implementation, AppInfo.Current);
+#endif
+        });
+    }
+
+    [Xunit.Fact]
+    public void Build_BackendAndEssentials_KeepsAppRegistration()
+    {
+        Run(() =>
+        {
+            var builder = MauiApp.CreateBuilder();
+            var custom = new TestFileSystem();
+            builder.Services.AddSingleton<IFileSystem>(custom);
+            AddEssentials(AddBackend(builder));
+            using var app = builder.Build();
+            Assert.Same(custom, FileSystem.Current);
+        });
+    }
+
     static MauiAppBuilder CreateBuilder()
     {
         var builder = MauiApp.CreateBuilder();
@@ -102,25 +181,40 @@ public class StaticFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
         return builder;
     }
 
-    static void AddEssentials(MauiAppBuilder builder)
+    static MauiAppBuilder AddEssentials(MauiAppBuilder builder)
     {
 #if WPF
-        builder.UseWPFEssentials();
+        return builder.UseWPFEssentials();
 #else
-        builder.AddLinuxGtk4Essentials();
+        return builder.AddLinuxGtk4Essentials();
 #endif
     }
 
+    static MauiAppBuilder AddBackend(MauiAppBuilder builder)
+    {
+#if WPF
+        return builder.UseMauiAppWPF<TestApplication>();
+#else
+        return builder.UseMauiAppLinuxGtk4<TestApplication>();
+#endif
+    }
+
+    static System.Reflection.Assembly GetBackendAssembly()
+    {
+#if WPF
+        return typeof(Microsoft.Maui.Platforms.Windows.WPF.MauiWPFApplication).Assembly;
+#else
+        return typeof(Microsoft.Maui.Platforms.Linux.Gtk4.Platform.GtkThemeManager).Assembly;
+#endif
+    }
+
+    // Runs each test on a fresh thread (STA for WPF). Facade state is restored by
+    // disposing the MauiApp, which every test does.
     internal static void Run(Action action)
     {
         Exception? error = null;
         var thread = new Thread(() =>
         {
-            var fields = typeof(FileSystem).Assembly.GetTypes()
-                .Where(t => t.IsAbstract && t.IsSealed)
-                .SelectMany(t => t.GetFields(BindingFlags.Static | BindingFlags.NonPublic))
-                .Where(f => f.Name is "currentImplementation" or "defaultImplementation")
-                .Select(f => (Field: f, Value: f.GetValue(null))).ToArray();
             try
             {
                 action();
@@ -128,11 +222,6 @@ public class StaticFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
             catch (Exception ex)
             {
                 error = ex;
-            }
-            finally
-            {
-                foreach (var (field, value) in fields)
-                    field.SetValue(null, value);
             }
         });
 #if WPF
@@ -143,6 +232,8 @@ public class StaticFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
         if (error is not null)
             ExceptionDispatchInfo.Capture(error).Throw();
     }
+
+    public sealed class TestApplication : Microsoft.Maui.Controls.Application;
 
     sealed class TestFileSystem : IFileSystem
     {

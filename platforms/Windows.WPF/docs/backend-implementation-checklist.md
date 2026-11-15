@@ -191,7 +191,7 @@
 | [x] **DisplayActionSheet** | ✅ | Custom WPF `Window` with button list |
 | [x] **DisplayPromptAsync** | ✅ | Custom WPF `Window` with `TextBox` + OK/Cancel |
 
-> **⚠️ Known Extensibility Gap:** `AlertManager` and `IAlertManagerSubscription` are internal. We use `DispatchProxy` + reflection to intercept dialog requests. See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
+> **Resolved in MAUI 11:** `WPFAlertManagerSubscription` implements the public `IAlertManagerSubscription`, registered as a DI singleton. See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
 
 ---
 
@@ -381,7 +381,7 @@ Every handler inherits these property mappings from `RemapForControls()` in `App
 | [x] **Vibration** | `IVibration` | ✅ | Stub (N/A for desktop) |
 | [x] **Sensors** | Various | ✅ | Stubs for all sensors (Accelerometer, Barometer, Compass, Gyroscope, etc.) — N/A for desktop |
 
-> **⚠️ Known Extensibility Gap:** Essentials use internal `SetDefault()` methods. Custom backends must use reflection. See [dotnet/maui#34100](https://github.com/dotnet/maui/issues/34100).
+> **Resolved in MAUI 11:** `UseWPFEssentials()` only registers the implementations in DI; MAUI's `ConfigureEssentials()` initializer assigns them to the static facades during `Build()`. See [dotnet/maui#34100](https://github.com/dotnet/maui/issues/34100).
 
 ---
 
@@ -544,17 +544,11 @@ Every handler inherits these property mappings from `RemapForControls()` in `App
 
 ### Gap 1: Essentials Static `Default` Properties ([#34100](https://github.com/dotnet/maui/issues/34100))
 
-**Status:** ⚠️ Using reflection workaround in `EssentialsExtensions.cs`
-
-```csharp
-var setDefault = typeof(Preferences).GetMethod("SetDefault",
-    BindingFlags.Static | BindingFlags.NonPublic);
-setDefault?.Invoke(null, new object[] { new WPFPreferences() });
-```
+**Status:** ✅ Resolved in MAUI 11 — `UseWPFEssentials()` registers the implementations with `TryAddSingleton` and calls the public `builder.ConfigureEssentials()`. MAUI's Essentials initializer assigns every DI registration to its static facade during `Build()` and restores the previous values when the app is disposed. No reflection is involved. Without the Essentials package, `UseMauiAppWPF()` registers a minimal Desktop `IDeviceInfo` so `OnIdiom` still resolves; `UseWPFEssentials()` replaces it.
 
 ### Gap 2: `MainThread.BeginInvokeOnMainThread` ([#34101](https://github.com/dotnet/maui/issues/34101))
 
-**Status:** ⚠️ Documented — app developers should use `Dispatcher.Dispatch()` instead.
+**Status:** ✅ Resolved in MAUI 11 — `UseMauiAppWPF()` registers the WPF application dispatcher (keyed `IDispatcher` under `typeof(IApplication)`) and calls `ConfigureEssentials()`, whose initializer bridges `MainThread.IsMainThread` / `BeginInvokeOnMainThread` from that dispatcher.
 
 ### Gap 3: Resizetizer Extensibility ([#34102](https://github.com/dotnet/maui/issues/34102), [#34222](https://github.com/dotnet/maui/issues/34222))
 

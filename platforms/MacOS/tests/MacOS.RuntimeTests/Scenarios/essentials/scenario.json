@@ -1,0 +1,6 @@
+{
+  "name": "essentials",
+  "expectedCases": 3,
+  "expectedAssertions": 40,
+  "evidence": ["facades.json", "essentials.json", "assertions.txt"]
+}

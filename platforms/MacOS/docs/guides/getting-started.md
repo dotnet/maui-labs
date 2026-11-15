@@ -272,10 +272,16 @@ Add the Essentials package for macOS implementations of device APIs:
 builder.AddMacOSEssentials();
 ```
 
+`AddMacOSEssentials()` registers the implementations in dependency injection. When the app is
+built, MAUI's Essentials initializer assigns each one to its static facade (`AppInfo.Current`,
+`Preferences.Default`, ...), so the static APIs and injected services share one instance. To
+replace an implementation, register your own before calling `AddMacOSEssentials()` (or with
+`AddSingleton` after it).
+
 ## Tips
 
 - **SF Symbols**: Use SF Symbol names directly as `IconImageSource` values (e.g., `"gear"`, `"plus"`, `"square.and.arrow.up"`)
 - **Window size**: Set initial window size via `Window.Width` and `Window.Height` in your `App.CreateWindow()`
 - **Debug**: Use `open MyApp.app` to launch — the app runs independently of the terminal
 - **Hot reload**: Not currently supported — rebuild and relaunch for changes
-- **MainThread**: `MainThread.BeginInvokeOnMainThread()` is **not supported** — use `Dispatcher.Dispatch()` or `MainThreadHelper.BeginInvokeOnMainThread()` instead (see [Controls & Platform Notes](controls.md#dispatcher--threading))
+- **MainThread**: `MainThread.BeginInvokeOnMainThread()` and `MainThread.IsMainThread` work once the app is built; MAUI bridges them from the macOS dispatcher (see [Controls & Platform Notes](controls.md#dispatcher--threading))

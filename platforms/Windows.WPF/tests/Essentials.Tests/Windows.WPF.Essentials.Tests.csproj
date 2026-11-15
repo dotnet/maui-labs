@@ -10,6 +10,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="xunit" />
+    <!-- The backend's Controls reference does not flow here; the tests build apps with UseMauiAppWPF. -->
+    <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(MauiVersion)" />
     <ProjectReference Include="..\..\src\Windows.WPF.Essentials\Windows.WPF.Essentials.csproj" />
     <Compile Include="..\..\..\Shared\Essentials.Tests\StaticFacadeTests.cs" Link="StaticFacadeTests.cs" />
     <Compile Include="..\..\..\Shared\Essentials.Tests\FileSystemDirectoryTests.cs" Link="FileSystemDirectoryTests.cs" />

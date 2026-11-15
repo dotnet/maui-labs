@@ -25,10 +25,6 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 			Services = applicationContext.Services;
 
-			// Override MAUI's default DeviceInfo with our WPF implementation
-			// Must happen AFTER CreateMauiApp() because Build() sets the default
-			OverrideEssentialsDefaults();
-
 			Application = Services.GetRequiredService<IApplication>();
 
 			// Wire up ApplicationHandler (replaces removed SetApplicationHandler API)
@@ -40,37 +36,6 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			ThemeManager.ApplyThemeToApplication();
 
 			this.CreatePlatformWindow(Application, args);
-		}
-
-		/// <summary>
-		/// Override the static Essentials defaults that MAUI sets during Build().
-		/// This ensures OnIdiom, OnPlatform, etc. resolve correctly for WPF.
-		/// </summary>
-		void OverrideEssentialsDefaults()
-		{
-			var deviceInfo = Services.GetService<Microsoft.Maui.Devices.IDeviceInfo>()
-				?? new WPFDeviceInfoFallback();
-			var setter = typeof(Microsoft.Maui.Devices.DeviceInfo).GetMethod("SetCurrent",
-				System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
-				[typeof(Microsoft.Maui.Devices.IDeviceInfo)])
-				?? throw new MissingMethodException(typeof(Microsoft.Maui.Devices.DeviceInfo).FullName, "SetCurrent");
-			setter.Invoke(null, [deviceInfo]);
-		}
-
-		/// <summary>
-		/// Minimal IDeviceInfo for WPF that returns Desktop idiom.
-		/// Used as fallback when the Essentials project implementation isn't available via DI.
-		/// </summary>
-		sealed class WPFDeviceInfoFallback : Microsoft.Maui.Devices.IDeviceInfo
-		{
-			public string Model => "WPF";
-			public string Manufacturer => "Microsoft";
-			public string Name => Environment.MachineName;
-			public string VersionString => Environment.OSVersion.VersionString;
-			public Version Version => Environment.OSVersion.Version;
-			public Microsoft.Maui.Devices.DevicePlatform Platform => Microsoft.Maui.Devices.DevicePlatform.WinUI;
-			public Microsoft.Maui.Devices.DeviceIdiom Idiom => Microsoft.Maui.Devices.DeviceIdiom.Desktop;
-			public Microsoft.Maui.Devices.DeviceType DeviceType => Microsoft.Maui.Devices.DeviceType.Physical;
 		}
 
 		public static new MauiWPFApplication Current => (MauiWPFApplication)System.Windows.Application.Current;

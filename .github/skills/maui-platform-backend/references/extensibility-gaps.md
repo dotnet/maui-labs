@@ -8,21 +8,15 @@ These are known issues where MAUI's architecture makes it difficult for third-pa
 
 **Issue**: [dotnet/maui#34100](https://github.com/dotnet/maui/issues/34100)
 
-**Problem**: `Preferences.Default`, `FilePicker.Default`, `Clipboard.Default`, etc. use internal `SetDefault()` methods. DI registration alone is NOT sufficient — static properties resolve to reference assembly stubs that throw `NotImplementedInReferenceAssemblyException`.
+**Status**: ✅ Resolved in MAUI 11 by the public `builder.ConfigureEssentials()`.
 
-**Impact**: Any app code using `XXX.Default` (which is common and documented) crashes on custom backends.
+Register each implementation in DI and apply `ConfigureEssentials()` (MAUI's default builder already does). During `Build()`, MAUI's Essentials initializer assigns every registered Essentials interface to its static facade (`Preferences.Default`, `AppInfo.Current`, `WebAuthenticator.Default`, `AppActions.Current`, ...) and restores the previous facades when the app is disposed. No reflection:
 
-**Workaround**:
 ```csharp
-// For EACH Essentials service, register in DI AND set the static default via reflection:
-services.AddSingleton<IPreferences>(new MyPreferencesImpl());
-
-var setDefault = typeof(Preferences).GetMethod("SetDefault",
-    BindingFlags.Static | BindingFlags.NonPublic);
-setDefault?.Invoke(null, new object[] { new MyPreferencesImpl() });
+builder.Services.TryAddSingleton<IPreferences, MyPreferencesImpl>();
+// ... one TryAddSingleton per service ...
+builder.ConfigureEssentials();
 ```
-
-**Best practice**: Wrap all reflection calls in try/catch — internal API could change at any time.
 
 ---
 
@@ -30,16 +24,14 @@ setDefault?.Invoke(null, new object[] { new MyPreferencesImpl() });
 
 **Issue**: [dotnet/maui#34101](https://github.com/dotnet/maui/issues/34101)
 
-**Problem**: `MainThread.BeginInvokeOnMainThread()` throws on custom backends even though `Application.Current.Dispatcher` works fine.
+**Status**: ✅ Resolved in MAUI 11. `ConfigureEssentials()`'s initializer bridges `MainThread.IsMainThread` and `BeginInvokeOnMainThread` from the application dispatcher: the keyed `IDispatcher` registered under `typeof(IApplication)`, otherwise the dispatcher the backend's `IDispatcherProvider` returns on the thread that builds the app. Register a thread-independent application dispatcher in the backend's `UseMauiApp*` extension:
 
-**Workaround**:
 ```csharp
-// Replace MainThread usage with Dispatcher throughout your codebase:
-// ❌ MainThread.BeginInvokeOnMainThread(() => { ... });
-// ✅ Application.Current?.Dispatcher.Dispatch(() => { ... });
+builder.Services.TryAddKeyedSingleton<IDispatcher>(typeof(IApplication), (_, _) => new MyUiThreadDispatcher());
+builder.ConfigureEssentials();
 ```
 
-**Recommendation**: Document for app developers that `Dispatcher` should be used instead of `MainThread` for cross-platform compatibility with custom backends.
+If the backend wraps the service provider in its own `IMauiContext`, implement `IKeyedServiceProvider` on the wrapper so keyed lookups reach the container.
 
 ---
 
@@ -96,29 +88,13 @@ setDefault?.Invoke(null, new object[] { new MyPreferencesImpl() });
 
 **Issue**: [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104)
 
-**Problem**: `AlertManager` and `IAlertManagerSubscription` are internal types. Custom backends cannot subscribe to dialog requests through any public API.
-
-**Workaround**: Create a `DispatchProxy` implementation that intercepts method calls on the internal interface:
+**Status**: ✅ Resolved in MAUI 11 — `Microsoft.Maui.Controls.Platform.IAlertManagerSubscription` is public. Implement `OnAlertRequested`, `OnActionSheetRequested` and `OnPromptRequested`, show native dialogs and complete the arguments' result, then register the subscription as a DI singleton:
 
 ```csharp
-// 1. Get the internal types via reflection
-var amType = typeof(Window).Assembly
-    .GetType("Microsoft.Maui.Controls.Platform.AlertManager");
-var iamsType = amType.GetNestedType("IAlertManagerSubscription",
-    BindingFlags.Public | BindingFlags.NonPublic);
-
-// 2. Create a DispatchProxy that intercepts the three methods:
-//    - OnAlertRequested
-//    - OnActionSheetRequested
-//    - OnPromptRequested
-var proxy = DispatchProxy.Create(iamsType, typeof(YourAlertProxy));
-
-// 3. Register the proxy in DI
-services.AddSingleton(iamsType, proxy);
-
-// 4. In your proxy's Invoke method, extract parameters via reflection,
-//    show native dialogs, and complete the TaskCompletionSource result
+services.AddSingleton<IAlertManagerSubscription, MyAlertSubscription>();
 ```
+
+MAUI's `Window` subscribes its `AlertManager` when the page handler changes, so the backend needs no reflection to call `Subscribe()`.
 
 **Reference**: See `platforms/Linux.Gtk4/src/Linux.Gtk4/Platform/GtkAlertManager.cs` for a complete implementation.
 
@@ -131,8 +107,8 @@ services.AddSingleton(iamsType, proxy);
 **Problem**: MAUI's reference assemblies throw `NotImplementedInReferenceAssemblyException` when methods are called on unrecognized platforms. This happens when services aren't properly wired up before the app accesses them.
 
 **Workaround**: Ensure ALL service implementations are wired in via both:
-1. DI registration (`services.AddSingleton<IFoo>(new MyFoo())`)
-2. Static `SetDefault()` reflection (for Essentials services)
+1. DI registration (`services.TryAddSingleton<IFoo, MyFoo>()`)
+2. `builder.ConfigureEssentials()`, which assigns Essentials registrations to the static facades during `Build()`
 
 Guard app code that might run before DI is configured. Register services in the app host builder extension method, which runs early in the lifecycle.
 
@@ -142,10 +118,10 @@ Guard app code that might run before DI is configured. Register services in the 
 
 | Gap | Issue | Status | Workaround Complexity |
 |-----|-------|--------|-----------------------|
-| Essentials SetDefault | #34100 | 🔴 Open | Medium (reflection per service) |
-| MainThread | #34101 | 🔴 Open | Low (use Dispatcher) |
+| Essentials static facades | #34100 | ✅ Fixed (MAUI 11 `ConfigureEssentials`) | N/A |
+| MainThread | #34101 | ✅ Fixed (MAUI 11 dispatcher bridge) | N/A |
 | Resizetizer standalone | #34102 | ✅ Fixed | N/A |
 | Resizetizer extension | #34222 | 🔴 Open | Medium (AfterTargets hook) |
 | BlazorWebView | #34103 | 🔴 Open | Medium (replicate registrations) |
-| Alert/Dialog | #34104 | 🔴 Open | High (DispatchProxy + heavy reflection) |
+| Alert/Dialog | #34104 | ✅ Fixed (MAUI 11 public `IAlertManagerSubscription`) | N/A |
 | Reference assemblies | Related | N/A | Low (ensure early registration) |

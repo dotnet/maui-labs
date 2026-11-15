@@ -29,7 +29,9 @@ public class GtkMauiContext : IMauiContext
 		_services.AddSpecific(typeof(TService), static state => ((WeakReference)state).Target, new WeakReference(instance));
 	}
 
-	class WrappedServiceProvider : IServiceProvider
+	// Keyed lookups (e.g. the application IDispatcher MAUI keys to typeof(IApplication))
+	// pass through to the app container, as MAUI's own MauiContext does.
+	class WrappedServiceProvider : IServiceProvider, IKeyedServiceProvider
 	{
 		readonly ConcurrentDictionary<Type, (object State, Func<object, object?> Getter)> _scopeStatic = new();
 
@@ -55,5 +57,13 @@ public class GtkMauiContext : IMauiContext
 		{
 			_scopeStatic[type] = (state, getter);
 		}
+
+		public object? GetKeyedService(Type serviceType, object? serviceKey) =>
+			Inner is IKeyedServiceProvider keyed ? keyed.GetKeyedService(serviceType, serviceKey) : null;
+
+		public object GetRequiredKeyedService(Type serviceType, object? serviceKey) =>
+			Inner is IKeyedServiceProvider keyed
+				? keyed.GetRequiredKeyedService(serviceType, serviceKey)
+				: throw new InvalidOperationException("This service provider doesn't support keyed services.");
 	}
 }

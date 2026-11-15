@@ -130,27 +130,30 @@ All support standard macOS text editing behaviors (spell check, auto-correct, Se
 
 The platform provides a main-thread dispatcher using `DispatchQueue.MainQueue`.
 
-> **⚠️ Important:** `MainThread.BeginInvokeOnMainThread()` and `MainThread.InvokeOnMainThreadAsync()` from `Microsoft.Maui.ApplicationModel` will throw `NotImplementedInReferenceAssemblyException` on macOS AppKit. Use `Dispatcher` or `IDispatcher` instead:
+`UseMauiAppMacOS()` registers that dispatcher as the MAUI application dispatcher and applies
+MAUI 11's `ConfigureEssentials()`, so once the app is built the standard
+`Microsoft.Maui.ApplicationModel.MainThread` APIs work (`IsMainThread`,
+`BeginInvokeOnMainThread`, `InvokeOnMainThreadAsync`). They are bridged from the
+application dispatcher, with or without the Essentials package:
 
 ```csharp
-// ✅ Correct — use Dispatcher (available on any BindableObject / View)
+// ✅ MainThread (after builder.Build())
+MainThread.BeginInvokeOnMainThread(() => { /* UI work */ });
+
+// ✅ Dispatcher (available on any BindableObject / View)
 Dispatcher.Dispatch(() =>
 {
     myLabel.Text = "Updated";
 });
 
-// ✅ Correct — use IDispatcher from DI
+// ✅ IDispatcher from DI
 var dispatcher = serviceProvider.GetRequiredService<IDispatcher>();
 dispatcher.Dispatch(() => { /* UI work */ });
-
-// ✅ Correct — use MainThreadHelper from Essentials package
-MainThreadHelper.BeginInvokeOnMainThread(() => { /* UI work */ });
-
-// ❌ Throws NotImplementedInReferenceAssemblyException
-// MainThread.BeginInvokeOnMainThread(() => { });
 ```
 
-The `MainThreadHelper` class in `Microsoft.Maui.Platforms.MacOS.Essentials` provides a familiar static API as an alternative:
+Code that runs before the `MauiApp` is built (where `MainThread` would still throw
+`NotImplementedInReferenceAssemblyException`) can use `MainThreadHelper` from
+`Microsoft.Maui.Platforms.MacOS.Essentials`, which calls AppKit directly:
 
 ```csharp
 using Microsoft.Maui.Platforms.MacOS.Essentials;

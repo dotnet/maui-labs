@@ -32,7 +32,9 @@ namespace Microsoft.Maui.WPF
 			_services.AddSpecific(typeof(TService), static state => ((WeakReference)state).Target, new WeakReference(instance));
 		}
 
-		class WrappedServiceProvider : IServiceProvider
+		// Keyed lookups (e.g. the application IDispatcher MAUI keys to typeof(IApplication))
+		// pass through to the app container, as MAUI's own MauiContext does.
+		class WrappedServiceProvider : IServiceProvider, IKeyedServiceProvider
 		{
 			readonly ConcurrentDictionary<Type, (object, Func<object, object?>)> _scopeStatic = new();
 
@@ -58,6 +60,14 @@ namespace Microsoft.Maui.WPF
 			{
 				_scopeStatic[type] = (state, getter);
 			}
+
+			public object? GetKeyedService(Type serviceType, object? serviceKey) =>
+				Inner is IKeyedServiceProvider keyed ? keyed.GetKeyedService(serviceType, serviceKey) : null;
+
+			public object GetRequiredKeyedService(Type serviceType, object? serviceKey) =>
+				Inner is IKeyedServiceProvider keyed
+					? keyed.GetRequiredKeyedService(serviceType, serviceKey)
+					: throw new InvalidOperationException("This service provider doesn't support keyed services.");
 		}
 	}
 }

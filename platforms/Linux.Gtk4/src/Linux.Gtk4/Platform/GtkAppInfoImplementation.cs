@@ -5,9 +5,11 @@ using Microsoft.Maui.ApplicationModel;
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 
 /// <summary>
-/// IAppInfo implementation for GTK4/Linux.
+/// Fallback IAppInfo for GTK4/Linux, registered in DI by UseMauiAppLinuxGtk4.
 /// Provides RequestedTheme from GTK settings so MAUI's
-/// Application.PlatformAppTheme returns the correct value.
+/// Application.PlatformAppTheme returns the correct value when the
+/// Essentials package (LinuxAppInfo) is not used. MAUI's Essentials
+/// initializer assigns the registration to the AppInfo facade.
 /// </summary>
 class GtkAppInfoImplementation : IAppInfo
 {
@@ -39,22 +41,5 @@ class GtkAppInfoImplementation : IAppInfo
 		{
 			// Ignore if no settings app is available
 		}
-	}
-
-	/// <summary>
-	/// Sets this implementation as the static default so AppInfo.RequestedTheme works.
-	/// </summary>
-	public static void Register()
-	{
-		var instance = new GtkAppInfoImplementation();
-
-		// Set the static field used by AppInfo's static accessors
-		var field = typeof(AppInfo).GetField("currentImplementation", BindingFlags.Static | BindingFlags.NonPublic);
-		if (field == null)
-		{
-			System.Diagnostics.Debug.WriteLine("GtkAppInfoImplementation: Could not find 'currentImplementation' field on AppInfo. Theme detection may not work.");
-			return;
-		}
-		field.SetValue(null, instance);
 	}
 }
