@@ -1,43 +1,26 @@
-using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Controls.Internals;
+using Microsoft.Maui.Controls.Platform;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 
 /// <summary>
 /// Handles MAUI DisplayAlert, DisplayActionSheet, and DisplayPromptAsync
-/// using custom GTK4 dialog windows. Registers a DispatchProxy implementation
-/// of MAUI's internal IAlertManagerSubscription via DI so AlertManager.Subscribe()
-/// discovers it automatically.
-/// See: https://gist.github.com/Redth/fc07a982bcff79cf925168f241a12c95
+/// using custom GTK4 dialog windows. Registers an implementation of MAUI's
+/// public <see cref="IAlertManagerSubscription"/> via DI so the default
+/// AlertManager.Subscribe() discovers it automatically.
 /// </summary>
 public static class GtkAlertManager
 {
 /// <summary>
-/// Creates and registers a DispatchProxy for IAlertManagerSubscription via DI.
+/// Registers the GTK <see cref="IAlertManagerSubscription"/> via DI.
 /// MAUI's AlertManager.Subscribe() resolves this from DI before falling back
-/// to the platform-specific AlertRequestHelper.
+/// to its no-op default subscription.
 /// </summary>
 public static void Register(IServiceCollection services)
 {
-// MAUI 10.0.70 moved the interface out of AlertManager.
-var amType = typeof(Window).Assembly
-.GetType("Microsoft.Maui.Controls.Platform.AlertManager");
-
-var iamsType = typeof(Window).Assembly
-.GetType("Microsoft.Maui.Controls.Platform.IAlertManagerSubscription")
-?? amType?.GetNestedType("IAlertManagerSubscription", BindingFlags.Public | BindingFlags.NonPublic)
-?? throw new NotSupportedException($"Cannot register GTK dialogs: IAlertManagerSubscription was not found in {typeof(Window).Assembly.FullName}.");
-
-var proxyType = typeof(AlertSubscriptionProxy<>).MakeGenericType(iamsType);
-var createMethod = typeof(DispatchProxy)
-.GetMethods(BindingFlags.Public | BindingFlags.Static)
-.First(m => m.Name == "Create" && m.GetGenericArguments().Length == 2)
-.MakeGenericMethod(iamsType, proxyType);
-
-var proxy = createMethod.Invoke(null, null)!;
-
-services.AddSingleton(iamsType, proxy);
+services.AddSingleton<IAlertManagerSubscription>(new AlertSubscription());
 }
 
 static Gtk.Window? GetGtkWindow(object? page)
@@ -88,47 +71,30 @@ dialog.SetChild(box);
 return (dialog, box);
 }
 
-public class AlertSubscriptionProxy<T> : DispatchProxy
+public sealed class AlertSubscription : IAlertManagerSubscription
 {
-protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+public void OnAlertRequested(Page sender, AlertArguments arguments) => HandleAlert(sender, arguments);
+
+public void OnActionSheetRequested(Page sender, ActionSheetArguments arguments) => HandleActionSheet(sender, arguments);
+
+public void OnPromptRequested(Page sender, PromptArguments arguments) => HandlePrompt(sender, arguments);
+
+static void HandleAlert(Page sender, AlertArguments? alertArgs)
 {
-if (targetMethod == null || args == null)
-return null;
+if (alertArgs == null) return;
 
-switch (targetMethod.Name)
-{
-case "OnAlertRequested":
-HandleAlert(args);
-break;
-case "OnActionSheetRequested":
-HandleActionSheet(args);
-break;
-case "OnPromptRequested":
-HandlePrompt(args);
-break;
-}
-
-return null;
-}
-
-static void HandleAlert(object?[] args)
-{
-if (args.Length < 2 || args[1] == null) return;
-
-var alertArgs = args[1]!;
-var title = GetProp<string>(alertArgs, "Title") ?? "Alert";
-var message = GetProp<string>(alertArgs, "Message") ?? "";
-var accept = GetProp<string>(alertArgs, "Accept");
-var cancel = GetProp<string>(alertArgs, "Cancel");
-var result = GetProp<object>(alertArgs, "Result");
-var trySetResult = result?.GetType().GetMethod("TrySetResult");
+var title = alertArgs.Title ?? "Alert";
+var message = alertArgs.Message ?? "";
+var accept = alertArgs.Accept;
+var cancel = alertArgs.Cancel;
+var result = alertArgs.Result;
 
 GLib.Functions.IdleAdd(0, () =>
 {
-var gtkWindow = GetGtkWindow(args[0]);
+var gtkWindow = GetGtkWindow(sender);
 if (gtkWindow == null)
 {
-trySetResult?.Invoke(result, [false]);
+result.TrySetResult(false);
 return false;
 }
 
@@ -145,7 +111,7 @@ acceptBtn.OnClicked += (_, _) =>
 {
 if (responded) return;
 responded = true;
-trySetResult?.Invoke(result, [true]);
+result.TrySetResult(true);
 dialog.Close();
 };
 buttonBox.Append(acceptBtn);
@@ -158,7 +124,7 @@ cancelBtn.OnClicked += (_, _) =>
 {
 if (responded) return;
 responded = true;
-trySetResult?.Invoke(result, [false]);
+result.TrySetResult(false);
 dialog.Close();
 };
 buttonBox.Append(cancelBtn);
@@ -171,7 +137,7 @@ okBtn.OnClicked += (_, _) =>
 {
 if (responded) return;
 responded = true;
-trySetResult?.Invoke(result, [false]);
+result.TrySetResult(false);
 dialog.Close();
 };
 buttonBox.Append(okBtn);
@@ -182,7 +148,7 @@ dialog.OnCloseRequest += (_, _) =>
 if (!responded)
 {
 responded = true;
-trySetResult?.Invoke(result, [false]);
+result.TrySetResult(false);
 }
 return false;
 };
@@ -194,24 +160,22 @@ return false;
 });
 }
 
-static void HandleActionSheet(object?[] args)
+static void HandleActionSheet(Page sender, ActionSheetArguments? sheetArgs)
 {
-if (args.Length < 2 || args[1] == null) return;
+if (sheetArgs == null) return;
 
-var sheetArgs = args[1]!;
-var title = GetProp<string>(sheetArgs, "Title") ?? "";
-var cancel = GetProp<string>(sheetArgs, "Cancel") ?? "Cancel";
-var destruction = GetProp<string>(sheetArgs, "Destruction");
-var buttons = GetProp<IEnumerable<string>>(sheetArgs, "Buttons")?.ToArray() ?? Array.Empty<string>();
-var result = GetProp<object>(sheetArgs, "Result");
-var trySetResult = result?.GetType().GetMethod("TrySetResult");
+var title = sheetArgs.Title ?? "";
+var cancel = sheetArgs.Cancel ?? "Cancel";
+var destruction = sheetArgs.Destruction;
+var buttons = sheetArgs.Buttons?.ToArray() ?? Array.Empty<string>();
+var result = sheetArgs.Result;
 
 GLib.Functions.IdleAdd(0, () =>
 {
-var gtkWindow = GetGtkWindow(args[0]);
+var gtkWindow = GetGtkWindow(sender);
 if (gtkWindow == null)
 {
-trySetResult?.Invoke(result, [cancel]);
+result.TrySetResult(cancel);
 return false;
 }
 
@@ -227,7 +191,7 @@ btn.OnClicked += (_, _) =>
 {
 if (responded) return;
 responded = true;
-trySetResult?.Invoke(result, [btnText]);
+result.TrySetResult(btnText);
 dialog.Close();
 };
 box.Append(btn);
@@ -242,7 +206,7 @@ destroyBtn.OnClicked += (_, _) =>
 {
 if (responded) return;
 responded = true;
-trySetResult?.Invoke(result, [destruction]);
+result.TrySetResult(destruction);
 dialog.Close();
 };
 box.Append(destroyBtn);
@@ -253,7 +217,7 @@ cancelBtn.OnClicked += (_, _) =>
 {
 if (responded) return;
 responded = true;
-trySetResult?.Invoke(result, [cancel]);
+result.TrySetResult(cancel);
 dialog.Close();
 };
 box.Append(cancelBtn);
@@ -263,7 +227,7 @@ dialog.OnCloseRequest += (_, _) =>
 if (!responded)
 {
 responded = true;
-trySetResult?.Invoke(result, [cancel]);
+result.TrySetResult(cancel);
 }
 return false;
 };
@@ -274,26 +238,24 @@ return false;
 });
 }
 
-static void HandlePrompt(object?[] args)
+static void HandlePrompt(Page sender, PromptArguments? promptArgs)
 {
-if (args.Length < 2 || args[1] == null) return;
+if (promptArgs == null) return;
 
-var promptArgs = args[1]!;
-var title = GetProp<string>(promptArgs, "Title") ?? "Prompt";
-var message = GetProp<string>(promptArgs, "Message") ?? "";
-var accept = GetProp<string>(promptArgs, "Accept") ?? "OK";
-var cancel = GetProp<string>(promptArgs, "Cancel") ?? "Cancel";
-var placeholder = GetProp<string>(promptArgs, "Placeholder") ?? "";
-var initialValue = GetProp<string>(promptArgs, "InitialValue") ?? "";
-var result = GetProp<object>(promptArgs, "Result");
-var trySetResult = result?.GetType().GetMethod("TrySetResult");
+var title = promptArgs.Title ?? "Prompt";
+var message = promptArgs.Message ?? "";
+var accept = promptArgs.Accept ?? "OK";
+var cancel = promptArgs.Cancel ?? "Cancel";
+var placeholder = promptArgs.Placeholder ?? "";
+var initialValue = promptArgs.InitialValue ?? "";
+var result = promptArgs.Result;
 
 GLib.Functions.IdleAdd(0, () =>
 {
-var gtkWindow = GetGtkWindow(args[0]);
+var gtkWindow = GetGtkWindow(sender);
 if (gtkWindow == null)
 {
-trySetResult?.Invoke(result, [null]);
+result.TrySetResult(null);
 return false;
 }
 
@@ -317,7 +279,7 @@ cancelBtn.OnClicked += (_, _) =>
 {
 if (responded) return;
 responded = true;
-trySetResult?.Invoke(result, [null]);
+result.TrySetResult(null);
 dialog.Close();
 };
 
@@ -325,7 +287,7 @@ acceptBtn.OnClicked += (_, _) =>
 {
 if (responded) return;
 responded = true;
-trySetResult?.Invoke(result, [entry.GetBuffer().GetText()]);
+result.TrySetResult(entry.GetBuffer().GetText());
 dialog.Close();
 };
 
@@ -333,7 +295,7 @@ entry.OnActivate += (_, _) =>
 {
 if (responded) return;
 responded = true;
-trySetResult?.Invoke(result, [entry.GetBuffer().GetText()]);
+result.TrySetResult(entry.GetBuffer().GetText());
 dialog.Close();
 };
 
@@ -342,7 +304,7 @@ dialog.OnCloseRequest += (_, _) =>
 if (!responded)
 {
 responded = true;
-trySetResult?.Invoke(result, [null]);
+result.TrySetResult(null);
 }
 return false;
 };
@@ -355,12 +317,6 @@ entry.GrabFocus();
 
 return false;
 });
-}
-
-static TResult? GetProp<TResult>(object obj, string name)
-{
-var prop = obj.GetType().GetProperty(name);
-return prop != null ? (TResult?)prop.GetValue(obj) : default;
 }
 }
 }
