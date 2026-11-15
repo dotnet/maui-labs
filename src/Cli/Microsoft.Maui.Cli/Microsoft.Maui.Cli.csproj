@@ -69,6 +69,33 @@
     <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" Condition="'$(TargetFramework)' == 'net11.0'" />
   </ItemGroup>
 
+  <!-- `maui profile startup` injects the profiling helper into the app being profiled as a raw
+       assembly reference. The copy next to the CLI matches the CLI's own TFM (net11.0 for the
+       net11.0 tool), which would drag a System.Runtime 11 reference into a net10.0 app build.
+       Ship the helper's lowest TFM build in Build/ (next to the injection targets) from every CLI
+       TFM, so the injected reference compiles for any app targeting that TFM or newer, including
+       the -android/-ios/-maccatalyst platform TFMs. Content in the output and publish directories
+       is what PackAsTool packs, so this file also ships in the tool package. -->
+  <PropertyGroup>
+    <MauiInjectedProfilingHelperTargetFramework>net9.0</MauiInjectedProfilingHelperTargetFramework>
+  </PropertyGroup>
+
+  <Target Name="IncludeInjectedProfilingHelper" BeforeTargets="AssignTargetPaths">
+    <MSBuild Projects="..\Microsoft.Maui.ProfilingHelper\Microsoft.Maui.ProfilingHelper.csproj"
+             Targets="Build"
+             Properties="TargetFramework=$(MauiInjectedProfilingHelperTargetFramework)"
+             RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir">
+      <Output TaskParameter="TargetOutputs" ItemName="_MauiInjectedProfilingHelperAssembly" />
+    </MSBuild>
+
+    <ItemGroup>
+      <None Include="@(_MauiInjectedProfilingHelperAssembly)"
+            Link="Build\%(Filename)%(Extension)"
+            CopyToOutputDirectory="PreserveNewest"
+            CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.Cli.UnitTests" />
     <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Tests" />
