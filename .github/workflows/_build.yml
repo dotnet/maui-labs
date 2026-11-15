@@ -67,7 +67,7 @@ on:
         required: false
         type: string
         default: ''
-        description: 'Xcode version to select on macOS (e.g. "26.0.1"). Empty uses runner default.'
+        description: 'Xcode version to select on macOS (e.g. "27.2"). Empty uses runner default.'
       skip-xcode-version-validation:
         required: false
         type: boolean
@@ -267,7 +267,7 @@ jobs:
 
           dotnet publish src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj \
             -c Release \
-            -f net10.0 \
+            -f net11.0 \
             -r "$rid" \
             -p:PublishAot=true \
             -p:PublishTrimmed=true \
@@ -275,7 +275,7 @@ jobs:
             -p:TreatWarningsAsErrors=true \
             --self-contained true
 
-          publish_dir="artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/$rid/publish"
+          publish_dir="artifacts/bin/Microsoft.Maui.Cli/Release/net11.0/$rid/publish"
           cli_path="$publish_dir/maui"
           commands_json="$(mktemp)"
           agents_json="$(mktemp)"
