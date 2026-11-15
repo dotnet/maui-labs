@@ -44,7 +44,7 @@ This skill guides the creation of **Native Library Interop (Slim Bindings)** for
 | libraryName | yes | `FirebaseMessaging`, `Lottie` | Name of the native iOS library to bind |
 | bindingProjectName | yes | `MyBinding.MaciOS` | Name for the C# binding project |
 | dependencySource | no | `cocoapods`, `spm`, `xcframework` | How the native library is distributed |
-| targetFrameworks | no | `net10.0-ios;net10.0-maccatalyst` | Target frameworks (default: latest .NET iOS + Mac Catalyst) |
+| targetFrameworks | no | `net11.0-ios;net11.0-maccatalyst` | Target frameworks (default: latest .NET iOS + Mac Catalyst) |
 | exposedApis | no | List of specific APIs | Which native APIs to expose (helps scope the wrapper) |
 
 # Project Structure

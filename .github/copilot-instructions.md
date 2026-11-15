@@ -8,7 +8,7 @@ DevFlow targets multiple platforms via multi-targeting. The pattern:
 
 - **`Microsoft.Maui.DevFlow.Agent.Abstractions`** targets `net11.0` — all platform-agnostic code lives here (HTTP server, routing, `DevFlowAgentService` base class). No MAUI dependency.
 - **`Microsoft.Maui.DevFlow.Agent.Core`** targets `net11.0` — MAUI UI backend (`MauiDevFlowAgentService`, `VisualTreeWalker`). Depends on `Agent.Abstractions`.
-- **`Microsoft.Maui.DevFlow.Agent`** targets `net11.0-android`, `net11.0-ios`, `net11.0-maccatalyst`, `net11.0-macos`, `net11.0-windows10.0.19041.0` — platform-specific overrides. DevFlow resolves .NET MAUI 11 (see `UseMaui11Packages` in `Directory.Packages.props`).
+- **`Microsoft.Maui.DevFlow.Agent`** targets `net11.0-android`, `net11.0-ios`, `net11.0-maccatalyst`, `net11.0-macos`, `net11.0-windows10.0.19041.0` — platform-specific overrides. Every product resolves .NET MAUI 11 through `MicrosoftMauiControlsVersion` in `eng/Versions.props`.
 - **`Microsoft.Maui.DevFlow.Agent.Gtk`** targets `net11.0` — Linux/GTK-specific code.
 
 Use `#if` directives for platform code in multi-targeting projects:
@@ -283,7 +283,7 @@ jobs:
       project-name: {product}                       # CUSTOMIZE: lowercase, used in artifact names
       run-tests: true
       pack: true
-      install-workloads: true                       # CUSTOMIZE: set false for net10.0-only products (no MAUI TFMs)
+      install-workloads: true                       # CUSTOMIZE: set false for net11.0-only products (no MAUI TFMs)
       # os: '["macos-latest", "windows-latest"]'    # CUSTOMIZE: default is macOS + Windows
       # native-deps: 'sudo apt-get install ...'     # CUSTOMIZE: if Linux-only with native libs
 ```
@@ -292,7 +292,7 @@ jobs:
 
 | Input | Default | When to change |
 |-------|---------|---------------|
-| `install-workloads` | `true` | Set `false` if the product targets only `net10.0` (no MAUI TFMs) |
+| `install-workloads` | `true` | Set `false` if the product targets only `net11.0` (no MAUI TFMs) |
 | `os` | `["macos-latest", "windows-latest"]` | Override to `["ubuntu-24.04"]` for Linux-only products |
 | `native-deps` | *(empty)* | Provide an `apt-get install` command if the product needs native libraries (e.g., GTK4) |
 | `pack` | `false` | Set `true` if the product produces NuGet packages |
@@ -349,7 +349,7 @@ The official pipeline is **`eng/pipelines/devflow-official.yml`**. It handles Ar
 >
 > **Workload versioning:** Always pin workload installs with `--version <pinned>`. Check `_build.yml` for the current pinned version. Unpinned installs cause version drift between CI and official builds.
 >
-> **macOS/Apple builds:** Products targeting Apple TFMs (`net10.0-macos`, `-ios`, `-maccatalyst`) that are **pure managed C#** can build on Windows — the macOS workload provides Apple reference assemblies for cross-compilation, and MicroBuild signs on Windows automatically. Products with **native code** (e.g. Swift bindings) require a **two-stage build**: a macOS job that compiles native artifacts, then a Windows job that downloads them and packs/signs. Use `pool: { name: Azure Pipelines, vmImage: macos-latest-internal, os: macOS }` with `templateContext: outputs:` for the macOS stage. Add `sudo xcode-select` before workload install — check https://aka.ms/xcode-requirement for the required Xcode version. See the `EssentialsAI_macOS`/`EssentialsAI` job pair for the native two-stage pattern, and the `MacOS` job for the pure managed single-stage pattern.
+> **macOS/Apple builds:** Products targeting Apple TFMs (`net11.0-macos`, `-ios`, `-maccatalyst`) that are **pure managed C#** can build on Windows — the macOS workload provides Apple reference assemblies for cross-compilation, and MicroBuild signs on Windows automatically. Products with **native code** (e.g. Swift bindings) require a **two-stage build**: a macOS job that compiles native artifacts, then a Windows job that downloads them and packs/signs. Use `pool: { name: Azure Pipelines, vmImage: macos-latest-internal, os: macOS }` with `templateContext: outputs:` for the macOS stage. Add `sudo xcode-select` before workload install — check https://aka.ms/xcode-requirement for the required Xcode version. See the `EssentialsAI_macOS`/`EssentialsAI` job pair for the native two-stage pattern, and the `MacOS` job for the pure managed single-stage pattern.
 
 #### c) Conditional publish stage (at the bottom, after the other `publish_*_nuget` stages)
 

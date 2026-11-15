@@ -42,7 +42,7 @@ This skill guides the creation of **Native Library Interop (Slim Bindings)** for
 | libraryName | yes | `FirebaseMessaging`, `OkHttp` | Name of the native Android library to bind |
 | bindingProjectName | yes | `MyBinding.Android` | Name for the C# binding project |
 | dependencySource | no | `maven`, `aar`, `jar` | How the native library is distributed |
-| targetFrameworks | no | `net10.0-android` | Target frameworks (default: latest .NET Android) |
+| targetFrameworks | no | `net11.0-android` | Target frameworks (default: latest .NET Android) |
 | exposedApis | no | List of specific APIs | Which native APIs to expose (helps scope the wrapper) |
 | mavenCoordinates | no | `com.example:library:1.0.0` | Maven coordinates if library is from Maven repository |
 
@@ -182,7 +182,7 @@ dotnet package search "artifact=androidx.core:core" --source https://api.nuget.o
 
 ## Step 8: Customize Bindings with Metadata
 
-Edit `Transforms/Metadata.xml` to rename packages, classes, parameters, and remove internal types. Examine `obj/Debug/net10.0-android/api.xml` after building to construct correct XPath expressions.
+Edit `Transforms/Metadata.xml` to rename packages, classes, parameters, and remove internal types. Examine `obj/Debug/net11.0-android/api.xml` after building to construct correct XPath expressions.
 
 ## Step 9: Build and Verify
 

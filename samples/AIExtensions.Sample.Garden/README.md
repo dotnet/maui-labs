@@ -81,7 +81,7 @@ or reject it.
 ## Build & run
 
 ```bash
-dotnet build samples/AIExtensions.Sample.Garden -f net10.0-maccatalyst
+dotnet build samples/AIExtensions.Sample.Garden -f net11.0-maccatalyst
 ```
 
 Configure user secrets (shared across AI Extensions samples):
