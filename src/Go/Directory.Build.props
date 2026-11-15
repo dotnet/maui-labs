@@ -1,17 +1,16 @@
 <Project>
 
   <!--
-    Go builds independently within maui-labs. It uses its own global.json
-    (targeting .NET 11 preview, see src/Go/global.json) so it can consume
-    Microsoft.Maui.Controls preview packages, and it does not yet integrate
-    with Arcade SDK. Full Arcade integration (signing, versioning, official
-    CI publishing) is a future step.
+    Go builds independently within maui-labs. It targets net11.0 with the
+    repo-root .NET 11 SDK and the central MAUI 11 packages, and it does not
+    yet integrate with Arcade SDK. Full Arcade integration (signing,
+    versioning, official CI publishing) is a future step.
 
     This file's main job is to STOP THE WALK: MSBuild walks up the directory
     tree looking for Directory.Build.props and stops at the first one it
     finds. Without this file, Go projects inherit the repo-root
-    Directory.Build.props which imports Microsoft.DotNet.Arcade.Sdk — and
-    Arcade can't be resolved alongside the .NET 11 preview SDK that Go uses.
+    Directory.Build.props, which imports Microsoft.DotNet.Arcade.Sdk and its
+    signing/versioning/packaging infrastructure.
 
     See src/Comet/Directory.Build.props for the same pattern.
   -->
@@ -44,7 +43,7 @@
   <PropertyGroup>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">17.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">17.0</SupportedOSPlatformVersion>
-    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 

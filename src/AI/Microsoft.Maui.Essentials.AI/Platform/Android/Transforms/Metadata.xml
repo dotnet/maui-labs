@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <metadata>
   <attr path="/api/package[@name='com.microsoft.maui.essentials.ai']/*" name="visibility">internal</attr>
+  <!-- NativeChatStream is Kotlin-internal and only used inside the bridge. It implements the ML Kit
+       StreamingCallback interface, which lives in a runtime archive packaged with Bind="false".
+       The .NET 11 binding generator resolves that interface from the reference jar and would emit
+       a C# implements clause for a type that is never bound, so drop the class (and its nested
+       Event class) from the binding. -->
+  <remove-node path="/api/package[@name='com.microsoft.maui.essentials.ai']/class[@name='NativeChatStream']" />
+  <remove-node path="/api/package[@name='com.microsoft.maui.essentials.ai']/class[@name='NativeChatStream.Event']" />
 </metadata>

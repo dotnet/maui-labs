@@ -20,7 +20,7 @@ public sealed class BuildTargetsTests
                               BuildReference="false"
                               PrivateAssets="all"
                               MauiAppProjectReference="true"
-                              TargetFramework="net10.0" />
+                              TargetFramework="net11.0" />
             """);
 
         Assert.True(result.ExitCode == 0, result.Output);
@@ -36,7 +36,7 @@ public sealed class BuildTargetsTests
             workspace,
             """
             <MauiAppProjectReference Include="..\App\App.csproj"
-                                     TargetFramework="net10.0" />
+                                     TargetFramework="net11.0" />
             """);
 
         Assert.True(result.ExitCode == 0, result.Output);
@@ -52,7 +52,7 @@ public sealed class BuildTargetsTests
             workspace,
             """
             <MauiAppProjectReference Include="..\App\App.csproj"
-                                     TargetFramework="net10.0" />
+                                     TargetFramework="net11.0" />
             """,
             setOutputRoot: false);
 
@@ -60,7 +60,7 @@ public sealed class BuildTargetsTests
         AssertArtifactItem(workspace, expectedName: "App");
 
         var artifactPath = Path.GetFullPath(GetSingleArtifactPath(workspace));
-        var expectedRoot = Path.GetFullPath(Path.Combine(workspace.TestProjectDirectory, "obj", "maui-app-refs", "App", "net10.0")) + Path.DirectorySeparatorChar;
+        var expectedRoot = Path.GetFullPath(Path.Combine(workspace.TestProjectDirectory, "obj", "maui-app-refs", "App", "net11.0")) + Path.DirectorySeparatorChar;
         Assert.StartsWith(expectedRoot, artifactPath, PathComparison);
     }
 
@@ -74,7 +74,7 @@ public sealed class BuildTargetsTests
             workspace,
             $$"""
             <MauiAppProjectReference Include="..\App\App.csproj"
-                                     TargetFramework="net10.0"
+                                     TargetFramework="net11.0"
                                      OutputRoot="{{TestWorkspace.XmlEscape(outputRoot)}}" />
             """);
 
@@ -99,7 +99,7 @@ public sealed class BuildTargetsTests
             workspace,
             """
             <MauiAppProjectReference Include="..\App\App.csproj"
-                                     TargetFramework="net10.0" />
+                                     TargetFramework="net11.0" />
             """);
 
         Assert.True(result.ExitCode == 0, result.Output);
@@ -119,7 +119,7 @@ public sealed class BuildTargetsTests
             workspace,
             """
             <MauiAppProjectReference Include="..\App\App.csproj"
-                                     TargetFramework="net10.0"
+                                     TargetFramework="net11.0"
                                      PrivateAssets="none"
                                      ReferenceName="OverrideApp" />
             """);
@@ -163,7 +163,7 @@ public sealed class BuildTargetsTests
                               BuildReference="false"
                               PrivateAssets="all"
                               MauiAppProjectReference="true"
-                              TargetFramework="net10.0"
+                              TargetFramework="net11.0"
                               ReferenceName="IosStyleApp"
                               Properties="MauiAppRefSimulateAppBundle=true" />
             """);
@@ -193,7 +193,7 @@ public sealed class BuildTargetsTests
                               BuildReference="false"
                               PrivateAssets="all"
                               MauiAppProjectReference="true"
-                              TargetFramework="net10.0"
+                              TargetFramework="net11.0"
                               ReferenceName="TrailingSlashApp"
                               SetPlatformOutputPaths="false"
                               Properties="MauiAppRefSimulateAppBundle=true;AppBundleDir={{appBundleDir}}" />
@@ -224,7 +224,7 @@ public sealed class BuildTargetsTests
                               BuildReference="false"
                               PrivateAssets="all"
                               MauiAppProjectReference="true"
-                              TargetFramework="net10.0"
+                              TargetFramework="net11.0"
                               ReferenceName="PublishDirApp"
                               Properties="CustomAfterMicrosoftCommonTargets={{customAfterTargetsPath}}" />
             """,
@@ -261,7 +261,7 @@ public sealed class BuildTargetsTests
                               BuildReference="false"
                               PrivateAssets="all"
                               MauiAppProjectReference="true"
-                              TargetFramework="net10.0"
+                              TargetFramework="net11.0"
                               ReferenceName="WindowsStyleApp"
                               Properties="MauiAppRefSimulateAppInstaller=true" />
             """);
@@ -288,7 +288,7 @@ public sealed class BuildTargetsTests
                               BuildReference="false"
                               PrivateAssets="all"
                               MauiAppProjectReference="true"
-                              TargetFramework="net10.0"
+                              TargetFramework="net11.0"
                               Properties="CustomAfterMicrosoftCommonTargets={{customAfterTargetsPath}};MauiAppRefAppTargetsPath=missing.targets" />
             """,
             customAfterTargetsXml:
@@ -318,7 +318,7 @@ public sealed class BuildTargetsTests
                               BuildReference="false"
                               PrivateAssets="all"
                               MauiAppProjectReference="true"
-                              TargetFramework="net10.0" />
+                              TargetFramework="net11.0" />
             """);
 
         var outsideOutputRoot = Path.Combine(workspace.Root, "outside-output") + Path.DirectorySeparatorChar;
@@ -353,7 +353,7 @@ public sealed class BuildTargetsTests
                               BuildReference="false"
                               PrivateAssets="all"
                               MauiAppProjectReference="true"
-                              TargetFramework="net10.0" />
+                              TargetFramework="net11.0" />
             """);
 
         var baseIntermediateOutputPath = Path.Combine(workspace.Root, "obj") + Path.DirectorySeparatorChar;
@@ -429,7 +429,7 @@ public sealed class BuildTargetsTests
             Assert.True(File.Exists(parts[1]), "Expected app artifact file at " + parts[1]);
 
         Assert.Equal(Path.GetFullPath(workspace.AppProjectPath), Path.GetFullPath(parts[2]));
-        Assert.Equal("net10.0", parts[3]);
+        Assert.Equal("net11.0", parts[3]);
         Assert.Equal(expectedArtifactType, parts[4]);
         Assert.Equal("com.example.testapp", parts[5]);
         Assert.Equal(expectedInstallable.ToString().ToLowerInvariant(), parts[6]);
@@ -555,7 +555,7 @@ public sealed class BuildTargetsTests
                 """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                     <OutputType>Exe</OutputType>
                     <ApplicationId>com.example.testapp</ApplicationId>
                   </PropertyGroup>
@@ -604,7 +604,7 @@ public sealed class BuildTargetsTests
                   <Import Project="{{XmlEscape(propsPath)}}" />
 
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                 {{outputRootProperty}}
                   </PropertyGroup>
 

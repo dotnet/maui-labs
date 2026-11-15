@@ -15,7 +15,8 @@ public class WpfHybridPackagingTests
             "platforms", "Windows.WPF", "samples", "Windows.WPF.Sample", "Windows.WPF.Sample.csproj"));
 
         var framework = Assert.Single(project.Descendants("TargetFramework")).Value;
-        Assert.StartsWith("net10.0-windows10.0.", framework);
+        // Version-agnostic: the WPF backend moves between .NET majors on its own schedule.
+        Assert.Matches(@"^net\d+\.0-windows10\.0\.", framework);
         var content = Assert.Single(project.Descendants("Content"),
             element => (string?)element.Attribute("Update") == @"wwwroot\**");
         Assert.Equal("PreserveNewest", (string?)content.Element("CopyToOutputDirectory"));
