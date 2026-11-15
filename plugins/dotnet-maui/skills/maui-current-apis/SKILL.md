@@ -20,8 +20,8 @@ instead of generating stale Xamarin.Forms or early MAUI patterns.
      "Microsoft.Maui.Controls\\|UseMaui\\|MauiVersion" . 2>/dev/null
    ```
 
-2. Identify whether the project targets .NET 8, .NET 9, .NET 10, or multiple
-   versions. Do not assume `net10.0`.
+2. Identify whether the project targets .NET 8, .NET 9, .NET 10, .NET 11, or
+   multiple versions. Do not assume the latest (`net11.0`).
 3. Prefer APIs from `Microsoft.Maui.*` namespaces. Do not add `Xamarin.Forms` or
    `Xamarin.Essentials` namespaces to MAUI projects.
 4. If replacing an obsolete API, explain the replacement and why it matches the

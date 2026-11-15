@@ -4,7 +4,7 @@ scenarios:
 
     want to try the experimental MAUI Labs Linux
 
-    GTK4 backend without pretending there is an official net10.0-linux MAUI
+    GTK4 backend without pretending there is an official net11.0-linux MAUI
 
     TFM. What project shape and commands should I use?
 
@@ -38,13 +38,13 @@ scenarios:
   - type: output_contains
     value: maui-macos
   - type: output_contains
-    value: net10.0-macos
+    value: net11.0-macos
   - type: output_contains
     value: UseMauiAppMacOS
   - type: output_matches
     pattern: MACOS\b|TargetPlatform|#if\s+MACOS\b|AddMacOSEssentials
   rubric:
-  - Uses the AppKit template/package and net10.0-macos target
+  - Uses the AppKit template/package and net11.0-macos target
   - Shows UseMauiAppMacOS and AddMacOSEssentials where appropriate
   - Distinguishes AppKit macOS from Mac Catalyst/UIKit code paths
   - Calls out experimental backend parity checks

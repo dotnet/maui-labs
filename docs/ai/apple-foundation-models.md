@@ -23,17 +23,17 @@ streaming, and error behavior is defined in the
 
 ## Toolchain and build
 
-The OS 27 Foundation Models APIs require Xcode 27 and the corresponding .NET
-reference packs. Build from the repository root:
+The OS 27 Foundation Models APIs require Xcode 27. The .NET 11 Apple target
+frameworks already compile against the OS 27 SDKs. Build from the repository
+root:
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst
 ```
 
-Use `net10.0-ios27.0` or `net10.0-macos27.0` for those platforms.
-`UseXcode27Preview` selects reference-pack targets; it does not install or
-select Xcode. The official pipeline also builds unsuffixed Apple target
+Use `net11.0-ios` or `net11.0-macos` for those platforms. The build does not
+install or select Xcode. The official pipeline builds the Apple target
 frameworks against Xcode 27 with its validated compatibility settings.
 
 ## Registration
@@ -166,7 +166,7 @@ Run managed Mac Catalyst device tests:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst
 ```
 
 Model-dependent tests use `RequiresModel=true`. Runtime availability checks use

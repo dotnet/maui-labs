@@ -23,7 +23,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 
 ### Technology Stack
 
-- **.NET 11 SDK** (pinned in `global.json`, `rollForward: latestMinor`). Most products still target `net10.0`; **DevFlow targets `net11.0` with .NET MAUI 11**, opted in through `UseMaui11Packages` in `Directory.Packages.props`
+- **.NET 11 SDK** (pinned in `global.json`, `rollForward: latestMinor`). Every product targets `net11.0` (`net11.0-android`, `-ios`, `-maccatalyst`, `-macos`, `-windows`) with **.NET MAUI 11** (`MicrosoftMauiControlsVersion` in `eng/Versions.props`). Intentional down-level library targets remain: `netstandard2.0`/`net8.0` on `Microsoft.Maui.DevFlow.Client`, `net9.0` on `Microsoft.Maui.DevFlow.Driver`, and `net9.0` alongside `net11.0` on the `maui` CLI tool and `Microsoft.Maui.ProfilingHelper`. Those TFMs keep the .NET 10 runtime packages (see the end of `Directory.Packages.props`)
 - **C#** with `LangVersion: latest`, file-scoped namespaces
 - **Microsoft.DotNet.Arcade.Sdk** for build infrastructure
 - **Central Package Management** — all versions in `Directory.Packages.props`
@@ -74,7 +74,8 @@ npm ci
 ### Build Troubleshooting
 
 - If restore fails, check `NuGet.config` — feeds are internal dnceng proxies, not nuget.org
-- If workload errors occur: `dotnet workload install maui macos maui-tizen`
+- If workload errors occur: `dotnet workload install maui macos maui-tizen --version 11.0.100.1` (the workload set pinned in `.github/workflows/_build.yml`; 10.x workload sets cannot be installed on SDK 11)
+- Apple app heads need Xcode 27 (the .NET 11 Apple packs recommend 27.2); see https://aka.ms/xcode-requirement
 - SDK version mismatch: check `global.json` vs `dotnet --version`
 
 ## Testing
@@ -141,12 +142,13 @@ Full guidance: `.github/instructions/dependencies.instructions.md`.
 ## Comet node-backend (Compose/SwiftUI) development
 
 Comet is being refactored off MAUI handlers onto a retained **node backend**
-(Jetpack Compose on Android, SwiftUI on iOS). This path uses **.NET 11 preview**,
-pinned by `src/Comet/global.json` — NOT the repo-root .NET 10.
+(Jetpack Compose on Android, SwiftUI on iOS). This path uses a **.NET 11 preview SDK**,
+pinned by `src/Comet/global.json` — NOT the repo-root .NET 11 GA SDK.
 
 - **Run Comet builds from inside `src/Comet`.** Bare `dotnet` at the repo root
-  resolves the .NET 10 SDK (root `global.json`) and fails net11 targets with
-  NETSDK1045.
+  resolves the repo-root .NET 11 GA SDK (`global.json` is found from the current
+  directory) instead of Comet's pinned preview SDK, so Comet builds would run on
+  a different SDK and workload set than the one Comet is validated against.
 - **Host tests link Comet via a HintPath**, so rebuild it first:
   `dotnet build src/Comet/src/Comet/Comet.csproj -f net11.0-maccatalyst`
   before `dotnet test tests/Comet.Tests` — otherwise tests run a stale DLL.

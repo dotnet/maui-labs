@@ -27,7 +27,7 @@ All NuGet package versions are defined in **`Directory.Packages.props`** at the 
    ```xml
    <Project Sdk="Microsoft.NET.Sdk">
      <PropertyGroup>
-       <TargetFramework>net10.0</TargetFramework>
+       <TargetFramework>net11.0</TargetFramework>
        <IsPackable>true</IsPackable>
        <IsShipping>true</IsShipping>
        <PackageId>Microsoft.Maui.DevFlow.NewPackage</PackageId>

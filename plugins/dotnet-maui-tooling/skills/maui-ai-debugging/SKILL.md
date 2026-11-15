@@ -124,7 +124,7 @@ Multiple desktop apps can run simultaneously without conflicts.
 ### 2. Detect the TFM
 
 **IMPORTANT:** Before building, detect the correct Target Framework Moniker from the project.
-Do NOT assume `net10.0` — many projects use `net9.0`, `net8.0`, etc.
+Do NOT assume `net11.0` — many projects use `net10.0`, `net9.0`, etc.
 
 ```bash
 grep -i 'TargetFrameworks' *.csproj Directory.Build.props 2>/dev/null

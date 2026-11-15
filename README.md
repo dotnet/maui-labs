@@ -249,6 +249,10 @@ These are CI builds from `main` only — PR builds are not published. Use wildca
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development setup.
 
+The repository builds with the .NET 11 SDK pinned in `global.json`. Products target `net11.0`
+(and `net11.0-android`, `-ios`, `-maccatalyst`, `-macos`, `-windows`) with .NET MAUI 11; Comet
+uses its own .NET 11 preview SDK from `src/Comet/global.json`. Apple app heads need Xcode 27.
+
 For the formal DevFlow HTTP and WebSocket contract, see [`docs/DevFlow/spec`](docs/DevFlow/spec/README.md).
 
 For live app inspection and host setup, see the

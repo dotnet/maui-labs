@@ -1,7 +1,7 @@
 scenarios:
   - name: "Find the root cause of a missing API in Java resolution"
     prompt: |
-      In my net10.0-android direct binding, WidgetActivity is in
+      In my net11.0-android direct binding, WidgetActivity is in
       api.xml.class-parse but absent from api.xml and generated C#. The native
       inheritance is WidgetActivity -> VendorActivity -> FragmentActivity.
       The build succeeds with warnings. I have binding.binlog but no diagnosis.
@@ -61,7 +61,7 @@ scenarios:
 
   - name: "Do not generalize a malformed generic managedReturn failure"
     prompt: |
-      A net10.0-android binding property fails CS0738: the generated property
+      A net11.0-android binding property fails CS0738: the generated property
       does not implement IList<string> on its interface. I tried:
       <attr path="/api/package[@name='com.example']/class[@name='Gauge']/method[@name='getKeys' and count(parameter)=0]" name="managedReturn">System.Collections.IList&gt;System.String&lt;</attr>
       Now BG0000 says length must be non-negative. Does this prove generic

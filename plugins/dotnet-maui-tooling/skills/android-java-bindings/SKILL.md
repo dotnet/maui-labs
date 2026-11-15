@@ -151,7 +151,7 @@ native dependencies so NuGet can resolve them instead of bundling duplicates.
 For example, substituting the actual project and TFM:
 
 ```powershell
-dotnet build .\Example.Binding\Example.Binding.csproj -t:Rebuild -c Debug -f net10.0-android -v:diag -bl:binding.binlog *> binding-diagnostic.log
+dotnet build .\Example.Binding\Example.Binding.csproj -t:Rebuild -c Debug -f net11.0-android -v:diag -bl:binding.binlog *> binding-diagnostic.log
 ```
 
 Check the exit code and read the first causal error. Use `binlogtool` to inspect

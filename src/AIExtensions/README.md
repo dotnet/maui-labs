@@ -30,6 +30,6 @@ AI integration packages for .NET MAUI, built on [`Microsoft.Extensions.AI`](http
 
 ## Requirements
 
-- .NET 10
+- .NET 11
 
 > ⚠️ **These packages are experimental.** APIs may change between releases.

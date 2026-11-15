@@ -1,7 +1,7 @@
 ---
 name: maui-labs-platform-targeting
 description: >-
-  Target MAUI Labs desktop backends from MAUI apps. USE FOR: Linux GTK4 head projects, `maui-linux-gtk4`, `maui-macos`, `maui-wpf`, net10 desktop setup, `UseMauiAppLinuxGtk4`, AppKit vs Mac Catalyst, parity planning. DO NOT USE FOR: backend implementation, handlers, Essentials services.
+  Target MAUI Labs desktop backends from MAUI apps. USE FOR: Linux GTK4 head projects, `maui-linux-gtk4`, `maui-macos`, `maui-wpf`, net11 desktop setup, `UseMauiAppLinuxGtk4`, AppKit vs Mac Catalyst, parity planning. DO NOT USE FOR: backend implementation, handlers, Essentials services.
 ---
 
 # MAUI Labs Platform Targeting
@@ -39,10 +39,14 @@ consuming backends, not implementing them.
 These backends are experimental. Ask the user which controls, Essentials APIs,
 and desktop integrations are required before promising parity.
 
+All three backends build with the .NET 11 SDK on .NET MAUI 11: Linux heads
+target plain `net11.0`, macOS AppKit heads `net11.0-macos`, and WPF heads
+`net11.0-windows`.
+
 ## Linux GTK4
 
-Linux uses a separate head project because there is no official `net10.0-linux`
-MAUI TFM.
+Linux uses a separate head project that targets plain `net11.0`, because there
+is no official `net11.0-linux` MAUI TFM.
 
 Ubuntu/Debian:
 
@@ -90,7 +94,7 @@ dotnet new maui-macos -n MyApp.MacOS
 dotnet run --project MyApp.MacOS
 ```
 
-Manual projects target `net10.0-macos`, reference the AppKit backend packages,
+Manual projects target `net11.0-macos`, reference the AppKit backend packages,
 and call:
 
 ```csharp
@@ -113,7 +117,7 @@ dotnet new maui-wpf -n MyApp.WPF
 dotnet run --project MyApp.WPF
 ```
 
-Manual projects target `net10.0-windows`, set both `UseWPF` and `UseMaui`,
+Manual projects target `net11.0-windows`, set both `UseWPF` and `UseMaui`,
 reference the WPF backend packages, and call:
 
 ```csharp

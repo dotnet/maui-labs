@@ -10,7 +10,7 @@ It is to Comet what **Expo Go** is to React Native or **DartPad** is to Flutter:
 
 | Project | Description |
 |---------|-------------|
-| [`Server/`](Server/) | `Microsoft.Maui.Go.Server` — file-watching dev server. Compiles `.cs` deltas with Roslyn and pushes them over WebSocket. Targets `net10.0`, runs on your dev machine. |
+| [`Server/`](Server/) | `Microsoft.Maui.Go.Server` — file-watching dev server. Compiles `.cs` deltas with Roslyn and pushes them over WebSocket. Targets `net11.0`, runs on your dev machine. |
 | [`CompanionApp/`](CompanionApp/) | `Microsoft.Maui.Go.CompanionApp` — the on-device runtime. A MAUI + Comet app that scans a QR code, connects to the server, applies metadata/IL/PDB deltas at runtime, and renders your view. Targets `net11.0-android;net11.0-ios;net11.0-maccatalyst` (+ Windows on Windows hosts). |
 | [`Shared/`](Shared/) | `Microsoft.Maui.Go.Shared` — wire protocol shared by server and companion (binary frames over WebSocket). |
 | [`spike/`](spike/) | Throwaway experiments — primarily `MetadataUpdaterSpike`, used to validate `System.Reflection.Metadata.MetadataUpdater` behaviour on each platform. |
@@ -42,7 +42,7 @@ Comet Go is meant to feel like Expo Go for .NET MAUI: install one tool, install 
 ### 1. Install prerequisites
 
 ```bash
-# .NET 11 SDK preview (Comet targets net11.0)
+# .NET 11 SDK (Go and Comet target net11.0)
 # Download from https://dotnet.microsoft.com/download/dotnet/11.0
 
 # MAUI workload (only needed once, for the companion app)
@@ -170,7 +170,7 @@ The server strips these lines before compilation, preserving line numbers so err
 
 ## Requirements
 
-- **.NET 11 SDK preview** — `src/Go/global.json` pins the version with `rollForward: latestPrerelease`, mirroring Comet.
+- **.NET 11 SDK** — Go uses the repo-root `global.json` (SDK 11.0.100) and the central .NET MAUI 11 version. The companion app references Comet, which is validated against its own preview SDK in `src/Comet/global.json`.
 - **MAUI workload** — `dotnet workload install maui`. The companion app targets `net11.0-*` and pulls in the .NET 11 runtime packs through the workload.
 - **A device or simulator** — iOS Simulator, Android emulator, Mac Catalyst, or Windows.
 - **`DOTNET_MODIFIABLE_ASSEMBLIES=Debug`** — required so `MetadataUpdater` will accept deltas. Already wired up in `GoApp.CreateMauiApp`.

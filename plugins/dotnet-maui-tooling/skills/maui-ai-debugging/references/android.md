@@ -71,10 +71,10 @@ android device list                           # formatted list
 
 ```bash
 # Build and deploy to running emulator
-dotnet build -f net10.0-android -t:Run
+dotnet build -f net11.0-android -t:Run
 
 # Build only (no deploy)
-dotnet build -f net10.0-android
+dotnet build -f net11.0-android
 ```
 
 **Critical: Port forwarding after deploy** — the Android emulator runs in its own network.
