@@ -99,8 +99,11 @@ var response = await chat.GetResponseAsync(
 
 The provider registers `AIFunction` names, descriptions, and parameter schemas.
 Kotlin maps supported schema fields directly to Google's `FunctionSchema`;
-unrepresentable constraints (including `$ref`, `const`, and `additionalProperties`)
-are rejected, not removed. Return schemas do not constrain generation.
+unrepresentable constraints (including `$ref`, `const`, and dictionary
+`additionalProperties` schemas) are rejected, not removed. Before that, the
+client's MEAI schema transform drops `$schema` and `additionalProperties: false`,
+which strict MEAI and `[AIToolSource]` tools emit on every object. ML Kit cannot
+express closed objects, and arguments bind by name. Return schemas do not constrain generation.
 Parameterless functions omit the native parameter schema: supplying an empty
 object schema caused AICore `countTokens` to fail with tokenization error 10003.
 The shared function suite covers parameterless invocation in both response modes.
@@ -210,13 +213,14 @@ Status queries propagate errors if ML Kit cannot resolve the selected model.
 
 ## Structured output
 
-Explicit MEAI JSON schemas use ML Kit's typed generation API through public
-runtime schema providers. The selected model must advertise
+Explicit MEAI JSON schemas are applied as ML Kit's native response schema
+(AICore constrained decoding) through ML Kit SDK internals, so this path is
+experimental. The selected model must advertise
 `ChatModelCapability.StructuredOutput`. Both response methods support the
-schema path; streaming delivers one complete validated JSON update, not token
-deltas. Active tools and full thinking output cannot be combined with it.
-See [structured output](gemini-nano-structured-output.md) for schema limits,
-examples, and the Java service-provider packaging rules.
+schema path, and streaming delivers JSON text deltas validated at completion.
+Active tools and full thinking output cannot be combined with it.
+See [structured output](gemini-nano-structured-output.md) for supported
+keywords, examples, and implementation details.
 
 ## Explicit download
 

@@ -7,6 +7,7 @@
 -keep class com.microsoft.maui.essentials.ai.NativeChatError { *; }
 -keep class com.microsoft.maui.essentials.ai.NativeCancellation { *; }
 -keep interface com.microsoft.maui.essentials.ai.NativeChatCallback { *; }
--keepattributes Signature
--keep class com.microsoft.maui.essentials.ai.NativeResponseObject* { *; }
--keep class * implements com.google.mlkit.genai.schema.guided.GenerableProvider { *; }
+# Structured output sets ML Kit's internal AICore response-schema field by type.
+-keepclassmembers class * extends com.google.android.gms.internal.mlkit_genai_prompt.zzim {
+    com.google.android.gms.internal.mlkit_genai_prompt.zzip *;
+}

@@ -155,6 +155,38 @@ public class GeminiNanoChatClientInteropTests
 		Assert.Same(function, Assert.Single(options.Tools));
 	}
 
+	[Fact]
+	public void ToNative_StrictToolSchemasDropOnlyClosedObjectMarkers()
+	{
+		var strict = new AIFunctionFactoryOptions
+		{
+			Name = "search",
+			JsonSchemaCreateOptions = new() { TransformOptions = new() { DisallowAdditionalProperties = true } },
+		};
+		var function = AIFunctionFactory.Create((string query, Filter? filter) => query, strict);
+		var clock = AIFunctionFactory.Create(() => "12:00",
+			new AIFunctionFactoryOptions { Name = "clock", JsonSchemaCreateOptions = strict.JsonSchemaCreateOptions });
+		Assert.False(function.JsonSchema.GetProperty("additionalProperties").GetBoolean());
+		using var request = GeminiNanoChatClient.ToNative([new(ChatRole.User, "hello")], new ChatOptions { Tools = [function, clock] });
+		var json = request.Options.ToolsJson!;
+		Assert.DoesNotContain("additionalProperties", json, StringComparison.Ordinal);
+		Assert.DoesNotContain("$schema", json, StringComparison.Ordinal);
+		using var tools = JsonDocument.Parse(json);
+		var parameters = tools.RootElement[0].GetProperty("parameters");
+		Assert.True(parameters.GetProperty("properties").GetProperty("filter").GetProperty("properties").TryGetProperty("track", out _));
+		Assert.Contains(parameters.GetProperty("required").EnumerateArray(), name => name.GetString() == "query");
+		Assert.False(function.JsonSchema.GetProperty("additionalProperties").GetBoolean());
+
+		// Schema-valued additionalProperties (dictionaries) stay intact so the native bridge rejects them.
+		var dictionary = AIFunctionFactory.Create((Dictionary<string, int> values) => values.Count, "count");
+		using var dictionaryRequest = GeminiNanoChatClient.ToNative([new(ChatRole.User, "hello")], new ChatOptions { Tools = [dictionary] });
+		using var dictionaryTools = JsonDocument.Parse(dictionaryRequest.Options.ToolsJson!);
+		Assert.Equal("integer", dictionaryTools.RootElement[0].GetProperty("parameters").GetProperty("properties")
+			.GetProperty("values").GetProperty("additionalProperties").GetProperty("type").GetString());
+	}
+
+	public sealed record Filter(string Track);
+
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]

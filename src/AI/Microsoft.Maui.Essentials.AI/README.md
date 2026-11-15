@@ -154,11 +154,13 @@ update when a provider emits no incremental progress. For trimmed/AOT apps,
 pass source-generated `JsonSerializerOptions`, as above, for every structured
 response type.
 
-Gemini Nano supports an explicit object-schema subset. Structured streaming
-delivers complete JSON at the end of inference, and cannot be combined with
-active tools or full thinking output. See the
+Gemini Nano structured output is experimental: runtime schemas reach AICore's
+constrained decoding through ML Kit internals. Object-root schemas of any depth
+are supported, including nested and nullable collections. Structured streaming
+emits JSON deltas validated at completion, and cannot be combined with active
+tools or full thinking output. See the
 [Android structured-output guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-structured-output.md)
-for supported keywords and numeric limits.
+for supported keywords.
 
 ### Apple tools
 

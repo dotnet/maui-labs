@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using AndroidNative = Com.Microsoft.Maui.Essentials.AI;
 using Microsoft.Extensions.AI;
@@ -17,8 +18,10 @@ namespace Microsoft.Maui.Essentials.AI;
 /// included in the prompt by the Kotlin bridge, with in-memory images and native
 /// system instructions. Native tool calling requires ML Kit model support;
 /// use Microsoft.Extensions.AI function invocation middleware to execute returned calls.
-/// Structured output requires an explicit object JSON schema supported by the native bridge.
-/// Structured streaming emits a complete validated JSON update after inference, not token deltas.
+/// Structured output requires an explicit JSON schema. The schema is applied as ML Kit's native
+/// response schema (constrained decoding) through ML Kit SDK internals, so it is experimental.
+/// Structured streaming emits JSON text deltas; the complete text is validated against the schema
+/// before the response completes, so a stream can end with an error after partial JSON updates.
 /// Structured output cannot be combined with tools or full thinking output.
 /// Structured requests default to 512 output tokens when MaxOutputTokens is unspecified.
 /// Model download is explicit and observable; generation never downloads or falls back to a cloud provider.
@@ -35,6 +38,23 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 		DisallowAdditionalProperties = true,
 		RequireAllProperties = true,
 		MoveDefaultKeywordToDescription = true,
+	});
+	// ML Kit tool schemas cannot express closed objects or $schema. Arguments bind by name,
+	// so closed-object markers from strict MEAI and [AIToolSource] tools are safe to drop.
+	// The native bridge still rejects every other keyword it cannot represent.
+	private static readonly AIJsonSchemaTransformCache ToolSchemaTransformCache = new(new()
+	{
+		TransformSchemaNode = static (_, node) =>
+		{
+			if (node is JsonObject schema)
+			{
+				schema.Remove("$schema");
+				if (schema["additionalProperties"] is JsonValue additional &&
+					additional.TryGetValue<bool>(out var allowed) && !allowed)
+					schema.Remove("additionalProperties");
+			}
+			return node;
+		},
 	});
 	private readonly AndroidNative.GeminiNanoNativeClient _native;
 	private ChatClientMetadata? _metadata;
@@ -333,7 +353,7 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 				writer.WriteString("name", function.Name);
 				writer.WriteString("description", function.Description ?? "");
 				writer.WritePropertyName("parameters");
-				function.JsonSchema.WriteTo(writer);
+				ToolSchemaTransformCache.GetOrCreateTransformedSchema(function).WriteTo(writer);
 				writer.WriteEndObject();
 			}
 			writer.WriteEndArray();

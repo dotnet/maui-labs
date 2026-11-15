@@ -422,13 +422,15 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   disallowing additional properties as required by the native model. Reject
   schema-free JSON/prompt fallback before native work and malformed native JSON
   on completion.
-- **Android:** use the native typed API and runtime `GenerableProvider` metadata.
-  Require an explicit object schema and check the model's structured capability.
-  Normalize required/additional properties through MEAI, validate projected
-  results, and preserve caller history and native input usage. Reject schema-free
-  JSON or unrepresentable constraints before inference. Structured streaming
-  emits complete validated JSON at completion; active tools and full thinking
-  output cannot be combined with this path.
+- **Android:** build ML Kit's native response schema from the JSON schema and
+  apply it through ML Kit internals (AICore constrained decoding); no fixed
+  classes or shape limits. Require an explicit object-root schema and check the
+  model's structured capability. Normalize required/additional properties
+  through MEAI, validate the complete JSON against the schema, and preserve
+  caller history and native input usage. Reject schema-free JSON or
+  unrepresentable constraints before inference. Structured streaming emits text
+  deltas validated at completion; active tools and full thinking output cannot
+  be combined with this path.
 
 ## Response behavior
 

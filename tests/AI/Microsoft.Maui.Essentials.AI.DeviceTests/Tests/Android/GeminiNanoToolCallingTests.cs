@@ -54,6 +54,56 @@ public sealed class GeminiNanoToolCallingTests(ITestOutputHelper output)
 		Assert.Contains("ORCHARD_SECRET_7291", response.Text, StringComparison.Ordinal);
 	}
 
+	// [AIToolSource] and strict MEAI tools close every object schema with additionalProperties=false.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task Generate_ClosedObjectToolSchemas_ExecuteNatively(bool streaming)
+	{
+		const string modelId = "gemini-nano-preview-fast";
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+		using var client = new GeminiNanoChatClient();
+		var status = await GeminiNanoChatClient.GetModelStatusAsync(modelId, timeout.Token);
+		Assert.True(status.Capabilities?.Contains(ChatModelCapability.ToolCalling) == true,
+			$"{modelId} must be downloaded and advertise native tool calling: {status.Availability}.");
+		var calls = 0;
+		AIFunction Strict(Delegate method, string name, string description)
+		{
+			var function = AIFunctionFactory.Create(method, new AIFunctionFactoryOptions
+			{
+				Name = name,
+				Description = description,
+				JsonSchemaCreateOptions = new() { TransformOptions = new() { DisallowAdditionalProperties = true } },
+			});
+			Assert.False(function.JsonSchema.GetProperty("additionalProperties").GetBoolean());
+			return function;
+		}
+		var lookup = Strict((string key) =>
+		{
+			Assert.Equal("orchard", key);
+			Interlocked.Increment(ref calls);
+			return "ORCHARD_SECRET_7291";
+		}, "lookup_secret", "Reads a secret from the local database by key.");
+		var clock = Strict(() => "12:00", "current_time", "Returns the current local time.");
+		var options = new ChatOptions
+		{
+			ModelId = modelId,
+			Temperature = 0,
+			MaxOutputTokens = 256,
+			Instructions = "Use lookup_secret to retrieve the secret. After the tool result, answer with that exact result and do not call again.",
+			Tools = [clock, lookup],
+		};
+		using var invoking = client.AsBuilder().UseFunctionInvocation().Build();
+		ChatMessage[] messages = [new(ChatRole.User, "Use lookup_secret with key orchard and tell me the secret.")];
+		var response = streaming
+			? await CaptureStream(invoking.GetStreamingResponseAsync(messages, options, timeout.Token)).ToChatResponseAsync(cancellationToken: timeout.Token)
+			: await invoking.GetResponseAsync(messages, options, timeout.Token);
+		output.WriteLine(JsonSerializer.Serialize(new { response.ModelId, response.Text, Calls = calls }));
+		Assert.Equal(1, calls);
+		Assert.Contains("ORCHARD_SECRET_7291", response.Text, StringComparison.Ordinal);
+	}
+
 	private async IAsyncEnumerable<ChatResponseUpdate> CaptureStream(IAsyncEnumerable<ChatResponseUpdate> updates)
 	{
 		await foreach (var update in updates)

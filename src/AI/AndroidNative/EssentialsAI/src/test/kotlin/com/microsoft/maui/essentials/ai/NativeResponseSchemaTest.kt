@@ -1,233 +1,216 @@
 package com.microsoft.maui.essentials.ai
 
-import com.google.mlkit.genai.schema.annotations.Generable
-import com.google.mlkit.genai.schema.guided.GenerableProvider
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.runCurrent
-import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withContext
+import com.google.android.gms.internal.mlkit_genai_prompt.zzaap
+import com.google.android.gms.internal.mlkit_genai_prompt.zzacq
+import com.google.android.gms.internal.mlkit_genai_prompt.zzip
+import com.google.mlkit.genai.prompt.GenerateContentRequest
+import com.google.mlkit.genai.prompt.TextPart
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
-import java.util.ServiceLoader
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class NativeResponseSchemaTest {
     private val schema = """
         {"type":"object","additionalProperties":false,
          "required":["sentiment","confidence"],
-         "properties":{"sentiment":{"type":"string","enum":["positive","negative","neutral"]},
+         "properties":{"sentiment":{"type":"string","enum":["positive","negative","neutral"],"description":"Overall tone"},
                        "confidence":{"type":"integer","minimum":0,"maximum":100}}}
     """.trimIndent()
 
+    // MEAI GetResponseAsync<T> wraps non-object roots in {"data": ...} and keeps the nested "$schema".
+    private fun meaiWrapper(data: String) =
+        """{"type":"object","properties":{"data":$data},"additionalProperties":false,"required":["data"]}"""
+
+    private fun native(json: String): JSONObject = NativeResponseSchema.parse(json).native().zzv()
+
+    private fun assertRejected(json: String, output: String) {
+        assertThrows(output, IllegalArgumentException::class.java) { NativeResponseSchema.parse(json).validate(output) }
+    }
+
+    private fun textMessage(role: String, vararg text: String) =
+        NativeChatMessage(role, text.map { NativeContentPart(CONTENT_TEXT, it, null) }.toTypedArray())
+
     @Test
-    fun providersAreDiscoverableWithoutAnnotatedCarrierFields() {
-        val providers = ServiceLoader.load(GenerableProvider::class.java).toList()
-        assertEquals(16, providers.size)
-        NativeResponseProviders.classes.forEach { carrier ->
-            assertEquals(1, providers.count { it.targetClass == carrier })
-            assertNull(carrier.java.getAnnotation(Generable::class.java))
-            assertTrue(carrier.java.declaredFields.isEmpty())
+    fun nativeSchemaCarriesTypesDescriptionsEnumsBoundsAndRequiredProperties() {
+        val native = native(schema)
+        val properties = native.getJSONObject("properties")
+        assertEquals(listOf("sentiment", "confidence"),
+            native.getJSONArray("required").let { array -> (0 until array.length()).map(array::getString) })
+        assertEquals("Overall tone", properties.getJSONObject("sentiment").getString("description"))
+        assertEquals(3, properties.getJSONObject("sentiment").getJSONArray("enum").length())
+        assertEquals(0.0, properties.getJSONObject("confidence").getDouble("minimum"), 0.0)
+        assertEquals(100.0, properties.getJSONObject("confidence").getDouble("maximum"), 0.0)
+        assertNotEquals(properties.getJSONObject("sentiment").get("type"), properties.getJSONObject("confidence").get("type"))
+    }
+
+    @Test
+    fun dataIngestionCollectionSchemasMapDirectlyWithoutWrappers() {
+        val summaries = meaiWrapper("""{"${'$'}schema":"https://json-schema.org/draft/2020-12/schema","type":"array","items":{"type":"string"}}""")
+        val keywords = meaiWrapper("""{"${'$'}schema":"https://json-schema.org/draft/2020-12/schema","type":"array","items":{"type":"array","items":{"type":"string"}}}""")
+
+        val nested = native(keywords).getJSONObject("properties").getJSONObject("data")
+        assertTrue(nested.getJSONObject("items").has("items"))
+        assertFalse(nested.getJSONObject("items").getJSONObject("items").has("properties"))
+
+        NativeResponseSchema.parse(summaries).validate("""{"data":["one","two"]}""")
+        NativeResponseSchema.parse(keywords).validate("""{"data":[["a","b"],[],["c"]]}""")
+        assertRejected(keywords, """{"data":["a","b"]}""")
+        assertRejected(summaries, """{"data":[["a"]]}""")
+    }
+
+    @Test
+    fun nullableItemsPropertiesAndEnumsStayNullable() {
+        val json = meaiWrapper("""{"type":["array","null"],"items":{"type":["array","null"],"items":{"type":["string","null"],"enum":["a",null]}}}""")
+        val data = native(json).getJSONObject("properties").getJSONObject("data")
+        assertTrue(data.getBoolean("nullable"))
+        assertTrue(data.getJSONObject("items").getBoolean("nullable"))
+        assertTrue(data.getJSONObject("items").getJSONObject("items").getBoolean("nullable"))
+
+        val compiled = NativeResponseSchema.parse(json)
+        compiled.validate("""{"data":null}""")
+        compiled.validate("""{"data":[null,["a",null]]}""")
+        assertRejected(json, """{"data":[["b"]]}""")
+        assertRejected("""{"type":"object","properties":{"v":{"type":"string"}},"required":["v"]}""", """{"v":null}""")
+    }
+
+    @Test
+    fun deepObjectGraphsHaveNoShapeLimit() {
+        var json = """{"type":"string"}"""
+        val leafType = native("""{"type":"object","properties":{"v":{"type":"string"}}}""")
+            .getJSONObject("properties").getJSONObject("v").get("type")
+        var output = "\"leaf\""
+        repeat(40) { level ->
+            json = """{"type":"object","properties":{"n$level":$json,"id":{"type":"integer"}},"required":["n$level","id"],"additionalProperties":false}"""
+            output = """{"n$level":$output,"id":$level}"""
+        }
+        var native = native(json)
+        repeat(40) { level -> native = native.getJSONObject("properties").getJSONObject("n${39 - level}") }
+        assertEquals(leafType, native.get("type"))
+        NativeResponseSchema.parse(json).validate(output)
+    }
+
+    @Test
+    fun arrayBoundsAreNativeButRootsMustBeObjects() {
+        val array = meaiWrapper("""{"type":"array","items":{"type":"integer"},"minItems":1,"maxItems":3}""")
+        val data = native(array).getJSONObject("properties").getJSONObject("data")
+        assertEquals(1, data.getInt("minItems"))
+        assertEquals(3, data.getInt("maxItems"))
+        NativeResponseSchema.parse(array).validate("""{"data":[1,2]}""")
+        assertRejected(array, """{"data":[]}""")
+        assertRejected(array, """{"data":[1,2,3,4]}""")
+        listOf("""{"type":"array","items":{"type":"integer"}}""", """{"type":"boolean"}""",
+            """{"type":["object","null"],"properties":{"v":{"type":"string"}}}""").forEach { json ->
+            assertTrue(assertThrows(IllegalArgumentException::class.java) { NativeResponseSchema.parse(json) }
+                .message!!.contains("object root"))
         }
     }
 
     @Test
-    fun runtimeMetadataPreservesNamesTypesAndNativeConstraints() {
-        val detail = NativeResponseSchema.parse(schema).detail(0)
-        assertEquals(listOf("sentiment", "confidence"), detail.guideDetails.map { it.name })
-        assertEquals(String::class, detail.guideDetails[0].type)
-        assertArrayEquals(arrayOf("positive", "negative", "neutral"), detail.guideDetails[0].enumValues)
-        assertEquals(Long::class, detail.guideDetails[1].type)
-        assertEquals(0.0, detail.guideDetails[1].minimum!!, 0.0)
-        assertEquals(100.0, detail.guideDetails[1].maximum!!, 0.0)
+    fun localReferencesResolveWithOverridesAndRecursionIsRejected() {
+        val json = """{"type":"object","${'$'}defs":{"point":{"type":"object","properties":{"x":{"type":"number"}},"required":["x"]}},
+            "properties":{"a":{"${'$'}ref":"#/${'$'}defs/point","description":"first"},"b":{"${'$'}ref":"#/${'$'}defs/point"}},"required":["a","b"]}"""
+        val native = native(json).getJSONObject("properties")
+        assertEquals("first", native.getJSONObject("a").getString("description"))
+        assertTrue(native.getJSONObject("b").getJSONObject("properties").has("x"))
+        NativeResponseSchema.parse(json).validate("""{"a":{"x":1.5},"b":{"x":-2}}""")
+
+        val recursive = """{"type":"object","properties":{"next":{"${'$'}ref":"#"}}}"""
+        assertTrue(assertThrows(IllegalArgumentException::class.java) { NativeResponseSchema.parse(recursive) }
+            .message!!.contains("recursive"))
     }
 
     @Test
-    fun doubleBackedSdkIntegersAreProjectedWithoutChangingTheirValue() {
-        val result = NativeResponseSchema.parse(schema).project(mapOf("sentiment" to "positive", "confidence" to 93.0))
-        assertEquals(93, JSONObject(result).getInt("confidence"))
-        assertTrue(result.contains("\"confidence\":93"))
-        assertFalse(result.contains("93.0"))
+    fun unsupportedSchemasFailBeforeInference() {
+        listOf(
+            """{"type":"object","properties":{"v":{"anyOf":[{"type":"string"},{"type":"integer"}]}}}""",
+            """{"type":"object","properties":{"v":{"type":["string","integer"]}}}""",
+            """{"type":"object","properties":{"v":{"type":"string","minLength":2}}}""",
+            """{"type":"object","properties":{"v":{"type":"integer","exclusiveMinimum":2}}}""",
+            """{"type":"object","properties":{"v":{"type":"integer","enum":[1,2]}}}""",
+            """{"type":"object","properties":{"v":{"type":"string","pattern":"("}}}""",
+            """{"type":"object","properties":{"v":{}}}""",
+            """{"type":"object","additionalProperties":{"type":"integer"}}""",
+            """{"type":"object","properties":{}}""",
+            """{"type":"object","properties":{"v":{"type":"string"}},"required":["w"]}""",
+            """{"type":"array"}""",
+            """{"type":"object","properties":{"v":{"${'$'}ref":"https://example.com/schema"}}}""",
+            """{"type":"object","properties":{"v":{"type":"array","items":{"type":"string"},"maxItems":-1}}}""",
+            "not json",
+        ).forEach { json ->
+            assertThrows(json, IllegalArgumentException::class.java) { validateSchema(json) }
+        }
     }
 
     @Test
-    fun normalTypedSchemasDoNotNeedArtificialIntegerBounds() {
-        val compiled = NativeResponseSchema.parse(schema.replace(",\"minimum\":0,\"maximum\":100", ""))
-        assertEquals(9007199254740991L,
-            JSONObject(compiled.project(mapOf("sentiment" to "positive", "confidence" to 9007199254740991.0)))
-                .getLong("confidence"))
-        assertTrue(runCatching {
-            compiled.project(mapOf("sentiment" to "positive", "confidence" to 9007199254740992.0))
-        }.exceptionOrNull() is IllegalArgumentException)
-    }
-
-    @Test
-    fun projectionRejectsConstraintsTheSdkFixtureValidatorDoesNotEnforce() {
+    fun validationEnforcesTheSchemaOnGeneratedText() {
         val compiled = NativeResponseSchema.parse(schema)
-        for (invalid in listOf(
-            mapOf("sentiment" to "invalid", "confidence" to 93.0),
-            mapOf("sentiment" to "positive", "confidence" to 101.0),
-            mapOf("sentiment" to "positive", "confidence" to 1.5),
-            mapOf("sentiment" to "positive", "confidence" to Double.NaN),
-            mapOf("sentiment" to "positive", "confidence" to Double.POSITIVE_INFINITY),
-            mapOf("sentiment" to "positive", "confidence" to 9007199254740992.0),
-            mapOf("sentiment" to "positive"),
-            mapOf("sentiment" to "positive", "confidence" to 93, "extra" to true),
-        )) {
-            assertTrue(runCatching { compiled.project(invalid) }.exceptionOrNull() is IllegalArgumentException)
-        }
+        compiled.validate("""  {"sentiment":"positive","confidence":90}  """)
+        compiled.validate("""{"sentiment":"neutral","confidence":5.0}""")
+        listOf(
+            """{"sentiment":"angry","confidence":90}""",
+            """{"sentiment":"positive","confidence":101}""",
+            """{"sentiment":"positive","confidence":1.5}""",
+            """{"sentiment":"positive"}""",
+            """{"sentiment":"positive","confidence":90,"extra":true}""",
+            """{"sentiment":1,"confidence":90}""",
+            """["positive",90]""",
+        ).forEach { assertRejected(schema, it) }
+
+        val open = """{"type":"object","properties":{"v":{"type":"string","pattern":"^[a-z]+${'$'}","format":"custom"}}}"""
+        NativeResponseSchema.parse(open).validate("""{"v":"abc","other":1}""")
+        NativeResponseSchema.parse(open).validate("""{}""")
+        assertRejected(open, """{"v":"ABC"}""")
+        assertEquals("custom", native(open).getJSONObject("properties").getJSONObject("v").getString("format"))
     }
 
     @Test
-    fun nestedObjectsAndStringListsProjectUsingDistinctCarrierMetadata() {
-        val compiled = NativeResponseSchema.parse("""
-            {"type":"object","additionalProperties":false,"required":["address","labels"],
-             "properties":{
-               "address":{"type":"object","additionalProperties":false,"required":["city","enabled"],
-                          "properties":{"city":{"type":"string"},"enabled":{"type":"boolean"}}},
-               "labels":{"type":"array","minItems":1,"maxItems":2,
-                         "items":{"type":"string","enum":["urgent","fragile"]}}}}
-        """.trimIndent())
-        assertEquals(NativeResponseObject1::class, compiled.detail(0).guideDetails[0].type)
-        assertEquals(listOf("city", "enabled"), compiled.detail(1).guideDetails.map { it.name })
-        val values = mapOf("address" to mapOf("city" to "Berlin", "enabled" to true),
-            "labels" to listOf("fragile", "urgent"))
-        val result = JSONObject(compiled.project(values))
-        assertEquals("Berlin", result.getJSONObject("address").getString("city"))
-        assertEquals(2, result.getJSONArray("labels").length())
-        for (labels in listOf(emptyList(), listOf("unknown"), listOf("urgent", "urgent", "urgent"))) {
-            assertTrue(runCatching { compiled.project(values + ("labels" to labels)) }
-                .exceptionOrNull() is IllegalArgumentException)
-        }
+    fun generatedTextMustBeStrictJson() {
+        val json = """{"type":"object","properties":{"v":{"type":"string"}},"required":["v"]}"""
+        NativeResponseSchema.parse(json).validate("""{"v":"\u00e9\n\"quoted\""}""")
+        listOf(
+            "```json\n{\"v\":\"x\"}\n```",
+            "{'v':'x'}",
+            "{v:\"x\"}",
+            "{\"v\":\"x\",}",
+            "{\"v\":\"x\"} trailing",
+            "{\"v\":\"x\",\"v\":\"y\"}",
+            "{\"v\":\"x\" /* comment */}",
+            "{\"v\":\"line\nbreak\"}",
+            "{\"v\":\"x\"",
+            "",
+        ).forEach { assertRejected(json, it) }
+        val number = """{"type":"object","properties":{"n":{"type":"number"}},"required":["n"]}"""
+        assertRejected(number, """{"n":01}""")
+        assertRejected(number, """{"n":NaN}""")
+        assertRejected(number, """{"n":1.}""")
     }
 
     @Test
-    fun nullableNumbersAndLocalReferencesRemainTyped() {
-        val compiled = NativeResponseSchema.parse("""
-            {"type":"object","required":["value","other"],"additionalProperties":false,
-             "properties":{"value":{"${"$"}ref":"#/${"$"}defs/value"},
-                           "other":{"type":["string","null"]}},
-             "${"$"}defs":{"value":{"type":"number","minimum":1,"maximum":2}}}
-        """.trimIndent())
-        assertEquals(Double::class, compiled.detail(0).guideDetails[0].type)
-        assertTrue(compiled.detail(0).guideDetails[1].nullable)
-        val result = JSONObject(compiled.project(mapOf("value" to 1.25, "other" to null)))
-        assertEquals(1.25, result.getDouble("value"), 0.0)
-        assertTrue(result.isNull("other"))
-        assertTrue(runCatching { compiled.project(mapOf("value" to 3.0, "other" to "x")) }
-            .exceptionOrNull() is IllegalArgumentException)
+    fun schemaPromptMatchesMlKitPlacementOnTheLastTextPart() {
+        val options = NativeChatOptions(null, null, null, null, false, null).apply { responseSchemaJson = schema }
+        val nativeSchema = NativeResponseSchema.parse(schema).native()
+        val messages = arrayOf(textMessage("system", "Be terse."), textMessage("user", "first", "second"))
+        val request = NativeChatRequest(messages, options).toNative(nativeSchema)
+
+        val texts = request.contents.flatMap { it.parts }.map { (it as TextPart).textString }
+        assertEquals(listOf("first", zzaap.zze("second", nativeSchema)), texts)
+        assertTrue(texts.last().startsWith("second"))
+        assertTrue(texts.last().contains(nativeSchema.zzv().toString()))
+        assertEquals("Be terse.", request.systemInstruction!!.textString)
+        assertEquals(listOf("first", "second"), NativeChatRequest(messages, options).toNative()
+            .contents.flatMap { it.parts }.map { (it as TextPart).textString })
     }
 
     @Test
-    fun rootReferencesRetainTheirDefinitionsAndRejectCycles() {
-        val json = """{"${"$"}ref":"#/${"$"}defs/result",
-            "${"$"}defs":{"result":{"type":"object","properties":{"value":{"type":"string"}},
-                "required":["value"],"additionalProperties":false}}}"""
-        val schema = NativeResponseSchema.parse(json)
-        assertEquals("hello", JSONObject(schema.project(mapOf("value" to "hello"))).getString("value"))
-        val cyclic = """{"${"$"}ref":"#/${"$"}defs/result",
-            "${"$"}defs":{"result":{"${"$"}ref":"#/${"$"}defs/result"}}}"""
-        assertTrue(runCatching { NativeResponseSchema.parse(cyclic) }.exceptionOrNull() is IllegalArgumentException)
-    }
-
-    @Test
-    fun nullableEnumsPreserveWhetherNullIsActuallyAllowed() {
-        val json = """{"type":"object","properties":{"value":{"type":["string","null"],"enum":["yes",null]}},
-            "required":["value"],"additionalProperties":false}"""
-        val nullable = NativeResponseSchema.parse(json)
-        assertTrue(nullable.detail(0).guideDetails.single().nullable)
-        assertTrue(JSONObject(nullable.project(mapOf("value" to null))).isNull("value"))
-        val nonNull = NativeResponseSchema.parse(json.replace("[\"yes\",null]", "[\"yes\"]"))
-        assertFalse(nonNull.detail(0).guideDetails.single().nullable)
-        assertTrue(runCatching { nonNull.project(mapOf("value" to null)) }.exceptionOrNull() is IllegalArgumentException)
-    }
-
-    @Test
-    fun unsupportedSchemasFailBeforeAnyModelOrRegistryUse() {
-        val invalid = listOf(
-            schema.replace("\"maximum\":100", "\"maximum\":9007199254740993"),
-            schema.replace("\"maximum\":100", "\"maximum\":100,\"multipleOf\":2"),
-            schema.replace("\"required\":[\"sentiment\",\"confidence\"]", "\"required\":[\"sentiment\"]"),
-            schema.replace("\"additionalProperties\":false", "\"additionalProperties\":true"),
-            schema.replace("\"type\":\"string\",\"enum\"", "\"type\":\"number\",\"enum\""),
-            """{"type":"object","properties":{},"required":[],"additionalProperties":false}""",
-            """{"type":"array","items":{"type":"string"}}""",
-            """{"type":"object","properties":{"a":{"type":"array","items":{"type":"integer","minimum":0,"maximum":10}}},
-                "required":["a"],"additionalProperties":false}""",
-            """{"type":"object","properties":{"a":{"${"$"}ref":"#"}},
-                "required":["a"],"additionalProperties":false}""",
-        )
-        invalid.forEach { json -> assertTrue(runCatching { NativeResponseSchema.parse(json) }.exceptionOrNull() is IllegalArgumentException) }
-    }
-
-    @Test
-    fun objectShapeLimitIsExplicitInsteadOfReusingIncorrectMetadata() {
-        var nested = """{"type":"string"}"""
-        repeat(17) {
-            nested = """{"type":"object","properties":{"child":$nested},"required":["child"],"additionalProperties":false}"""
-        }
-        val error = runCatching { NativeResponseSchema.parse(nested) }.exceptionOrNull()
-        assertTrue(error is IllegalArgumentException)
-        assertTrue(error!!.message!!.contains("at most 16 object shapes"))
-    }
-
-    @Test
-    fun concurrentSchemasRemainIsolatedAcrossSuspensionAndThreadChanges() = runTest {
-        val first = NativeResponseSchema.parse(schema)
-        val second = NativeResponseSchema.parse(schema.replace("sentiment", "different"))
-        val firstEntered = CompletableDeferred<Unit>()
-        val releaseFirst = CompletableDeferred<Unit>()
-        val secondEntered = CompletableDeferred<Unit>()
-        val a = async {
-            NativeResponseProviders.withSchema(first) {
-                firstEntered.complete(Unit)
-                releaseFirst.await()
-                withContext(Dispatchers.Default) {
-                    assertEquals("sentiment", NativeResponseProvider0().getGenerableDetail().guideDetails[0].name)
-                }
-            }
-        }
-        firstEntered.await()
-        val b = async {
-            NativeResponseProviders.withSchema(second) {
-                secondEntered.complete(Unit)
-                assertEquals("different", NativeResponseProvider0().getGenerableDetail().guideDetails[0].name)
-            }
-        }
-        runCurrent()
-        assertFalse(secondEntered.isCompleted)
-        releaseFirst.complete(Unit)
-        a.await()
-        b.await()
-        assertTrue(runCatching { NativeResponseProviders.detail(0) }.exceptionOrNull() is IllegalStateException)
-    }
-
-    @Test
-    fun cancellationFailureAndCancelledWaitersReleaseSchemaState() = runTest {
-        val compiled = NativeResponseSchema.parse(schema)
-        val entered = CompletableDeferred<Unit>()
-        val running = launch {
-            NativeResponseProviders.withSchema(compiled) {
-                entered.complete(Unit)
-                awaitCancellation()
-            }
-        }
-        entered.await()
-        val waiter = launch { NativeResponseProviders.withSchema(compiled) { error("Cancelled waiter entered.") } }
-        runCurrent()
-        waiter.cancelAndJoin()
-        running.cancelAndJoin()
-        assertTrue(runCatching { NativeResponseProviders.detail(0) }.exceptionOrNull() is IllegalStateException)
-        val failure = IllegalStateException("inference failed")
-        assertSame(failure, runCatching { NativeResponseProviders.withSchema(compiled) { throw failure } }.exceptionOrNull())
-        NativeResponseProviders.withSchema(compiled) {
-            assertEquals("sentiment", NativeResponseProviders.detail(0).guideDetails[0].name)
-        }
+    fun responseSchemaIsAppliedToTheSingleAicoreSchemaField() {
+        val nativeSchema = NativeResponseSchema.parse(schema).native()
+        val built = zzaap.zzg(zzacq(GenerateContentRequest.Builder(TextPart("hi")).build(), null, false), null, null)
+        val field = generateSequence<Class<*>>(built.javaClass) { it.superclass }
+            .flatMap { it.declaredFields.asSequence() }
+            .single { it.type == zzip::class.java }
+            .apply { isAccessible = true }
+        assertNull(field.get(built))
+        assertSame(built, applyResponseSchema(built, nativeSchema))
+        assertSame(nativeSchema, field.get(built))
     }
 }
