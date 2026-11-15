@@ -1,64 +1,32 @@
 #nullable enable
 using System;
 using System.Linq;
-using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Internals;
+using Microsoft.Maui.Controls.Platform;
 
 namespace Microsoft.Maui.Platforms.Windows.WPF
 {
-#pragma warning disable IL2026, IL2060, IL2080, IL2111 // Reflection required for internal IAlertManagerSubscription
-
 	/// <summary>
-	/// Uses DispatchProxy to implement MAUI's internal IAlertManagerSubscription interface,
-	/// routing alerts/prompts/action sheets to WPF dialogs.
+	/// Implements MAUI's public <see cref="IAlertManagerSubscription"/>, routing
+	/// alerts/prompts/action sheets to WPF dialogs. MAUI's default AlertManager
+	/// resolves it from DI when a window is created.
 	/// </summary>
-	public class WPFAlertManagerSubscription : DispatchProxy
+	public sealed class WPFAlertManagerSubscription : IAlertManagerSubscription
 	{
-		static readonly Type? AlertManagerType = typeof(Window).Assembly
-			.GetType("Microsoft.Maui.Controls.Platform.AlertManager");
-
-		// MAUI 10.0.70 moved the interface out of AlertManager.
-		static readonly Type? IAlertManagerSubscriptionType = typeof(Window).Assembly
-			.GetType("Microsoft.Maui.Controls.Platform.IAlertManagerSubscription")
-			?? AlertManagerType?.GetNestedType("IAlertManagerSubscription", BindingFlags.Public | BindingFlags.NonPublic);
-
 		public static void Register(IServiceCollection services)
 		{
-			if (IAlertManagerSubscriptionType == null)
-				throw new NotSupportedException($"Cannot register WPF dialogs: IAlertManagerSubscription was not found in {typeof(Window).Assembly.FullName}.");
-
-			var proxyType = typeof(WPFAlertManagerSubscriptionProxy<>).MakeGenericType(IAlertManagerSubscriptionType);
-			var createMethod = typeof(DispatchProxy)
-				.GetMethods(BindingFlags.Public | BindingFlags.Static)
-				.First(m => m.Name == "Create" && m.GetGenericArguments().Length == 2)
-				.MakeGenericMethod(IAlertManagerSubscriptionType, proxyType);
-
-			var proxy = createMethod.Invoke(null, null)!;
-			services.AddSingleton(IAlertManagerSubscriptionType, proxy);
+			services.AddSingleton<IAlertManagerSubscription>(new WPFAlertManagerSubscription());
 		}
 
-		internal static void HandleInvoke(MethodInfo? method, object?[]? args)
-		{
-			if (method == null || args == null)
-				return;
+		public void OnAlertRequested(Page sender, AlertArguments arguments) => HandleAlertRequested(sender, arguments);
 
-			switch (method.Name)
-			{
-				case "OnAlertRequested":
-					OnAlertRequested(args[0] as Page, args[1] as AlertArguments);
-					break;
-				case "OnPromptRequested":
-					OnPromptRequested(args[0] as Page, args[1] as PromptArguments);
-					break;
-				case "OnActionSheetRequested":
-					OnActionSheetRequested(args[0] as Page, args[1] as ActionSheetArguments);
-					break;
-			}
-		}
+		public void OnPromptRequested(Page sender, PromptArguments arguments) => HandlePromptRequested(sender, arguments);
 
-		static void OnAlertRequested(Page? sender, AlertArguments? arguments)
+		public void OnActionSheetRequested(Page sender, ActionSheetArguments arguments) => HandleActionSheetRequested(sender, arguments);
+
+		static void HandleAlertRequested(Page? sender, AlertArguments? arguments)
 		{
 			if (arguments == null) return;
 
@@ -164,7 +132,7 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			};
 		}
 
-		static void OnPromptRequested(Page? sender, PromptArguments? arguments)
+		static void HandlePromptRequested(Page? sender, PromptArguments? arguments)
 		{
 			if (arguments == null) return;
 
@@ -238,7 +206,7 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			arguments.SetResult(accepted ? textBox.Text : null);
 		}
 
-		static void OnActionSheetRequested(Page? sender, ActionSheetArguments? arguments)
+		static void HandleActionSheetRequested(Page? sender, ActionSheetArguments? arguments)
 		{
 			if (arguments == null) return;
 
@@ -269,9 +237,8 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 			string? selectedResult = null;
 
-			foreach (var button in arguments.Buttons)
+			foreach (var button in arguments.Buttons.OfType<string>())
 			{
-				if (button == null) continue;
 				var btn = CreateDialogButton(button);
 				var capturedButton = button;
 				btn.Click += (s, e) => { selectedResult = capturedButton; dialog.Close(); };
@@ -313,17 +280,6 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 				Margin = new System.Windows.Thickness(0, 2, 0, 2),
 				FontSize = 14,
 			};
-		}
-
-		protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
-	}
-
-	public class WPFAlertManagerSubscriptionProxy<T> : DispatchProxy
-	{
-		protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
-		{
-			WPFAlertManagerSubscription.HandleInvoke(targetMethod, args);
-			return null;
 		}
 	}
 }

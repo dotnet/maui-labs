@@ -274,10 +274,56 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 
 	public class WPFTextToSpeech : ITextToSpeech
 	{
+		const string SpeechAssemblyName = "System.Speech, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35";
+
 		public Task<IEnumerable<Locale>> GetLocalesAsync()
 		{
-			// Return empty locale list (Locale constructor is internal in MAUI 10)
-			return Task.FromResult<IEnumerable<Locale>>(Array.Empty<Locale>());
+			// MAUI 11 exposes Locale's constructor publicly. Report one Locale per enabled
+			// System.Speech voice, the same synthesizer SpeakAsync uses.
+			return Task.Run<IEnumerable<Locale>>(() =>
+			{
+				try
+				{
+					var speechAssembly = System.Reflection.Assembly.Load(SpeechAssemblyName);
+					var synthType = speechAssembly.GetType("System.Speech.Synthesis.SpeechSynthesizer");
+					if (synthType == null) return Array.Empty<Locale>();
+
+					var synth = Activator.CreateInstance(synthType);
+					try
+					{
+						var voices = synthType.GetMethod("GetInstalledVoices", Type.EmptyTypes)?.Invoke(synth, null)
+							as System.Collections.IEnumerable;
+						if (voices == null) return Array.Empty<Locale>();
+
+						return voices.Cast<object>()
+							.Where(voice => voice.GetType().GetProperty("Enabled")?.GetValue(voice) is true)
+							.Select(voice => voice.GetType().GetProperty("VoiceInfo")?.GetValue(voice))
+							.OfType<object>()
+							.Select(CreateLocale)
+							.ToList();
+					}
+					finally
+					{
+						(synth as IDisposable)?.Dispose();
+					}
+				}
+				catch
+				{
+					return Array.Empty<Locale>();
+				}
+			});
+		}
+
+		static Locale CreateLocale(object voiceInfo)
+		{
+			var voiceType = voiceInfo.GetType();
+			var culture = voiceType.GetProperty("Culture")?.GetValue(voiceInfo) as System.Globalization.CultureInfo;
+			var name = voiceType.GetProperty("Name")?.GetValue(voiceInfo) as string ?? culture?.DisplayName ?? string.Empty;
+			var id = voiceType.GetProperty("Id")?.GetValue(voiceInfo) as string ?? name;
+			var country = culture == null || culture.IsNeutralCulture || culture.Name.Length == 0
+				? string.Empty
+				: new System.Globalization.RegionInfo(culture.Name).TwoLetterISORegionName;
+			return new Locale(culture?.TwoLetterISOLanguageName ?? string.Empty, country, name, id);
 		}
 
 		public async Task SpeakAsync(string text, SpeechOptions? options = null, CancellationToken cancelToken = default)
@@ -291,7 +337,7 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 			{
 				try
 				{
-					var speechAssembly = System.Reflection.Assembly.Load("System.Speech, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
+					var speechAssembly = System.Reflection.Assembly.Load(SpeechAssemblyName);
 					var synthType = speechAssembly.GetType("System.Speech.Synthesis.SpeechSynthesizer");
 					if (synthType == null) return;
 
@@ -328,12 +374,12 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 			return Task.FromResult<FileResult?>(null);
 		}
 
-		public Task<IEnumerable<FileResult?>> PickMultipleAsync(PickOptions? options = null)
+		public Task<IEnumerable<FileResult>?> PickMultipleAsync(PickOptions? options = null)
 		{
 			var dialog = new Microsoft.Win32.OpenFileDialog { Multiselect = true };
 			if (dialog.ShowDialog() == true)
-				return Task.FromResult<IEnumerable<FileResult?>>(dialog.FileNames.Select(f => (FileResult?)new FileResult(f)));
-			return Task.FromResult<IEnumerable<FileResult?>>(Array.Empty<FileResult?>());
+				return Task.FromResult<IEnumerable<FileResult>?>(dialog.FileNames.Select(f => new FileResult(f)).ToList());
+			return Task.FromResult<IEnumerable<FileResult>?>(Array.Empty<FileResult>());
 		}
 	}
 }

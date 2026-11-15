@@ -1,20 +1,27 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Microsoft.Maui.Controls;
+using MauiDragEventArgs = Microsoft.Maui.Controls.DragEventArgs;
+using MauiPoint = Microsoft.Maui.Graphics.Point;
 
 namespace Microsoft.Maui.Platforms.Windows.WPF
 {
 	/// <summary>
 	/// Manages gesture recognizer attachment for WPF FrameworkElements.
-	/// Handles Tap, Pointer, Pan, Drag, Drop, and LongPress gestures.
+	/// Handles Tap, Pointer, Pan, Swipe, Drag, Drop, Pinch, and LongPress gestures.
 	/// </summary>
 	public static class GestureManager
 	{
+		/// <summary>
+		/// Private data format carrying the MAUI <see cref="DataPackage"/> from a
+		/// <see cref="DragGestureRecognizer"/> to a <see cref="DropGestureRecognizer"/>.
+		/// </summary>
+		const string DataPackageFormat = "Microsoft.Maui.Controls.DataPackage";
+
 		/// <summary>
 		/// Attached property storing gesture cleanup handlers. Uses a DependencyProperty
 		/// instead of FrameworkElement.Tag to avoid conflicts with other WPF code.
@@ -25,6 +32,8 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 				typeof(List<GestureCleanup>),
 				typeof(GestureManager),
 				new PropertyMetadata(null));
+
+		static int s_nextPanGestureId;
 
 		public static void SetupGestures(FrameworkElement platformView, IView virtualView)
 		{
@@ -59,14 +68,10 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 					case PinchGestureRecognizer pinch:
 						AddPinchGesture(platformView, pinch);
 						break;
+					case LongPressGestureRecognizer longPress:
+						AddLongPressGesture(platformView, longPress);
+						break;
 				}
-			}
-
-			// Check for LongPress via reflection (MAUI 10+)
-			foreach (var recognizer in mauiView.GestureRecognizers)
-			{
-				if (recognizer.GetType().Name == "LongPressGestureRecognizer")
-					AddLongPressGesture(platformView, recognizer);
 			}
 		}
 
@@ -104,26 +109,10 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		{
 			MouseButtonEventHandler handler = (s, e) =>
 			{
-				if (e.ClickCount >= tap.NumberOfTapsRequired)
-				{
-					// Use SendTapped which handles Command execution + Tapped event
-					var sendTapped = typeof(TapGestureRecognizer).GetMethod(
-						"SendTapped", BindingFlags.Instance | BindingFlags.NonPublic);
-					if (sendTapped != null)
-					{
-						var parent = FindParentView(tap);
-						var parameters = sendTapped.GetParameters();
-						if (parameters.Length == 1)
-							sendTapped.Invoke(tap, new object?[] { parent });
-						else if (parameters.Length == 2)
-							sendTapped.Invoke(tap, new object?[] { parent, null });
-					}
-					else
-					{
-						// Fallback: execute command directly
-						tap.Command?.Execute(tap.CommandParameter);
-					}
-				}
+				// SendTapped executes Command and raises Tapped; it requires the owning view.
+				var parent = FindParentView(tap);
+				if (e.ClickCount >= tap.NumberOfTapsRequired && parent != null)
+					tap.SendTapped(parent, CreateGetPosition(view, e.MouseDevice));
 			};
 
 			view.MouseLeftButtonUp += handler;
@@ -137,31 +126,48 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 		static void AddPointerGesture(FrameworkElement view, PointerGestureRecognizer pointer)
 		{
-			var sendEntered = typeof(PointerGestureRecognizer).GetMethod("SendPointerEntered", BindingFlags.Instance | BindingFlags.NonPublic);
-			var sendExited = typeof(PointerGestureRecognizer).GetMethod("SendPointerExited", BindingFlags.Instance | BindingFlags.NonPublic);
-			var sendMoved = typeof(PointerGestureRecognizer).GetMethod("SendPointerMoved", BindingFlags.Instance | BindingFlags.NonPublic);
-
+			// The PointerGestureRecognizer Send* methods require the owning view; a recognizer
+			// that has been detached from its view has nothing to report against.
 			MouseEventHandler enterHandler = (s, e) =>
 			{
 				var parent = FindParentView(pointer);
-				sendEntered?.Invoke(pointer, new object?[] { parent, null, null, ButtonsMask.Primary });
+				if (parent != null)
+					pointer.SendPointerEntered(parent, CreateGetPosition(view, e.MouseDevice));
 			};
 
 			MouseEventHandler leaveHandler = (s, e) =>
 			{
 				var parent = FindParentView(pointer);
-				sendExited?.Invoke(pointer, new object?[] { parent, null, null, ButtonsMask.Primary });
+				if (parent != null)
+					pointer.SendPointerExited(parent, CreateGetPosition(view, e.MouseDevice));
 			};
 
 			MouseEventHandler moveHandler = (s, e) =>
 			{
 				var parent = FindParentView(pointer);
-				sendMoved?.Invoke(pointer, new object?[] { parent, null, null, ButtonsMask.Primary });
+				if (parent != null)
+					pointer.SendPointerMoved(parent, CreateGetPosition(view, e.MouseDevice));
+			};
+
+			MouseButtonEventHandler pressedHandler = (s, e) =>
+			{
+				var parent = FindParentView(pointer);
+				if (parent != null)
+					pointer.SendPointerPressed(parent, CreateGetPosition(view, e.MouseDevice), button: ToButtonsMask(e.ChangedButton));
+			};
+
+			MouseButtonEventHandler releasedHandler = (s, e) =>
+			{
+				var parent = FindParentView(pointer);
+				if (parent != null)
+					pointer.SendPointerReleased(parent, CreateGetPosition(view, e.MouseDevice), button: ToButtonsMask(e.ChangedButton));
 			};
 
 			view.MouseEnter += enterHandler;
 			view.MouseLeave += leaveHandler;
 			view.MouseMove += moveHandler;
+			view.MouseDown += pressedHandler;
+			view.MouseUp += releasedHandler;
 
 			var cleanups = GetCleanups(view);
 			cleanups.Add(new GestureCleanup(() =>
@@ -169,8 +175,13 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 				view.MouseEnter -= enterHandler;
 				view.MouseLeave -= leaveHandler;
 				view.MouseMove -= moveHandler;
+				view.MouseDown -= pressedHandler;
+				view.MouseUp -= releasedHandler;
 			}));
 		}
+
+		static ButtonsMask ToButtonsMask(MouseButton button) =>
+			button == MouseButton.Right ? ButtonsMask.Secondary : ButtonsMask.Primary;
 
 		#endregion
 
@@ -178,8 +189,10 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 		static void AddPanGesture(FrameworkElement view, PanGestureRecognizer pan)
 		{
+			IPanGestureController controller = pan;
 			System.Windows.Point? startPoint = null;
 			bool isPanning = false;
+			int gestureId = 0;
 
 			MouseButtonEventHandler downHandler = (s, e) =>
 			{
@@ -190,39 +203,49 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 			MouseEventHandler moveHandler = (s, e) =>
 			{
-				if (startPoint == null || e.LeftButton != MouseButtonState.Pressed) return;
+				var parent = FindParentView(pan);
+				if (startPoint == null || parent == null || e.LeftButton != MouseButtonState.Pressed) return;
 
 				var current = e.GetPosition(view);
-				double deltaX = current.X - startPoint.Value.X;
-				double deltaY = current.Y - startPoint.Value.Y;
+				double totalX = current.X - startPoint.Value.X;
+				double totalY = current.Y - startPoint.Value.Y;
 
 				if (!isPanning)
 				{
 					isPanning = true;
-					// Send PanStarted
-					InvokePanMethod(pan, "SendPanStarted", FindParentView(pan), 0, 0);
+					gestureId = System.Threading.Interlocked.Increment(ref s_nextPanGestureId);
+					controller.SendPanStarted(parent, gestureId);
 				}
 
-				InvokePanMethod(pan, "SendPanRunning", FindParentView(pan), deltaX, deltaY);
+				controller.SendPan(parent, totalX, totalY, gestureId);
 			};
 
 			MouseButtonEventHandler upHandler = (s, e) =>
 			{
-				if (isPanning)
-				{
-					var current = e.GetPosition(view);
-					double deltaX = current.X - startPoint!.Value.X;
-					double deltaY = current.Y - startPoint.Value.Y;
-					InvokePanMethod(pan, "SendPanCompleted", FindParentView(pan), deltaX, deltaY);
-				}
+				var parent = FindParentView(pan);
+				var wasPanning = isPanning;
+				// Clear state first: releasing capture raises LostMouseCapture synchronously.
 				startPoint = null;
 				isPanning = false;
 				view.ReleaseMouseCapture();
+				if (wasPanning && parent != null)
+					controller.SendPanCompleted(parent, gestureId);
+			};
+
+			MouseEventHandler lostCaptureHandler = (s, e) =>
+			{
+				// Capture can be taken away mid-pan (e.g. by a dialog or Alt+Tab).
+				var parent = FindParentView(pan);
+				if (isPanning && parent != null)
+					controller.SendPanCanceled(parent, gestureId);
+				startPoint = null;
+				isPanning = false;
 			};
 
 			view.MouseLeftButtonDown += downHandler;
 			view.MouseMove += moveHandler;
 			view.MouseLeftButtonUp += upHandler;
+			view.LostMouseCapture += lostCaptureHandler;
 			EnsureHitTestable(view);
 
 			GetCleanups(view).Add(new GestureCleanup(() =>
@@ -230,24 +253,8 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 				view.MouseLeftButtonDown -= downHandler;
 				view.MouseMove -= moveHandler;
 				view.MouseLeftButtonUp -= upHandler;
+				view.LostMouseCapture -= lostCaptureHandler;
 			}));
-		}
-
-		static void InvokePanMethod(PanGestureRecognizer pan, string methodName, View? parent, double totalX, double totalY)
-		{
-			try
-			{
-				var method = typeof(PanGestureRecognizer).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
-				if (method != null)
-				{
-					var parms = method.GetParameters();
-					if (parms.Length == 3)
-						method.Invoke(pan, new object?[] { parent, totalX, totalY });
-					else if (parms.Length == 4)
-						method.Invoke(pan, new object?[] { parent, totalX, totalY, null });
-				}
-			}
-			catch { }
 		}
 
 		#endregion
@@ -288,18 +295,10 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 						direction = SwipeDirection.Up;
 				}
 
-				if (direction != null)
-				{
-					swipe.Command?.Execute(swipe.CommandParameter);
-					try
-					{
-						var method = typeof(SwipeGestureRecognizer).GetMethod("SendSwiped",
-							BindingFlags.Instance | BindingFlags.NonPublic);
-						var parent = FindParentView(swipe);
-						method?.Invoke(swipe, new object?[] { parent, direction.Value });
-					}
-					catch { }
-				}
+				// SendSwiped executes Command and raises Swiped.
+				var parent = FindParentView(swipe);
+				if (direction != null && parent != null)
+					swipe.SendSwiped(parent, direction.Value);
 
 				startPoint = null;
 			};
@@ -323,23 +322,22 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		{
 			MouseEventHandler moveHandler = (s, e) =>
 			{
-				if (e.LeftButton != MouseButtonState.Pressed) return;
+				var parent = FindParentView(drag);
+				if (e.LeftButton != MouseButtonState.Pressed || !drag.CanDrag || parent == null) return;
 
-				try
-				{
-					var data = new DataObject();
-					var parent = FindParentView(drag);
-					if (parent != null)
-						data.SetData("MauiDragSource", parent);
+				// SendDragStarting executes DragStartingCommand, raises DragStarting and fills the
+				// DataPackage; a canceled or handled drag must not start a WPF drag operation.
+				var args = drag.SendDragStarting(parent, CreateGetPosition(view, e.MouseDevice));
+				if (args.Cancel || args.Handled) return;
 
-					// Fire DragStarting
-					var method = typeof(DragGestureRecognizer).GetMethod("SendDragStarting",
-						BindingFlags.Instance | BindingFlags.NonPublic);
-					method?.Invoke(drag, new object?[] { parent });
+				var data = new DataObject();
+				data.SetData(DataPackageFormat, args.Data);
+				var text = args.Data.Text;
+				if (!string.IsNullOrEmpty(text))
+					data.SetText(text);
 
-					DragDrop.DoDragDrop(view, data, DragDropEffects.Copy | DragDropEffects.Move);
-				}
-				catch { }
+				DragDrop.DoDragDrop(view, data, DragDropEffects.Copy | DragDropEffects.Move);
+				drag.SendDropCompleted(new DropCompletedEventArgs());
 			};
 
 			view.MouseMove += moveHandler;
@@ -348,44 +346,63 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 		static void AddDropGesture(FrameworkElement view, DropGestureRecognizer drop)
 		{
-			view.AllowDrop = true;
+			view.AllowDrop = drop.AllowDrop;
 
 			DragEventHandler dragOverHandler = (s, e) =>
 			{
-				e.Effects = DragDropEffects.Copy;
 				e.Handled = true;
-				try
-				{
-					var method = typeof(DropGestureRecognizer).GetMethod("SendDragOver",
-						BindingFlags.Instance | BindingFlags.NonPublic);
-					var parent = FindParentView(drop);
-					method?.Invoke(drop, new object?[] { parent, null });
-				}
-				catch { }
+				var args = new MauiDragEventArgs(GetDataPackage(e.Data));
+				drop.SendDragOver(args);
+				e.Effects = drop.AllowDrop ? ToDragDropEffects(args.AcceptedOperation) : DragDropEffects.None;
 			};
 
-			DragEventHandler dropHandler = (s, e) =>
+			DragEventHandler dragLeaveHandler = (s, e) =>
+			{
+				drop.SendDragLeave(new MauiDragEventArgs(GetDataPackage(e.Data)));
+			};
+
+			DragEventHandler dropHandler = async (s, e) =>
 			{
 				e.Handled = true;
 				try
 				{
-					var method = typeof(DropGestureRecognizer).GetMethod("SendDrop",
-						BindingFlags.Instance | BindingFlags.NonPublic);
-					var parent = FindParentView(drop);
-					method?.Invoke(drop, new object?[] { parent, null });
+					await drop.SendDrop(new DropEventArgs(GetDataPackage(e.Data).View));
 				}
-				catch { }
+				catch (Exception ex)
+				{
+					System.Diagnostics.Debug.WriteLine($"[GestureManager] Drop handling failed: {ex}");
+				}
 			};
 
 			view.DragOver += dragOverHandler;
+			view.DragLeave += dragLeaveHandler;
 			view.Drop += dropHandler;
 
 			GetCleanups(view).Add(new GestureCleanup(() =>
 			{
 				view.DragOver -= dragOverHandler;
+				view.DragLeave -= dragLeaveHandler;
 				view.Drop -= dropHandler;
 			}));
 		}
+
+		/// <summary>
+		/// Returns the MAUI DataPackage of a drag started by a <see cref="DragGestureRecognizer"/>,
+		/// or wraps the text of a drag that came from outside MAUI (another app, Explorer).
+		/// </summary>
+		static DataPackage GetDataPackage(IDataObject data)
+		{
+			if (data.GetData(DataPackageFormat) is DataPackage package)
+				return package;
+
+			var external = new DataPackage();
+			if (data.GetData(DataFormats.UnicodeText) is string text)
+				external.Text = text;
+			return external;
+		}
+
+		static DragDropEffects ToDragDropEffects(DataPackageOperation operation) =>
+			operation == DataPackageOperation.None ? DragDropEffects.None : DragDropEffects.Copy;
 
 		#endregion
 
@@ -394,56 +411,33 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		static void AddPinchGesture(FrameworkElement view, PinchGestureRecognizer pinch)
 		{
 			// WPF doesn't have native pinch — map Ctrl+MouseWheel to zoom
-			double currentScale = 1.0;
+			IPinchGestureController controller = pinch;
 			bool isPinching = false;
 
 			MouseWheelEventHandler wheelHandler = (s, e) =>
 			{
-				if ((System.Windows.Input.Keyboard.Modifiers & ModifierKeys.Control) != 0)
+				var parent = FindParentView(pinch);
+				if ((System.Windows.Input.Keyboard.Modifiers & ModifierKeys.Control) == 0 || parent == null)
+					return;
+
+				var scaleOrigin = GetScaleOrigin(view, e);
+				if (!isPinching)
 				{
-					var parent = FindParentView(pinch);
-					if (!isPinching)
-					{
-						isPinching = true;
-						try
-						{
-							var startMethod = typeof(PinchGestureRecognizer).GetMethod("SendPinchStarted",
-								BindingFlags.Instance | BindingFlags.NonPublic);
-							startMethod?.Invoke(pinch, new object?[] { parent, null });
-						}
-						catch { }
-					}
-
-					double delta = e.Delta > 0 ? 1.1 : 0.9;
-					currentScale *= delta;
-
-					try
-					{
-						var updateMethod = typeof(PinchGestureRecognizer).GetMethod("SendPinch",
-							BindingFlags.Instance | BindingFlags.NonPublic);
-						updateMethod?.Invoke(pinch, new object?[] { parent, currentScale, null, GestureStatus.Running });
-					}
-					catch { }
-
-					e.Handled = true;
+					isPinching = true;
+					controller.SendPinchStarted(parent, scaleOrigin);
 				}
+
+				// PinchGestureUpdatedEventArgs.Scale is relative to the previous update, not cumulative.
+				controller.SendPinch(parent, e.Delta > 0 ? 1.1 : 0.9, scaleOrigin);
+				e.Handled = true;
 			};
 
 			MouseEventHandler leaveHandler = (s, e) =>
 			{
-				if (isPinching)
-				{
-					isPinching = false;
-					currentScale = 1.0;
-					try
-					{
-						var endMethod = typeof(PinchGestureRecognizer).GetMethod("SendPinchEnded",
-							BindingFlags.Instance | BindingFlags.NonPublic);
-						var parent = FindParentView(pinch);
-						endMethod?.Invoke(pinch, new object?[] { parent });
-					}
-					catch { }
-				}
+				var parent = FindParentView(pinch);
+				if (isPinching && parent != null)
+					controller.SendPinchEnded(parent);
+				isPinching = false;
 			};
 
 			view.MouseWheel += wheelHandler;
@@ -457,67 +451,132 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			}));
 		}
 
+		/// <summary>
+		/// MAUI pinch scale origins are proportional (0..1) to the recognizing view's size.
+		/// </summary>
+		static MauiPoint GetScaleOrigin(FrameworkElement view, MouseEventArgs e)
+		{
+			var position = e.GetPosition(view);
+			return new MauiPoint(
+				view.ActualWidth > 0 ? position.X / view.ActualWidth : 0.5,
+				view.ActualHeight > 0 ? position.Y / view.ActualHeight : 0.5);
+		}
+
 		#endregion
 
 		#region LongPress Gesture
 
-		static void AddLongPressGesture(FrameworkElement view, IGestureRecognizer recognizer)
+		/// <summary>
+		/// Maps a held left mouse button onto <see cref="LongPressGestureRecognizer"/>, following
+		/// the MAUI platform managers: Started once MinimumPressDuration elapses, Running while the
+		/// pointer moves within AllowableMovement, then LongPressed plus Completed on release, or
+		/// Canceled if the pointer moves too far or leaves the view.
+		/// </summary>
+		static void AddLongPressGesture(FrameworkElement view, LongPressGestureRecognizer longPress)
 		{
 			DispatcherTimer? timer = null;
+			System.Windows.Point? startPoint = null;
+			bool isRecognized = false;
+
+			void Reset()
+			{
+				timer?.Stop();
+				timer = null;
+				startPoint = null;
+				isRecognized = false;
+			}
+
+			void Cancel(MouseDevice mouse)
+			{
+				var parent = FindParentView(longPress);
+				if (isRecognized && parent != null)
+					longPress.SendLongPressing(parent, GestureStatus.Canceled, CreateGetPosition(view, mouse));
+				Reset();
+			}
 
 			MouseButtonEventHandler downHandler = (s, e) =>
 			{
-				timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-				timer.Tick += (_, _) =>
+				Reset();
+				startPoint = e.GetPosition(view);
+				var mouse = e.MouseDevice;
+				var pressTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(longPress.MinimumPressDuration) };
+				pressTimer.Tick += (_, _) =>
 				{
-					timer.Stop();
-					try
+					pressTimer.Stop();
+					var parent = FindParentView(longPress);
+					if (parent == null)
 					{
-						var method = recognizer.GetType().GetMethod("SendLongPress",
-							BindingFlags.Instance | BindingFlags.NonPublic);
-						var parent = FindParentView(recognizer);
-						method?.Invoke(recognizer, new object?[] { parent });
+						Reset();
+						return;
 					}
-					catch { }
 
-					// Also execute command if available
-					var cmdProp = recognizer.GetType().GetProperty("Command");
-					var paramProp = recognizer.GetType().GetProperty("CommandParameter");
-					var cmd = cmdProp?.GetValue(recognizer) as System.Windows.Input.ICommand;
-					var param = paramProp?.GetValue(recognizer);
-					if (cmd?.CanExecute(param) == true)
-						cmd.Execute(param);
+					isRecognized = true;
+					longPress.SendLongPressing(parent, GestureStatus.Started, CreateGetPosition(view, mouse));
 				};
-				timer.Start();
+				timer = pressTimer;
+				pressTimer.Start();
+			};
+
+			MouseEventHandler moveHandler = (s, e) =>
+			{
+				if (startPoint == null) return;
+
+				var distance = (e.GetPosition(view) - startPoint.Value).Length;
+				var parent = FindParentView(longPress);
+				if (distance > longPress.AllowableMovement)
+					Cancel(e.MouseDevice);
+				else if (isRecognized && parent != null)
+					longPress.SendLongPressing(parent, GestureStatus.Running, CreateGetPosition(view, e.MouseDevice));
 			};
 
 			MouseButtonEventHandler upHandler = (s, e) =>
 			{
-				timer?.Stop();
-				timer = null;
+				var parent = FindParentView(longPress);
+				if (isRecognized && parent != null)
+				{
+					// SendLongPressed executes Command and raises LongPressed.
+					var getPosition = CreateGetPosition(view, e.MouseDevice);
+					longPress.SendLongPressed(parent, getPosition);
+					longPress.SendLongPressing(parent, GestureStatus.Completed, getPosition);
+				}
+				Reset();
 			};
 
-			MouseEventHandler leaveHandler = (s, e) =>
-			{
-				timer?.Stop();
-				timer = null;
-			};
+			MouseEventHandler leaveHandler = (s, e) => Cancel(e.MouseDevice);
 
 			view.MouseLeftButtonDown += downHandler;
+			view.MouseMove += moveHandler;
 			view.MouseLeftButtonUp += upHandler;
 			view.MouseLeave += leaveHandler;
 			EnsureHitTestable(view);
 
 			GetCleanups(view).Add(new GestureCleanup(() =>
 			{
-				timer?.Stop();
+				Reset();
 				view.MouseLeftButtonDown -= downHandler;
+				view.MouseMove -= moveHandler;
 				view.MouseLeftButtonUp -= upHandler;
 				view.MouseLeave -= leaveHandler;
 			}));
 		}
 
 		#endregion
+
+		/// <summary>
+		/// Builds the <c>getPosition</c> callback MAUI gesture event args expose: the pointer
+		/// position relative to the requested element's platform view, or to the recognizing view.
+		/// </summary>
+		static Func<IElement?, MauiPoint?> CreateGetPosition(FrameworkElement view, MouseDevice mouse)
+		{
+			return relativeTo =>
+			{
+				IInputElement target = relativeTo is VisualElement { Handler.PlatformView: UIElement relativeView }
+					? relativeView
+					: view;
+				var position = mouse.GetPosition(target);
+				return new MauiPoint(position.X, position.Y);
+			};
+		}
 
 		static View? FindParentView(IGestureRecognizer recognizer)
 		{

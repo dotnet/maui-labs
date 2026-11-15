@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Reflection;
 using System.Windows.Automation;
 using Microsoft.Maui.Controls.Internals;
 using Microsoft.Maui.Platforms.Windows.WPF;
@@ -27,16 +26,14 @@ public class AlertManagerTests
 		var arguments = new AlertArguments(title, message, accept, cancel);
 		var expectedButtons = accept == null ? new[] { cancel } : new[] { accept, cancel };
 
-		// Exercise the production request handler, independently of MAUI's internal
-		// subscription interface (whose version compatibility is tested separately).
-		var handler = typeof(WPFAlertManagerSubscription).GetMethod(
-			"OnAlertRequested", BindingFlags.Static | BindingFlags.NonPublic)!;
+		// Startup alerts can arrive before a page has a window, so a null sender must still show a dialog.
+		var subscription = new WPFAlertManagerSubscription();
 		Exception? requestFailure = null;
 		var request = Task.Run(() =>
 		{
 			try
 			{
-				WpfApplicationHost.Run(_ => handler.Invoke(null, new object?[] { null, arguments }));
+				WpfApplicationHost.Run(_ => subscription.OnAlertRequested(null!, arguments));
 			}
 			catch (Exception ex)
 			{
@@ -108,10 +105,9 @@ public class AlertManagerTests
 	public async Task OnAlertRequested_OnNonStaThread_FaultsTaskInsteadOfLeavingItPending()
 	{
 		var arguments = new AlertArguments("Thread error", "Message", null, "OK");
-		var handler = typeof(WPFAlertManagerSubscription).GetMethod(
-			"OnAlertRequested", BindingFlags.Static | BindingFlags.NonPublic)!;
+		var subscription = new WPFAlertManagerSubscription();
 
-		await Task.Run(() => handler.Invoke(null, new object?[] { null, arguments }));
+		await Task.Run(() => subscription.OnAlertRequested(null!, arguments));
 
 		Assert.True(arguments.Result.Task.IsFaulted);
 		await Assert.ThrowsAsync<InvalidOperationException>(() => arguments.Result.Task);

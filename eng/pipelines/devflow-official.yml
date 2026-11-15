@@ -431,7 +431,8 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: eng\common\dotnet.cmd workload install maui --version 10.0.203
+            # WPF targets net11.0-windows: the workload set must match the SDK 11 band in global.json.
+            - script: eng\common\dotnet.cmd workload install maui --version 11.0.100.1
               displayName: Install MAUI workload
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
