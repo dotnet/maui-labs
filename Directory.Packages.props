@@ -78,7 +78,9 @@
 
   <!-- MAUI Cli Tool dependencies -->
   <ItemGroup Label="Cli">
+    <PackageVersion Include="Azure.Monitor.OpenTelemetry.Exporter" Version="$(AzureMonitorOpenTelemetryExporterVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(MicrosoftExtensionsDependencyInjectionVersion)" />
+    <PackageVersion Include="OpenTelemetry" Version="$(OpenTelemetryVersion)" />
     <PackageVersion Include="Xamarin.Android.Tools.AndroidSdk" Version="$(XamarinAndroidToolsAndroidSdkVersion)" />
     <PackageVersion Include="Xamarin.Apple.Tools.MaciOS" Version="$(XamarinAppleToolsMaciOSVersion)" />
   </ItemGroup>

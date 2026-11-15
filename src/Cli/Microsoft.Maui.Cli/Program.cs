@@ -57,6 +57,8 @@ public class Program
 		// verbosity they need before any command runs.
 		Providers.Apple.StandardErrorToolsLogger.DefaultVerbose = IsVerbose(parseResult);
 
+		using var telemetry = CliTelemetry.Start(parseResult);
+
 		try
 		{
 			var exitCode = await parseResult.InvokeAsync();
@@ -76,6 +78,7 @@ public class Program
 					Console.Error.WriteLine(notice);
 			}
 
+			telemetry?.Complete(exitCode);
 			return exitCode;
 		}
 
@@ -84,9 +87,11 @@ public class Program
 			var formatter = GetFormatter(parseResult);
 			var isCi = parseResult.GetValue(GlobalOptions.CiOption);
 			var exitCode = HandleCommandException(formatter, exception);
+			telemetry?.Complete(exitCode, exception);
 
 			if (isCi)
 			{
+				telemetry?.Dispose();
 				Environment.Exit(exitCode);
 			}
 

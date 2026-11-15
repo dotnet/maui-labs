@@ -420,6 +420,50 @@ are separate from native `ui query --selector` and MCP `maui_query_css`.
 | `--dry-run` | Show what would be done without making changes |
 | `--ci` | CI mode — non-interactive, fail fast on errors |
 
+## Telemetry
+
+The CLI uses OpenTelemetry with `Azure.Monitor.OpenTelemetry.Exporter`, following
+the [current .NET SDK](https://github.com/dotnet/sdk/blob/main/src/Cli/dotnet/Telemetry/TelemetryClient.cs)
+and [Aspire CLI](https://github.com/dotnet/aspire/blob/main/src/Aspire.Cli/Telemetry/TelemetryManager.cs).
+Reporting is enabled by default **only when a MAUI-specific Application Insights
+destination is configured**. This repository does not include a destination.
+
+| Setting | Effect |
+|---------|--------|
+| `MAUI_CLI_TELEMETRY_CONNECTION_STRING` | Sets the Application Insights destination; overrides the build-time destination. An explicitly blank value disables reporting. |
+| `MAUI_CLI_TELEMETRY_OPTOUT=1` or `true` | Disables reporting. |
+| `DOTNET_CLI_TELEMETRY_OPTOUT=1` or `true` | Also disables reporting, regardless of the MAUI setting. |
+| `OTEL_SDK_DISABLED=1` or `true` | Disables reporting through the standard OpenTelemetry switch. |
+
+Opt-out values are case-insensitive. Release builders can set the MSBuild property
+`MauiCliTelemetryConnectionString` to embed a dedicated MAUI destination. The CLI
+never reuses the SDK/Aspire destination or the application's
+`APPLICATIONINSIGHTS_CONNECTION_STRING`. Local builds without a configured
+destination send nothing.
+
+Each invocation reports only the canonical command/subcommand names, duration,
+exit code, success/error/cancellation outcome, CLI version, .NET runtime version,
+OS family/version, and architecture. An exception reaching the entry point
+includes its **type only**. Arguments and option values, project or file paths,
+device identifiers, user/machine identifiers, application data, logs, network
+payloads, exception messages, and stack traces are not collected. Automatic HTTP,
+runtime, and application-log instrumentation and Live Metrics are not enabled;
+arbitrary `OTEL_RESOURCE_ATTRIBUTES` are not imported. The CLI disables the Azure
+exporter's SDK-health statistics in its process and uses a fixed `maui-cli` role
+instance instead of Azure Monitor's default machine-name fallback. Child processes
+inherit the SDK-health opt-outs; these do not disable application traces, logs, or metrics.
+
+Help, CLI-version queries, invalid command lines, and `--dry-run` do not report.
+JSON, CI, redirected, DevFlow, and Go invocations never display a telemetry notice;
+ordinary interactive commands show a one-time notice on stderr. These output
+settings do not themselves opt out of reporting.
+
+Pending telemetry uses the Azure exporter's offline storage under
+`~/.maui/cache/telemetry`; a later enabled invocation can deliver it. Shutdown
+has a 250 ms budget with no additional upload drain wait. Reporting is best-effort,
+never changes command exit codes, and reports initialization/shutdown diagnostics
+on stderr with `--verbose`.
+
 ## Output Formats
 
 The CLI supports two output modes:

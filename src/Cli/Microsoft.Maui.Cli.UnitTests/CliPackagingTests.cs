@@ -6,6 +6,22 @@ namespace Microsoft.Maui.Cli.UnitTests;
 public sealed class CliPackagingTests
 {
     [Fact]
+    public void PackageProject_TelemetryDestinationIsOptionalAndShutdownDoesNotWaitForUpload()
+    {
+        var project = LoadProject();
+        var destination = Assert.Single(project.Descendants(), element =>
+            element.Name.LocalName == "AssemblyMetadata" &&
+            (string?)element.Attribute("Include") == "MauiCliTelemetryConnectionString");
+        Assert.Equal("$(MauiCliTelemetryConnectionString)", (string?)destination.Attribute("Value"));
+        Assert.Equal("'$(MauiCliTelemetryConnectionString)' != ''", (string?)destination.Attribute("Condition"));
+
+        var shutdown = Assert.Single(project.Descendants(), element =>
+            element.Name.LocalName == "RuntimeHostConfigurationOption" &&
+            (string?)element.Attribute("Include") == "Azure.Monitor.OpenTelemetry.Exporter.ShutdownDrainBudgetMilliseconds");
+        Assert.Equal("0", (string?)shutdown.Attribute("Value"));
+    }
+
+    [Fact]
     public void PackageProject_DeclaresAndPacksCliReadme()
     {
         var project = LoadProject();
