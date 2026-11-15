@@ -5,7 +5,7 @@
 
 Custom .NET MAUI backend targeting WPF (Windows Presentation Foundation) — an alternative to the official WinUI backend.
 
-This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback assemblies) and provides custom handler implementations that bridge MAUI's layout/rendering system to WPF controls. **All core MAUI controls, pages, layouts, gestures, and navigation patterns are implemented.**
+This backend uses the platform-agnostic MAUI NuGet packages (`net11.0` fallback assemblies, .NET MAUI 11) and provides custom handler implementations that bridge MAUI's layout/rendering system to WPF controls. **All core MAUI controls, pages, layouts, gestures, and navigation patterns are implemented.**
 
 > **Inspiration:** This project follows the patterns established by [mauiplatforms](https://github.com/Redth/mauiplatforms) (macOS/tvOS backends) and [Maui.Gtk](https://github.com/AathifMahir/Maui.Gtk).
 
@@ -290,7 +290,7 @@ manifests are read from the directory where the build wrote them.
 ## Samples
 
 Blazor Hybrid hosts need a Windows SDK-versioned target framework, such as
-`net10.0-windows10.0.17763.0`, so WebView2 can load the `Microsoft.Windows.SDK.NET`
+`net11.0-windows10.0.17763.0`, so WebView2 can load the `Microsoft.Windows.SDK.NET`
 projection assembly. Copy `wwwroot` content to both build and publish output; without
 `wwwroot/index.html`, the WebView can start but cannot load the Blazor host page.
 The `Windows.WPF.Sample` project includes both settings.
@@ -380,13 +380,13 @@ All layouts work via the cross-platform MAUI layout engine + `LayoutPanel`:
 | Gesture | Status | Notes |
 |---|---|---|
 | TapGestureRecognizer | ✅ | MouseLeftButtonUp via GestureManager |
-| PointerGestureRecognizer | ✅ | MouseEnter/Leave/Move |
+| PointerGestureRecognizer | ✅ | MouseEnter/Leave/Move/Down/Up |
 | PanGestureRecognizer | ✅ | Mouse capture + delta tracking |
 | SwipeGestureRecognizer | ✅ | Threshold-based direction detection |
 | PinchGestureRecognizer | ✅ | Ctrl+MouseWheel zoom |
 | DragGestureRecognizer | ✅ | WPF DragDrop.DoDragDrop |
 | DropGestureRecognizer | ✅ | AllowDrop + DragOver/Drop events |
-| LongPressGestureRecognizer | ✅ | DispatcherTimer 500ms hold |
+| LongPressGestureRecognizer | ✅ | DispatcherTimer hold for `MinimumPressDuration`; cancels beyond `AllowableMovement` |
 
 ### Shapes
 
@@ -456,7 +456,7 @@ they remove only their own directories, never the user storage roots.
 | Map | ✅ | Bing Maps URL |
 | Screenshot | ✅ | RenderTargetBitmap capture |
 | VersionTracking | ✅ | Preferences-backed |
-| TextToSpeech | ✅ | System.Speech.Synthesis via PowerShell |
+| TextToSpeech | ✅ | System.Speech.Synthesis; installed voices are reported as locales |
 | Battery | ✅ | Returns Full/AC for desktop |
 | Share | ⚠️ | Stub — no native share dialog on Windows desktop |
 | FilePicker | ⚠️ | Stub — needs WPF OpenFileDialog implementation |
@@ -468,7 +468,7 @@ they remove only their own directories, never the user storage roots.
 
 ```
 src/
-  Microsoft.Maui.Platforms.Windows.WPF/              # WPF backend library (net10.0-windows)
+  Microsoft.Maui.Platforms.Windows.WPF/              # WPF backend library (net11.0-windows)
   Microsoft.Maui.Platforms.Windows.WPF.Essentials/   # WPF Essentials library
 samples/
   ControlGallery/                  # WPF Control Gallery (used by UI tests)
@@ -480,9 +480,9 @@ tests/
 
 ## Prerequisites
 
-### .NET 10 SDK
+### .NET 11 SDK
 
-Install the latest .NET 10 SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/10.0).
+Install the latest .NET 11 SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/11.0).
 
 ### Workloads
 
@@ -534,8 +534,8 @@ as an automation id. Tapping **Alice Johnson** or **Bob Smith** updates the stat
 to `Tapped: <name>`, providing an observable check beyond a successful tap response.
 
 The `ci-wpf.yml` compatibility matrix runs `AlertManagerSubscriptionTests` in the
-existing `HandlerTests` project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
-through the shared build workflow's targeted test mode. These are registration
+existing `HandlerTests` project against MAUI 11.0.10 (add newer 11.0.x servicing
+releases to the matrix) through the shared build workflow's targeted test mode. These are registration
 contract tests, not native dialog interaction tests.
 
 The project includes **213 UI tests** covering all implemented controls, plus a **WinUI comparison framework** that captures side-by-side screenshots of the WPF and WinUI ControlGallery apps for visual parity validation.
@@ -552,11 +552,12 @@ Comparison screenshots are saved to `tests/UITests/Comparisons/`.
 
 ## Key Technical Notes
 
-- MAUI NuGet packages resolve to the `net10.0` (platform-agnostic) assembly. `ToPlatform()` returns `object` — `WPFViewHandler<TVirtualView, TPlatformView>` provides the typed bridge.
+- MAUI NuGet packages resolve to the `net11.0` (platform-agnostic) assembly. `ToPlatform()` returns `object` — `WPFViewHandler<TVirtualView, TPlatformView>` provides the typed bridge.
 - The platform-agnostic `ViewHandler` has no-op `PlatformArrange` and returns `Size.Zero`. `WPFViewHandler` overrides these to bridge MAUI layout to WPF `Measure`/`Arrange`.
 - WPF `System.Windows.Controls` and MAUI `Microsoft.Maui.Controls` share many type names — every handler file uses `using` aliases to disambiguate (e.g., `WButton = System.Windows.Controls.Button`).
 - The `MauiWPFApplication` base class in `App.xaml` bootstraps the MAUI runtime within a WPF `Application`.
-- Dialogs use `DispatchProxy` + reflection to intercept `AlertManager` requests (the API is internal in MAUI). Both the nested subscription interface in MAUI 10.0.41–10.0.60 and the top-level interface in 10.0.70+ are supported. An unrecognized contract fails during registration rather than leaving dialog tasks pending. See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
+- Dialogs implement MAUI 11's public `IAlertManagerSubscription` (`WPFAlertManagerSubscription`), which the default `AlertManager` resolves from DI. See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
+- Gestures call the public MAUI 11 gesture APIs directly (`SendTapped`, `SendPointer*`, `SendSwiped`, `SendDragStarting`/`SendDrop`, `SendLongPressing`/`SendLongPressed`, and the `IPanGestureController`/`IPinchGestureController` interfaces) instead of reflecting over internal members.
 
 ## Known Limitations
 

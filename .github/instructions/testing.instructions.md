@@ -27,8 +27,8 @@ applyTo: "**/*Tests*/**,**/*.Tests.*"
 | DevFlow (client) | `src/DevFlow/Microsoft.Maui.DevFlow.Client.Tests/` | `net11.0` (Windows: `net472;net11.0`) |
 | DevFlow (integration) | `src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/` | `net11.0` |
 | DevFlow (inspector) | `src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/` | `net11.0` |
-| WPF | `platforms/Windows.WPF/tests/HandlerTests/` | `net10.0-windows` |
-| WPF | `platforms/Windows.WPF/tests/UITests/` | `net10.0-windows` |
+| WPF | `platforms/Windows.WPF/tests/HandlerTests/` | `net11.0-windows` |
+| WPF | `platforms/Windows.WPF/tests/UITests/` | `net11.0-windows` |
 
 ## Running Tests
 

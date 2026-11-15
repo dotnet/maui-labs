@@ -55,7 +55,7 @@ public class HomePage : ContentPage
 								new Label { Text = "• Native WPF controls and rendering", FontSize = 14 },
 								new Label { Text = "• WebView2 for BlazorWebView", FontSize = 14 },
 								new Label { Text = "• Microsoft.Maui.Graphics.Win2D-backed ICanvas for GraphicsView", FontSize = 14 },
-								new Label { Text = "• .NET 10 / MAUI 10", FontSize = 14 },
+								new Label { Text = "• .NET 11 / MAUI 11", FontSize = 14 },
 								new Label { Text = $"• Runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}", FontSize = 14, TextColor = Colors.Gray },
 								new Label { Text = $"• OS: {System.Runtime.InteropServices.RuntimeInformation.OSDescription}", FontSize = 14, TextColor = Colors.Gray },
 							}

@@ -9,7 +9,7 @@ using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
-using WebView2Control = Microsoft.Web.WebView2.Wpf.WebView2CompositionControl;
+using Microsoft.Web.WebView2.Wpf;
 
 namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 {
@@ -20,7 +20,7 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 	{
 		// Track the inner WebView2 reference so we can unsubscribe on disconnect even if
 		// PlatformView.WebView has already been torn down.
-		private WebView2Control? _hookedWebView;
+		private IWebView2? _hookedWebView;
 
 		/// <inheritdoc />
 		protected override Wpf.BlazorWebView CreatePlatformView()
@@ -40,14 +40,16 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 			if (double.IsInfinity(h)) h = 600;
 
 			// PlatformView.WebView is lazily created after Loaded fires; guard against NRE during initial measure.
-			PlatformView?.WebView?.Measure(new System.Windows.Size(w, h));
+			// Since MAUI 11 it is typed as IWebView2 (a WebView2CompositionControl by default, or a
+			// WebView2 when UseCompositionControl is false); both are UIElements.
+			(PlatformView?.WebView as System.Windows.UIElement)?.Measure(new System.Windows.Size(w, h));
 			return new Size(w, h);
 		}
 
 		public override void PlatformArrange(Rect rect)
 		{
 			base.PlatformArrange(rect);
-			PlatformView?.WebView?.Arrange(new global::System.Windows.Rect(rect.X, rect.Y, rect.Width, rect.Height));
+			(PlatformView?.WebView as System.Windows.UIElement)?.Arrange(new global::System.Windows.Rect(rect.X, rect.Y, rect.Width, rect.Height));
 		}
 
 		protected override void ConnectHandler(Wpf.BlazorWebView platformView)

@@ -209,7 +209,7 @@ foreach ($id in $references.Keys) {
     }
 }
 
-$output = Join-Path $appDirectory "bin\Release\net10.0-windows\$RuntimeIdentifier"
+$output = Join-Path $appDirectory "bin\Release\net11.0-windows\$RuntimeIdentifier"
 if ($FontScenarios) {
     $installedPackage = Join-Path $work "cache\microsoft.maui.platforms.windows.wpf\$($PackageVersion.ToLowerInvariant())"
     foreach ($entryPath in @($mainTargetEntry, $fontTargetEntry)) {

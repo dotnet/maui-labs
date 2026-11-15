@@ -187,7 +187,7 @@
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| [x] **DisplayAlert** | ✅ | `MessageBox.Show()` via `WPFAlertManagerSubscription` `DispatchProxy` |
+| [x] **DisplayAlert** | ✅ | `MessageBox.Show()` via `WPFAlertManagerSubscription` (`IAlertManagerSubscription`) |
 | [x] **DisplayActionSheet** | ✅ | Custom WPF `Window` with button list |
 | [x] **DisplayPromptAsync** | ✅ | Custom WPF `Window` with `TextBox` + OK/Cancel |
 
@@ -566,7 +566,7 @@ setDefault?.Invoke(null, new object[] { new WPFPreferences() });
 
 ### Gap 5: Alert/Dialog System ([#34104](https://github.com/dotnet/maui/issues/34104))
 
-**Status:** ✅ Implemented via `WPFAlertManagerSubscription` using `DispatchProxy` + reflection.
+**Status:** ✅ Resolved in MAUI 11 — `WPFAlertManagerSubscription` implements the now-public `IAlertManagerSubscription` directly (it previously used `DispatchProxy` + reflection).
 
 ---
 
