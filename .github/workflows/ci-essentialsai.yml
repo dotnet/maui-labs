@@ -78,6 +78,7 @@ jobs:
       target-framework: net11.0-maccatalyst27.2
       filter: 'RequiresModel!=true'
       os: xcode-27
+      xcode-version: '27.2'
 
   # Step 4: Run model-free Windows device tests. Hosted runners do not have
   # Windows AI models, but they can execute readiness, policy, lifecycle, and
