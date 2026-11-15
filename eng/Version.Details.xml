@@ -8,30 +8,30 @@
       <Sha>d73c903c550512212332fa7818b4612e7419e786</Sha>
     </Dependency>
     <!-- dotnet/maui -->
-    <Dependency Name="Microsoft.Maui.Controls" Version="10.0.41">
+    <Dependency Name="Microsoft.Maui.Controls" Version="11.0.10">
       <Uri>https://github.com/dotnet/maui</Uri>
-      <Sha>d15964ef4f0a6d0740b655ba7c6be9b96be8b187</Sha>
+      <Sha>87182d7bcbbc9af30bc6dd81991aa6fd1ab3cd35</Sha>
     </Dependency>
-    <Dependency Name="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.41">
+    <Dependency Name="Microsoft.AspNetCore.Components.WebView.Maui" Version="11.0.10">
       <Uri>https://github.com/dotnet/maui</Uri>
-      <Sha>d15964ef4f0a6d0740b655ba7c6be9b96be8b187</Sha>
+      <Sha>87182d7bcbbc9af30bc6dd81991aa6fd1ab3cd35</Sha>
     </Dependency>
     <!-- dotnet/runtime -->
-    <Dependency Name="Microsoft.Extensions.Http" Version="10.0.5">
+    <Dependency Name="Microsoft.Extensions.Http" Version="11.0.0">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>297acf930fb0f5c07fd4e51d78e521b4ad2e5d1f</Sha>
     </Dependency>
-    <Dependency Name="Microsoft.Extensions.Hosting" Version="10.0.5">
+    <Dependency Name="Microsoft.Extensions.Hosting" Version="11.0.0">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>297acf930fb0f5c07fd4e51d78e521b4ad2e5d1f</Sha>
     </Dependency>
-    <Dependency Name="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5">
+    <Dependency Name="Microsoft.Extensions.Logging.Abstractions" Version="11.0.0">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>297acf930fb0f5c07fd4e51d78e521b4ad2e5d1f</Sha>
     </Dependency>
-    <Dependency Name="System.Text.Json" Version="10.0.5">
+    <Dependency Name="System.Text.Json" Version="11.0.0">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>297acf930fb0f5c07fd4e51d78e521b4ad2e5d1f</Sha>
     </Dependency>
     <Dependency Name="Xamarin.Apple.Tools.MaciOS" Version="1.0.0-preview.1.26521.1">
       <Uri>https://github.com/dotnet/macios-devtools</Uri>

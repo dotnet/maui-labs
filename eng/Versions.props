@@ -14,21 +14,24 @@
   </PropertyGroup>
   <!-- Dependencies flowing via darc/maestro (match Version.Details.xml) -->
   <PropertyGroup Label="Dotnet MAUI">
-    <MicrosoftMauiControlsVersion>10.0.41</MicrosoftMauiControlsVersion>
+    <MicrosoftMauiControlsVersion>11.0.10</MicrosoftMauiControlsVersion>
     <!-- Minimum MAUI version required by DevFlow shipping packages (which target net11.0).
          Kept low so consumers can use any compatible MAUI 11.0.x release. -->
     <DevFlowMauiMinVersion>11.0.0</DevFlowMauiMinVersion>
-    <MicrosoftMauiControlsCompatibilityVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsCompatibilityVersion>
+    <!-- Microsoft.Maui.Controls.Compatibility has no MAUI 11 release (the last one is
+         11.0.0-preview.6), so it stays on the last 10.x version. No project references it
+         directly; it only arrives transitively (e.g. via AathifMahir.Maui.MauiIcons). -->
+    <MicrosoftMauiControlsCompatibilityVersion>10.0.41</MicrosoftMauiControlsCompatibilityVersion>
     <MicrosoftMauiEssentialsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiEssentialsVersion>
-    <MicrosoftAspNetCoreComponentsWebViewVersion>10.0.3</MicrosoftAspNetCoreComponentsWebViewVersion>
+    <!-- Blazor WebView core matching MAUI 11 (Microsoft.AspNetCore.Components.WebView.Maui 11.0.x
+         depends on 11.0.0). -->
+    <MicrosoftAspNetCoreComponentsWebViewVersion>11.0.0</MicrosoftAspNetCoreComponentsWebViewVersion>
     <MicrosoftMauiControlsMapsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsMapsVersion>
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
-    <!-- MAUI 11 baseline for products that have moved to net11.0 TFMs (DevFlow, macOS AppKit,
-         Linux GTK4). Products still on net10.0 keep MicrosoftMauiControlsVersion above. -->
-    <MicrosoftMauiControlsNet11Version>11.0.10</MicrosoftMauiControlsNet11Version>
-    <!-- Blazor WebView core matching MAUI 11 (Microsoft.AspNetCore.Components.WebView.Maui 11.0.x
-         depends on 11.0.0). Applied together with MicrosoftMauiControlsNet11Version. -->
-    <MicrosoftAspNetCoreComponentsWebViewNet11Version>11.0.0</MicrosoftAspNetCoreComponentsWebViewNet11Version>
+    <!-- Aliases kept for the stacked platform PRs (macOS AppKit, Linux GTK4, WPF), which still
+         reference these names. Every product is on MAUI 11 now; remove once those have merged. -->
+    <MicrosoftMauiControlsNet11Version>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsNet11Version>
+    <MicrosoftAspNetCoreComponentsWebViewNet11Version>$(MicrosoftAspNetCoreComponentsWebViewVersion)</MicrosoftAspNetCoreComponentsWebViewNet11Version>
   </PropertyGroup>
   <PropertyGroup Label="AndroidX">
     <!-- WorkManager: used by DevFlow.Sample to exercise background job inspection/triggering.
@@ -41,26 +44,31 @@
          Revisit once the Room/Sqlite platform packages are mirrored. -->
     <XamarinAndroidXWorkRuntimeVersion>2.10.0.5</XamarinAndroidXWorkRuntimeVersion>
     <XamarinAndroidXKtxFacadeVersion>1.3.0.1</XamarinAndroidXKtxFacadeVersion>
-    <XamarinAndroidXLifecycleServiceVersion>2.9.2.1</XamarinAndroidXLifecycleServiceVersion>
     <!-- MAUI 11 resolves AndroidX.Core 1.19, which needs Lifecycle.Runtime 2.11.x. -->
-    <XamarinAndroidXLifecycleServiceNet11Version>2.11.0.1</XamarinAndroidXLifecycleServiceNet11Version>
+    <XamarinAndroidXLifecycleServiceVersion>2.11.0.1</XamarinAndroidXLifecycleServiceVersion>
+    <!-- Alias kept for the stacked platform PRs; remove once those have merged. -->
+    <XamarinAndroidXLifecycleServiceNet11Version>$(XamarinAndroidXLifecycleServiceVersion)</XamarinAndroidXLifecycleServiceNet11Version>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
-    <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
-    <MicrosoftExtensionsConfigurationVersion>10.0.5</MicrosoftExtensionsConfigurationVersion>
-    <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
-    <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>
-    <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.5</MicrosoftExtensionsLoggingAbstractionsVersion>
-    <MicrosoftExtensionsLoggingConsoleVersion>10.0.5</MicrosoftExtensionsLoggingConsoleVersion>
-    <MicrosoftExtensionsLoggingVersion>10.0.5</MicrosoftExtensionsLoggingVersion>
-    <MicrosoftExtensionsLoggingDebugVersion>10.0.5</MicrosoftExtensionsLoggingDebugVersion>
-    <MicrosoftExtensionsConfigurationJsonVersion>10.0.5</MicrosoftExtensionsConfigurationJsonVersion>
-    <MicrosoftExtensionsConfigurationUserSecretsVersion>10.0.5</MicrosoftExtensionsConfigurationUserSecretsVersion>
-    <SystemTextJsonVersion>10.0.5</SystemTextJsonVersion>
-    <!-- Microsoft.Extensions.* line required by MAUI 11 (its packages depend on >= 11.0.0).
-         Applied only to projects that opt into MAUI 11 (UseMaui11Packages in
-         Directory.Packages.props); everything else keeps the 10.0 versions above. -->
-    <MicrosoftExtensionsNet11Version>11.0.0</MicrosoftExtensionsNet11Version>
+    <!-- The .NET 11 line: MAUI 11 depends on Microsoft.Extensions.* >= 11.0.0, so anything lower
+         is a package downgrade (NU1109) under transitive pinning. -->
+    <MicrosoftExtensionsDependencyInjectionVersion>11.0.0</MicrosoftExtensionsDependencyInjectionVersion>
+    <MicrosoftExtensionsConfigurationVersion>11.0.0</MicrosoftExtensionsConfigurationVersion>
+    <MicrosoftExtensionsHttpVersion>11.0.0</MicrosoftExtensionsHttpVersion>
+    <MicrosoftExtensionsHostingVersion>11.0.0</MicrosoftExtensionsHostingVersion>
+    <MicrosoftExtensionsLoggingAbstractionsVersion>11.0.0</MicrosoftExtensionsLoggingAbstractionsVersion>
+    <MicrosoftExtensionsLoggingConsoleVersion>11.0.0</MicrosoftExtensionsLoggingConsoleVersion>
+    <MicrosoftExtensionsLoggingVersion>11.0.0</MicrosoftExtensionsLoggingVersion>
+    <MicrosoftExtensionsLoggingDebugVersion>11.0.0</MicrosoftExtensionsLoggingDebugVersion>
+    <MicrosoftExtensionsConfigurationJsonVersion>11.0.0</MicrosoftExtensionsConfigurationJsonVersion>
+    <MicrosoftExtensionsConfigurationUserSecretsVersion>11.0.0</MicrosoftExtensionsConfigurationUserSecretsVersion>
+    <SystemTextJsonVersion>11.0.0</SystemTextJsonVersion>
+    <!-- The 11.0 packages above only support net10.0+ on .NETCoreApp. Down-level TFMs
+         (net8.0/net9.0/netstandard2.0/net472) use these instead; see Directory.Packages.props. -->
+    <MicrosoftExtensionsDownlevelVersion>10.0.5</MicrosoftExtensionsDownlevelVersion>
+    <SystemTextJsonDownlevelVersion>10.0.5</SystemTextJsonDownlevelVersion>
+    <!-- Alias kept for the stacked platform PRs; remove once those have merged. -->
+    <MicrosoftExtensionsNet11Version>$(MicrosoftExtensionsDependencyInjectionVersion)</MicrosoftExtensionsNet11Version>
   </PropertyGroup>
   <PropertyGroup Label="AI">
     <MicrosoftExtensionsAIVersion>10.4.1</MicrosoftExtensionsAIVersion>
@@ -124,10 +132,11 @@
     <!-- Stable library baseline; development apps override the umbrella SDK only. -->
     <MicrosoftWindowsAppSDKAIVersion>2.4.4</MicrosoftWindowsAppSDKAIVersion>
     <MicrosoftWindowsAppSDKVersion_Experimental>2.5.4-experimental</MicrosoftWindowsAppSDKVersion_Experimental>
-    <!-- Windows: enables dotnet run for packaged MSIX apps -->
-    <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.3.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>
-    <!-- Microsoft.Maui.Core 11 (Windows) depends on WinApp >= 0.7.1; applied with MAUI 11 only. -->
-    <MicrosoftWindowsSDKBuildToolsWinAppNet11Version>0.7.1</MicrosoftWindowsSDKBuildToolsWinAppNet11Version>
+    <!-- Windows: enables dotnet run for packaged MSIX apps. Microsoft.Maui.Core 11 (Windows)
+         depends on WinApp >= 0.7.1. -->
+    <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.7.1</MicrosoftWindowsSDKBuildToolsWinAppVersion>
+    <!-- Alias kept for the stacked platform PRs; remove once those have merged. -->
+    <MicrosoftWindowsSDKBuildToolsWinAppNet11Version>$(MicrosoftWindowsSDKBuildToolsWinAppVersion)</MicrosoftWindowsSDKBuildToolsWinAppNet11Version>
   </PropertyGroup>
   <PropertyGroup Label="Testing">
     <MicrosoftNETTestSdkVersion>18.3.0</MicrosoftNETTestSdkVersion>
