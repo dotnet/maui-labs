@@ -89,5 +89,7 @@ public partial class ContentViewHandler : MacOSViewHandler<IContentView, MacOSCo
 
         if (contentView.Background is Graphics.SolidPaint solidPaint && solidPaint.Color != null)
             handler.PlatformView.Layer.BackgroundColor = solidPaint.Color.ToPlatformColor().CGColor;
+        else
+            handler.PlatformView.Layer.BackgroundColor = null;
     }
 }
