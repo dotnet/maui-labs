@@ -1,7 +1,10 @@
 using System.Buffers.Binary;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Controls;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Hosting;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Accessibility;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Media;
@@ -37,9 +40,16 @@ public class NativeFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
                     var monitor = Assert.IsType<Gdk.Monitor>(monitors.GetObject(0), exactMatch: false);
                     monitor.GetGeometry(out var geometry);
 
-                    using var app = MauiApp.CreateBuilder().AddLinuxGtk4Essentials().Build();
+                    using var app = MauiApp.CreateBuilder()
+                        .UseMauiAppLinuxGtk4<Application>()
+                        .AddLinuxGtk4Essentials()
+                        .Build();
                     Assert.Equal(app.Services.GetRequiredService<IFileSystem>().AppDataDirectory, FileSystem.AppDataDirectory);
                     Assert.Equal(DeviceIdiom.Desktop, DeviceInfo.Idiom);
+                    Assert.True(MainThread.IsMainThread);
+                    var invoked = false;
+                    MainThread.BeginInvokeOnMainThread(() => invoked = true);
+                    Assert.True(invoked);
                     var display = DeviceDisplay.MainDisplayInfo;
                     Assert.Equal(geometry.Width * monitor.GetScaleFactor(), display.Width);
                     Assert.Equal(geometry.Height * monitor.GetScaleFactor(), display.Height);

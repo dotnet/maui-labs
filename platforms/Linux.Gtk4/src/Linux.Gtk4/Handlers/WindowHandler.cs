@@ -30,7 +30,9 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 	{
 	};
 
+#if NET10_0
 	private readonly Dictionary<Page, Gtk.Window> _modalDialogs = new();
+#endif
 	private bool _destroying;
 	private GtkAllocationObserver? _allocationObserver;
 
@@ -74,17 +76,20 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 				VirtualView?.FrameChanged(new Rect(0, 0, width, height));
 		}, MauiContext?.Services.GetService(typeof(ILogger<WindowHandler>)) as ILogger);
 
+#if NET10_0
 		if (VirtualView is Microsoft.Maui.Controls.Window mauiWindow)
 		{
 			mauiWindow.ModalPushed += OnModalPushed;
 			mauiWindow.ModalPopped += OnModalPopped;
 		}
+#endif
 	}
 
 	protected override void DisconnectHandler(Gtk.Window platformView)
 	{
 		_allocationObserver?.Dispose();
 		_allocationObserver = null;
+#if NET10_0
 		if (VirtualView is Microsoft.Maui.Controls.Window mauiWindow)
 		{
 			mauiWindow.ModalPushed -= OnModalPushed;
@@ -97,6 +102,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 			dialog.Close();
 		}
 		_modalDialogs.Clear();
+#endif
 
 		platformView.OnCloseRequest -= OnCloseRequest;
 		platformView.OnNotify -= OnWindowNotify;
@@ -128,6 +134,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 		}
 	}
 
+#if NET10_0
 	private void OnModalPushed(object? sender, ModalPushedEventArgs e)
 	{
 		if (MauiContext == null || PlatformView == null) return;
@@ -275,6 +282,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 		}
 		// else: user-initiated dialog close — already closed by GTK via OnCloseRequest
 	}
+#endif
 
 	public static void MapTitle(WindowHandler handler, IWindow window)
 	{

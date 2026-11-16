@@ -107,6 +107,7 @@ public static partial class AppHostBuilderExtensions
 		GtkAlertManager.Register(builder.Services);
 #if NET11_0_OR_GREATER
 		builder.Services.AddSingleton<IGesturePlatformManagerFactory, GtkGesturePlatformManagerFactory>();
+		builder.Services.AddSingleton<IModalNavigationPlatformFactory, GtkModalNavigationPlatformFactory>();
 #endif
 
 		builder.Services.AddScoped(svc =>
