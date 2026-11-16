@@ -53,7 +53,9 @@ if (-not $TestFramework) {
     --configuration Release --framework $TestFramework --filter $filter @mauiArgs `
     --logger 'console;verbosity=detailed' `
     --logger "trx;LogFileName=$resultsName.trx" `
-    --results-directory $results --blame-hang-timeout 3m '-m:1' '-nr:false'
+    --results-directory $results `
+    --blame-crash --blame-crash-dump-type mini `
+    --blame-hang-timeout 3m '-m:1' '-nr:false'
 if ($LASTEXITCODE -ne 0) {
     throw "Native GTK class $TestClass failed (exit code $LASTEXITCODE)."
 }

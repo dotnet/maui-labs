@@ -19,15 +19,16 @@ public class LinuxDeviceDisplay : IDeviceDisplay
 		{
 			try
 			{
-				var display = Gdk.Display.GetDefault();
+				using var display = Gdk.Display.GetDefault();
 				if (display is null)
 					return new DisplayInfo(1920, 1080, 1.0, DisplayOrientation.Landscape, DisplayRotation.Rotation0);
 
-				var monitors = display.GetMonitors();
+				using var monitors = display.GetMonitors();
 				if (monitors.GetNItems() == 0)
 					return new DisplayInfo(1920, 1080, 1.0, DisplayOrientation.Landscape, DisplayRotation.Rotation0);
 
-				var monitor = (Gdk.Monitor)monitors.GetObject(0)!;
+				using var monitorObject = monitors.GetObject(0);
+				var monitor = (Gdk.Monitor)monitorObject!;
 				monitor.GetGeometry(out var geometry);
 				var scale = monitor.GetScaleFactor();
 				var width = geometry.Width * scale;
