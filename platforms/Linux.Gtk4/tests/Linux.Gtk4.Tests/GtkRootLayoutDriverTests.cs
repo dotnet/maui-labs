@@ -15,8 +15,8 @@ public class GtkRootLayoutDriverTests
 	{
 		Gtk.Module.Initialize();
 		Gtk.Functions.Init();
-		using var parent = new GtkLayoutPanel();
-		using var child = new GtkLayoutPanel();
+		using var parent = GtkLayoutPanel.NewWithProperties([]);
+		using var child = GtkLayoutPanel.NewWithProperties([]);
 		var parentView = new RecordingView();
 		var childView = new RecordingView();
 		var logger = new RecordingLogger();

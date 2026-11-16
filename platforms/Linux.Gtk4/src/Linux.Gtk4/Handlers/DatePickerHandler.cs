@@ -63,7 +63,7 @@ public class DatePickerHandler : GtkViewHandler<IDatePicker, Gtk.Box>
 		if (parent == null)
 			return;
 
-		var dialog = new Gtk.Window();
+		var dialog = Gtk.Window.New();
 		dialog.SetTitle("Select Date");
 		dialog.SetModal(true);
 		dialog.SetTransientFor(parent);

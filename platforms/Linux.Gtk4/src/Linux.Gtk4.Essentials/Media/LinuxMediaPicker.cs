@@ -346,7 +346,7 @@ internal sealed class GStreamerMediaCaptureProvider : ILinuxMediaCaptureProvider
 			try
 			{
 				var parent = LinuxMediaPicker.GetActiveWindow("capture media");
-				var dialog = new Gtk.Window();
+				var dialog = Gtk.Window.New();
 				dialog.SetTitle(title);
 				dialog.SetModal(true);
 				dialog.SetTransientFor(parent);

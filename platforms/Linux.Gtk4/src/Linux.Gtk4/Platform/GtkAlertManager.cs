@@ -265,7 +265,7 @@ public sealed class GtkAlertManager : IAlertManagerSubscription
 		string? message,
 		int width = 400)
 	{
-		var dialog = new Gtk.Window();
+		var dialog = Gtk.Window.New();
 		dialog.SetTitle(title);
 		dialog.SetModal(true);
 		dialog.SetTransientFor(parent);

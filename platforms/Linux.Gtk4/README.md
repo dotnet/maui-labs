@@ -620,13 +620,11 @@ Without an override, the runner selects `net11.0`, or `net10.0` for a MAUI 10 ve
 CI's `runtime` matrix runs one existing native class per process; retain
 the union of native class entries when integrating other platform changes.
 The runner also keeps `--blame-crash` enabled and uploads mini dumps. GirCore
-0.7.0 can let an exception escape its unmanaged `InstanceCache.ToggleNotify`
-callback; [gircore/gir.core@70f5465090b0](https://github.com/gircore/gir.core/commit/70f5465090b0)
-(included in GirCore 0.8.1) hardens that callback. Until the backend can take
-that broader binding update, native tests deterministically dispose GObject
-wrappers they own on the GTK thread, keep observer-created borrowed wrappers
-rooted for the dedicated test-host lifetime, and run target frameworks in
-separate test hosts.
+0.8.1 includes [gircore/gir.core@70f5465090b0](https://github.com/gircore/gir.core/commit/70f5465090b0),
+which prevents exceptions from escaping the unmanaged `InstanceCache.ToggleNotify`
+callback. Native tests still deterministically dispose GObject wrappers on the GTK
+thread and run target frameworks in separate test hosts to catch future lifetime
+regressions without sharing GTK global state.
 
 The transform regression creates a real GTK window and repeatedly scales and
 rotates a button at origin, off-origin, translated, and translation-cancelled
