@@ -36,7 +36,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 ### Prerequisites
 
 - [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) (see `global.json` for the pinned version)
-- MAUI workloads: `dotnet workload install maui macos --from-rollback-file eng/workloads/dotnet11-rc2.json`
+- MAUI workloads: `dotnet workload install maui macos --version 11.0.100.1 --source https://api.nuget.org/v3/index.json`
 
 ### Build Commands
 
@@ -74,7 +74,7 @@ npm ci
 ### Build Troubleshooting
 
 - If restore fails, check `NuGet.config` — feeds are internal dnceng proxies, not nuget.org
-- If workload errors occur: `dotnet workload install maui macos maui-tizen`
+- If workload errors occur: `dotnet workload install maui macos --version 11.0.100.1 --source https://api.nuget.org/v3/index.json`
 - SDK version mismatch: check `global.json` vs `dotnet --version`
 
 ## Testing

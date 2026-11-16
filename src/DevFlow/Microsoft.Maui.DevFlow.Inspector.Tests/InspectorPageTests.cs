@@ -391,7 +391,7 @@ public partial class InspectorPageTests : IAsyncLifetime
             (await viewport.GetAttributeAsync("data-height"))!,
             CultureInfo.InvariantCulture);
 
-        await _page.RouteAsync("**/api/state", async route =>
+        await _page.RouteAsync("**/api/state*", async route =>
         {
             await route.FulfillAsync(new()
             {
@@ -811,24 +811,41 @@ public partial class InspectorPageTests : IAsyncLifetime
     [LiveInspectorFact]
     public async Task EmptyRecordingStopClosesTimeline()
     {
+        var recordingActive = false;
         await _page.RouteAsync("**/api/control", route => route.FulfillAsync(new()
         {
             Status = 200,
             ContentType = "application/json",
             Body = "{\"youAreWriter\":true,\"heldByOther\":false}",
         }));
-        await _page.RouteAsync("**/api/flows/record/start", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/flows/record/start", route =>
+        {
+            recordingActive = true;
+            return route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = "{\"ok\":true,\"recordingId\":\"empty-recording\",\"name\":\"empty\"}",
+            });
+        });
+        await _page.RouteAsync("**/api/flows/record/status", route => route.FulfillAsync(new()
         {
             Status = 200,
             ContentType = "application/json",
-            Body = "{\"ok\":true,\"recordingId\":\"empty-recording\",\"name\":\"empty\"}",
+            Body = recordingActive
+                ? "{\"ok\":true,\"recording\":true,\"recordingId\":\"empty-recording\",\"name\":\"empty\",\"steps\":0}"
+                : "{\"ok\":true,\"recording\":false,\"steps\":0}",
         }));
-        await _page.RouteAsync("**/api/flows/record/stop", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/flows/record/stop", route =>
         {
-            Status = 200,
-            ContentType = "application/json",
-            Body = "{\"ok\":true,\"empty\":true,\"steps\":0}",
-        }));
+            recordingActive = false;
+            return route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = "{\"ok\":true,\"empty\":true,\"steps\":0}",
+            });
+        });
 
         await _page.GotoAsync(BaseUrl);
         await _page.Locator("#df-mode-interact").ClickAsync();
@@ -1687,7 +1704,7 @@ public partial class InspectorPageTests : IAsyncLifetime
                 Body = $"{{\"youAreWriter\":{ownsLease.ToString().ToLowerInvariant()},\"heldByOther\":false}}",
             });
         });
-        await _page.RouteAsync("**/api/state", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/state*", route => route.FulfillAsync(new()
         {
             Status = 200,
             ContentType = "application/json",

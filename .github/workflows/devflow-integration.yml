@@ -90,7 +90,8 @@ concurrency:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   DOTNET_NOLOGO: 1
-  DOTNET_WORKLOAD_ROLLBACK_FILE: eng/workloads/dotnet11-rc2.json
+  DOTNET_WORKLOAD_VERSION: 11.0.100.1
+  DOTNET_WORKLOAD_SOURCE: https://api.nuget.org/v3/index.json
   TEST_PROJECT: src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
 
 jobs:
@@ -185,7 +186,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workloads
-        run: dotnet workload install maui-android android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
+        run: dotnet workload install maui-android android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }} --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
 
       - name: Cache AVD
         uses: actions/cache@v4
@@ -271,7 +272,7 @@ jobs:
       fail-fast: false
       matrix:
         framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
-    # The RC2 manifests retain net10 Apple packs for Xcode 26.0.
+    # The GA manifests retain net10 Apple packs for Xcode 26.0.
     # Fresh simulator ownership does not eliminate hosted CoreSimulator stalls.
     runs-on: macos-26
     timeout-minutes: 90
@@ -326,16 +327,16 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        # Keep this list to workloads the repo actually targets. The rollback file is pinned,
-        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
-        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
+        # Keep this list to workloads the repo actually targets so unavailable
+        # runtime packs for unused workloads cannot break the job.
         run: |
           if [[ "${{ matrix.framework }}" == maui ]]; then
-            # The net10 manifest extends the current runtime workload, which is net11
-            # under this SDK. Install the explicit net10 runtime workload as well.
-            dotnet workload install maui ios macos maccatalyst android wasm-tools mobile-librarybuilder-net10 --from-rollback-file eng/workloads/dotnet11-rc2-ios-net10.json
+            # The GA workload set still carries the Xcode 26.0 net10 iOS pack, whose
+            # actool runtime is absent on this hosted image. Keep the released 26.4
+            # net10 iOS manifest and its explicit net10 runtime workload for this lane.
+            dotnet workload install maui ios macos maccatalyst android wasm-tools mobile-librarybuilder-net10 --from-rollback-file eng/workloads/dotnet11-ga-ios-net10.json --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
           else
-            dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
+            dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }} --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
           fi
 
       - name: Install Apple simulator automation tool
@@ -400,7 +401,7 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # Match the net10 Apple packs carried by the pinned RC2 manifests.
+          # Match the net10 Apple packs carried by the GA workload set.
           COMPATIBLE="${COMPATIBLE:-}"
           for candidate in /Applications/Xcode_26.0.app /Applications/Xcode_26.app; do
             if [[ -d "$candidate" ]]; then
@@ -433,10 +434,9 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        # Keep this list to workloads the repo actually targets. The rollback file is pinned,
-        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
-        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
+        # Keep this list to workloads the repo actually targets so unavailable
+        # runtime packs for unused workloads cannot break the job.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }} --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
 
       - name: Run DevFlow integration tests (maccatalyst)
         run: >
@@ -479,7 +479,7 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # Match the net10 Apple packs carried by the pinned RC2 manifests.
+          # Match the net10 Apple packs carried by the GA workload set.
           COMPATIBLE="${COMPATIBLE:-}"
           for candidate in /Applications/Xcode_26.0.app /Applications/Xcode_26.app; do
             if [[ -d "$candidate" ]]; then
@@ -508,10 +508,9 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        # Keep this list to workloads the repo actually targets. The rollback file is pinned,
-        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
-        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
+        # Keep this list to workloads the repo actually targets so unavailable
+        # runtime packs for unused workloads cannot break the job.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }} --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
 
       - name: Run DevFlow integration tests (macos)
         run: >
@@ -633,10 +632,9 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workloads
-        # Keep this list to workloads the repo actually targets. The rollback file is pinned,
-        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
-        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
+        # Keep this list to workloads the repo actually targets so unavailable
+        # runtime packs for unused workloads cannot break the job.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }} --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
 
       - name: Run DevFlow integration tests (windows)
         shell: pwsh
@@ -735,7 +733,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workload
-        run: dotnet workload install maui --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
+        run: dotnet workload install maui --version ${{ env.DOTNET_WORKLOAD_VERSION }} --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
 
       - name: Run DevFlow integration tests (WPF)
         shell: pwsh
