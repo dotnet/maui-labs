@@ -17,6 +17,7 @@ public class LinuxGeolocation : IGeolocation
     const string PropertiesInterface = "org.freedesktop.DBus.Properties";
 
     // GeoClue2 accuracy levels (GClueAccuracyLevel).
+    const uint AccuracyNone = 0;
     const uint AccuracyCountry = 1;
     const uint AccuracyCity = 4;
     const uint AccuracyNeighborhood = 5;
@@ -24,6 +25,7 @@ public class LinuxGeolocation : IGeolocation
     const uint AccuracyExact = 8;
 
     static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
+    static readonly TimeSpan EnabledProbeTimeout = TimeSpan.FromSeconds(2);
     static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(1);
     static readonly TimeSpan SinglePollInterval = TimeSpan.FromMilliseconds(500);
 
@@ -55,7 +57,56 @@ public class LinuxGeolocation : IGeolocation
         }
     }
 
-    public bool IsEnabled => OperatingSystem.IsLinux() && DBusAddress.System is not null;
+    /// <summary>
+    /// True when GeoClue2 is reachable on the system bus and currently allows some accuracy level.
+    /// </summary>
+    /// <remarks>
+    /// A non-null <see cref="DBusAddress.System"/> proves nothing: it falls back to the default socket path even
+    /// when there is no system bus. This property therefore connects to the bus and reads the GeoClue Manager's
+    /// <c>AvailableAccuracyLevel</c>; a missing bus, a missing GeoClue service or any D-Bus error yields false.
+    /// GeoClue reports <c>AvailableAccuracyLevel</c> = NONE when location services are switched off
+    /// (e.g. by the desktop's privacy settings). Per-application authorization by the GeoClue agent
+    /// can still be refused when a client is started. Each call performs a D-Bus round trip.
+    /// </remarks>
+    public bool IsEnabled
+    {
+        get
+        {
+            try
+            {
+                // Task.Run: blocking on async code from a UI SynchronizationContext could otherwise deadlock.
+                return Task.Run(() => GetAvailableAccuracyAsync(CancellationToken.None))
+                    .GetAwaiter().GetResult() > AccuracyNone;
+            }
+            catch
+            {
+                return false; // no bus, no GeoClue, timeout or any D-Bus error
+            }
+        }
+    }
+
+    async Task<uint> GetAvailableAccuracyAsync(CancellationToken token)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+        cts.CancelAfter(EnabledProbeTimeout);
+
+        using var connection = CreateConnection();
+        await connection.ConnectAsync().AsTask().WaitAsync(cts.Token).ConfigureAwait(false);
+        return await GetPropertyAsync<uint>(connection, new ObjectPath(ManagerPath), ManagerInterface, "AvailableAccuracyLevel", cts.Token).ConfigureAwait(false);
+    }
+    
+    static async Task<bool> IsLocationOffAsync(DBusConnection connection, CancellationToken token)
+    {
+        try
+        {
+            return await GetPropertyAsync<uint>(connection, new ObjectPath(ManagerPath), ManagerInterface,
+                "AvailableAccuracyLevel", token).ConfigureAwait(false) == AccuracyNone;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return false;
+        }
+    }
 
     public Task<Location?> GetLastKnownLocationAsync() =>
         Task.FromResult(_lastKnownLocation);
@@ -245,29 +296,44 @@ public class LinuxGeolocation : IGeolocation
         var token = cts.Token;
         var interval = minimumTime > TimeSpan.Zero ? minimumTime : DefaultPollInterval;
         string? lastLocationPath = null;
+        var activeCheckInterval = TimeSpan.FromSeconds(1);
+        var nextLocationRead = DateTime.UtcNow;
 
         try
         {
             while (!token.IsCancellationRequested)
             {
-                var locationPath = await GetPropertyAsync<ObjectPath>(
-                    connection, clientPath, ClientInterface, "Location", token).ConfigureAwait(false);
-
-                // GeoClue exposes a new Location object for every update,
-                // so a change of object path means a new fix is available.
-                var path = locationPath.ToString();
-                if (IsValidPath(locationPath) && path != lastLocationPath)
+                var active = await GetPropertyAsync<bool>(connection, clientPath, ClientInterface, "Active", token).ConfigureAwait(false);
+                if (!active)
                 {
-                    var location = await ReadLocationAsync(connection, locationPath, token).ConfigureAwait(false);
-
-                    lastLocationPath = path;
-                    _lastKnownLocation = location;
-
-                    if (!token.IsCancellationRequested)
-                        LocationChanged?.Invoke(this, new GeolocationLocationChangedEventArgs(location));
+                    var locationOff = await IsLocationOffAsync(connection, token).ConfigureAwait(false);
+                    StopListening(cts);
+                    ListeningFailed?.Invoke(this, new GeolocationListeningFailedEventArgs(
+                        locationOff ? GeolocationError.PositionUnavailable : GeolocationError.Unauthorized));
+                    return;
                 }
 
-                await Task.Delay(interval, token).ConfigureAwait(false);
+                if (DateTime.UtcNow >= nextLocationRead)
+                {
+                    var locationPath = await GetPropertyAsync<ObjectPath>(connection, clientPath, ClientInterface, "Location", token).ConfigureAwait(false);
+
+                    // GeoClue exposes a new Location object for every update,
+                    // so a change of object path means a new fix is available.
+                    var path = locationPath.ToString();
+                    if (IsValidPath(locationPath) && path != lastLocationPath)
+                    {
+                        var location = await ReadLocationAsync(connection, locationPath, token).ConfigureAwait(false);
+
+                        lastLocationPath = path;
+                        _lastKnownLocation = location;
+
+                        if (!token.IsCancellationRequested)
+                            LocationChanged?.Invoke(this, new GeolocationLocationChangedEventArgs(location));
+                    }
+                    nextLocationRead = DateTime.UtcNow + interval;
+                }
+
+                await Task.Delay(interval < activeCheckInterval ? interval : activeCheckInterval, token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
