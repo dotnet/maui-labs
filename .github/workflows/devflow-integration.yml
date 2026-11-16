@@ -90,8 +90,7 @@ concurrency:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   DOTNET_NOLOGO: 1
-  DOTNET_WORKLOAD_VERSION: 11.0.100.1
-  DOTNET_WORKLOAD_SOURCE: https://api.nuget.org/v3/index.json
+  DOTNET_WORKLOAD_ROLLBACK_FILE: eng/workloads/dotnet11-ga.json
   TEST_PROJECT: src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
 
 jobs:
@@ -186,7 +185,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workloads
-        run: dotnet workload install maui-android android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }} --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
+        run: dotnet workload install maui-android android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
 
       - name: Cache AVD
         uses: actions/cache@v4
@@ -334,9 +333,9 @@ jobs:
             # The GA workload set still carries the Xcode 26.0 net10 iOS pack, whose
             # actool runtime is absent on this hosted image. Keep the released 26.4
             # net10 iOS manifest and its explicit net10 runtime workload for this lane.
-            dotnet workload install maui ios macos maccatalyst android wasm-tools mobile-librarybuilder-net10 --from-rollback-file eng/workloads/dotnet11-ga-ios-net10.json --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
+            dotnet workload install maui ios macos maccatalyst android wasm-tools mobile-librarybuilder-net10 --from-rollback-file eng/workloads/dotnet11-ga-ios-net10.json
           else
-            dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }} --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
+            dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
           fi
 
       - name: Install Apple simulator automation tool
@@ -436,7 +435,7 @@ jobs:
       - name: Install Apple MAUI workloads
         # Keep this list to workloads the repo actually targets so unavailable
         # runtime packs for unused workloads cannot break the job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }} --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
 
       - name: Run DevFlow integration tests (maccatalyst)
         run: >
@@ -510,7 +509,7 @@ jobs:
       - name: Install Apple MAUI workloads
         # Keep this list to workloads the repo actually targets so unavailable
         # runtime packs for unused workloads cannot break the job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }} --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
 
       - name: Run DevFlow integration tests (macos)
         run: >
@@ -634,7 +633,7 @@ jobs:
       - name: Install MAUI workloads
         # Keep this list to workloads the repo actually targets so unavailable
         # runtime packs for unused workloads cannot break the job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }} --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
 
       - name: Run DevFlow integration tests (windows)
         shell: pwsh
@@ -733,7 +732,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workload
-        run: dotnet workload install maui --version ${{ env.DOTNET_WORKLOAD_VERSION }} --source ${{ env.DOTNET_WORKLOAD_SOURCE }}
+        run: dotnet workload install maui --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
 
       - name: Run DevFlow integration tests (WPF)
         shell: pwsh

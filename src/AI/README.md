@@ -49,7 +49,7 @@ Use `net11.0-ios27.2` or `net11.0-macos27.2` for those platforms.
 The pinned GA workload set provides OS 27.2 reference packs for .NET 11.
 `UseNet11AppleTargets` adds those targets while retaining the default .NET 10
 targets; it does not install or select Xcode. Install the matching workloads with
-`dotnet workload install maui macos --version 11.0.100.1 --source https://api.nuget.org/v3/index.json`.
+`dotnet workload install maui macos --from-rollback-file eng/workloads/dotnet11-ga.json`.
 
 ### Android
 
