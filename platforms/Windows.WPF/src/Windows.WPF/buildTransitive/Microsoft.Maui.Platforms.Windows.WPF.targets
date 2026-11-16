@@ -37,7 +37,7 @@
 
   <Target Name="_WpfPrepareMauiResources"
           Condition="'$(_WpfUseMaui11ResourcePipeline)' == 'true'"
-          DependsOnTargets="ProcessMauiAssets;ProcessMauiFonts;ResizetizeImages"
+          DependsOnTargets="ProcessMauiAssets;ProcessMauiFonts;ResizetizeImages;_WpfProcessMauiSplashScreen"
           BeforeTargets="GetCopyToOutputDirectoryItems;GetCopyToPublishDirectoryItems;ComputeFilesToPublish">
   </Target>
 

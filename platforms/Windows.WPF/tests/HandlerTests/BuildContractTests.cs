@@ -31,7 +31,11 @@ public sealed class BuildContractTests
 
 		var text = targets.ToString(SaveOptions.DisableFormatting);
 		Assert.Contains("BeforeTargets=\"GetCopyToOutputDirectoryItems;GetCopyToPublishDirectoryItems;ComputeFilesToPublish\"", text);
-		Assert.Contains("_WpfPrepareMauiResources", text);
+		var prepareResources = Assert.Single(targets.Descendants(),
+			element => element.Name.LocalName == "Target" &&
+				(string?)element.Attribute("Name") == "_WpfPrepareMauiResources");
+		Assert.Contains("_WpfProcessMauiSplashScreen",
+			prepareResources.Attribute("DependsOnTargets")?.Value);
 		Assert.Contains("MSBuildSourceProjectFile", text);
 		Assert.DoesNotContain("_WpfProcessMauiIcon", text);
 	}
