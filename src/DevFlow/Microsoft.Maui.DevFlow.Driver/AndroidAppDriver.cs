@@ -586,17 +586,14 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
             DeviceRecordingPath);
         var processStartInfo = CreateAdbProcessStartInfo(AdbPath, arguments);
         int? recordingPid = null;
-        var error = new StringWriter(CultureInfo.InvariantCulture);
-        var recordingTask = ProcessUtils.StartProcess(
+        var recordingTask = HostProcess.CaptureAsync(
             processStartInfo,
-            TextWriter.Null,
-            error,
             CancellationToken.None,
-            process => recordingPid = process.Id);
+            killEntireProcessTree: false,
+            onStarted: pid => recordingPid = pid);
 
         await EnsureRecordingProcessStartedAsync(
             recordingTask,
-            error,
             "adb screenrecord").ConfigureAwait(false);
 
         if (recordingPid is null)
@@ -618,8 +615,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     }
 
     internal static async Task EnsureRecordingProcessStartedAsync(
-        Task<int> recordingTask,
-        TextWriter error,
+        Task<(int ExitCode, string Output, string Error)> recordingTask,
         string command)
     {
         var completedTask = await Task.WhenAny(
@@ -628,11 +624,11 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
         if (completedTask != recordingTask)
             return;
 
-        var exitCode = await recordingTask.ConfigureAwait(false);
-        var detail = error.ToString()?.Trim() ?? string.Empty;
+        var result = await recordingTask.ConfigureAwait(false);
+        var detail = result.Error.Trim();
         var suffix = detail.Length == 0 ? string.Empty : $": {detail}";
         throw new InvalidOperationException(
-            $"{command} exited during startup with code {exitCode}{suffix}");
+            $"{command} exited during startup with code {result.ExitCode}{suffix}");
     }
 
     public override async Task<string> StopRecordingAsync()
@@ -879,24 +875,25 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     {
         var adbArguments = BuildAdbArguments(serial, arguments);
         var processStartInfo = CreateAdbProcessStartInfo(AdbPath, adbArguments);
-        using var output = new StringWriter(CultureInfo.InvariantCulture);
-        using var error = new StringWriter(CultureInfo.InvariantCulture);
-
-        var exitCode = await ProcessUtils.StartProcess(
+        // ADB may start a shared server; cancellation owns only this client process.
+        var result = await HostProcess.CaptureAsync(
             processStartInfo,
-            output,
-            error,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            killEntireProcessTree: false).ConfigureAwait(false);
 
-        if (exitCode != 0)
-            throw new InvalidOperationException($"adb {string.Join(" ", arguments)} failed: {error}");
+        if (result.ExitCode != 0)
+            throw new InvalidOperationException($"adb {string.Join(" ", arguments)} failed: {result.Error}");
 
-        return output.ToString();
+        return result.Output;
     }
 
     internal static ProcessStartInfo CreateAdbProcessStartInfo(string adbPath, params string[] arguments)
     {
-        var processStartInfo = ProcessUtils.CreateProcessStartInfo(adbPath);
+        var processStartInfo = new ProcessStartInfo(adbPath)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
         foreach (var argument in arguments)
             processStartInfo.ArgumentList.Add(argument);
         return processStartInfo;

@@ -165,5 +165,9 @@ public partial class PickerHandler : MacOSViewHandler<IPicker, NSPopUpButton>
             handler.PlatformView.WantsLayer = true;
             handler.PlatformView.Layer!.BackgroundColor = solidPaint.Color.ToPlatformColor().CGColor;
         }
+        else if (handler.PlatformView.Layer is { } layer)
+        {
+            layer.BackgroundColor = null;
+        }
     }
 }

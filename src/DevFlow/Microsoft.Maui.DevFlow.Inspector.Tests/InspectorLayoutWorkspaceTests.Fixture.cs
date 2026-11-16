@@ -26,6 +26,8 @@ public partial class InspectorLayoutWorkspaceTests(ITestOutputHelper output) : I
     private readonly List<string> _pageErrors = [];
     private readonly HashSet<string> _scripts = [];
     private string BaseUrl => $"http://127.0.0.1:{_inspector.Port}/";
+    private static bool IsStateUrl(string url)
+        => new Uri(url).AbsolutePath.EndsWith("/api/state", StringComparison.Ordinal);
 
     public async Task InitializeAsync()
     {

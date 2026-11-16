@@ -11,7 +11,7 @@ public partial class InspectorLayoutWorkspaceTests
         var appReachable = Task.FromResult(false);
         var stateRequests = 0;
         await PrepareLayoutWorkspaceAsync();
-        await _page.RouteAsync("**/api/state", async route =>
+        await _page.RouteAsync("**/api/state*", async route =>
         {
             Interlocked.Increment(ref stateRequests);
             if (await appReachable) await route.FallbackAsync();
@@ -73,7 +73,7 @@ public partial class InspectorLayoutWorkspaceTests
     public async Task RetryNowTimesOutAHungStateRequestAndCanTryAgain()
     {
         await PrepareLayoutWorkspaceAsync();
-        await _page.RouteAsync("**/api/state", route => route.FulfillAsync(new() { Status = 503 }),
+        await _page.RouteAsync("**/api/state*", route => route.FulfillAsync(new() { Status = 503 }),
             new() { Times = 1 });
         await AdvanceLayoutPollingAsync();
         var overlay = _page.Locator("#df-disconnected-overlay");
@@ -85,9 +85,9 @@ public partial class InspectorLayoutWorkspaceTests
         var aborted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _page.RequestFailed += (_, request) =>
         {
-            if (request.Url.EndsWith("/api/state", StringComparison.Ordinal)) aborted.TrySetResult();
+            if (IsStateUrl(request.Url)) aborted.TrySetResult();
         };
-        await _page.RouteAsync("**/api/state", async route =>
+        await _page.RouteAsync("**/api/state*", async route =>
         {
             started.TrySetResult();
             await release.Task;
@@ -129,7 +129,7 @@ public partial class InspectorLayoutWorkspaceTests
         var stateRequests = 0;
         _page.Request += (_, request) =>
         {
-            if (request.Url.EndsWith("/api/state", StringComparison.Ordinal)) Interlocked.Increment(ref stateRequests);
+            if (IsStateUrl(request.Url)) Interlocked.Increment(ref stateRequests);
         };
         var overlay = _page.Locator("#df-disconnected-overlay");
 
@@ -139,11 +139,11 @@ public partial class InspectorLayoutWorkspaceTests
         async Task FailAndRecoverAsync()
         {
             var requestsBefore = stateRequests;
-            await _page.RouteAsync("**/api/state", route => route.FulfillAsync(new() { Status = 503 }),
+            await _page.RouteAsync("**/api/state*", route => route.FulfillAsync(new() { Status = 503 }),
                 new() { Times = 1 });
             await _page.RunAndWaitForResponseAsync(
                 () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
-                response => response.Url.EndsWith("/api/state", StringComparison.Ordinal));
+                response => IsStateUrl(response.Url));
             await Expect(overlay).ToBeVisibleAsync();
             await _page.Clock.RunForAsync(3100);
             await Expect(overlay).ToBeHiddenAsync(new() { Timeout = 1000 });
@@ -172,7 +172,7 @@ public partial class InspectorLayoutWorkspaceTests
               Object.defineProperty(document, 'hidden', { configurable: true, value: false });
               document.dispatchEvent(new Event('visibilitychange'));
             }
-            """), response => response.Url.EndsWith("/api/state", StringComparison.Ordinal));
+            """), response => IsStateUrl(response.Url));
         await FailAndRecoverAsync();
     }
 }
