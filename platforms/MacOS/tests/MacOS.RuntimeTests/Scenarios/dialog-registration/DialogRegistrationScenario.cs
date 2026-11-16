@@ -5,6 +5,7 @@ using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Media;
+using Microsoft.Maui.Storage;
 using Microsoft.Maui.Platforms.MacOS.Hosting;
 using Microsoft.Maui.Platforms.MacOS.Essentials;
 #if NET11_0_OR_GREATER
@@ -19,7 +20,7 @@ static class DialogRegistrationScenario
 {
     [ModuleInitializer]
     public static void Register() => ScenarioRegistry.Register(
-        new("dialog-registration", ExpectedCases: 1, RunManaged: Run, ExpectedAssertions: 7));
+        new("dialog-registration", ExpectedCases: 1, RunManaged: Run, ExpectedAssertions: 9));
 
     static void Run(RuntimeTestContext context)
     {
@@ -75,6 +76,23 @@ static class DialogRegistrationScenario
         builder.UseMauiAppMacOS<OverrideApplication>();
         builder.Services.AddSingleton<IScreenshot>(overrideScreenshot);
         builder.AddMacOSEssentials();
+        var fileSystemRegistration = builder.Services.Last(descriptor =>
+            descriptor.ServiceType == typeof(IFileSystem));
+#if NET11_0_OR_GREATER
+        context.Assert(
+            fileSystemRegistration.ImplementationType?.FullName ==
+                "Microsoft.Maui.Platforms.MacOS.Essentials.FileSystemImplementation",
+            "MAUI 11 must register the AppKit file system for the framework-owned facade bridge.");
+        context.Assert(fileSystemRegistration.ImplementationInstance is null,
+            "MAUI 11 can defer AppKit file-system creation until the app provider is built.");
+#else
+        context.Assert(fileSystemRegistration.ImplementationInstance is IFileSystem,
+            "MAUI 10 must register an eager AppKit file-system singleton.");
+        context.Assert(
+            ReferenceEquals(FileSystem.Current, fileSystemRegistration.ImplementationInstance) &&
+            !string.IsNullOrEmpty(FileSystem.CacheDirectory),
+            "MAUI 10 must make the same DI file-system instance available before MauiApp.Build().");
+#endif
         var screenshotRegistrations = builder.Services
             .Where(descriptor => descriptor.ServiceType == typeof(IScreenshot))
             .ToArray();

@@ -26,7 +26,11 @@ public static class EssentialsExtensions
         builder.Services.TryAddSingleton<IConnectivity, ConnectivityImplementation>();
         builder.Services.TryAddSingleton<IBattery, BatteryImplementation>();
         builder.Services.TryAddSingleton<IDeviceDisplay, DeviceDisplayImplementation>();
+#if NET11_0_OR_GREATER
         builder.Services.TryAddSingleton<IFileSystem, FileSystemImplementation>();
+#else
+        RegisterLegacyFileSystem(builder.Services);
+#endif
         builder.Services.TryAddSingleton<IPreferences, PreferencesImplementation>();
         builder.Services.TryAddSingleton<ISecureStorage, SecureStorageImplementation>();
         builder.Services.TryAddSingleton<IFilePicker, FilePickerImplementation>();
@@ -114,16 +118,41 @@ public static class EssentialsExtensions
         }
     }
 
+    static void RegisterLegacyFileSystem(IServiceCollection services)
+    {
+        var registration = services.LastOrDefault(descriptor =>
+            descriptor.ServiceType == typeof(IFileSystem));
+
+        if (registration?.ImplementationInstance is IFileSystem existing)
+        {
+            Set(typeof(FileSystem), existing);
+            return;
+        }
+
+        if (registration is not null)
+            return;
+
+        IFileSystem implementation = new FileSystemImplementation();
+        services.AddSingleton(implementation);
+        Set(typeof(FileSystem), implementation);
+    }
+
     static void Set<T>(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicMethods)] Type facade,
         IServiceProvider services)
+        where T : class
+        => Set(facade, services.GetRequiredService<T>());
+
+    static void Set<T>(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicMethods)] Type facade,
+        T implementation)
         where T : class
     {
         const BindingFlags flags = BindingFlags.Static | BindingFlags.NonPublic;
         var setter = facade.GetMethod("SetDefault", flags, [typeof(T)])
             ?? facade.GetMethod("SetCurrent", flags, [typeof(T)])
             ?? throw new MissingMethodException(facade.FullName, "SetDefault/SetCurrent");
-        setter.Invoke(null, [services.GetRequiredService<T>()]);
+        setter.Invoke(null, [implementation]);
     }
 #endif
 }

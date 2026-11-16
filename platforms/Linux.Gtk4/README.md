@@ -624,7 +624,9 @@ The runner also keeps `--blame-crash` enabled and uploads mini dumps. GirCore
 callback; [gircore/gir.core@70f5465090b0](https://github.com/gircore/gir.core/commit/70f5465090b0)
 (included in GirCore 0.8.1) hardens that callback. Until the backend can take
 that broader binding update, native tests deterministically dispose GObject
-wrappers on the GTK thread and run target frameworks in separate test hosts.
+wrappers they own on the GTK thread, keep observer-created borrowed wrappers
+rooted for the dedicated test-host lifetime, and run target frameworks in
+separate test hosts.
 
 The transform regression creates a real GTK window and repeatedly scales and
 rotates a button at origin, off-origin, translated, and translation-cancelled
