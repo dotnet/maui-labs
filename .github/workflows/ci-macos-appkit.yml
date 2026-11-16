@@ -42,7 +42,7 @@ jobs:
         with:
           dotnet-version: |
             10.0.x
-            11.0.100-rc.2.26504.105
+            11.0.100
       - name: Run portable lifecycle, resource, and Blazor reconciliation tests
         run: dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj -c Release
       - name: Verify native runner contracts
@@ -62,7 +62,7 @@ jobs:
       android-project: ''
       run-tests: true
       pack: true
-      xcode-version: '27.0'
+      xcode-version: '27.2'
 
   sample-build:
     uses: ./.github/workflows/_build.yml
@@ -76,7 +76,7 @@ jobs:
       install-workloads: true
       workloads: 'macos maui'
       android-project: ''
-      xcode-version: '27.0'
+      xcode-version: '27.2'
 
   resource-acceptance:
     name: Package-only AppKit resource acceptance
@@ -86,9 +86,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-      - name: Select Xcode 27
+      - name: Select Xcode 27.2
         run: |
-          developer_dir="$(cd /Applications/Xcode_27.0.app/Contents/Developer && pwd -P)"
+          developer_dir="$(cd /Applications/Xcode_27.2.app/Contents/Developer && pwd -P)"
           sudo xcode-select -s "$developer_dir"
           echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
           xcodebuild -version
@@ -96,7 +96,7 @@ jobs:
         with:
           global-json-file: global.json
       - name: Install pinned AppKit workloads
-        run: ./eng/common/dotnet.sh workload install macos maui --from-rollback-file eng/workloads/dotnet11-rc2.json
+        run: ./eng/common/dotnet.sh workload install macos maui --from-rollback-file eng/workloads/dotnet11-ga.json
       - name: Verify referenced-library assets, mutation, publish, and collisions
         shell: pwsh
         run: ./eng/smoke-tests/community-resource-acceptance.ps1 -Backend appkit -ArtifactsDirectory "$PWD/artifacts/appkit-resources" -KeepArtifacts
@@ -156,9 +156,13 @@ jobs:
             maui-version: ''
             workloads: 'macos maui maui-tizen'
             packages: true
+          - scenario: bundle-resources
+            maui-version: '10.0.110'
+            workloads: 'macos maui maui-tizen'
+            packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages
-      APPKIT_XCODE_VERSION: ${{ startsWith(matrix.maui-version, '10.') && '26.0.1' || '27.0' }}
+      APPKIT_XCODE_VERSION: ${{ startsWith(matrix.maui-version, '10.') && '26.0.1' || '27.2' }}
     steps:
       - uses: actions/checkout@v6
       - name: Select Xcode
@@ -206,9 +210,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-      - name: Select Xcode 27
+      - name: Select Xcode 27.2
         run: |
-          developer_dir="$(cd /Applications/Xcode_27.0.app/Contents/Developer && pwd -P)"
+          developer_dir="$(cd /Applications/Xcode_27.2.app/Contents/Developer && pwd -P)"
           sudo xcode-select -s "$developer_dir"
           echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
           xcodebuild -version
@@ -216,7 +220,7 @@ jobs:
         with:
           global-json-file: global.json
       - name: Install pinned AppKit workload
-        run: ./eng/common/dotnet.sh workload install macos --from-rollback-file eng/workloads/dotnet11-rc2.json
+        run: ./eng/common/dotnet.sh workload install macos --from-rollback-file eng/workloads/dotnet11-ga.json
       - name: Verify Xcode
         run: xcodebuild -version
       - name: Run camera-equipped AppKit regression

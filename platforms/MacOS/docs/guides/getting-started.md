@@ -50,7 +50,7 @@ Create a new class library targeting `net11.0-macos`:
 
   <!-- Platform NuGet packages -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Controls" Version="11.0.0-rc.2.26505.5" />
+    <PackageReference Include="Microsoft.Maui.Controls" Version="11.0.10" />
     <PackageReference Include="Microsoft.Maui.Platforms.MacOS" Version="0.2.0-beta.6" />
   </ItemGroup>
 
@@ -90,15 +90,22 @@ Link your shared pages, view models, and helpers from the main MAUI project:
   <!-- Fonts -->
   <MauiFont Include="..\MyApp\Resources\Fonts\*" />
 
-  <!-- Blazor wwwroot (if applicable) -->
-  <BundleResource Include="..\MyApp\wwwroot\**"
-                  Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
+  <!-- Images and raw app-package files -->
+  <MauiImage Include="..\MyApp\Resources\Images\*" />
+  <MauiAsset Include="..\MyApp\Resources\Raw\**\*"
+             LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+
+  <!-- Processed as an AppKit bundle image; macOS has no OS launch-screen UI -->
+  <MauiSplashScreen Include="..\MyApp\Resources\Splash\splash.png" />
 </ItemGroup>
 ```
 
+Razor projects expose `wwwroot` through standard static web assets. The AppKit
+package consumes those generated `MauiAsset` items automatically.
+
 ### App Icon
 
-The `MauiIcon` item is automatically processed into a macOS `.icns` file at build time. The build targets use `sips` and `iconutil` to generate all required icon sizes (16×16 through 512×512 with @2x variants) from your source PNG or SVG.
+The `MauiIcon` item is automatically processed into a macOS `.icns` file at build time. The build targets use `sips` and `iconutil` to generate all required icon sizes (16×16 through 512×512 with @2x variants) from a source PNG.
 
 ## Step 3: Create Platform Bootstrap Files
 

@@ -13,7 +13,7 @@ Set-StrictMode -Version Latest
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $fixture = Join-Path $repo 'platforms\Shared\ResourceAcceptance'
 $version = '9.8.7-resource-smoke'
-$mauiVersion = '11.0.0-rc.2.26505.5'
+$mauiVersion = '11.0.10'
 if (-not $ArtifactsDirectory) {
     $ArtifactsDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "community-resources-$([Guid]::NewGuid().ToString('N'))"
 }
