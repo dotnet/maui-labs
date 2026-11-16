@@ -26,16 +26,20 @@ public class BuildContractTests
 		Assert.Contains("@(MauiProcessedImage)", targetText);
 		Assert.Contains("@(MauiProcessedFont)", targetText);
 		Assert.Contains("@(MauiProcessedAsset)", targetText);
+		Assert.Contains("ResizetizerAfterImageProcessingTargets", targetText);
+		Assert.Contains("ResizetizerAfterFontProcessingTargets", targetText);
+		Assert.Contains("ResizetizerAfterAssetProcessingTargets", targetText);
 		Assert.Contains("DependsOnTargets=\"ProcessMauiAssets;ProcessMauiFonts;ResizetizeImages\"", targetText);
 		Assert.Contains("BeforeTargets=\"GetCopyToOutputDirectoryItems;GetCopyToPublishDirectoryItems;ComputeFilesToPublish\"", targetText);
-		Assert.Contains("_LinuxGtk4ProcessedResourcesCollected", targetText);
-		Assert.Contains("MSBuildSourceProjectFile", targetText);
+		Assert.DoesNotContain("MauiProcessedImage.IsAppIcon", targetText);
+		Assert.DoesNotContain("MauiProcessedImage.TargetPath", targetText);
+		Assert.DoesNotContain("MauiProcessedFont.TargetPath", targetText);
 		Assert.Contains("Include=\"@(MauiImage)\"", targetText);
 		Assert.Contains("Include=\"@(MauiFont)\"", targetText);
 		Assert.Contains("Include=\"@(MauiAsset)\"", targetText);
+		Assert.Contains("Include=\"@(MauiSplashScreen)\"", targetText);
 		Assert.Contains("_LinuxGtk4UseMaui11Contracts", targetText);
 		Assert.Contains("hicolor/scalable/apps/", targetText);
-		Assert.Contains("MauiProcessedAsset.LogicalName", targetText);
 		Assert.Contains("MauiProcessedAsset.Link", targetText);
 	}
 

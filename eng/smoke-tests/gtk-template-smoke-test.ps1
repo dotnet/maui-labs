@@ -1,13 +1,18 @@
 param(
     [switch]$BuildApps,
     [switch]$KeepArtifacts,
-    [string]$DotNetSdkPath
+    [string]$DotNetSdkPath,
+    [string]$ArtifactsDirectory
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 # Keep restored package paths below Windows' assembly resolver path-length limit.
-$workRoot = Join-Path ([System.IO.Path]::GetTempPath()) "gtk-$([Guid]::NewGuid().ToString('N'))"
+$workRoot = if ($ArtifactsDirectory) {
+    $ArtifactsDirectory
+} else {
+    Join-Path ([System.IO.Path]::GetTempPath()) "gtk-$([Guid]::NewGuid().ToString('N'))"
+}
 $templateProject = Join-Path $repoRoot 'platforms\Linux.Gtk4\templates\Linux.Gtk4.Templates.csproj'
 $packagePrefix = 'Microsoft.Maui.Platforms.Linux.Gtk4'
 $dotnetPrefix = @()
@@ -58,7 +63,10 @@ function Assert-TemplateProject {
     if ($Text.Contains('__GtkPackageVersion__')) { throw 'Unexpanded version token' }
 }
 
-New-Item -ItemType Directory -Path $workRoot -Force | Out-Null
+if (Test-Path -LiteralPath $workRoot) {
+    throw "Use a new artifacts directory to avoid stale template results: $workRoot"
+}
+New-Item -ItemType Directory -Path $workRoot | Out-Null
 try {
     # Generated apps must not inherit repository-only Arcade or CPM settings.
     '<Project />' | Set-Content (Join-Path $workRoot 'Directory.Build.props')

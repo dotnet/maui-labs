@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <MauiAsset Include="Resources/Raw/local.txt" LogicalName="App/local.txt" />
+    __PLATFORM_RESOURCE_ITEMS__
   </ItemGroup>
 
   <Target Name="WriteResourceAcceptanceBackendIdentity" AfterTargets="Build">
