@@ -1,28 +1,22 @@
 #nullable enable
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Internals;
+using Microsoft.Maui.Controls.Platform;
 
 namespace Microsoft.Maui.Platforms.Windows.WPF;
 
 /// <summary>
-/// WPF implementation of MAUI's public keyed dialog delegates.
+/// WPF dialog implementation used by the typed MAUI 11 subscription and the
+/// isolated MAUI 10 compatibility proxy.
 /// </summary>
 public static class WPFDialogService
 {
-	public const string DisplayAlertKey = "Microsoft.Maui.Controls.DisplayAlert";
-	public const string DisplayActionSheetKey = "Microsoft.Maui.Controls.DisplayActionSheet";
-	public const string DisplayPromptKey = "Microsoft.Maui.Controls.DisplayPrompt";
-
 	public static void Register(IServiceCollection services)
 	{
 #if !NET10_0
-		services.AddKeyedSingleton<Func<Page, AlertArguments, Task<bool>>>(
-			DisplayAlertKey, static (_, arguments) => ShowAlertAsync(_, arguments));
-		services.AddKeyedSingleton<Func<Page, ActionSheetArguments, Task<string>>>(
-			DisplayActionSheetKey, static (_, arguments) => ShowActionSheetAsync(_, arguments));
-		services.AddKeyedSingleton<Func<Page, PromptArguments, Task<string>>>(
-			DisplayPromptKey, static (_, arguments) => ShowPromptAsync(_, arguments));
+		services.TryAddSingleton<IAlertManagerSubscription, WPFAlertManagerSubscription>();
 #endif
 	}
 
@@ -216,3 +210,49 @@ public static class WPFDialogService
 		return button;
 	}
 }
+
+#if !NET10_0
+sealed class WPFAlertManagerSubscription : IAlertManagerSubscription
+{
+	public async void OnAlertRequested(Page sender, AlertArguments arguments)
+	{
+		try
+		{
+			arguments.SetResult(await WPFDialogService.ShowAlertAsync(sender, arguments));
+		}
+		catch (Exception exception)
+		{
+			arguments.Result.TrySetException(exception);
+		}
+	}
+
+	public async void OnActionSheetRequested(Page sender, ActionSheetArguments arguments)
+	{
+		try
+		{
+			arguments.SetResult(await WPFDialogService.ShowActionSheetAsync(sender, arguments));
+		}
+		catch (Exception exception)
+		{
+			arguments.Result.TrySetException(exception);
+		}
+	}
+
+	public async void OnPromptRequested(Page sender, PromptArguments arguments)
+	{
+		try
+		{
+			arguments.SetResult(await WPFDialogService.ShowPromptAsync(sender, arguments));
+		}
+		catch (Exception exception)
+		{
+			arguments.Result.TrySetException(exception);
+		}
+	}
+
+	[Obsolete("Page busy notifications are obsolete and have no replacement.")]
+	public void OnPageBusy(Page sender, bool enabled)
+	{
+	}
+}
+#endif

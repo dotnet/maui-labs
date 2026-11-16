@@ -25,12 +25,6 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 			Services = applicationContext.Services;
 
-#if NET10_0
-			// MAUI 10 does not bridge Essentials static facades to DI. Keep this compatibility
-			// path isolated from .NET 11, where the public DI integration is used.
-			OverrideEssentialsDefaults();
-#endif
-
 			Application = Services.GetRequiredService<IApplication>();
 
 			// Wire up ApplicationHandler (replaces removed SetApplicationHandler API)
@@ -50,29 +44,5 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 		public IApplication Application { get; protected set; } = null!;
 
-#if NET10_0
-		void OverrideEssentialsDefaults()
-		{
-			var deviceInfo = Services.GetService<Microsoft.Maui.Devices.IDeviceInfo>()
-				?? new WPFDeviceInfoFallback();
-			var setter = typeof(Microsoft.Maui.Devices.DeviceInfo).GetMethod("SetCurrent",
-				System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
-				[typeof(Microsoft.Maui.Devices.IDeviceInfo)])
-				?? throw new MissingMethodException(typeof(Microsoft.Maui.Devices.DeviceInfo).FullName, "SetCurrent");
-			setter.Invoke(null, [deviceInfo]);
-		}
-
-		sealed class WPFDeviceInfoFallback : Microsoft.Maui.Devices.IDeviceInfo
-		{
-			public string Model => "WPF";
-			public string Manufacturer => "Microsoft";
-			public string Name => Environment.MachineName;
-			public string VersionString => Environment.OSVersion.VersionString;
-			public Version Version => Environment.OSVersion.Version;
-			public Microsoft.Maui.Devices.DevicePlatform Platform => Microsoft.Maui.Devices.DevicePlatform.Create("WPF");
-			public Microsoft.Maui.Devices.DeviceIdiom Idiom => Microsoft.Maui.Devices.DeviceIdiom.Desktop;
-			public Microsoft.Maui.Devices.DeviceType DeviceType => Microsoft.Maui.Devices.DeviceType.Physical;
-		}
-#endif
 	}
 }

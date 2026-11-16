@@ -19,6 +19,10 @@ public class ModernizationRegistrationTests
 
         Assert.IsType<WPFGesturePlatformManagerFactory>(
             app.Services.GetRequiredService<IGesturePlatformManagerFactory>());
+        Assert.Single(app.Services.GetServices<Microsoft.Maui.Dispatching.IDispatcherProvider>());
+        Assert.Single(app.Services.GetServices<IFontRegistrar>());
+        Assert.Single(app.Services.GetServices<IEmbeddedFontLoader>());
+        Assert.Single(app.Services.GetServices<IFontManager>());
     }
 
     [Fact]

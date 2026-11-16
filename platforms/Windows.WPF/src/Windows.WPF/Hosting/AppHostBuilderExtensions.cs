@@ -105,19 +105,19 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 			//DependencyService.Register<FontNamedSizeService>();
 
 
-			builder.Services.AddSingleton<IDispatcherProvider>(svc =>
+			builder.Services.Replace(ServiceDescriptor.Singleton<IDispatcherProvider>(svc =>
 				// the DispatcherProvider might have already been initialized, so ensure that we are grabbing the
 				// Current and putting it in the DI container.
-				new WPFDispatcherProvider());
+				new WPFDispatcherProvider()));
 
-			builder.Services.AddScoped(svc =>
+			builder.Services.Replace(ServiceDescriptor.Scoped<IDispatcher>(svc =>
 			{
 				var provider = svc.GetRequiredService<IDispatcherProvider>();
 				if (DispatcherProvider.SetCurrent(provider))
 					svc.GetService<ILogger<Dispatcher>>()?.LogWarning("Replaced an existing DispatcherProvider with one from the service provider.");
 
 				return Dispatcher.GetForCurrentThread()!;
-			});
+			}));
 
 			// Register WPF-specific animation ticker (runs on dispatcher thread)
 			builder.Services.AddSingleton<Microsoft.Maui.Animations.Ticker>(new Microsoft.Maui.Platforms.Windows.WPF.WPFTicker());
@@ -136,10 +136,10 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 			Microsoft.Maui.Platforms.Windows.WPF.ThemeManager.Initialize();
 
 			// Register font services
-			builder.Services.AddSingleton<IFontRegistrar, Microsoft.Maui.Platforms.Windows.WPF.WPFFontRegistrar>();
-			builder.Services.AddSingleton<IEmbeddedFontLoader>(_ => new WPFEmbeddedFontLoader());
+			builder.Services.Replace(ServiceDescriptor.Singleton<IFontRegistrar, Microsoft.Maui.Platforms.Windows.WPF.WPFFontRegistrar>());
+			builder.Services.Replace(ServiceDescriptor.Singleton<IEmbeddedFontLoader>(_ => new WPFEmbeddedFontLoader()));
 			builder.Services.AddSingleton<WPFFontManager>();
-			builder.Services.AddSingleton<IFontManager>(services => services.GetRequiredService<WPFFontManager>());
+			builder.Services.Replace(ServiceDescriptor.Singleton<IFontManager>(services => services.GetRequiredService<WPFFontManager>()));
 
 			// Register FontNamedSizeService
 			DependencyService.Register<Microsoft.Maui.Platforms.Windows.WPF.WPFFontNamedSizeService>();
@@ -151,11 +151,7 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 					handlers.AddMauiControlsHandlers();
 				});
 
-			// Register EffectsFactory (internal type required for page effects)
-			var effectsFactoryType = typeof(Microsoft.Maui.Controls.Effect).Assembly
-				.GetType("Microsoft.Maui.Controls.Hosting.EffectsFactory");
-			if (effectsFactoryType != null)
-				builder.Services.TryAddSingleton(effectsFactoryType);
+			builder.ConfigureEffects(_ => { });
 
 			builder.RemapForControls();
 
