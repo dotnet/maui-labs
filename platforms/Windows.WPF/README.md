@@ -280,8 +280,11 @@ Run `eng\smoke-tests\wpf-assets-smoke-test.ps1 -RuntimeIdentifier win-x64` on
 Windows (choose the RID matching your selected `dotnet` host) to build and run the
 existing `Windows.WPF.Sample` with `-p:WpfTestScenarios=true`, then publish it
 without rebuilding and run it again. The opt-in `--test-scenario packaged-assets`
-entrypoint uses the actual DI-registered WPF file system without opening a window
-or starting DevFlow. Normal startup (no scenario argument) still opens the gallery.
+entrypoint uses the actual DI-registered WPF file system, while
+`--test-scenario standard-resources` validates the processed `MauiImage`,
+`MauiFont`, `MauiAsset`, `MauiIcon`, and retained `MauiSplashScreen` contract.
+Neither scenario opens a window or starts DevFlow. Normal startup (no scenario
+argument) still opens the gallery.
 Scenario code and fixtures live under the sample's `TestScenarios` directory;
 additional runtime checks should use this shared host rather than new test apps.
 Launch scenarios with `dotnet Windows.WPF.Sample.dll --test-scenario <name>` to
@@ -312,10 +315,14 @@ and AppKit; Windows handler tests cover the native collection projection.
 The .NET 11 package selects `MauiActiveBackend=wpf` and
 `ResizetizerPlatformType=wpf` after consumer properties have been evaluated.
 Processed images and fonts are copied to `Resources/Images` and `Resources/Fonts`;
-raw assets retain their logical names, including referenced-library assets.
+processed app icons are copied to `Resources/AppIcon`; raw assets retain their
+logical names, including referenced-library assets. The backend attaches these
+last-mile targets through MAUI's public Resizetizer post-processing hooks.
 SVG `MauiImage` inputs are rasterized by MAUI's Resizetizer: use the processed
 `.png` filename, not runtime `.svg` loading. The backend does not render a
-placeholder for unsupported runtime SVG sources.
+placeholder for unsupported runtime SVG sources. MAUI does not yet expose a
+processed splash item or external splash hook, so WPF retains the declared splash
+source in `Resources/Splash` for build and publish.
 
 On Windows, run `eng\smoke-tests\community-resource-acceptance.ps1 -Backend wpf`
 for package-only .NET 10 and .NET 11 consumers. It checks exact bytes, nested and
@@ -329,7 +336,7 @@ inherited global cache cannot mask missing package build imports.
 The WPF PR workflow is not restricted to PRs targeting `main`, so stacked PRs
 receive Windows-native coverage. Handler and Essentials suites run separately
 for both TFMs; dialog registration also covers MAUI 10.0.41, 10.0.60, 10.0.70,
-10.0.110, and 11.0.0-rc.2.26505.5. Historical regression baselines keep their
+10.0.110, and 11.0.10. Historical regression baselines keep their
 original framework and failure-count gates. Cross-building on macOS verifies
 compilation and package contents, not WPF rendering, dialogs, UI Automation,
 SAPI, location, or other Windows-native execution.
@@ -583,7 +590,8 @@ to `Tapped: <name>`, providing an observable check beyond a successful tap respo
 
 The libraries and focused tests multi-target .NET 10 and .NET 11. The .NET 10
 lane keeps the historical `AlertManagerSubscriptionTests` coverage for the
-compatibility `DispatchProxy`; .NET 11 verifies the public keyed dialog delegates.
+compatibility `DispatchProxy`; .NET 11 verifies the public typed
+`IAlertManagerSubscription`.
 
 The project includes **213 UI tests** covering all implemented controls, plus a **WinUI comparison framework** that captures side-by-side screenshots of the WPF and WinUI ControlGallery apps for visual parity validation.
 
@@ -599,16 +607,17 @@ Comparison screenshots are saved to `tests/UITests/Comparisons/`.
 
 ## Key Technical Notes
 
-- .NET 11 uses public keyed dialog delegates, public gesture dispatch, and
+- .NET 11 uses public typed dialog subscriptions, public gesture dispatch, and
   `IGesturePlatformManagerFactory`. Reflection remains compiled only for `NET10_0`.
 - The platform-agnostic `ViewHandler` has no-op `PlatformArrange` and returns `Size.Zero`. `WPFViewHandler` overrides these to bridge MAUI layout to WPF `Measure`/`Arrange`.
 - WPF `System.Windows.Controls` and MAUI `Microsoft.Maui.Controls` share many type names — every handler file uses `using` aliases to disambiguate (e.g., `WButton = System.Windows.Controls.Button`).
 - The `MauiWPFApplication` base class in `App.xaml` bootstraps the MAUI runtime within a WPF `Application`.
-- Dialogs use MAUI 11's documented keyed delegate contract. The .NET 10 target
+- Dialogs use MAUI 11's public `IAlertManagerSubscription`. The .NET 10 target
   retains the older `DispatchProxy` bridge solely for binary compatibility.
 - `buildTransitive` targets opt WPF into Resizetizer and consume
-  `MauiProcessedImage`, `MauiProcessedFont`, and `MauiProcessedAsset`. Runtime SVG
-  loading is rejected; reference the processed bitmap name instead.
+  `MauiProcessedImage`, `MauiProcessedFont`, and `MauiProcessedAsset` through the
+  public post-processing hooks. Runtime SVG loading is rejected; reference the
+  processed bitmap name instead.
 - Register Blazor with
   `AddMauiBlazorWebView().UsePlatformHandler<Microsoft.AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler>()`.
 

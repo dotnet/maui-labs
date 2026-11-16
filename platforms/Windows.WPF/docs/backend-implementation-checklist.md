@@ -532,15 +532,15 @@ Every handler inherits these property mappings from `RemapForControls()` in `App
 
 | Item Type | Status | Notes |
 |-----------|--------|-------|
-| [x] **MauiIcon** | ✅ | MSBuild target copies icon to `Resources/` in output directory |
+| [x] **MauiIcon** | ✅ | Resizetizer output is copied to `Resources/AppIcon/` |
 | [x] **MauiImage** | ✅ | Consumes `MauiProcessedImage` into `Resources/Images/` |
 | [x] **MauiFont** | ✅ | Consumes `MauiProcessedFont` into `Resources/Fonts/` |
 | [x] **MauiAsset** | ✅ | Consumes `MauiProcessedAsset` and preserves logical paths |
-| [x] **MauiSplashScreen** | ✅ | MSBuild target copies splash image to `Resources/` |
+| [x] **MauiSplashScreen** | ✅ | Source is retained in `Resources/Splash/`; MAUI has no public processed-splash hook |
 
 > The idempotent `buildTransitive` props/targets set `ResizetizerPlatformType`,
 > declare the WPF platform folder, run the public processing targets, and consume
-> the resulting `MauiProcessed*` items.
+> the resulting `MauiProcessed*` items through MAUI's post-processing hooks.
 
 ---
 
@@ -552,7 +552,7 @@ Every handler inherits these property mappings from `RemapForControls()` in `App
 
 ### Gap 2: `MainThread.BeginInvokeOnMainThread` ([#34101](https://github.com/dotnet/maui/issues/34101))
 
-**Status:** ⚠️ Documented — app developers should use `Dispatcher.Dispatch()` instead.
+**Status:** ✅ MAUI 11 bridges `MainThread` to the registered application dispatcher.
 
 ### Gap 3: Resizetizer Extensibility ([#34102](https://github.com/dotnet/maui/issues/34102), [#34222](https://github.com/dotnet/maui/issues/34222))
 
@@ -564,7 +564,7 @@ Every handler inherits these property mappings from `RemapForControls()` in `App
 
 ### Gap 5: Alert/Dialog System ([#34104](https://github.com/dotnet/maui/issues/34104))
 
-**Status:** ✅ Public typed keyed delegates on .NET 11; `DispatchProxy` only on .NET 10.
+**Status:** ✅ Public `IAlertManagerSubscription` on .NET 11; `DispatchProxy` only on .NET 10.
 
 ---
 
@@ -706,4 +706,4 @@ D:\repos\rmarinho\maui.wpf\
 
 *Last updated: 2026-02-26*
 *Branch: `more-controls`*
-*Target Frameworks: `net10.0-windows` + `net11.0-windows` | Default MAUI: `11.0.0-rc.2.26505.5`*
+*Target Frameworks: `net10.0-windows` + `net11.0-windows` | Default MAUI: `11.0.10`*

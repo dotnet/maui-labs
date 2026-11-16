@@ -5,7 +5,7 @@ This guide walks you through creating your first .NET MAUI app running on Window
 ## Prerequisites
 
 - [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) or later
-- MAUI workload: `dotnet workload install maui`
+- MAUI workloads: `dotnet workload install maui maui-tizen --from-rollback-file eng/workloads/dotnet11-ga.json`
 
 ## Quick Start
 
@@ -45,13 +45,13 @@ version; it ensures the consumer and Essentials reference the same Windows SDK
 assembly. The template stamps this value from the repository's dependency pin.
 
 Reference `Microsoft.Maui.Controls` explicitly at the version required by the
-backend (currently `11.0.0-rc.2.26505.5`), and reference both
+backend (currently `11.0.10`), and reference both
 `Microsoft.Maui.Platforms.Windows.WPF` and
 `Microsoft.Maui.Platforms.Windows.WPF.Essentials` at the same full release
 version. For example, these references select the preview.12 release:
 
 ```xml
-<PackageReference Include="Microsoft.Maui.Controls" Version="11.0.0-rc.2.26505.5" />
+<PackageReference Include="Microsoft.Maui.Controls" Version="11.0.10" />
 <PackageReference Include="Microsoft.Maui.Platforms.Windows.WPF" Version="0.1.0-preview.12.26421.1" />
 <PackageReference Include="Microsoft.Maui.Platforms.Windows.WPF.Essentials" Version="0.1.0-preview.12.26421.1" />
 ```
@@ -139,16 +139,18 @@ use `-ArtifactsDirectory` to choose a new directory. No global template installa
 is changed. `-SdkDirectory` can select an already-installed SDK for local
 diagnostics when the repository-pinned SDK is unavailable. This also selects the
 `dotnet.exe` from that SDK's installation rather than the host on `PATH`. CI installs
-`maui` and `maui-tizen` at the pinned workload version into the setup-dotnet SDK
+`maui` and `maui-tizen` from `eng/workloads/dotnet11-ga.json` into the setup-dotnet SDK
 and explicitly uses that same SDK for packing, generation, and the consumer build.
 
-Add `-FontScenarios` to exercise registered fonts in that same generated
-PackageReference consumer (enabled in WPF CI). The harness adds the sample's shared
-font registration and native scenario, without adding any ProjectReference or
-repository target import. It checks the actual packed font target and its consumer
-integration, then compares native font identity, glyphs, and pixels against an
-independent trusted Open Sans control in three working directories for both build
-and no-build/no-restore publish output. The normal template window check still runs.
+Add `-FontScenarios` to exercise registered fonts and the complete standard MAUI
+resource pipeline in that same generated PackageReference consumer (enabled in WPF
+CI). The harness adds plain `MauiImage`, `MauiFont`, `MauiAsset`, `MauiIcon`, and
+`MauiSplashScreen` items without adding any ProjectReference or repository target
+import. It checks the packed target hooks and output items, validates processed
+images/icons and retained assets/splash files for build and no-build/no-restore
+publish, then compares native font identity, glyphs, and pixels against an
+independent trusted Open Sans control in three working directories. The normal
+template window check still runs.
 The proof uses framework-dependent output with `PublishReadyToRun=false` consistently
 for restore, build, and publish; it verifies resource deployment, not ReadyToRun compilation.
 The package contract, evaluated imports, native results, and tested packages are
