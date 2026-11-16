@@ -101,9 +101,10 @@ model advertises that capability. Select **Preview fast** for the verified Nano 
 tool path; the default stable/full Nano V3 model has no native tool calling.
 Tool controls follow the selected model's status. Auto and None are available;
 Require any is unsupported. **Structured JSON** uses the native schema API and
-works together with tools and thinking: tool calls run first, then the final
-answer is generated under the schema. With Streaming enabled, JSON arrives incrementally. Tool-enabled text arrives at
-the end of each model turn so ML Kit's raw function tokens never appear in chat.
+works together with tools: tool calls run first, then the final answer is
+generated under the schema. With Streaming enabled, JSON arrives incrementally.
+Without Structured JSON, tool-enabled text arrives at the end of each model turn
+so ML Kit's raw function tokens never appear in chat.
 Use **Download** in the readiness banner to prepare the model. Chat requests never
 download assets or fall back to a cloud provider.
 See the [Android guide](../../docs/ai/gemini-nano-android.md).

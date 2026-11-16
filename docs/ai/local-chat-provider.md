@@ -425,8 +425,8 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - **Android:** build ML Kit's native response schema from the JSON schema and
   apply it through ML Kit internals (AICore constrained decoding); no fixed
   classes or shape limits. Require an explicit schema (AICore wraps non-object
-  roots, which the bridge unwraps) and check the model's structured capability. Normalize required/additional properties
-  through MEAI, validate the complete JSON against the schema, and preserve
+  roots, which the bridge unwraps) and check the model's structured capability.
+  Normalize required/additional properties through MEAI, validate the complete JSON against the schema, and preserve
   caller history and native input usage. Reject schema-free JSON or
   unrepresentable constraints before inference. Structured streaming emits text
   deltas validated at completion. Thinking works with a schema. AICore emits no
@@ -491,9 +491,9 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - **Android:** serialize native callbacks through a per-request queue, preserve
   text/thought order, and reconcile the final candidate against accumulated
   additional-text deltas with the same equal/suffix/divergence contract. Finish
-  admitted callbacks before releasing the managed JNI callback. The typed-schema
-  API has no progress overload, so structured requests emit one complete,
-  validated JSON update and then terminal metadata.
+  admitted callbacks before releasing the managed JNI callback. Structured
+  requests stream JSON deltas, except non-object roots, which emit one validated
+  update.
 
 ### Token usage
 
@@ -523,8 +523,8 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - **Windows:** advertise no TokenUsage capability and report no usage metadata
   because the native API exposes no token counts.
 - **Android:** map native input tokens from `countTokens`; do not estimate output
-  or total counts. For structured requests, count the complete typed request
-  including its schema. Emit streaming input usage once with the terminal update.
+  or total counts. For structured requests, count the request with its schema,
+  plus the schema-free tool-decision request when tools are active. Emit streaming input usage once with the terminal update.
 
 ### Telemetry and timing
 

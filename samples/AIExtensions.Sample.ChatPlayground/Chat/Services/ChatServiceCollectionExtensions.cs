@@ -98,7 +98,7 @@ internal static class ChatServiceCollectionExtensions
                 "Gemini Nano",
                 "Gemini Nano includes the supplied conversation in each text/image request. " +
                     "Native tool calling requires a capable Nano V4 model, such as Preview fast. " +
-                    "Structured JSON uses the native schema API and works with tools and thinking. " +
+                    "Structured JSON uses the native schema API and works with tools. " +
                     "Required tool mode is unavailable. System instructions require Nano V3+. " +
                     "Use Download above the composer to prepare the model; requests never download automatically.",
                 SupportsImageInput: true,

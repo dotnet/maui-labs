@@ -169,7 +169,7 @@ class GeminiNanoNativeClient {
             val response = try {
                 val schema = request.options.responseSchemaJson?.let { NativeResponseSchema.parse(it) }
                 val model = Generation.getClient(modelConfiguration(request.options.modelId))
-                try {
+                val generatedResponse = try {
                     ensureActive()
                     val featureStatus = model.checkStatus()
                     check(featureStatus == FeatureStatus.AVAILABLE) {
@@ -258,6 +258,8 @@ class GeminiNanoNativeClient {
                 } finally {
                     model.close()
                 }
+                ensureActive()
+                generatedResponse
             } catch (cause: Throwable) {
                 stream?.cancel()
                 fail(cause)

@@ -17,9 +17,9 @@ import com.google.android.gms.internal.mlkit_genai_prompt.zzip
 import com.google.android.gms.internal.mlkit_genai_prompt.zziq
 import com.google.android.gms.internal.mlkit_genai_prompt.zziw
 import com.google.android.gms.internal.mlkit_genai_prompt.zziz
+import com.google.mlkit.genai.common.FunctionCall
 import com.google.mlkit.genai.common.StreamingCallback
 import com.google.mlkit.genai.prompt.Candidate
-import com.google.mlkit.genai.common.FunctionCall
 import com.google.mlkit.genai.prompt.GenerateContentRequest
 import com.google.mlkit.genai.prompt.GenerateContentResponse
 import com.google.mlkit.genai.prompt.GenerationConfig
