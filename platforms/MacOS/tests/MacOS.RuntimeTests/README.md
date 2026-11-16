@@ -28,7 +28,7 @@ sentinel and all 59 fixed assertions remain required.
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
 | `dialog-registration` | 1 | Typed MAUI 11 subscription or isolated MAUI 10 proxy, with singleton registration |
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
-| `window-page-reset` | 1 | Sheets survive root replacement / native button opens nested modal sheets, then resets Window.Page and verifies both sheets and MAUI modal state are cleared |
+| `window-page-reset` | 1 | Native button opens nested modal sheets, then resets Window.Page and verifies both sheets and MAUI modal state are cleared through the GA modal platform contract |
 | `picker` | 19 | Unselected null-title Picker displays January / selection, title, items and native activation transitions |
 | `background-reset` | 4 | Cleared Grid background keeps its colour / direct clears, DataTrigger exit, ContentView, Picker and ImageButton (10 assertions) |
 | `tap-buttons` | 3 | Left click routed to secondary recognizer / primary, secondary and dynamic `Buttons` changes |
@@ -59,11 +59,11 @@ evidence, and deletes the captured file.
 
 ## Run on macOS
 
-Use the repository .NET 11 SDK, its pinned macOS workload, and Xcode 27.0:
+Use the repository .NET 11 SDK, its pinned macOS workload, and Xcode 27.2:
 
 ```sh
 export NUGET_PACKAGES="$PWD/.packages"
-./eng/common/dotnet.sh workload install macos --from-rollback-file eng/workloads/dotnet11-rc2.json
+./eng/common/dotnet.sh workload install macos --from-rollback-file eng/workloads/dotnet11-ga.json
 python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
   --scenario layout --evidence "$PWD/artifacts/layout-run"
 ```
@@ -71,9 +71,8 @@ python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
 The default run targets `net11.0-macos`. Passing a MAUI 10 version with
 `--maui-version` selects `net10.0-macos`, keeping the release compatibility lane
 without enabling any MAUI 10 private workaround in the .NET 11 build.
-Select Xcode 26.0.x for that compatibility lane. Hosted CI uses `macos-26` with
-Xcode 26.0.1 for MAUI 10 scenarios and `xcode-27` with Xcode 27.0 for MAUI 11
-scenarios. Both use `eng/workloads/dotnet11-rc2.json`. The runner explicitly
+Hosted CI uses `macos-26` with Xcode 26.0.1 for MAUI 10 and `xcode-27` with
+Xcode 27.2 for MAUI 11. Both use `eng/workloads/dotnet11-ga.json`. The runner explicitly
 enables Xcode validation, which matches the workload's required major/minor
 version; a different major/minor is not accepted as a native pass.
 

@@ -8,7 +8,9 @@ using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Media;
 using Microsoft.Maui.Platforms.MacOS.Essentials;
 using Microsoft.Maui.Platforms.MacOS.Platform;
+using Microsoft.Maui.Devices;
 using Microsoft.Maui.Storage;
+using MacOS.RuntimeTests.Platforms;
 
 namespace MacOS.RuntimeTests.Scenarios.BundleResources;
 
@@ -31,7 +33,7 @@ sealed class BundleResourcesScenario : MauiRuntimeScenario
     public static void Register() => ScenarioRegistry.Register(new(
         "bundle-resources", ExpectedCases: 4,
         CreateDelegate: context => new BundleResourcesScenario().CreateDelegate(context),
-        ExpectedAssertions: 29));
+        ExpectedAssertions: 37));
 
     public override void Configure(MauiAppBuilder builder) =>
         builder.ConfigureFonts(fonts => fonts.AddFont("OpenSans-Regular.ttf", "BundleProbeFont"));
@@ -46,7 +48,13 @@ sealed class BundleResourcesScenario : MauiRuntimeScenario
         await RuntimeTestContext.FlushMainQueueAsync();
         var root = NSBundle.MainBundle.ResourcePath
             ?? throw new InvalidOperationException("The running app has no resource directory.");
-        var expected = new[] { "Images/appicon.png", "Fonts/OpenSans-Regular.ttf" }.Concat(Assets.Keys).ToArray();
+        var expected = new[]
+        {
+            "Images/appicon.png",
+            "Images/splash.png",
+            "Fonts/OpenSans-Regular.ttf",
+            "AppIcon.icns",
+        }.Concat(Assets.Keys).ToArray();
         var inventory = Directory.GetFiles(root, "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(root, path)).Order().ToArray();
         context.WriteJson("bundle-files.json", new { root, expected, files = inventory });
@@ -55,7 +63,7 @@ sealed class BundleResourcesScenario : MauiRuntimeScenario
         context.Assert(imageView != null, "The MAUI image must have an AppKit view.");
         if (imageView!.Image == null)
         {
-            foreach (var name in expected)
+            foreach (var name in expected.Where(name => name != "AppIcon.icns"))
                 context.Assert(!File.Exists(Path.Combine(root, name)), $"Historical bundle must omit {name}.");
             context.BaselineFailure("resources.missing", "The linked MauiImage was not loaded.");
             return;
@@ -63,6 +71,31 @@ sealed class BundleResourcesScenario : MauiRuntimeScenario
 
         foreach (var name in expected)
             context.Assert(File.Exists(Path.Combine(root, name)), $"Bundle must contain {name}.");
+        context.Assert(
+            string.Equals(
+                NSBundle.MainBundle.ObjectForInfoDictionary("CFBundleIconFile")?.ToString(),
+                "AppIcon",
+                StringComparison.Ordinal),
+            "The application manifest must select the generated AppIcon.icns.");
+        context.Assert(!File.Exists(Path.Combine(root, "AppIcon", "applicationicon.png")),
+            "The source MauiIcon must not be copied as an ordinary bundle resource.");
+        context.Assert(!inventory.Any(name =>
+                name.StartsWith("Images/applicationicon-", StringComparison.Ordinal)),
+            "Generic Resizetizer icon PNGs must not be bundled as ordinary images.");
+        context.Assert(DeviceInfo.Platform == DevicePlatform.macOS,
+            "AppKit must identify itself as macOS rather than Mac Catalyst.");
+        var platformValue = new OnPlatform<string>
+        {
+            Platforms =
+            {
+                new On { Platform = ["macOS"], Value = "AppKit" },
+                new On { Platform = ["MacCatalyst"], Value = "Wrong" },
+            },
+        };
+        context.Assert((string)platformValue == "AppKit",
+            "OnPlatform must select the macOS value rather than Mac Catalyst.");
+        context.Assert(PlatformMarker.Value == "AppKit",
+            "The standard Platforms/MacOS source folder must compile for AppKit.");
         context.Assert(!File.Exists(Path.Combine(root, "Raw", "local.txt")), "Default glob must not retain Raw/local.txt.");
         context.Pass("bundle logical paths");
 

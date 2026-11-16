@@ -35,13 +35,13 @@
   </Target>
 
   <Target Name="AssertBundleResourceItems"
-          DependsOnTargets="_PrepareBundleResourceAssertions;_MacOSCollectMauiResources;_MacOSCollectProcessedMauiResources">
+          DependsOnTargets="_PrepareBundleResourceAssertions;_MacOSCollectMauiResources;_MacOSCollectProcessedMauiImages;_MacOSCollectProcessedMauiFonts;_MacOSCollectProcessedMauiAssets">
     <ItemGroup>
       <_ActualResourceNames Include="@(BundleResource->'%(LogicalName)')" />
     </ItemGroup>
     <Error Condition="'$(_ExpectMapping)' == 'true' and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.')) and '@(_ActualResourceNames)' != 'unrelated.txt;Images/picture.png;Fonts/font.ttf;Data/nested/renamed.txt;default.txt;Data with spaces/sample file.txt'"
            Text="Unexpected processed macOS bundle resources: @(_ActualResourceNames)" />
-    <Error Condition="'$(_ExpectMapping)' == 'true' and !$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.')) and '@(_ActualResourceNames)' != 'unrelated.txt;Images/picture.svg;Fonts/font.ttf;Data/nested/renamed.txt;default.txt;Data with spaces/sample file.txt'"
+    <Error Condition="'$(_ExpectMapping)' == 'true' and !$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.')) and '@(_ActualResourceNames)' != 'unrelated.txt;Images/picture.svg;Images/splash.png;Fonts/font.ttf;Data/nested/renamed.txt;default.txt;Data with spaces/sample file.txt'"
            Text="Unexpected macOS bundle resources: @(_ActualResourceNames)" />
     <Error Condition="'$(_ExpectMapping)' != 'true' and '@(_ActualResourceNames)' != 'Raw/data.txt;unrelated.txt'"
            Text="Resource mapping ignored the platform guard or opt-out: @(_ActualResourceNames)" />
@@ -49,7 +49,7 @@
   </Target>
 
   <Target Name="AssertRawAssetProcessing"
-          DependsOnTargets="_MacOSCollectMauiResources;_MacOSCollectProcessedMauiResources">
+          DependsOnTargets="_MacOSCollectMauiResources;_MacOSPrepareProcessedMauiResources">
     <Error Condition="'@(BundleResource->WithMetadataValue('LogicalName', 'Custom/renamed.txt'))' == ''"
            Text="The explicit raw asset LogicalName was not preserved." />
     <Error Condition="'@(BundleResource->WithMetadataValue('LogicalName', 'Data/sample.txt'))' == ''"
