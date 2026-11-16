@@ -51,7 +51,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workload
-        run: dotnet workload install maui --version 11.0.100.1 --source https://api.nuget.org/v3/index.json
+        run: dotnet workload install maui --from-rollback-file ${{ github.workspace }}/eng/workloads/dotnet11-ga.json
 
       - name: Build runtime
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj

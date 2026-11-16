@@ -23,14 +23,14 @@ maui-labs/
 ### Prerequisites
 
 - [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) (see `global.json` for the pinned version)
-- MAUI workloads: `dotnet workload install maui macos --version 11.0.100.1 --source https://api.nuget.org/v3/index.json`
+- MAUI workloads: `dotnet workload install maui macos --from-rollback-file eng/workloads/dotnet11-ga.json`
 
 The CLI workload-set version `11.0.100.1` is published in the
-`Microsoft.NET.Workloads.11.0.100` package as version `11.100.1`. It is
-not yet mirrored by the repository's internal feeds, so workload installation
-uses NuGet.org explicitly while ordinary project restore continues to use
-`NuGet.config`. It is SDK-feature-band specific. Do not install a
-.NET 10 workload set into the .NET 11 SDK. Its Apple manifests retain .NET 10
+`Microsoft.NET.Workloads.11.0.100` package as version `11.100.1`. That package
+is not yet mirrored by the repository's internal feeds, although its individual
+GA manifests are. The checked-in rollback file therefore reproduces the workload
+set without bypassing `NuGet.config`. It is SDK-feature-band specific. Do not
+install a .NET 10 workload set into the .NET 11 SDK. Its Apple manifests retain .NET 10
 packs for Xcode 26.0 alongside .NET 11 packs for Xcode 27.2. Select the
 matching Xcode when building app heads.
 Resolve Xcode aliases with `pwd -P` before setting `DEVELOPER_DIR` and
@@ -46,7 +46,7 @@ the current runtime workload, which otherwise supplies .NET 11 runtime packs.
 This job uses Xcode 26.4 and verifies the hosted iOS 26.4.1 runtime for asset
 compilation, while keeping the test device on iOS 26.2. The native iOS job uses
 the GA workload set's .NET 10 packs with Xcode 26.0. The job-specific manifest
-cannot build .NET 11 iOS targets; use workload set 11.0.100.1 for those. Do not
+cannot build .NET 11 iOS targets; use `eng/workloads/dotnet11-ga.json` for those. Do not
 mix entire .NET 10 workload sets into SDK 11 or bypass asset compilation/Xcode
 validation.
 Existing .NET 10 target frameworks and the repository-wide MAUI 10 baseline
