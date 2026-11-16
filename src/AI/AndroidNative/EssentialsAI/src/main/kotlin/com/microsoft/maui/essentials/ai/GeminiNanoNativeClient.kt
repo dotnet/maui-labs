@@ -233,7 +233,11 @@ class GeminiNanoNativeClient {
                                 if (toolTurn.functionCalls.isNotEmpty()) {
                                     val calls = NativeChatResponse("", toolTurn.thoughts, toolTurn.finishReason, modelName,
                                         toolTurnTokens).apply { functionCalls = toolTurn.functionCalls }
-                                    nativeStream?.finish(calls)
+                                    if (nativeStream != null) {
+                                        nativeStream.finish(calls)
+                                    } else if (streaming) {
+                                        calls.thoughts.forEach { callback.onThought(it, modelName) }
+                                    }
                                     return@generation calls
                                 }
                             }

@@ -43,8 +43,8 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
         val choices: List<String>? = null,
         val format: String? = null,
         val pattern: Regex? = null,
-        val minimum: Double? = null,
-        val maximum: Double? = null,
+        val minimum: BigDecimal? = null,
+        val maximum: BigDecimal? = null,
         val minItems: Long? = null,
         val maxItems: Long? = null,
     ) {
@@ -61,8 +61,8 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
             description?.let { builder.zzb(it) }
             format?.let { builder.zza(it) }
             pattern?.let { builder.zzl(it.pattern) }
-            minimum?.let { builder.zzj(it) }
-            maximum?.let { builder.zzk(it) }
+            minimum?.let { builder.zzj(it.toDouble()) }
+            maximum?.let { builder.zzk(it.toDouble()) }
             minItems?.let { builder.zzg(it) }
             maxItems?.let { builder.zzf(it) }
             choices?.let { builder.zzo(it) }
@@ -106,8 +106,8 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
                     require(type == "number" || value.signum() == 0 || value.stripTrailingZeros().scale() <= 0) {
                         "$path must be an integer."
                     }
-                    require(minimum == null || value >= BigDecimal(minimum)) { "$path is below its minimum." }
-                    require(maximum == null || value <= BigDecimal(maximum)) { "$path is above its maximum." }
+                    require(minimum == null || value >= minimum) { "$path is below its minimum." }
+                    require(maximum == null || value <= maximum) { "$path is above its maximum." }
                 }
             }
         }
@@ -173,15 +173,17 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
             }
             val description = if (source.has("description")) source.getString("description") else null
 
-            fun number(key: String): Double? {
+            // Bounds keep their exact JSON value for validation; ML Kit's native schema takes doubles.
+            fun number(key: String): BigDecimal? {
                 if (!source.has(key)) return null
                 val raw = source.get(key)
                 require(raw is Number && raw.toDouble().isFinite()) { "$path.$key must be a finite number." }
-                return raw.toDouble()
+                return BigDecimal(raw.toString())
             }
             fun count(key: String): Long? {
                 val value = number(key) ?: return null
-                require(value >= 0 && value % 1.0 == 0.0 && value <= Int.MAX_VALUE) {
+                require(value.signum() >= 0 && value.stripTrailingZeros().scale() <= 0 &&
+                    value <= BigDecimal(Int.MAX_VALUE)) {
                     "$path.$key must be a nonnegative integer."
                 }
                 return value.toLong()
@@ -227,10 +229,12 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
                     Node(type, nullable, description, minimum = minimum, maximum = maximum)
                 }
                 "string" -> {
-                    val choices = source.optJSONArray("enum")?.let { array ->
+                    val enum = source.optJSONArray("enum")
+                    // A nullable type is only nullable when an enum, if present, also lists null.
+                    val enumAllowsNull = enum != null && (0 until enum.length()).any { enum.isNull(it) }
+                    val choices = enum?.let { array ->
                         require(array.length() > 0) { "$path: enum must not be empty." }
-                        val allowsNull = (0 until array.length()).any { array.isNull(it) }
-                        require(!allowsNull || nullable) { "$path: null enum values require a nullable type." }
+                        require(!enumAllowsNull || nullable) { "$path: null enum values require a nullable type." }
                         (0 until array.length()).filterNot { array.isNull(it) }.map {
                             require(array.get(it) is String) { "$path: enum values must be strings." }
                             array.getString(it)
@@ -243,7 +247,7 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
                             throw IllegalArgumentException("$path: invalid pattern: ${exception.message}", exception)
                         }
                     } else null
-                    Node(type, nullable, description, choices = choices,
+                    Node(type, nullable && (enum == null || enumAllowsNull), description, choices = choices,
                         format = if (source.has("format")) source.getString("format") else null, pattern = pattern)
                 }
                 else -> Node(type, nullable, description)
@@ -402,9 +406,10 @@ internal object StrictJson {
                             't' -> result.append('\t')
                             'u' -> {
                                 require(index + 4 <= text.length, "Invalid unicode escape")
-                                val code = text.substring(index, index + 4).toIntOrNull(16)
-                                    ?: fail("Invalid unicode escape")
-                                result.append(code.toChar())
+                                val digits = text.substring(index, index + 4)
+                                require(digits.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' },
+                                    "Invalid unicode escape")
+                                result.append(digits.toInt(16).toChar())
                                 index += 4
                             }
                             else -> fail("Invalid escape")

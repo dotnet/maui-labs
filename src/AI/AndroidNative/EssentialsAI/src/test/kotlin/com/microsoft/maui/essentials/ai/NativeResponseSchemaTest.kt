@@ -199,6 +199,35 @@ class NativeResponseSchemaTest {
         assertRejected(number, """{"n":01}""")
         assertRejected(number, """{"n":NaN}""")
         assertRejected(number, """{"n":1.}""")
+        assertRejected(json, """{"v":"\u+041"}""")
+        assertRejected(json, """{"v":"\u-001"}""")
+        assertRejected(json, """{"v":"\u 041"}""")
+    }
+
+    @Test
+    fun numericBoundsAreValidatedExactly() {
+        val decimal = """{"type":"object","properties":{"n":{"type":"number","minimum":0.1,"maximum":0.3}},"required":["n"]}"""
+        NativeResponseSchema.parse(decimal).validate("""{"n":0.1}""")
+        NativeResponseSchema.parse(decimal).validate("""{"n":0.3}""")
+        assertRejected(decimal, """{"n":0.09999}""")
+        assertRejected(decimal, """{"n":0.30001}""")
+        assertEquals(0.1, native(decimal).getJSONObject("properties").getJSONObject("n").getDouble("minimum"), 0.0)
+
+        val long = """{"type":"object","properties":{"n":{"type":"integer","maximum":9223372036854775807}},"required":["n"]}"""
+        NativeResponseSchema.parse(long).validate("""{"n":9223372036854775807}""")
+        assertRejected(long, """{"n":9223372036854775808}""")
+    }
+
+    @Test
+    fun nullableEnumsOnlyAllowNullWhenListed() {
+        val excluded = """{"type":"object","properties":{"c":{"type":["string","null"],"enum":["red"]}},"required":["c"]}"""
+        assertRejected(excluded, """{"c":null}""")
+        NativeResponseSchema.parse(excluded).validate("""{"c":"red"}""")
+        assertFalse(native(excluded).getJSONObject("properties").getJSONObject("c").optBoolean("nullable"))
+
+        val listed = """{"type":"object","properties":{"c":{"type":["string","null"],"enum":["red",null]}},"required":["c"]}"""
+        NativeResponseSchema.parse(listed).validate("""{"c":null}""")
+        assertTrue(native(listed).getJSONObject("properties").getJSONObject("c").getBoolean("nullable"))
     }
 
     @Test
