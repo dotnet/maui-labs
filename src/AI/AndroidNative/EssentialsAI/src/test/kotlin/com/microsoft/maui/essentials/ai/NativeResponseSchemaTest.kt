@@ -205,6 +205,19 @@ class NativeResponseSchemaTest {
     }
 
     @Test
+    fun onlyACompletedToolTurnCanLeadToTheStructuredAnswer() {
+        checkToolTurnFinished(com.google.mlkit.genai.prompt.Candidate.FinishReason.STOP)
+        val truncated = assertThrows(IllegalStateException::class.java) {
+            checkToolTurnFinished(com.google.mlkit.genai.prompt.Candidate.FinishReason.MAX_TOKENS)
+        }
+        assertTrue(truncated.message!!.contains("MaxOutputTokens"))
+        assertThrows(IllegalStateException::class.java) {
+            checkToolTurnFinished(com.google.mlkit.genai.prompt.Candidate.FinishReason.OTHER)
+        }
+        assertThrows(IllegalStateException::class.java) { checkToolTurnFinished(FINISH_UNSPECIFIED) }
+    }
+
+    @Test
     fun numericBoundsAreValidatedExactly() {
         val decimal = """{"type":"object","properties":{"n":{"type":"number","minimum":0.1,"maximum":0.3}},"required":["n"]}"""
         NativeResponseSchema.parse(decimal).validate("""{"n":0.1}""")

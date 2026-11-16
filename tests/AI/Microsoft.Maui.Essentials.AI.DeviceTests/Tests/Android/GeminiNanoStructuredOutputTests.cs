@@ -236,6 +236,42 @@ public sealed class GeminiNanoStructuredOutputTests(ITestOutputHelper output)
 		Assert.Equal(1, weatherCalls);
 	}
 
+	// A tool turn that hits the token limit without a call may have been about to call a tool, so it must not
+	// lead to a schema answer. (A call cut off midway already fails inside AICore.)
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ToolsAndSchema_TruncatedToolTurnFailsInsteadOfAnswering(bool streaming)
+	{
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+		using var client = new GeminiNanoChatClient();
+		var calls = 0;
+		var options = new ChatOptions
+		{
+			ModelId = "gemini-nano-preview-fast",
+			Temperature = 0,
+			MaxOutputTokens = 32,
+			ResponseFormat = ChatResponseFormat.ForJsonSchema<Reply>(JsonSerializerOptions.Web),
+			Tools = [AIFunctionFactory.Create((string key) =>
+			{
+				Interlocked.Increment(ref calls);
+				return "ORCHARD_SECRET_7291";
+			}, "lookup_secret", "Reads a secret from the local database by key.")],
+		};
+		ChatMessage[] messages = [new(ChatRole.User, "Write a long poem about the sea.")];
+		var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync(messages, options, timeout.Token).ToChatResponseAsync(timeout.Token);
+			else
+				await client.GetResponseAsync(messages, options, timeout.Token);
+		});
+		output.WriteLine(error.Message);
+		Assert.Contains("output token limit while deciding whether to call tools", error.Message, StringComparison.Ordinal);
+		Assert.Equal(0, calls);
+	}
+
 	[Theory]
 	[InlineData("gemini-nano-preview-fast", false)]
 	[InlineData("gemini-nano-preview-fast", true)]

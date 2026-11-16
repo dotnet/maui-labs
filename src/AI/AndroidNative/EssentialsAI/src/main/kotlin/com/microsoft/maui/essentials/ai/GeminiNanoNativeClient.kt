@@ -236,10 +236,12 @@ class GeminiNanoNativeClient {
                                     if (nativeStream != null) {
                                         nativeStream.finish(calls)
                                     } else if (streaming) {
+                                        ensureActive()
                                         calls.thoughts.forEach { callback.onThought(it, modelName) }
                                     }
                                     return@generation calls
                                 }
+                                checkToolTurnFinished(toolTurn.finishReason)
                             }
                             val tokenCount = toolTurnTokens + countStructuredTokens(processor, nativeRequest)
                             val generated = generateStructuredContent(processor, nativeRequest, nativeStream)
@@ -251,6 +253,7 @@ class GeminiNanoNativeClient {
                                 nativeStream.finish(response)
                             } else if (streaming) {
                                 // AICore wraps non-object roots; the unwrapped value is emitted once validated.
+                                ensureActive()
                                 response.thoughts.forEach { callback.onThought(it, modelName) }
                                 callback.onText(response.text, modelName)
                             }

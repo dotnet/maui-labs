@@ -99,6 +99,9 @@ So when tools are active the bridge runs each model turn in two steps:
    the answer is generated again with the schema constrained and the same
    history and tools.
 
+If the first step reaches the output token limit without a call, the request
+fails instead of answering: the model may have been about to call a tool.
+
 The final structured turn therefore costs one extra inference (about 0.4–1 s on
 Nano V4 fast); usage reports the input tokens of both steps. The first step is
 not cancelled early: the model can write text before a call, so the decision

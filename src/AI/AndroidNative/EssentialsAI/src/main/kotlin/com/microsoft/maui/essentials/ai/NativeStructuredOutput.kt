@@ -100,6 +100,19 @@ internal fun applyResponseSchema(native: Any, schema: zzip): Any {
     return native
 }
 
+/**
+ * A tool turn without calls is only a decision to answer if it finished normally. A truncated turn may
+ * have been cut off before its call, and answering under the schema would invent the tool result.
+ */
+internal fun checkToolTurnFinished(finishReason: Int) {
+    check(finishReason == Candidate.FinishReason.STOP) {
+        val truncated = finishReason == Candidate.FinishReason.MAX_TOKENS
+        val reason = if (truncated) "reached the output token limit" else "stopped abnormally (ML Kit finish reason $finishReason)"
+        "Gemini Nano $reason while deciding whether to call tools, so no structured answer was generated." +
+            if (truncated) " Increase MaxOutputTokens." else ""
+    }
+}
+
 internal fun validateStructuredResponse(schema: NativeResponseSchema, response: NativeChatResponse): String {
     try {
         return schema.validate(response.text)
