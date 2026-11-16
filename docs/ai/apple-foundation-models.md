@@ -28,8 +28,8 @@ streaming, and error behavior is defined in the
 
 ## Toolchain and build
 
-The OS 27 Foundation Models APIs require Xcode 27.2 and the corresponding .NET
-reference packs. Build from the repository root:
+The OS 27 Foundation Models APIs and GA Apple packs require exactly Xcode 27.2;
+Xcode 27.3 is rejected. Build from the repository root:
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \

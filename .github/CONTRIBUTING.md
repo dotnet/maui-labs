@@ -33,9 +33,11 @@ set without bypassing `NuGet.config`. It is SDK-feature-band specific. Do not
 install a .NET 10 workload set into the .NET 11 SDK. Its Apple manifests retain .NET 10
 packs for Xcode 26.0 alongside .NET 11 packs for Xcode 27.2. Select the
 matching Xcode when building app heads.
-Resolve Xcode aliases with `pwd -P` before setting `DEVELOPER_DIR` and
-`MD_APPLE_SDK_ROOT`: the Apple pack's explicit SDK paths must use the physical
-Xcode application directory, not a runner alias such as `Xcode_26.0.app`.
+Resolve Xcode aliases with `pwd -P` before setting `DEVELOPER_DIR`: Apple SDK
+resolution must use the physical developer directory, not a runner alias such
+as `Xcode_26.0.app`. Do not set `MD_APPLE_SDK_ROOT`; GA Apple packs deprecate
+and ignore it, emitting a warning that breaks warnings-as-errors builds.
+The .NET 11 GA Apple packs require Xcode 27.2 exactly; Xcode 27.3 is rejected.
 The MAUI iOS integration job instead uses
 `eng/workloads/dotnet11-ga-ios-net10.json`: it selects the released .NET 10 iOS
 26.4.10259 manifest from feature band `10.0.100` while keeping the other GA

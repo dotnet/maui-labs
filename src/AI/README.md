@@ -32,7 +32,8 @@ For installation and a quick start, see the [package README](Microsoft.Maui.Esse
 
 - The .NET SDK pinned in the repository `global.json`.
 - Matching MAUI workloads.
-- macOS with Xcode 27.2 for the Apple native bridge and OS 27 APIs.
+- macOS with exactly Xcode 27.2 for the Apple native bridge and OS 27 APIs
+  (the GA Apple pack rejects Xcode 27.3).
 - Windows build and packaging tools for the Windows target and MSIX app heads.
 - Java 17+ and the Android SDK for Android builds.
 

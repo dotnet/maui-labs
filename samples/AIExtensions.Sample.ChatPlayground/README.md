@@ -70,7 +70,8 @@ Run the following commands from the repository root.
 
 ### Apple
 
-Apple builds require Xcode 27.2. For Mac Catalyst:
+Apple builds require exactly Xcode 27.2; the GA Apple pack rejects Xcode 27.3.
+For Mac Catalyst:
 
 ```sh
 dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
