@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Hosting;
@@ -83,6 +84,7 @@ public class NativeFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
                 executed = true;
                 try
                 {
+                    await WaitForAllocationAsync(window, TimeSpan.FromSeconds(5));
                     var result = await Task.Run(
                         async () => await new LinuxScreenshot().CaptureAsync());
                     Assert.True(result.Width > 0);
@@ -120,6 +122,30 @@ public class NativeFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
         Assert.True(executed);
         if (error is not null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
+    }
+
+    static Task WaitForAllocationAsync(Gtk.Widget widget, TimeSpan timeout)
+    {
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var timer = Stopwatch.StartNew();
+        GLib.Functions.TimeoutAdd(0, 10, () =>
+        {
+            if (widget.GetWidth() > 0 && widget.GetHeight() > 0)
+            {
+                completion.TrySetResult();
+                return false;
+            }
+
+            if (timer.Elapsed >= timeout)
+            {
+                completion.TrySetException(new TimeoutException(
+                    $"GTK widget did not receive a non-zero allocation within {timeout}."));
+                return false;
+            }
+
+            return true;
+        });
+        return completion.Task;
     }
 }
 

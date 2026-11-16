@@ -13,6 +13,11 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 [Collection("GTK runtime")]
 public class GtkSignalLifetimeTests
 {
+	// This test class runs in a dedicated process. Keep observer-created wrappers
+	// rooted until process exit because GirCore 0.7.0 can crash in ToggleNotify when
+	// their safe handles are finalized after GTK has dropped the native references.
+	static readonly List<Gtk.EventController> RetainedControllerWrappers = [];
+
 	[GtkRuntimeFact]
 	public void Signals_SurviveCollection_AndDisconnectBeforeNativeTeardown()
 	{
@@ -105,12 +110,7 @@ public class GtkSignalLifetimeTests
 			{
 				box.Remove(panel);
 				layoutHandler.DisconnectHandler();
-				// GirCore 0.7.0 allows exceptions from the unmanaged ToggleNotify callback
-				// to terminate the process. GirCore commit 70f5465090b0 (shipped in 0.8.1)
-				// hardens that callback, but wrappers should still be released deterministically
-				// on the GTK thread instead of being left to the finalizer thread.
-				foreach (var controller in ownedControllers)
-					controller.Dispose();
+				RetainedControllerWrappers.AddRange(ownedControllers);
 			}
 		}
 	}

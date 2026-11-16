@@ -115,6 +115,15 @@ jobs:
               --logger "trx;LogFileName=essentials-native-${framework}.trx" \
               --results-directory artifacts/TestResults/essentials || status=$?
           done
+          for iteration in 1 2 3; do
+            xvfb-run -a dotnet test \
+              platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj \
+              --framework net11.0 --configuration Release --no-build \
+              --filter FullyQualifiedName~NativeFacadeTests \
+              --blame-crash --blame-crash-dump-type mini \
+              --logger "trx;LogFileName=essentials-native-net11.0-repeat-${iteration}.trx" \
+              --results-directory artifacts/TestResults/essentials || status=$?
+          done
           exit "$status"
       - name: Verify GStreamer capture codecs and containers
         run: ./eng/smoke-tests/gtk-media-capture-smoke-test.sh
@@ -260,6 +269,7 @@ jobs:
           -TestNamespace '${{ matrix.test-namespace || 'Microsoft.Maui.Platforms.Linux.Gtk4.Tests' }}'
           ${{ matrix.test-framework && format('-TestFramework {0}', matrix.test-framework) || '' }}
           ${{ matrix.maui && format('-MauiVersion {0}', matrix.maui) || '' }}
+          -Repeat ${{ matrix.test-class == 'GtkSignalLifetimeTests' && 3 || 1 }}
       - name: Build DevFlow sample
         if: matrix.test-class == 'CollectionViewHandlerTests'
         run: >-
