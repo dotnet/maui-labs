@@ -15,7 +15,7 @@ public class GtkWebViewSnapshotRuntimeTests
         GtkBlazorWebView.InitializeWebKit();
         using var window = global::Gtk.Window.New();
         using var wrapper = global::Gtk.Box.New(global::Gtk.Orientation.Vertical, 0);
-        using var view = new WebKit.WebView();
+        using var view = WebKit.WebView.New();
         view.SetHexpand(true);
         view.SetVexpand(true);
         wrapper.Append(view);
@@ -65,7 +65,7 @@ public class GtkWebViewSnapshotRuntimeTests
         global::Gtk.Functions.Init();
         GtkBlazorWebView.InitializeWebKit();
         using var window = global::Gtk.Window.New();
-        using var view = new WebKit.WebView();
+        using var view = WebKit.WebView.New();
         using var service = new GtkBlazorWebViewDebugService();
         var previousContext = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(new GtkRuntimeSynchronizationContext());
@@ -109,7 +109,7 @@ public class GtkWebViewSnapshotRuntimeTests
         global::Gtk.Functions.Init();
         GtkBlazorWebView.InitializeWebKit();
         using var window = global::Gtk.Window.New();
-        using var view = new WebKit.WebView();
+        using var view = WebKit.WebView.New();
         using var cancellation = new CancellationTokenSource();
         window.SetDefaultSize(320, 240);
         window.SetChild(view);
@@ -142,7 +142,7 @@ public class GtkWebViewSnapshotRuntimeTests
         global::Gtk.Functions.Init();
         GtkBlazorWebView.InitializeWebKit();
         using var window = global::Gtk.Window.New();
-        using var view = new WebKit.WebView();
+        using var view = WebKit.WebView.New();
         using var service = new GtkBlazorWebViewDebugService();
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         var requested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -32,7 +32,7 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 	protected override WebKit.WebView CreatePlatformView()
 	{
 		EnsureWebKitInitialized();
-		var webView = new WebKit.WebView();
+		var webView = WebKit.WebView.New();
 
 		var settings = webView.GetSettings();
 		settings.SetEnableJavascript(true);

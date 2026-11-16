@@ -46,7 +46,7 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 
 	protected override GtkLayoutPanel CreatePlatformView()
 	{
-		return new GtkLayoutPanel();
+		return GtkLayoutPanel.NewWithProperties([]);
 	}
 
 	public override void SetVirtualView(IView view)

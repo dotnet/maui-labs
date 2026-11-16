@@ -41,7 +41,7 @@ internal sealed class GtkModalNavigationPlatform : IModalNavigationPlatform
 			return Task.CompletedTask;
 		}
 
-		var dialog = new Gtk.Window();
+		var dialog = Gtk.Window.New();
 		dialog.SetModal(true);
 		dialog.SetTransientFor(_window);
 		dialog.SetTitle(modal.Title ?? string.Empty);

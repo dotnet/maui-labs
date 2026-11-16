@@ -24,7 +24,7 @@ public class ContentViewHandler : GtkViewHandler<IContentView, Platform.GtkLayou
 
 	protected override Platform.GtkLayoutPanel CreatePlatformView()
 	{
-		return new Platform.GtkLayoutPanel();
+		return Platform.GtkLayoutPanel.NewWithProperties([]);
 	}
 
 	protected override void ConnectHandler(Platform.GtkLayoutPanel platformView)
