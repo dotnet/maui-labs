@@ -145,3 +145,17 @@ test("GA Apple targets are additive and leave .NET 10 defaults intact", () => {
     assert.doesNotMatch(text, /net11\.0-(?:ios|maccatalyst|macos)27\.0|net10\.0-(?:ios|maccatalyst|macos)27\./);
   }
 });
+
+test("MAUI Testing Apple templates use the GA scene lifecycle", () => {
+  for (const platform of ["iOS", "MacCatalyst"]) {
+    const root = `src/Testing/templates/mauitest/Platforms/${platform}`;
+    const plist = read(`${root}/Info.plist`);
+    const sceneDelegate = read(`${root}/SceneDelegate.cs`);
+    assert.match(plist, /<key>UIApplicationSceneManifest<\/key>/);
+    assert.match(plist, /<key>UIApplicationSupportsMultipleScenes<\/key>\s*<false\/>/);
+    assert.match(plist, /<key>UISceneConfigurationName<\/key>\s*<string>__MAUI_DEFAULT_SCENE_CONFIGURATION__<\/string>/);
+    assert.match(plist, /<key>UISceneDelegateClassName<\/key>\s*<string>SceneDelegate<\/string>/);
+    assert.match(sceneDelegate, /\[Register\("SceneDelegate"\)\]/);
+    assert.match(sceneDelegate, /class SceneDelegate : MauiUISceneDelegate/);
+  }
+});
