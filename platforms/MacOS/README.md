@@ -83,6 +83,11 @@ version pinned by each Apple pack: Xcode 26.0.x for the net10 compatibility pack
 (`26.0.11017`) and Xcode 27.2 for the net11 pack (`27.2.11039`). A successful
 library build is not a native application or resource-bundle pass.
 
+Source-based net10 AppKit heads must align their direct MAUI references with
+`$(MacOSMaui10Version)` rather than the repository-wide 10.0.41 baseline. The
+AppKit samples import `platforms/MacOS/MacOS.Versions.props`, which keeps that
+override scoped to AppKit consumers.
+
 On .NET 11, AppKit uses public platform contracts for dialogs, gesture lifecycle,
 assembly-aware font registration, view screenshots, and standard `BlazorWebView`
 hosting. Essentials static facades use the application's DI provider; .NET 10

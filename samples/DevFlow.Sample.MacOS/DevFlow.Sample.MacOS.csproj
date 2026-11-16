@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
+  <Import Project="..\..\platforms\MacOS\MacOS.Versions.props" />
+
   <PropertyGroup>
     <TargetFramework>net10.0-macos</TargetFramework>
     <OutputType>Exe</OutputType>
@@ -11,14 +13,19 @@
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <IsPackable>false</IsPackable>
+    <!-- AppKit's net10 assets compile against the final MAUI 10 servicing release.
+         Disable repo-wide transitive pinning only for this AppKit sample so its
+         project-reference graph resolves coherently without moving other products
+         off the repository's 10.0.41 baseline. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\platforms\MacOS\src\MacOS\MacOS.csproj" />
     <ProjectReference Include="..\..\platforms\MacOS\src\MacOS.BlazorWebView\MacOS.BlazorWebView.csproj" />
     <ProjectReference Include="..\..\platforms\MacOS\src\MacOS.Essentials\MacOS.Essentials.csproj" />
-    <PackageReference Include="Microsoft.Maui.Controls" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
+    <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(MacOSMaui10Version)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" VersionOverride="$(MacOSBlazorWebView10Version)" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
   </ItemGroup>
 
