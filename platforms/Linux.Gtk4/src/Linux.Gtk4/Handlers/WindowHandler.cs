@@ -47,7 +47,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 	protected override Gtk.Window CreatePlatformElement()
 	{
 		return MauiContext?.Services.GetService(typeof(Gtk.Window)) as Gtk.Window
-			?? new Gtk.Window();
+			?? Gtk.Window.New();
 	}
 
 	public override void SetVirtualView(IElement view)
@@ -65,7 +65,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 
 		if (platformView.GetChild() == null)
 		{
-			platformView.SetChild(new WindowRootViewContainer());
+			platformView.SetChild(WindowRootViewContainer.NewWithProperties([]));
 		}
 
 		platformView.OnCloseRequest += OnCloseRequest;
@@ -157,7 +157,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 			// Native GTK4 modal dialog window (default)
 			var platformContent = (Gtk.Widget)e.Modal.ToPlatform(MauiContext);
 
-			var dialog = new Gtk.Window();
+			var dialog = Gtk.Window.New();
 			dialog.SetModal(true);
 			dialog.SetTransientFor(PlatformView);
 			dialog.SetTitle((e.Modal as Page)?.Title ?? string.Empty);

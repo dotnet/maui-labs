@@ -264,7 +264,7 @@ public static class GtkAlertManager
 		string title,
 		string? message)
 	{
-		var dialog = new Gtk.Window();
+		var dialog = Gtk.Window.New();
 		dialog.SetTitle(title);
 		dialog.SetModal(true);
 		dialog.SetTransientFor(parent);

@@ -6,13 +6,14 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 /// Root container for window content. Manages page display within a GTK window.
 /// Supports an optional menu bar above the page content.
 /// </summary>
-public class WindowRootViewContainer : Gtk.Box
+[GObject.Subclass<Gtk.Box>]
+public partial class WindowRootViewContainer
 {
 	private Gtk.Widget? _currentPage;
 	private Gtk.Widget? _menuBar;
 	private readonly Stack<Gtk.Widget> _modalStack = new();
 
-	public WindowRootViewContainer() : base()
+	partial void Initialize()
 	{
 		SetOrientation(Gtk.Orientation.Vertical);
 		SetVexpand(true);

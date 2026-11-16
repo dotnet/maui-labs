@@ -85,7 +85,7 @@
 
   <!-- Platform extensions (pinned) -->
   <ItemGroup Label="Platform">
-    <PackageVersion Include="GirCore.GdkPixbuf-2.0" Version="0.7.0" />
+    <PackageVersion Include="GirCore.GdkPixbuf-2.0" Version="0.8.1" />
   </ItemGroup>
 
   <!-- EssentialsAI dependencies -->

@@ -139,7 +139,7 @@ public sealed class GtkBlazorWebView : IDisposable
 
 	private WebView CreateWebView()
 	{
-		var webView = new WebView();
+		var webView = WebView.New();
 
 		// Make web view transparent for Blazor styling
 		webView.SetBackgroundColor(new Gdk.RGBA { Red = 0, Blue = 0, Green = 0, Alpha = 0 });

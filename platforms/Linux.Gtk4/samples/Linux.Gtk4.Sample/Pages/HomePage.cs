@@ -52,7 +52,7 @@ public class HomePage : ContentPage
 							{
 								new Label { Text = "Platform Details", FontSize = 18, FontAttributes = FontAttributes.Bold },
 								new Label { Text = "• 33 MAUI control handlers implemented", FontSize = 14 },
-								new Label { Text = "• GTK4 widgets via GirCore.Gtk-4.0 (v0.7.0)", FontSize = 14 },
+								new Label { Text = "• GTK4 widgets via GirCore.Gtk-4.0 (v0.8.1)", FontSize = 14 },
 								new Label { Text = "• WebKitGTK 6.0 for BlazorWebView", FontSize = 14 },
 								new Label { Text = "• Cairo-backed ICanvas for GraphicsView", FontSize = 14 },
 								new Label { Text = "• .NET 11 / MAUI 11", FontSize = 14 },
