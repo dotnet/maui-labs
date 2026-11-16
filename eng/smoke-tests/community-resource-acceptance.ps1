@@ -118,6 +118,34 @@ function Assert-NoFile {
     }
 }
 
+function Assert-PngDimensions {
+    param(
+        [string] $Root,
+        [string] $RelativePath,
+        [int] $Width,
+        [int] $Height
+    )
+
+    $normalized = $RelativePath.Replace('\', [System.IO.Path]::DirectorySeparatorChar).Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+    $matches = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Where-Object {
+        $_.FullName.EndsWith($normalized, [StringComparison]::Ordinal)
+    })
+    if ($matches.Count -ne 1) {
+        throw "Expected exactly one '$RelativePath' below '$Root'; found $($matches.Count)."
+    }
+    $path = $matches[0].FullName
+    $bytes = [System.IO.File]::ReadAllBytes($path)
+    if ($bytes.Length -lt 24 -or
+        $bytes[0] -ne 0x89 -or $bytes[1] -ne 0x50 -or $bytes[2] -ne 0x4E -or $bytes[3] -ne 0x47) {
+        throw "Expected '$path' to be a PNG."
+    }
+    $actualWidth = ($bytes[16] -shl 24) -bor ($bytes[17] -shl 16) -bor ($bytes[18] -shl 8) -bor $bytes[19]
+    $actualHeight = ($bytes[20] -shl 24) -bor ($bytes[21] -shl 16) -bor ($bytes[22] -shl 8) -bor $bytes[23]
+    if ($actualWidth -ne $Width -or $actualHeight -ne $Height) {
+        throw "Expected '$path' to be ${Width}x${Height}; found ${actualWidth}x${actualHeight}."
+    }
+}
+
 function Assert-BackendIdentity {
     param(
         [string] $Root,
@@ -182,6 +210,14 @@ function Invoke-BackendAcceptance {
         '__BACKEND_PACKAGE__' = $PackageId
         '__BACKEND_VERSION__' = $version
         '__PLATFORM_PROPERTIES__' = $PlatformProperties
+        '__PLATFORM_RESOURCE_ITEMS__' = if ($Name.StartsWith('gtk', [StringComparison]::Ordinal)) {
+            @'
+    <MauiImage Include="Resources/Images/pipeline.svg" BaseSize="16,16" />
+    <MauiFont Include="Resources/Fonts/OpenSans-Regular.ttf" />
+    <MauiIcon Include="Resources/AppIcon/appicon.svg" />
+    <MauiSplashScreen Include="Resources/Splash/splash.svg" Color="#512BD4" BaseSize="128,128" />
+'@
+        } else { '' }
     }
     $libraryProject = Join-Path $root 'ReferencedAssets\ReferencedAssets.csproj'
     $consumerProject = Join-Path $root 'Consumer\Consumer.csproj'
@@ -209,6 +245,17 @@ function Invoke-BackendAcceptance {
     Assert-SingleFile $output 'Shared/Unicode/café.txt' $unicode | Out-Null
     Assert-SingleFile $output 'Shared/zero.bin' ([byte[]]::new(0)) | Out-Null
     Assert-SingleFile $output 'App/local.txt' $local | Out-Null
+    if ($Name.StartsWith('gtk', [StringComparison]::Ordinal)) {
+        Assert-SingleFile $output 'OpenSans-Regular.ttf' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Fonts\OpenSans-Regular.ttf'))) | Out-Null
+        Assert-SingleFile $output 'hicolor/scalable/apps/appicon.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\AppIcon\appicon.svg'))) | Out-Null
+        Assert-SingleFile $output 'splash/splash.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Splash\splash.svg'))) | Out-Null
+        if ($TargetFramework -eq 'net11.0') {
+            Assert-PngDimensions $output 'pipeline.png' 16 16
+            Assert-PngDimensions $output 'pipeline@2x.png' 32 32
+        } else {
+            Assert-SingleFile $output 'pipeline.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Images\pipeline.svg'))) | Out-Null
+        }
+    }
 
     $payload = Join-Path $root 'ReferencedAssets\Resources\Raw\Nested\payload.bin'
     [System.IO.File]::WriteAllText($payload, "referenced-payload-v2`n")
@@ -251,6 +298,17 @@ function Invoke-BackendAcceptance {
     Assert-SingleFile $publishedResources 'Shared/Renamed/payload.bin' $payloadV2 | Out-Null
     Assert-SingleFile $publishedResources 'Shared/Unicode/café.txt' $unicode | Out-Null
     Assert-SingleFile $publishedResources 'App/local.txt' $local | Out-Null
+    if ($Name.StartsWith('gtk', [StringComparison]::Ordinal)) {
+        Assert-SingleFile $publishedResources 'OpenSans-Regular.ttf' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Fonts\OpenSans-Regular.ttf'))) | Out-Null
+        Assert-SingleFile $publishedResources 'hicolor/scalable/apps/appicon.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\AppIcon\appicon.svg'))) | Out-Null
+        Assert-SingleFile $publishedResources 'splash/splash.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Splash\splash.svg'))) | Out-Null
+        if ($TargetFramework -eq 'net11.0') {
+            Assert-PngDimensions $publishedResources 'pipeline.png' 16 16
+            Assert-PngDimensions $publishedResources 'pipeline@2x.png' 32 32
+        } else {
+            Assert-SingleFile $publishedResources 'pipeline.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Images\pipeline.svg'))) | Out-Null
+        }
+    }
     Assert-NoFile $publishedResources 'Shared/Nested/payload.bin'
     Assert-NoFile $publishedResources 'Shared/zero.bin'
 
@@ -266,8 +324,11 @@ function Invoke-BackendAcceptance {
     Invoke-DotNet (@('publish', $consumerProject, '--no-restore', "-p:PublishDir=$collisionPublish") + $buildArguments) `
         -ExpectFailure -ExpectedErrorCode $collisionCode
 
+    $standardItems = if ($Name.StartsWith('gtk', [StringComparison]::Ordinal)) {
+        ', standard image/font/icon/splash outputs'
+    } else { '' }
     $publishMode = if ($Name -eq 'appkit') { 'supported publish and installer payload' } else { 'no-build publish' }
-    Write-Host "PASS ${Name}: referenced-library bytes/names, incremental mutation, stale removal, $publishMode, and collision failure."
+    Write-Host "PASS ${Name}: referenced-library bytes/names${standardItems}, incremental mutation, stale removal, $publishMode, and collision failure."
 }
 
 function Invoke-BackendSwitchAcceptance {
@@ -305,6 +366,7 @@ function Invoke-BackendSwitchAcceptance {
             '__BACKEND_PACKAGE__' = $PackageId
             '__BACKEND_VERSION__' = $version
             '__PLATFORM_PROPERTIES__' = $PlatformProperties
+            '__PLATFORM_RESOURCE_ITEMS__' = ''
         }
         Set-Tokens $libraryProject $tokens
         Set-Tokens $consumerProject $tokens

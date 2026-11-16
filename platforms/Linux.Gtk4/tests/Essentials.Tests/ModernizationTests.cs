@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Media;
+using Microsoft.Maui.Controls.Xaml;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Devices;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting;
 
@@ -27,6 +28,19 @@ public class ModernizationTests
 
 		Assert.Same(app.Services.GetRequiredService<IDeviceInfo>(), DeviceInfo.Current);
 		Assert.IsAssignableFrom<IViewScreenshot>(app.Services.GetRequiredService<IScreenshot>());
+	}
+
+	[Fact]
+	public void GtkIdentity_MatchesPublicOnPlatformAndOnIdiomContracts()
+	{
+		using var app = MauiApp.CreateBuilder()
+			.AddLinuxGtk4Essentials()
+			.Build();
+
+		Assert.Equal(DevicePlatform.Create("GTK"), DeviceInfo.Platform);
+		Assert.Equal(DeviceIdiom.Desktop, DeviceInfo.Idiom);
+		Assert.True(typeof(OnPlatformExtension).GetProperty(nameof(OnPlatformExtension.GTK))?.GetMethod?.IsPublic);
+		Assert.True(typeof(OnIdiomExtension).GetProperty(nameof(OnIdiomExtension.Desktop))?.GetMethod?.IsPublic);
 	}
 #endif
 }
