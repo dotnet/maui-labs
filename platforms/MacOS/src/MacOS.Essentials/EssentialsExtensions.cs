@@ -45,6 +45,18 @@ public static class EssentialsExtensions
         builder.Services.TryAddSingleton<IEmail, EmailImplementation>();
         builder.Services.TryAddSingleton<IHapticFeedback, HapticFeedbackImplementation>();
         builder.Services.TryAddSingleton<IScreenshot, ScreenshotImplementation>();
+#if !NET11_0_OR_GREATER
+        builder.Services.TryAddKeyedSingleton<Func<object, Task<IScreenshotResult?>>>(
+            "Microsoft.Maui.ViewCapture",
+            (services, _) => platformView =>
+                ((ScreenshotImplementation)services.GetRequiredService<IScreenshot>())
+                    .CapturePlatformAsync(platformView));
+        builder.Services.TryAddKeyedSingleton<Func<object, Task<IScreenshotResult?>>>(
+            "Microsoft.Maui.WindowCapture",
+            (services, _) => platformView =>
+                ((ScreenshotImplementation)services.GetRequiredService<IScreenshot>())
+                    .CapturePlatformAsync(platformView));
+#endif
 
         // Stubs for APIs not available on macOS desktop
         builder.Services.TryAddSingleton<IPhoneDialer, PhoneDialerImplementation>();
@@ -57,55 +69,61 @@ public static class EssentialsExtensions
         builder.Services.TryAddSingleton<IMagnetometer, MagnetometerImplementation>();
 
 #if !NET11_0_OR_GREATER
-        SetEssentialsDefaults();
+        builder.Services.TryAddEnumerable(
+            ServiceDescriptor.Transient<IMauiInitializeService, LegacyEssentialsInitializer>());
 #endif
         return builder;
     }
 
 #if !NET11_0_OR_GREATER
-    static void SetEssentialsDefaults()
+    sealed class LegacyEssentialsInitializer : IMauiInitializeService
     {
-        SetStaticField(typeof(AppInfo), "currentImplementation", new AppInfoImplementation());
-        SetStaticField(typeof(DeviceInfo), "currentImplementation", new DeviceInfoImplementation());
-        SetStaticField(typeof(Connectivity), "currentImplementation", new ConnectivityImplementation());
-        SetStaticField(typeof(Battery), "defaultImplementation", new BatteryImplementation());
-        SetStaticField(typeof(DeviceDisplay), "currentImplementation", new DeviceDisplayImplementation());
-        SetStaticField(typeof(FileSystem), "currentImplementation", new FileSystemImplementation());
-        SetStaticField(typeof(Preferences), "defaultImplementation", new PreferencesImplementation());
-        SetStaticField(typeof(SecureStorage), "defaultImplementation", new SecureStorageImplementation());
-        SetStaticField(typeof(FilePicker), "defaultImplementation", new FilePickerImplementation());
-        SetStaticField(typeof(MediaPicker), "defaultImplementation", new MediaPickerImplementation());
-        SetStaticField(typeof(TextToSpeech), "defaultImplementation", new TextToSpeechImplementation());
-        SetStaticField(typeof(Clipboard), "defaultImplementation", new ClipboardImplementation());
-        SetStaticField(typeof(Browser), "defaultImplementation", new BrowserImplementation());
-        SetStaticField(typeof(Share), "defaultImplementation", new ShareImplementation());
-        SetStaticField(typeof(Launcher), "defaultImplementation", new LauncherImplementation());
-        SetStaticField(typeof(ApplicationModel.Map), "defaultImplementation", new MapImplementation());
-        SetStaticField(typeof(Vibration), "defaultImplementation", new VibrationImplementation());
-        SetStaticField(typeof(SemanticScreenReader), "defaultImplementation", new SemanticScreenReaderImplementation());
-        SetStaticField(typeof(Geolocation), "defaultImplementation", new GeolocationImplementation());
-        SetStaticField(typeof(Email), "defaultImplementation", new EmailImplementation());
-        SetStaticField(typeof(HapticFeedback), "defaultImplementation", new HapticFeedbackImplementation());
-        SetStaticField(typeof(Screenshot), "defaultImplementation", new ScreenshotImplementation());
-        SetStaticField(typeof(PhoneDialer), "currentImplementation", new PhoneDialerImplementation());
-        SetStaticField(typeof(Sms), "defaultImplementation", new SmsImplementation());
-        SetStaticField(typeof(Flashlight), "defaultImplementation", new FlashlightImplementation());
-        SetStaticField(typeof(Accelerometer), "defaultImplementation", new AccelerometerImplementation());
-        SetStaticField(typeof(Gyroscope), "defaultImplementation", new GyroscopeImplementation());
-        SetStaticField(typeof(Compass), "defaultImplementation", new CompassImplementation());
-        SetStaticField(typeof(Barometer), "defaultImplementation", new BarometerImplementation());
-        SetStaticField(typeof(Magnetometer), "defaultImplementation", new MagnetometerImplementation());
-        SetStaticField(typeof(VersionTracking), "defaultImplementation", null);
-        VersionTracking.Track();
+        public void Initialize(IServiceProvider services)
+        {
+            Set<IAppInfo>(typeof(AppInfo), services);
+            Set<IDeviceInfo>(typeof(DeviceInfo), services);
+            Set<IConnectivity>(typeof(Connectivity), services);
+            Set<IBattery>(typeof(Battery), services);
+            Set<IDeviceDisplay>(typeof(DeviceDisplay), services);
+            Set<IFileSystem>(typeof(FileSystem), services);
+            Set<IPreferences>(typeof(Preferences), services);
+            Set<ISecureStorage>(typeof(SecureStorage), services);
+            Set<IFilePicker>(typeof(FilePicker), services);
+            Set<IMediaPicker>(typeof(MediaPicker), services);
+            Set<ITextToSpeech>(typeof(TextToSpeech), services);
+            Set<IClipboard>(typeof(Clipboard), services);
+            Set<IBrowser>(typeof(Browser), services);
+            Set<IShare>(typeof(Share), services);
+            Set<ILauncher>(typeof(Launcher), services);
+            Set<IMap>(typeof(ApplicationModel.Map), services);
+            Set<IVibration>(typeof(Vibration), services);
+            Set<ISemanticScreenReader>(typeof(SemanticScreenReader), services);
+            Set<IGeolocation>(typeof(Geolocation), services);
+            Set<IEmail>(typeof(Email), services);
+            Set<IHapticFeedback>(typeof(HapticFeedback), services);
+            Set<IScreenshot>(typeof(Screenshot), services);
+            Set<IPhoneDialer>(typeof(PhoneDialer), services);
+            Set<ISms>(typeof(Sms), services);
+            Set<IFlashlight>(typeof(Flashlight), services);
+            Set<IAccelerometer>(typeof(Accelerometer), services);
+            Set<IGyroscope>(typeof(Gyroscope), services);
+            Set<ICompass>(typeof(Compass), services);
+            Set<IBarometer>(typeof(Barometer), services);
+            Set<IMagnetometer>(typeof(Magnetometer), services);
+            VersionTracking.Track();
+        }
     }
 
-    static void SetStaticField(
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicFields)] Type type,
-        string fieldName,
-        object? value)
+    static void Set<T>(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicMethods)] Type facade,
+        IServiceProvider services)
+        where T : class
     {
-        var field = type.GetField(fieldName, BindingFlags.Static | BindingFlags.NonPublic);
-        field?.SetValue(null, value);
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.NonPublic;
+        var setter = facade.GetMethod("SetDefault", flags, [typeof(T)])
+            ?? facade.GetMethod("SetCurrent", flags, [typeof(T)])
+            ?? throw new MissingMethodException(facade.FullName, "SetDefault/SetCurrent");
+        setter.Invoke(null, [services.GetRequiredService<T>()]);
     }
 #endif
 }

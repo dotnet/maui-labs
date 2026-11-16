@@ -139,6 +139,8 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
     {
     }
 
+    internal MacOSModalManager? ModalManager => _modalManager;
+
     /// <summary>
     /// Called when the NSWindow is closed or the application terminates.
     /// Fires IWindow.Destroying() and removes the window from the tracked list.
@@ -573,6 +575,7 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
         handler.PlatformView.MaxSize = new CGSize(maxW, maxH);
     }
 
+#if !NET11_0_OR_GREATER
     Window? _subscribedWindow;
 
     void SubscribeModalEvents(IWindow window)
@@ -608,4 +611,13 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
         if (_modalManager != null)
             _modalManager.PopModal(true);
     }
+#else
+    void SubscribeModalEvents(IWindow window)
+    {
+    }
+
+    void UnsubscribeModalEvents()
+    {
+    }
+#endif
 }

@@ -96,6 +96,7 @@ public static partial class AppHostBuilderExtensions
         builder.Services.AddSingleton<IDispatcherProvider>(svc => new MacOSDispatcherProvider());
 #if NET11_0_OR_GREATER
         builder.Services.AddSingleton<IGesturePlatformManagerFactory, MacOSGesturePlatformManagerFactory>();
+        builder.Services.AddSingleton<IModalNavigationPlatformFactory, MacOSModalNavigationPlatformFactory>();
 #endif
 
         // Replace the default System.Timers.Timer-based ticker with one using NSTimer on the main run loop.
