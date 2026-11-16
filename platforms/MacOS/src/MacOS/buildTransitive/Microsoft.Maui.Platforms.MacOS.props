@@ -8,4 +8,21 @@
     <AvailableItemName Include="MauiSplashScreen" />
   </ItemGroup>
 
+  <!-- These properties must be available before MAUI's Resizetizer targets are
+       evaluated. The AppKit package is referenced only by AppKit heads; MAUI 10
+       ignores the .NET 11 hook properties and retains the compatibility target. -->
+  <PropertyGroup>
+    <ResizetizerPlatformType Condition="'$(ResizetizerPlatformType)' == ''">macos-appkit</ResizetizerPlatformType>
+    <MauiActiveBackend Condition="'$(MauiActiveBackend)' == ''">macos</MauiActiveBackend>
+    <ResizetizerAfterAssetProcessingTargets>$(ResizetizerAfterAssetProcessingTargets);_MacOSCollectProcessedMauiAssets</ResizetizerAfterAssetProcessingTargets>
+    <ResizetizerAfterFontProcessingTargets>$(ResizetizerAfterFontProcessingTargets);_MacOSCollectProcessedMauiFonts</ResizetizerAfterFontProcessingTargets>
+    <ResizetizerAfterImageProcessingTargets>$(ResizetizerAfterImageProcessingTargets);_MacOSCollectProcessedMauiImages</ResizetizerAfterImageProcessingTargets>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <MauiPlatformSpecificFolder Include="Platforms\MacOS\"
+                                TargetPlatformIdentifier="macos"
+                                BackendIdentity="macos" />
+  </ItemGroup>
+
 </Project>

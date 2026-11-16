@@ -1,6 +1,6 @@
 {
   "name": "dialog-registration",
   "expectedCases": 1,
-  "expectedAssertions": 6,
+  "expectedAssertions": 7,
   "evidence": ["registration.json", "assertions.txt"]
 }

@@ -36,7 +36,7 @@ public static class GtkGestureExtensions
 					controllers.AddRange(AttachPanGesture(widget, mauiView, panRecognizer));
 					break;
 				case PointerGestureRecognizer pointerRecognizer:
-					controllers.AddRange(AttachPointerGesture(widget, pointerRecognizer));
+					controllers.AddRange(AttachPointerGesture(widget, mauiView, pointerRecognizer));
 					break;
 				case SwipeGestureRecognizer swipeRecognizer:
 					controllers.AddRange(AttachSwipeGesture(widget, mauiView, swipeRecognizer));
@@ -151,22 +151,53 @@ public static class GtkGestureExtensions
 	}
 #endif
 
-	private static Gtk.EventController[] AttachPointerGesture(Gtk.Widget widget, PointerGestureRecognizer recognizer)
+	private static Gtk.EventController[] AttachPointerGesture(
+		Gtk.Widget widget,
+		View view,
+		PointerGestureRecognizer recognizer)
 	{
 		var motion = Gtk.EventControllerMotion.New();
 
-		motion.OnEnter += (_, _) =>
+		motion.OnEnter += (_, args) =>
+#if NET11_0_OR_GREATER
+			recognizer.SendPointerEntered(
+				view,
+				_ => new Point(args.X, args.Y));
+#else
 			Execute(recognizer.PointerEnteredCommand, recognizer.PointerEnteredCommandParameter);
-		motion.OnMotion += (_, _) =>
+#endif
+		motion.OnMotion += (_, args) =>
+#if NET11_0_OR_GREATER
+			recognizer.SendPointerMoved(
+				view,
+				_ => new Point(args.X, args.Y));
+#else
 			Execute(recognizer.PointerMovedCommand, recognizer.PointerMovedCommandParameter);
+#endif
 		motion.OnLeave += (_, _) =>
+#if NET11_0_OR_GREATER
+			recognizer.SendPointerExited(view, _ => null);
+#else
 			Execute(recognizer.PointerExitedCommand, recognizer.PointerExitedCommandParameter);
+#endif
 
 		var click = Gtk.GestureClick.New();
-		click.OnPressed += (_, _) =>
+		click.OnPressed += (_, args) =>
+#if NET11_0_OR_GREATER
+			recognizer.SendPointerPressed(
+				view,
+				_ => new Point(args.X, args.Y));
+#else
 			Execute(recognizer.PointerPressedCommand, recognizer.PointerPressedCommandParameter);
-		click.OnReleased += (_, _) =>
+#endif
+		click.OnReleased += (_, args) =>
+#if NET11_0_OR_GREATER
+			recognizer.SendPointerReleased(
+				view,
+				_ => new Point(args.X, args.Y));
+#else
 			Execute(recognizer.PointerReleasedCommand, recognizer.PointerReleasedCommandParameter);
+#endif
 
 		widget.AddController(motion);
 		widget.AddController(click);

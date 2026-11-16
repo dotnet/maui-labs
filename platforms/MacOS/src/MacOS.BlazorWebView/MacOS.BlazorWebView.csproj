@@ -21,8 +21,8 @@
     </PackageReference>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui"
                       ExcludeAssets="build;buildTransitive">
-      <VersionOverride Condition="'$(TargetFramework)' == 'net10.0-macos'">$(MacOSMaui10Version)</VersionOverride>
-      <VersionOverride Condition="'$(TargetFramework)' == 'net11.0-macos'">$(MacOSMaui11Version)</VersionOverride>
+      <VersionOverride Condition="'$(TargetFramework)' == 'net10.0-macos'">$(MacOSBlazorWebView10Version)</VersionOverride>
+      <VersionOverride Condition="'$(TargetFramework)' == 'net11.0-macos'">$(MacOSBlazorWebView11Version)</VersionOverride>
     </PackageReference>
   </ItemGroup>
 

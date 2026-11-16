@@ -34,16 +34,12 @@ public static MauiApp CreateMauiApp()
 }
 ```
 
-### 3. Link wwwroot Resources
+### 3. Add wwwroot Resources
 
-In your macOS app head `.csproj`, link the Blazor static assets:
-
-```xml
-<ItemGroup>
-  <BundleResource Include="..\MyApp\wwwroot\**"
-                  Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
-</ItemGroup>
-```
+Use the standard Razor SDK static-web-asset layout. The MAUI Blazor build targets
+convert these assets to `MauiAsset`, and the AppKit package maps the processed
+assets into the application bundle automatically. No custom `BundleResource`
+items are required.
 
 The `wwwroot/` folder should contain your `index.html` and any static assets (CSS, JS, images).
 

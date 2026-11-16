@@ -5,7 +5,7 @@ namespace Microsoft.Maui.Platforms.MacOS.Tests;
 public sealed class BuildContractTests
 {
 	[Fact]
-	public void PackageTargets_EvaluateBackendContractsAfterConsumerProperties()
+	public void PackageProps_RegisterBackendAndResizetizerHooksBeforeMauiTargets()
 	{
 		var root = GetBuildContractsDirectory();
 		var props = XDocument.Load(Path.Combine(root,
@@ -13,12 +13,16 @@ public sealed class BuildContractTests
 		var targets = XDocument.Load(Path.Combine(root,
 			"Microsoft.Maui.Platforms.MacOS.targets"));
 
-		Assert.Null(Element(props, "ResizetizerPlatformType"));
-		Assert.Null(Element(props, "MauiActiveBackend"));
-		Assert.Equal("macos-appkit", Element(targets, "ResizetizerPlatformType")?.Value);
-		Assert.Equal("macos", Element(targets, "MauiActiveBackend")?.Value);
+		Assert.Equal("macos-appkit", Element(props, "ResizetizerPlatformType")?.Value);
+		Assert.Equal("macos", Element(props, "MauiActiveBackend")?.Value);
+		Assert.Contains("_MacOSCollectProcessedMauiImages",
+			Element(props, "ResizetizerAfterImageProcessingTargets")?.Value);
+		Assert.Contains("_MacOSCollectProcessedMauiFonts",
+			Element(props, "ResizetizerAfterFontProcessingTargets")?.Value);
+		Assert.Contains("_MacOSCollectProcessedMauiAssets",
+			Element(props, "ResizetizerAfterAssetProcessingTargets")?.Value);
 
-		var platformFolder = Element(targets, "MauiPlatformSpecificFolder");
+		var platformFolder = Element(props, "MauiPlatformSpecificFolder");
 		Assert.Equal("macos", platformFolder?.Attribute("TargetPlatformIdentifier")?.Value);
 		Assert.Equal("macos", platformFolder?.Attribute("BackendIdentity")?.Value);
 		Assert.Contains("MSBuildSourceProjectFile", targets.ToString(SaveOptions.DisableFormatting));
@@ -29,13 +33,19 @@ public sealed class BuildContractTests
 	{
 		var targets = XDocument.Load(Path.Combine(GetBuildContractsDirectory(),
 			"Microsoft.Maui.Platforms.MacOS.targets"));
-		var collect = targets.Descendants().Single(element =>
-			element.Attribute("Name")?.Value == "_MacOSCollectProcessedMauiResources");
-		Assert.Contains("ResizetizeImages", collect.Attribute("DependsOnTargets")?.Value);
-		Assert.Contains("Normalize(System.Text.NormalizationForm.FormD)", collect.ToString());
-		Assert.Null(Element(targets, "ResizetizerAfterImageProcessingTargets"));
-		Assert.Contains(collect.Descendants(), element => element.Name.LocalName == "FileWrites" &&
-			element.Attribute("Include")?.Value == "@(MauiProcessedImage);@(MauiProcessedFont)");
+		var images = targets.Descendants().Single(element =>
+			element.Attribute("Name")?.Value == "_MacOSCollectProcessedMauiImages");
+		var fonts = targets.Descendants().Single(element =>
+			element.Attribute("Name")?.Value == "_MacOSCollectProcessedMauiFonts");
+		var assets = targets.Descendants().Single(element =>
+			element.Attribute("Name")?.Value == "_MacOSCollectProcessedMauiAssets");
+		Assert.Contains("Normalize(System.Text.NormalizationForm.FormD)", images.ToString());
+		Assert.Contains("Normalize(System.Text.NormalizationForm.FormD)", fonts.ToString());
+		Assert.Contains("Normalize(System.Text.NormalizationForm.FormD)", assets.ToString());
+		Assert.Contains(images.Descendants(), element => element.Name.LocalName == "FileWrites" &&
+			element.Attribute("Include")?.Value == "@(MauiProcessedImage)");
+		Assert.Contains(fonts.Descendants(), element => element.Name.LocalName == "FileWrites" &&
+			element.Attribute("Include")?.Value == "@(MauiProcessedFont)");
 		var prepare = targets.Descendants().Single(element =>
 			element.Attribute("Name")?.Value == "_MacOSPrepareRawMauiAssets");
 		Assert.Equal("ProcessMauiAssets", prepare.Attribute("BeforeTargets")?.Value);
@@ -43,12 +53,47 @@ public sealed class BuildContractTests
 		Assert.Equal("%(Filename)%(Extension)", rawName.Value);
 		Assert.Contains("'%(MauiAsset.LogicalName)' == ''", rawName.Attribute("Condition")?.Value);
 
-		var asset = targets.Descendants().Single(element =>
+		var asset = assets.Descendants().Single(element =>
 			element.Attribute("Include")?.Value == "@(MauiProcessedAsset)");
 		var names = asset.Elements().Where(element => element.Name.LocalName == "LogicalName").ToArray();
-		Assert.Equal("%(MauiProcessedAsset.LogicalName)", names[0].Value);
-		Assert.All(names.Skip(1), name =>
+		Assert.Contains(names, name =>
+			name.Value == "%(MauiProcessedAsset.TargetPath)" &&
+			name.Attribute("Condition")?.Value.Contains("StartsWith('wwwroot/')") == true);
+		Assert.Contains(names, name =>
+			name.Value == "%(MauiProcessedAsset.LogicalName)" &&
+			name.Attribute("Condition")?.Value.Contains("!$([System.String]::Copy") == true);
+		Assert.All(names.Where(name =>
+			name.Value is not "%(MauiProcessedAsset.TargetPath)" and
+			not "%(MauiProcessedAsset.LogicalName)"), name =>
 			Assert.Contains("'%(MauiProcessedAsset.LogicalName)' == ''", name.Attribute("Condition")?.Value));
+	}
+
+	[Fact]
+	public void StandardIconAndSplashItems_UseAppKitPackagingTargets()
+	{
+		var targets = XDocument.Load(Path.Combine(GetBuildContractsDirectory(),
+			"Microsoft.Maui.Platforms.MacOS.targets"));
+
+		var splash = targets.Descendants().Single(element =>
+			element.Attribute("Name")?.Value == "_MacOSPromoteMauiSplashScreens");
+		Assert.Contains("ResizetizeCollectItems", splash.Attribute("BeforeTargets")?.Value);
+		Assert.Contains(splash.Descendants(), element =>
+			element.Name.LocalName == "MauiImage" &&
+			element.Attribute("Include")?.Value == "@(MauiSplashScreen)" &&
+			element.Attribute("IsAppSplashScreen")?.Value == "true");
+
+		var icon = targets.Descendants().Single(element =>
+			element.Attribute("Name")?.Value == "_MacOSGenerateAppIcon");
+		Assert.Contains(icon.Descendants(), element =>
+			element.Name.LocalName == "BundleResource" &&
+			element.Attribute("Remove")?.Value == "@(MauiIcon)");
+		Assert.Contains(icon.Descendants(), element =>
+			element.Name.LocalName == "BundleResource" &&
+			element.Elements().Any(child =>
+				child.Name.LocalName == "LogicalName" &&
+				child.Value == "AppIcon.icns"));
+		Assert.Contains(icon.Descendants(), element =>
+			element.Name.LocalName == "PartialAppManifest");
 	}
 
 	[Fact]
@@ -87,19 +132,12 @@ public sealed class BuildContractTests
 	}
 
 	[Fact]
-	public void BlazorAssets_ReplaceMappedResourcesWithCanonicalWebPaths()
+	public void BlazorAssets_UseStandardMauiAssetPipeline()
 	{
 		var targets = XDocument.Load(Path.Combine(GetBuildContractsDirectory(),
 			"Microsoft.Maui.Platforms.MacOS.BlazorWebView.targets"));
-		var bridge = targets.Descendants().Single(element =>
-			element.Attribute("Name")?.Value == "_IncludeBlazorWebViewBundleResources");
-		Assert.Contains("_MacOSCollectProcessedMauiResources", bridge.Attribute("DependsOnTargets")?.Value);
-		var remove = bridge.Descendants().Single(element => element.Attribute("Remove") is not null);
-		Assert.Equal("FullPath", remove.Attribute("MatchOnMetadata")?.Value);
-		Assert.Equal("PathLike", remove.Attribute("MatchOnMetadataOptions")?.Value);
-		var include = bridge.Descendants().Single(element => element.Name.LocalName == "BundleResource" &&
-			element.Attribute("Include") is not null);
-		Assert.Equal("%(_BlazorBundleResourceWithTargetPath.TargetPath)", include.Attribute("LogicalName")?.Value);
+		Assert.DoesNotContain(targets.Descendants(), element =>
+			element.Name.LocalName == "Target");
 	}
 
 	static string GetBuildContractsDirectory() =>

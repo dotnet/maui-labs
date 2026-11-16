@@ -115,7 +115,10 @@ MAUI_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo xvfb-run -a \
   --logger "console;verbosity=detailed"
 ```
 
-The test uses its own GTK application and does not require a DevFlow broker.
+The test uses a process-specific GTK application ID so concurrent net10/net11
+test hosts cannot forward activation to each other on the shared D-Bus session.
+It asserts that its own application completes with exactly one activation and
+does not require a DevFlow broker.
 
 ### Handler styling
 
@@ -258,7 +261,7 @@ store an encryption key beside the encrypted data.
 
 | Requirement | Version |
 |---|---|
-| .NET SDK | 11.0.100-rc.2.26504.105 or newer .NET 11 build |
+| .NET SDK | 11.0.100 (GA); workloads installed from `eng/workloads/dotnet11-ga.json` when required |
 | GTK 4 libraries | 4.12+ (system package) |
 | WebKitGTK *(Blazor only)* | 6.x (system package) |
 | GStreamer *(camera capture only)* | 1.0 command-line tools plus base/good plugins |
@@ -408,14 +411,18 @@ Linux head projects can use MAUI resource item groups for common `Resources/*` p
 - `MauiFont` from `Resources/Fonts/**`
 - `MauiAsset` from `Resources/Raw/**` (with `LogicalName` defaulting to `%(RecursiveDir)%(Filename)%(Extension)`)
 - `MauiIcon` from explicit items, or default `Resources/AppIcon/appicon.{svg|png|ico}`
+- `MauiSplashScreen` from explicit items, copied to `splash/` for GTK packaging
 
 The `net11.0` asset opts into MAUI 11's Resizetizer with
 `ResizetizerPlatformType=linux`, selects the neutral-TFM backend with
 `MauiActiveBackend=linux`, and consumes the public `MauiProcessedImage`,
-`MauiProcessedFont`, and `MauiProcessedAsset` outputs. Processed target paths are
-preserved, including `MauiAsset` logical names under `Resources/Raw`. `MauiIcon`
+`MauiProcessedFont`, and `MauiProcessedAsset` outputs through the public
+`ResizetizerAfter*ProcessingTargets` hooks. Image and font output filenames and
+`MauiAsset` logical names are preserved. `MauiIcon`
 continues to emit the Linux `hicolor` icon-theme layout, and runtime sets the GTK
-window default icon name from that icon.
+window default icon name from that icon. MAUI 11 does not expose a generic
+processed splash output for external backends, so GTK packages the declared
+`MauiSplashScreen` source as its platform launch asset.
 
 `Platforms/Linux/**` is registered through the public
 `MauiPlatformSpecificFolder`/`BackendIdentity` contract, so a Linux head can keep
@@ -426,9 +433,10 @@ does not publish these external-backend processed-item contracts.
 GTK uses portable SDK projects and MAUI NuGet build assets, not `UseMaui=true`
 or a platform workload. The `maui` workload is not supported on Linux.
 
-The package-only consumer fixture exercises .NET 10 and .NET 11 referenced-library raw assets,
-logical names (including Unicode and empty files), incremental changes and
-removal, no-build publish, and collision failures:
+The package-only consumer fixture exercises .NET 10 and .NET 11 images, fonts,
+raw assets, icons, splash assets, referenced-library logical names (including
+Unicode and empty files), incremental changes and removal, no-build publish,
+and collision failures:
 
 ```powershell
 ./eng/smoke-tests/community-resource-acceptance.ps1 -Backend gtk
@@ -606,6 +614,9 @@ The runner requires a .NET 11 SDK, creates a private DBus session and display, r
 tests with no failures or skips in the TRX, and rejects missing/empty filtered
 classes. Use a fresh `-ResultsDirectory` when repeating a run to preserve prior
 evidence. Use `-TestProject` and `-TestNamespace` to select tests in another project.
+For a project with a different target framework, pass `-TestFramework` explicitly:
+the DevFlow GTK snapshot project targets `net10.0`, even under the .NET 11 SDK.
+Without an override, the runner selects `net11.0`, or `net10.0` for a MAUI 10 version.
 CI's `runtime` matrix runs one existing native class per process; retain
 the union of native class entries when integrating other platform changes.
 

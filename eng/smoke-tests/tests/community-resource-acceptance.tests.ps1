@@ -7,7 +7,13 @@ $errors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     (Resolve-Path $scriptPath), [ref] $tokens, [ref] $errors)
 if ($errors.Count -ne 0) { throw "Acceptance script parse errors: $errors" }
-foreach ($name in @('Get-ResourcePublishArguments', 'Invoke-DotNet', 'Assert-SingleFile', 'Assert-NoFile')) {
+foreach ($name in @(
+    'Get-ResourcePublishArguments',
+    'Invoke-DotNet',
+    'Assert-SingleFile',
+    'Assert-NoFile',
+    'Assert-Icns',
+    'Assert-AppKitStandardResources')) {
     $definition = $ast.Find({
         param($node)
         $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
@@ -71,9 +77,12 @@ $global:LASTEXITCODE = 0
 $root = Join-Path $PSScriptRoot "../../../artifacts/resource-contract-$([Guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $root -Force | Out-Null
 $file = Join-Path $root "cafe$([char]0x0301).txt"
+$icon = Join-Path $root 'AppIcon.icns'
 $bytes = [byte[]] @(1, 2, 3)
 try {
     [System.IO.File]::WriteAllBytes($file, $bytes)
+    [System.IO.File]::WriteAllBytes($icon, [byte[]] @(0x69, 0x63, 0x6E, 0x73, 0, 0, 0, 8))
+    Assert-Icns $root 'AppIcon.icns'
     $composedName = "caf$([char]0x00e9).txt"
     Assert-SingleFile $root $composedName $bytes | Out-Null
     $rejected = $false
@@ -85,6 +94,7 @@ try {
 }
 finally {
     Remove-Item -LiteralPath $file
+    Remove-Item -LiteralPath $icon
     Remove-Item -LiteralPath $root
 }
 Write-Host 'PASS resource acceptance: five backend commands, four exit-status contracts, and Unicode payload/stale-file checks.'

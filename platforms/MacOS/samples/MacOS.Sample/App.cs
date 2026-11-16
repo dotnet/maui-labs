@@ -84,9 +84,7 @@ class MainShell : Shell
 		platform.Items.Add(MakeContent("Battery & Network", "battery", "battery.100", typeof(BatteryNetworkPage)));
 		platform.Items.Add(MakeContent("Clipboard & Storage", "clipboard", "doc.on.clipboard", typeof(ClipboardPrefsPage)));
 		platform.Items.Add(MakeContent("Launch & Share", "launch", "square.and.arrow.up", typeof(LaunchSharePage)));
-#if MACAPP
 		platform.Items.Add(MakeContent("Blazor Hybrid", "blazor", "network", typeof(BlazorPage)));
-#endif
 		Items.Add(platform);
 
 		// Navigation

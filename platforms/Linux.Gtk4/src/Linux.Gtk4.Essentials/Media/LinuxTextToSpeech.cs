@@ -8,6 +8,17 @@ public class LinuxTextToSpeech : ITextToSpeech
 {
 	public Task<IEnumerable<Locale>> GetLocalesAsync()
 	{
+#if NET11_0_OR_GREATER
+		var culture = CultureInfo.CurrentCulture;
+		return Task.FromResult<IEnumerable<Locale>>(
+		[
+			new Locale(
+				culture.TwoLetterISOLanguageName,
+				culture.Name,
+				culture.DisplayName,
+				culture.Name)
+		]);
+#else
 		// Locale has an internal constructor — create via reflection
 		var culture = CultureInfo.CurrentCulture;
 		try
@@ -31,6 +42,7 @@ public class LinuxTextToSpeech : ITextToSpeech
 			System.Diagnostics.Debug.WriteLine($"LinuxTextToSpeech: Failed to create Locale via reflection: {ex.Message}");
 		}
 		return Task.FromResult<IEnumerable<Locale>>(Array.Empty<Locale>());
+#endif
 	}
 
 	public async Task SpeakAsync(string text, SpeechOptions? options = null, CancellationToken cancelToken = default)

@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110', '11.0.0-rc.2.26505.5']
+        maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110', '11.0.10']
     uses: ./.github/workflows/_build.yml
     permissions:
       contents: read
@@ -209,13 +209,14 @@ jobs:
       fail-fast: false
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [CollectionViewHandlerTests, GtkBlazorWebViewLifetimeTests, PickerSelectionTests, GtkSignalLifetimeTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests, WindowSizingTests, GtkTransformTests, StartupLayoutTests, ResourceImageRuntimeTests]
+        test-class: [CollectionViewHandlerTests, GtkBlazorWebViewLifetimeTests, PickerSelectionTests, GtkSignalLifetimeTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests, WindowSizingTests, GtkTransformTests, StartupLayoutTests, ResourceImageRuntimeTests, ResourceFontRuntimeTests, ModalNavigationRuntimeTests]
         maui: ['']
         include:
           - test-class: GtkSignalLifetimeTests
             maui: '10.0.70'
           - test-class: GtkWebViewSnapshotRuntimeTests
             maui: ''
+            test-framework: net10.0
             test-project: src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/Microsoft.Maui.DevFlow.Agent.Gtk.Tests.csproj
             test-namespace: Microsoft.Maui.DevFlow.Agent.Gtk.Tests
           - test-class: WindowSizingTests
@@ -225,7 +226,7 @@ jobs:
           - test-class: StartupLayoutTests
             maui: '10.0.70'
           - test-class: ModernizationRegistrationTests
-            maui: '11.0.0-rc.2.26505.5'
+            maui: '11.0.10'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
@@ -246,6 +247,7 @@ jobs:
           -TestClass '${{ matrix.test-class }}'
           -TestProject '${{ matrix.test-project || 'platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj' }}'
           -TestNamespace '${{ matrix.test-namespace || 'Microsoft.Maui.Platforms.Linux.Gtk4.Tests' }}'
+          ${{ matrix.test-framework && format('-TestFramework {0}', matrix.test-framework) || '' }}
           ${{ matrix.maui && format('-MauiVersion {0}', matrix.maui) || '' }}
       - name: Build DevFlow sample
         if: matrix.test-class == 'CollectionViewHandlerTests'

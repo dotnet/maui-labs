@@ -19,7 +19,7 @@ static class DialogRegistrationScenario
 {
     [ModuleInitializer]
     public static void Register() => ScenarioRegistry.Register(
-        new("dialog-registration", ExpectedCases: 1, RunManaged: Run, ExpectedAssertions: 6));
+        new("dialog-registration", ExpectedCases: 1, RunManaged: Run, ExpectedAssertions: 7));
 
     static void Run(RuntimeTestContext context)
     {
@@ -88,11 +88,20 @@ static class DialogRegistrationScenario
                 descriptor.ServiceType == typeof(IGesturePlatformManagerFactory) &&
                 descriptor.ImplementationType == typeof(MacOSGesturePlatformManagerFactory)),
             "MAUI 11 startup must register the public AppKit gesture factory.");
+        context.Assert(
+            builder.Services.Any(descriptor =>
+                descriptor.ServiceType == typeof(IModalNavigationPlatformFactory) &&
+                descriptor.ImplementationType == typeof(MacOSModalNavigationPlatformFactory)),
+            "MAUI 11 startup must register the public AppKit modal-navigation factory.");
 #else
         context.Assert(
             builder.Services.All(descriptor => descriptor.ServiceType.FullName !=
                 "Microsoft.Maui.Controls.Platform.IGesturePlatformManagerFactory"),
             "MAUI 10 startup must retain the compatibility gesture lifecycle.");
+        context.Assert(
+            builder.Services.All(descriptor => descriptor.ServiceType.FullName !=
+                "Microsoft.Maui.Controls.Platform.IModalNavigationPlatformFactory"),
+            "MAUI 10 startup must retain the compatibility modal lifecycle.");
 #endif
         context.Pass("dialog subscription registration");
     }

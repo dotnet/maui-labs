@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components.WebView.Maui;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.Hosting;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView;
 
@@ -18,8 +19,9 @@ public static class BlazorWebViewExtensions
 #else
 	public static IServiceCollection AddLinuxGtk4BlazorWebView(this IServiceCollection services)
 	{
-		// MAUI 10 has no public UsePlatformHandler contract. Existing MAUI 10
-		// applications continue to register the handler with ConfigureMauiHandlers.
+		services.AddMauiBlazorWebView();
+		services.ConfigureMauiHandlers(handlers =>
+			handlers.AddHandler<Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebView, BlazorWebViewHandler>());
 		return services;
 	}
 #endif

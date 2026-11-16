@@ -70,17 +70,18 @@ assertions as `appkit-runtime-shell-sections-default`. See the
 
 ## Prerequisites
 
-- .NET SDK `11.0.100-rc.2.26504.105`
-- SDK-bundled `macos` workload (`27.0.12212-net11-rc.2`)
+- .NET SDK `11.0.100`
+- GA rollback manifest `eng/workloads/dotnet11-ga.json` with the `macos`
+  workload (`27.2.11039`)
 - macOS 14 (Sonoma) or later
-- Xcode 27 for .NET 11 build and runtime validation
+- Xcode 27.2 for native build and runtime validation
 - Xcode command line tools (`sips` / `iconutil` are used by the icon build target)
 
 The packages include both `net10.0-macos` (MAUI 10.0.110 by default) and
-`net11.0-macos` (MAUI 11 RC2). Native application validation requires the matching
-Xcode major/minor supported by each pinned workload: Xcode 26.0.x for the .NET 10
-pack and Xcode 27.0.x for the .NET 11 pack. A successful library build is not a native
-application or resource-bundle pass.
+`net11.0-macos` (MAUI 11.0.10). Native application validation requires the Xcode
+version pinned by each Apple pack: Xcode 26.0.x for the net10 compatibility pack
+(`26.0.11017`) and Xcode 27.2 for the net11 pack (`27.2.11039`). A successful
+library build is not a native application or resource-bundle pass.
 
 On .NET 11, AppKit uses public platform contracts for dialogs, gesture lifecycle,
 assembly-aware font registration, view screenshots, and standard `BlazorWebView`
@@ -101,10 +102,8 @@ The AppKit workflow accepts pull requests targeting `main` or the GTK stack bran
 `redth-maui-net11-gtk`. Portable contracts run independently of native build jobs;
 native and package-consumer jobs retain Xcode validation. .NET 11 jobs use the
 hosted [`xcode-27` image](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
-with Xcode 27.0 explicitly selected; `macos-latest` does not provide that Xcode.
-.NET 10 native scenarios use the hosted
-[`macos-26` image](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)
-with Xcode 26.0.1 selected. Both lanes retain the repository workload rollback.
+with Xcode 27.2 explicitly selected. .NET 10 native scenarios use the `macos-26`
+image with Xcode 26.0.1. Both use the repository's GA workload rollback manifest.
 Camera validation is opt-in on a camera-equipped self-hosted runner
 (`MAUI_APPKIT_CAMERA_TESTS=1`).
 
@@ -151,6 +150,7 @@ dotnet run
     <MauiImage Include="Resources\Images\*" />
     <MauiFont Include="Resources\Fonts\*" />
     <MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiSplashScreen Include="Resources\Splash\splash.png" />
   </ItemGroup>
 </Project>
 ```
@@ -310,6 +310,14 @@ MAUI 10 compatibility target retains the prior raw-item mapping and is isolated
 from the .NET 11 path. Image names and font names must be unique within their respective bundle directories.
 Use `LogicalName` to preserve nested raw-asset paths.
 
+`MauiSplashScreen` uses the same standard item syntax and is promoted through the
+image pipeline so its processed image is available in `Contents/Resources/Images`.
+Native macOS does not define an operating-system launch-screen contract, so AppKit
+does not automatically display that image before the first window.
+
+Razor static web assets are converted by the standard MAUI Blazor targets and flow
+through `MauiProcessedAsset`; no manual `BundleResource` glob for `wwwroot` is needed.
+
 The standalone package-resource acceptance gate uses supported `dotnet publish`,
 expands the resulting `.pkg` with `pkgutil --expand-full` without installing it,
 and verifies the installed payload's resource bytes and stale-file removal before
@@ -318,7 +326,7 @@ checking collision rejection. Logical names use macOS's decomposed Unicode form:
 omitted from the installer payload on case-sensitive filesystems. Canonically
 equivalent names are compared without changing resource bytes. Distinct resource
 files targeting the same bundle path fail with `MAUIAPPKIT001` rather than allowing
-the native SDK to silently select one. Apple SDK `27.0.12212-net11-rc.2` does not support
+the native SDK to silently select one. Apple SDK `27.2.11039` does not support
 `publish --no-build`: it invokes `Build` through `GetApplicationArtifactsDependsOn`
 and fails with `NETSDK1085` ([upstream explanation](https://github.com/dotnet/macios/issues/19132)).
 That unsupported operation is not an AppKit acceptance requirement; GTK and WPF
