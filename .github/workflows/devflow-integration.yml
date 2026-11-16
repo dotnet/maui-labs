@@ -307,13 +307,9 @@ jobs:
             sudo xcode-select -s "$SELECTED/Contents/Developer"
             ACTOOL_PATH="$(xcrun --find actool)"
             DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd -P)"
-            XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd -P)"
             echo "Resolved developer dir: $DEVELOPER_ROOT"
-            echo "Resolved Xcode app: $XCODE_APP"
             export DEVELOPER_DIR="$DEVELOPER_ROOT"
-            export MD_APPLE_SDK_ROOT="$XCODE_APP"
             echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
-            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
           fi
           sudo xcodebuild -runFirstLaunch
           xcodebuild -version
@@ -414,13 +410,9 @@ jobs:
             sudo xcode-select -s "$SELECTED/Contents/Developer"
             ACTOOL_PATH="$(xcrun --find actool)"
             DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd)"
-            XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd)"
             echo "Resolved developer dir: $DEVELOPER_ROOT"
-            echo "Resolved Xcode app: $XCODE_APP"
             export DEVELOPER_DIR="$DEVELOPER_ROOT"
-            export MD_APPLE_SDK_ROOT="$XCODE_APP"
             echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
-            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
           fi
           sudo xcodebuild -runFirstLaunch
           xcodebuild -version
@@ -492,11 +484,8 @@ jobs:
             sudo xcode-select -s "$SELECTED/Contents/Developer"
             ACTOOL_PATH="$(xcrun --find actool)"
             DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd)"
-            XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd)"
             export DEVELOPER_DIR="$DEVELOPER_ROOT"
-            export MD_APPLE_SDK_ROOT="$XCODE_APP"
             echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
-            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
           fi
           sudo xcodebuild -runFirstLaunch
           xcodebuild -version
