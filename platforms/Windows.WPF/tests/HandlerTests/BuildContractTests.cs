@@ -17,15 +17,23 @@ public sealed class BuildContractTests
 		Assert.Null(Element(props, "_WpfUseMaui11ResourcePipeline"));
 		Assert.Null(Element(props, "MauiActiveBackend"));
 		Assert.Equal("wpf", Element(targets, "MauiActiveBackend")?.Value);
+		Assert.Contains("_WpfCollectProcessedMauiImages",
+			Element(targets, "ResizetizerAfterImageProcessingTargets")?.Value);
+		Assert.Contains("_WpfCollectProcessedMauiFonts",
+			Element(targets, "ResizetizerAfterFontProcessingTargets")?.Value);
+		Assert.Contains("_WpfCollectProcessedMauiAssets",
+			Element(targets, "ResizetizerAfterAssetProcessingTargets")?.Value);
 
 		var platformFolder = Element(targets, "MauiPlatformSpecificFolder");
 		Assert.Equal("wpf", platformFolder?.Attribute("BackendIdentity")?.Value);
-		Assert.Equal("MauiActiveBackend", platformFolder?.Attribute("ActivationProperty")?.Value);
+		Assert.Null(platformFolder?.Attribute("ActivationProperty"));
+		Assert.Null(platformFolder?.Attribute("ActivationValue"));
 
 		var text = targets.ToString(SaveOptions.DisableFormatting);
 		Assert.Contains("BeforeTargets=\"GetCopyToOutputDirectoryItems;GetCopyToPublishDirectoryItems;ComputeFilesToPublish\"", text);
-		Assert.Contains("_WpfProcessedResourcesCollected", text);
+		Assert.Contains("_WpfPrepareMauiResources", text);
 		Assert.Contains("MSBuildSourceProjectFile", text);
+		Assert.DoesNotContain("_WpfProcessMauiIcon", text);
 	}
 
 	static XElement? Element(XDocument document, string localName) =>

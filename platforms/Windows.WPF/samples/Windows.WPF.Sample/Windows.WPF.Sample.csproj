@@ -39,6 +39,8 @@
     <MauiFont Include="Resources\Fonts\*" />
     <MauiImage Include="Resources\Images\*" />
     <MauiIcon Include="Resources\AppIcon\appicon_modern.svg" />
+    <MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiSplashScreen Include="Resources\Images\dotnet_bot.svg" Color="#512BD4" />
   </ItemGroup>
 
   <ItemGroup>
@@ -54,10 +56,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Windows.WPF\Windows.WPF.csproj" />
     <ProjectReference Include="..\..\src\Windows.WPF.Essentials\Windows.WPF.Essentials.csproj" />
-    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.WPF\Microsoft.Maui.DevFlow.Agent.WPF.csproj" />
+    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.WPF\Microsoft.Maui.DevFlow.Agent.WPF.csproj"
+                      Condition="'$(EnableMauiDevFlow)' == 'true'" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(EnableMauiDevFlow)' == 'true'">
     <AssemblyMetadata Include="Microsoft.Maui.DevFlowProject" Value="Windows.WPF.Sample" />
     <AssemblyMetadata Include="Microsoft.Maui.DevFlowTfm" Value="$(TargetFramework)" />
   </ItemGroup>
@@ -75,7 +78,7 @@
     </ItemGroup>
   </Target>
   <PropertyGroup Condition="'$(WpfTestScenarios)' == 'true'">
-    <DefineConstants>$(DefineConstants);WPF_TEST_SCENARIOS;WPF_FONT_TEST_SCENARIO</DefineConstants>
+    <DefineConstants>$(DefineConstants);WPF_TEST_SCENARIOS;WPF_FONT_TEST_SCENARIO;WPF_RESOURCE_PIPELINE_SCENARIO</DefineConstants>
     <WpfTestTargetsPath Condition="'$(WpfTestTargetsPath)' == ''">$(MSBuildThisFileDirectory)..\..\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets</WpfTestTargetsPath>
   </PropertyGroup>
 

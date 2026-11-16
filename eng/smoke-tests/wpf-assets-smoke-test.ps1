@@ -43,9 +43,11 @@ if ($SkipMauiWorkload) {
 
 Invoke-DotNet (@('build', $project, '--nologo', '-v:minimal') + $properties)
 Invoke-DotNet @((Join-Path $build 'Windows.WPF.Sample.dll'), '--test-scenario', 'packaged-assets')
+Invoke-DotNet @((Join-Path $build 'Windows.WPF.Sample.dll'), '--test-scenario', 'standard-resources')
 
 # A no-build publish must reconstruct the content items without relying on the Build target.
 Invoke-DotNet (@('publish', $project, '--no-build', '--no-restore', '--nologo', '-v:minimal',
     "-p:PublishDir=$publish\") + $properties)
 Invoke-DotNet @((Join-Path $publish 'Windows.WPF.Sample.dll'), '--test-scenario', 'packaged-assets')
-Write-Host "PASS: built and published assets opened through IFileSystem. Artifacts: $work"
+Invoke-DotNet @((Join-Path $publish 'Windows.WPF.Sample.dll'), '--test-scenario', 'standard-resources')
+Write-Host "PASS: built and published MauiImage, MauiFont, MauiAsset, MauiIcon, and MauiSplashScreen contracts. Artifacts: $work"
