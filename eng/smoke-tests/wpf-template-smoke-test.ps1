@@ -282,7 +282,7 @@ if ($FontScenarios) {
         'Resources\Images\dotnet_bot.png',
         'Resources\AppIcon\appicon_modern.png',
         'Resources\Splash\dotnet_bot.svg',
-        'Pipeline\payload.txt'
+        'Pipeline/payload.txt'
     )) {
         $matches = @($fontItems.Items.ContentWithTargetPath | Where-Object TargetPath -CEQ $targetPath)
         if ($matches.Count -ne 1 -or

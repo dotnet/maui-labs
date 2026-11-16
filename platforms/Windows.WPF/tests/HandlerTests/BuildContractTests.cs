@@ -34,7 +34,8 @@ public sealed class BuildContractTests
 		var prepareResources = Assert.Single(targets.Descendants(),
 			element => element.Name.LocalName == "Target" &&
 				(string?)element.Attribute("Name") == "_WpfPrepareMauiResources");
-		Assert.Contains("_WpfProcessMauiSplashScreen",
+		Assert.Equal(
+			"ProcessMauiAssets;ProcessMauiFonts;ResizetizeImages;_WpfProcessMauiSplashScreen",
 			prepareResources.Attribute("DependsOnTargets")?.Value);
 		Assert.Contains("MSBuildSourceProjectFile", text);
 		Assert.DoesNotContain("_WpfProcessMauiIcon", text);
