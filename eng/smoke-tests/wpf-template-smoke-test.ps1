@@ -44,6 +44,15 @@ function Invoke-DotNet {
     }
 }
 
+function Invoke-App {
+    param([string[]] $Arguments)
+    # Apps run through the host directly; Invoke-DotNet routes through the pinned SDK's dotnet.dll.
+    & $dotnet @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
+    }
+}
+
 function Invoke-MSBuild {
     param([string[]] $Arguments)
     if ($SdkDirectory) {
@@ -309,14 +318,14 @@ if ($FontScenarios) {
     & $fontSmoke -SampleAssembly (Join-Path $output 'TemplateSmoke.WPF.dll') -DotNet $dotnet `
         -ControlFont (Join-Path $sample 'Resources\Fonts\OpenSans-Regular.ttf') `
         -ResultsDirectory (Join-Path $work 'FontBuild')
-    Invoke-DotNet -Arguments @((Join-Path $output 'TemplateSmoke.WPF.dll'), '--test-scenario', 'standard-resources')
+    Invoke-App -Arguments @((Join-Path $output 'TemplateSmoke.WPF.dll'), '--test-scenario', 'standard-resources')
     $publish = Join-Path $work 'publish'
     Invoke-DotNet -Arguments (@('publish', $appProject, '-c', 'Release', '--no-build', '--no-restore',
         '-o', $publish) + $consumerArguments)
     & $fontSmoke -SampleAssembly (Join-Path $publish 'TemplateSmoke.WPF.dll') -DotNet $dotnet `
         -ControlFont (Join-Path $sample 'Resources\Fonts\OpenSans-Regular.ttf') `
         -ResultsDirectory (Join-Path $work 'FontPublish')
-    Invoke-DotNet -Arguments @((Join-Path $publish 'TemplateSmoke.WPF.dll'), '--test-scenario', 'standard-resources')
+    Invoke-App -Arguments @((Join-Path $publish 'TemplateSmoke.WPF.dll'), '--test-scenario', 'standard-resources')
 }
 
 $executable = Join-Path $output 'TemplateSmoke.WPF.exe'
