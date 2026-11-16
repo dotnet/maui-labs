@@ -20,21 +20,27 @@ streaming, and error behavior is defined in the
   tools, and images on guided-generation, tool-calling, and vision flags.
   Token usage requires OS 27; reasoning is not advertised until MEAI options map.
 - The provider never silently switches to a cloud model.
+- The native bridge (`EssentialsAI.framework`) deploys to iOS / Mac Catalyst 15.0 and
+  macOS 12.0, with its Foundation Models code marked `@available(… 26.0, *)` and
+  `FoundationModels` (and Swift's StringProcessing) weak-linked. Apps that support older OS
+  versions can embed the package and launch there; only construct or call
+  `AppleIntelligenceChatClient` after an OS 26+ check (it's `[SupportedOSPlatform]`-annotated).
 
 ## Toolchain and build
 
-The OS 27 Foundation Models APIs require Xcode 27 and the corresponding .NET
+The OS 27 Foundation Models APIs require Xcode 27.2 and the corresponding .NET
 reference packs. Build from the repository root:
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
-  -f net11.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst27.2 -p:UseNet11AppleTargets=true
 ```
 
-Use `net11.0-ios27.0` or `net11.0-macos27.0` for those platforms.
-`UseXcode27Preview` selects reference-pack targets; it does not install or
+Use `net11.0-ios27.2` or `net11.0-macos27.2` for those platforms.
+`UseNet11AppleTargets` selects reference-pack targets; it does not install or
 select Xcode. The official pipeline also builds unsuffixed Apple target
-frameworks against Xcode 27 with its validated compatibility settings.
+frameworks against Xcode 27.2 with validation disabled for the retained
+.NET 10 Apple targets.
 
 ## Registration
 
@@ -166,7 +172,7 @@ Run managed Mac Catalyst device tests:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net11.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst27.2 -p:UseNet11AppleTargets=true
 ```
 
 Model-dependent tests use `RequiresModel=true`. Runtime availability checks use

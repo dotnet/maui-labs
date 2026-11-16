@@ -47,12 +47,12 @@ jobs:
       project-path: samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj
       project-name: ai-chat-playground
       os: '["xcode-27"]'
+      xcode-version: '27.2'
       run-tests: false
       pack: false
       install-workloads: true
-      build-target-framework: net11.0-maccatalyst27.0
-      build-arguments: -p:UseXcode27Preview=true
-      skip-xcode-version-validation: true
+      build-target-framework: net11.0-maccatalyst27.2
+      build-arguments: -p:UseNet11AppleTargets=true
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
   sample-windows:

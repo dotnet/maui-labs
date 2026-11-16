@@ -5,26 +5,31 @@ const { test } = require("node:test");
 
 const root = path.resolve(__dirname, "../../..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
-const sdk = JSON.parse(read("global.json")).sdk;
+const sdkConfig = JSON.parse(read("global.json"));
+const sdk = sdkConfig.sdk;
 
-test("root and Testing select the same exact SDK for the RC2 manifests", () => {
+test("root and Testing select the same GA SDK feature band", () => {
   const testingSdk = JSON.parse(read("src/Testing/global.json")).sdk;
-  assert.equal(sdk.version, "11.0.100-rc.2.26504.105");
+  assert.equal(sdk.version, "11.0.100");
   assert.equal(testingSdk.version, sdk.version);
-  assert.equal(sdk.rollForward, "disable");
-  assert.equal(testingSdk.rollForward, "disable");
+  assert.equal(sdk.rollForward, "latestPatch");
+  assert.equal(testingSdk.rollForward, "latestPatch");
+  assert.equal("allowPrerelease" in sdk, false);
+  assert.equal("allowPrerelease" in testingSdk, false);
+  assert.equal(sdkConfig.tools.dotnet, sdk.version);
   const testing = read(".github/workflows/ci-testing.yml");
   assert.match(testing, /global-json-file: global\.json/);
   assert.doesNotMatch(testing, /dotnet-version:|dotnet-quality:/);
   assert.match(read("eng/pipelines/devflow-official.yml"), new RegExp(`version: ${sdk.version.replaceAll(".", "\\.")}\\s`));
 });
 
-test("shared build and device workflows default to RC2 rollback installs", () => {
+test("shared build and device workflows default to the GA workload set", () => {
   for (const file of ["_build.yml", "_device-tests.yml"]) {
     const text = read(`.github/workflows/${file}`);
-    assert.match(text, /workload-rollback-file:\n[\s\S]*?default: 'eng\/workloads\/dotnet11-rc2\.json'/);
-    assert.match(text, /workload install .* --from-rollback-file /);
-    assert.doesNotMatch(text, /workload-version|workload install .* --version /);
+    assert.match(text, /workload-version:\n[\s\S]*?default: '11\.0\.100\.1'/);
+    assert.match(text, /workload-source:\n[\s\S]*?default: 'https:\/\/api\.nuget\.org\/v3\/index\.json'/);
+    assert.match(text, /workload install .* --version \$\{\{ inputs\.workload-version \}\} --source \$\{\{ inputs\.workload-source \}\}/);
+    assert.doesNotMatch(text, /workload-rollback-file|--from-rollback-file/);
   }
 });
 
@@ -38,23 +43,38 @@ test("Apple build and device callers give the SDK a physical Xcode path", () => 
   }
 });
 
-test("MAUI iOS uses installed Xcode 26.4 runtimes without changing native iOS or the test-device runtime", () => {
+test("GA net11 Apple lanes select Xcode 27.2", () => {
+  for (const file of ["ci-ai.yml", "ci-essentialsai.yml"]) {
+    assert.match(read(`.github/workflows/${file}`), /xcode-version: '27\.2'/);
+  }
+  assert.match(read(".github/workflows/ci-testing.yml"), /Xcode_27\.2\.app/);
+  const official = read("eng/pipelines/devflow-official.yml");
+  assert.match(official, /Xcode_27\.2\.app/);
+  assert.match(official, /\^Xcode 27\\\.2/);
+});
+
+test("MAUI iOS keeps the released net10 override required by the hosted actool runtime", () => {
   const text = read(".github/workflows/devflow-integration.yml");
-  const rollback = JSON.parse(read("eng/workloads/dotnet11-rc2.json"));
-  const iosRollback = JSON.parse(read("eng/workloads/dotnet11-rc2-ios-net10.json"));
-  assert.equal(iosRollback["microsoft.net.sdk.ios"], "26.4.10259/10.0.100");
-  delete iosRollback["microsoft.net.sdk.ios"];
-  delete rollback["microsoft.net.sdk.ios"];
-  assert.deepEqual(iosRollback, rollback);
+  const iosRollback = JSON.parse(read("eng/workloads/dotnet11-ga-ios-net10.json"));
+  assert.deepEqual(iosRollback, {
+    "microsoft.net.sdk.android": "37.2.31/11.0.100",
+    "microsoft.net.sdk.ios": "26.4.10259/10.0.100",
+    "microsoft.net.sdk.maccatalyst": "27.2.11039/11.0.100",
+    "microsoft.net.sdk.macos": "27.2.11039/11.0.100",
+    "microsoft.net.sdk.maui": "11.0.0/11.0.100",
+    "microsoft.net.sdk.tvos": "27.2.11039/11.0.100",
+  });
+  assert.match(text, /DOTNET_WORKLOAD_VERSION: 11\.0\.100\.1/);
+  assert.match(text, /DOTNET_WORKLOAD_SOURCE: https:\/\/api\.nuget\.org\/v3\/index\.json/);
   assert.match(text, /DEVFLOW_TEST_IOS_VERSION: \$\{\{ inputs\.ios-runtime \|\| '26\.2' \}\}/);
   assert.match(text, /if \[\[ "\$\{\{ matrix\.framework \}\}" == maui \]\]; then\n\s+CANDIDATES=\(\/Applications\/Xcode_26\.4\.app \/Applications\/Xcode_26\.4\.1\.app\)\n\s+else\n\s+CANDIDATES=\(\/Applications\/Xcode_26\.0\.app \/Applications\/Xcode_26\.app\)/);
-  assert.match(text, /if \[\[ "\$\{\{ matrix\.framework \}\}" == maui \]\]; then[\s\S]*?workload install .* mobile-librarybuilder-net10 --from-rollback-file eng\/workloads\/dotnet11-rc2-ios-net10\.json\n\s+else\n\s+dotnet workload install .* --from-rollback-file \$\{\{ env\.DOTNET_WORKLOAD_ROLLBACK_FILE \}\}/);
+  assert.match(text, /if \[\[ "\$\{\{ matrix\.framework \}\}" == maui \]\]; then[\s\S]*?workload install .* mobile-librarybuilder-net10 --from-rollback-file eng\/workloads\/dotnet11-ga-ios-net10\.json --source \$\{\{ env\.DOTNET_WORKLOAD_SOURCE \}\}\n\s+else\n\s+dotnet workload install .* --version \$\{\{ env\.DOTNET_WORKLOAD_VERSION \}\} --source \$\{\{ env\.DOTNET_WORKLOAD_SOURCE \}\}/);
   assert.match(text, /name: Verify SDK-matching iOS simulator runtime\n\s+if: matrix\.framework == 'maui'/);
   assert.match(text, /runtime\["version"\] == "26\.4\.1" and runtime\["isAvailable"\]/);
   assert.doesNotMatch(text, /xcodebuild -downloadPlatform/);
 });
 
-test("root-SDK callers do not reinstall a .NET 10 workload set", () => {
+test("root-SDK callers do not install a .NET 10 workload set", () => {
   for (const file of [
     ".github/workflows/ci-ai.yml",
     ".github/workflows/ci-essentialsai.yml",
@@ -63,18 +83,30 @@ test("root-SDK callers do not reinstall a .NET 10 workload set", () => {
     ".github/workflows/devflow-integration.yml",
     "eng/pipelines/devflow-official.yml",
   ]) {
-    assert.doesNotMatch(read(file), /workload-version:|DOTNET_WORKLOAD_VERSION|workload install .* --version 10\./);
+    const text = read(file);
+    assert.doesNotMatch(text, /workload install .* --version 10\./);
+    assert.doesNotMatch(text, /dotnet11-rc2/);
   }
 });
 
-test("the rollback MAUI version matches the shared contract package version", () => {
-  const rollback = JSON.parse(read("eng/workloads/dotnet11-rc2.json"));
-  const maui = read("eng/Versions.props").match(/<CommunityPlatformMauiVersion>([^<]+)<\/CommunityPlatformMauiVersion>/);
-  assert.ok(maui);
-  assert.equal(rollback["microsoft.net.sdk.maui"], maui[1]);
+test("GA workload callers do not request the retired bundled Tizen workload", () => {
+  for (const file of [
+    ".github/workflows/_build.yml",
+    ".github/workflows/ci-macos-appkit.yml",
+    ".github/workflows/ci-wpf.yml",
+    "eng/pipelines/devflow-official.yml",
+  ]) {
+    assert.doesNotMatch(read(file), /maui-tizen/);
+  }
 });
 
-test("Apple preview targets are additive and leave .NET 10 defaults intact", () => {
+test("community packages use GA servicing releases", () => {
+  const versions = read("eng/Versions.props");
+  assert.match(versions, /<CommunityPlatformMauiVersion>11\.0\.10<\/CommunityPlatformMauiVersion>/);
+  assert.match(versions, /<CommunityPlatformAspNetCoreComponentsWebViewVersion>11\.0\.0<\/CommunityPlatformAspNetCoreComponentsWebViewVersion>/);
+});
+
+test("GA Apple targets are additive and leave .NET 10 defaults intact", () => {
   for (const file of [
     "src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj",
     "samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj",
@@ -82,7 +114,7 @@ test("Apple preview targets are additive and leave .NET 10 defaults intact", () 
   ]) {
     const text = read(file);
     assert.match(text, /<TargetFrameworks Condition="!\$\(\[MSBuild\]::IsOSPlatform\('linux'\)\)">\$\(TargetFrameworks\);net10\.0-ios;net10\.0-maccatalyst/);
-    assert.match(text, /<TargetFrameworks Condition="'\$\(UseXcode27Preview\)' == 'true'[^"]*">\$\(TargetFrameworks\);net11\.0-ios27\.0;net11\.0-maccatalyst27\.0/);
-    assert.doesNotMatch(text, /net10\.0-(?:ios|maccatalyst|macos)27\.0/);
+    assert.match(text, /<TargetFrameworks Condition="'\$\(UseNet11AppleTargets\)' == 'true'[^"]*">\$\(TargetFrameworks\);net11\.0-ios27\.2;net11\.0-maccatalyst27\.2/);
+    assert.doesNotMatch(text, /UseXcode27Preview|net11\.0-(?:ios|maccatalyst|macos)27\.0|net10\.0-(?:ios|maccatalyst|macos)27\./);
   }
 });
