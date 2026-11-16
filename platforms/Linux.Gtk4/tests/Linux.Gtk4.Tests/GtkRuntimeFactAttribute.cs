@@ -11,3 +11,8 @@ internal sealed class GtkRuntimeFactAttribute : FactAttribute
 
 [CollectionDefinition("GTK runtime", DisableParallelization = true)]
 public sealed class GtkRuntimeCollection;
+
+// MauiAppBuilder.UseMauiApp remaps static handler mappers, which is not thread-safe,
+// so tests that build a MauiApp must not run in parallel with each other.
+[CollectionDefinition("MAUI app builder", DisableParallelization = true)]
+public sealed class MauiAppBuilderCollection;

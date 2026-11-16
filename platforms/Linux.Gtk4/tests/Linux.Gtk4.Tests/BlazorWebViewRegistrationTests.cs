@@ -9,6 +9,7 @@ using MauiBlazorWebView = Microsoft.AspNetCore.Components.WebView.Maui.BlazorWeb
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 
+[Collection("MAUI app builder")]
 public sealed class BlazorWebViewRegistrationTests
 {
 	[Fact]
