@@ -32,14 +32,21 @@ test("shared build and device workflows default to the mirrored GA manifests", (
   }
 });
 
-test("Apple build and device callers give the SDK a physical Xcode path", () => {
+test("Apple build and device callers export only a physical DEVELOPER_DIR", () => {
   for (const file of ["_build.yml", "_device-tests.yml", "ci-macos-appkit.yml"]) {
     const text = read(`.github/workflows/${file}`);
     assert.match(text, /developer_dir="\$\(cd \/Applications\/Xcode_[^\n]+ && pwd -P\)"/);
     assert.match(text, /sudo xcode-select -s "\$developer_dir"/);
     assert.match(text, /echo "DEVELOPER_DIR=\$developer_dir" >> "\$GITHUB_ENV"/);
-    assert.match(text, /echo "MD_APPLE_SDK_ROOT=\$\(cd "\$developer_dir\/\.\.\/\.\." && pwd -P\)" >> "\$GITHUB_ENV"/);
+    assert.doesNotMatch(text, /MD_APPLE_SDK_ROOT/);
   }
+  for (const file of ["devflow-integration.yml"]) {
+    const text = read(`.github/workflows/${file}`);
+    assert.match(text, /export DEVELOPER_DIR="\$DEVELOPER_ROOT"/);
+    assert.match(text, /echo "DEVELOPER_DIR=\$DEVELOPER_ROOT" >> "\$GITHUB_ENV"/);
+    assert.doesNotMatch(text, /MD_APPLE_SDK_ROOT/);
+  }
+  assert.doesNotMatch(read("eng/pipelines/devflow-official.yml"), /MD_APPLE_SDK_ROOT/);
 });
 
 test("GA net11 Apple lanes select Xcode 27.2", () => {
