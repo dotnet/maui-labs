@@ -619,6 +619,12 @@ the DevFlow GTK snapshot project targets `net10.0`, even under the .NET 11 SDK.
 Without an override, the runner selects `net11.0`, or `net10.0` for a MAUI 10 version.
 CI's `runtime` matrix runs one existing native class per process; retain
 the union of native class entries when integrating other platform changes.
+The runner also keeps `--blame-crash` enabled and uploads mini dumps. GirCore
+0.7.0 can let an exception escape its unmanaged `InstanceCache.ToggleNotify`
+callback; [gircore/gir.core@70f5465090b0](https://github.com/gircore/gir.core/commit/70f5465090b0)
+(included in GirCore 0.8.1) hardens that callback. Until the backend can take
+that broader binding update, native tests deterministically dispose GObject
+wrappers on the GTK thread and run target frameworks in separate test hosts.
 
 The transform regression creates a real GTK window and repeatedly scales and
 rotates a button at origin, off-origin, translated, and translation-cancelled
