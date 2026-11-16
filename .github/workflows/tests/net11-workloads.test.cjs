@@ -23,13 +23,12 @@ test("root and Testing select the same GA SDK feature band", () => {
   assert.match(read("eng/pipelines/devflow-official.yml"), new RegExp(`version: ${sdk.version.replaceAll(".", "\\.")}\\s`));
 });
 
-test("shared build and device workflows default to the GA workload set", () => {
+test("shared build and device workflows default to the mirrored GA manifests", () => {
   for (const file of ["_build.yml", "_device-tests.yml"]) {
     const text = read(`.github/workflows/${file}`);
-    assert.match(text, /workload-version:\n[\s\S]*?default: '11\.0\.100\.1'/);
-    assert.match(text, /workload-source:\n[\s\S]*?default: 'https:\/\/api\.nuget\.org\/v3\/index\.json'/);
-    assert.match(text, /workload install .* --version \$\{\{ inputs\.workload-version \}\} --source \$\{\{ inputs\.workload-source \}\}/);
-    assert.doesNotMatch(text, /workload-rollback-file|--from-rollback-file/);
+    assert.match(text, /workload-rollback-file:\n[\s\S]*?default: 'eng\/workloads\/dotnet11-ga\.json'/);
+    assert.match(text, /workload install .* --from-rollback-file \$\{\{ inputs\.workload-rollback-file \}\}/);
+    assert.doesNotMatch(text, /workload-source|api\.nuget\.org/);
   }
 });
 
@@ -55,20 +54,24 @@ test("GA net11 Apple lanes select Xcode 27.2", () => {
 
 test("MAUI iOS keeps the released net10 override required by the hosted actool runtime", () => {
   const text = read(".github/workflows/devflow-integration.yml");
+  const rollback = JSON.parse(read("eng/workloads/dotnet11-ga.json"));
   const iosRollback = JSON.parse(read("eng/workloads/dotnet11-ga-ios-net10.json"));
-  assert.deepEqual(iosRollback, {
+  assert.deepEqual(rollback, {
     "microsoft.net.sdk.android": "37.2.31/11.0.100",
-    "microsoft.net.sdk.ios": "26.4.10259/10.0.100",
+    "microsoft.net.sdk.ios": "27.2.11039/11.0.100",
     "microsoft.net.sdk.maccatalyst": "27.2.11039/11.0.100",
     "microsoft.net.sdk.macos": "27.2.11039/11.0.100",
     "microsoft.net.sdk.maui": "11.0.0/11.0.100",
     "microsoft.net.sdk.tvos": "27.2.11039/11.0.100",
   });
-  assert.match(text, /DOTNET_WORKLOAD_VERSION: 11\.0\.100\.1/);
-  assert.match(text, /DOTNET_WORKLOAD_SOURCE: https:\/\/api\.nuget\.org\/v3\/index\.json/);
+  assert.equal(iosRollback["microsoft.net.sdk.ios"], "26.4.10259/10.0.100");
+  delete iosRollback["microsoft.net.sdk.ios"];
+  delete rollback["microsoft.net.sdk.ios"];
+  assert.deepEqual(iosRollback, rollback);
+  assert.match(text, /DOTNET_WORKLOAD_ROLLBACK_FILE: eng\/workloads\/dotnet11-ga\.json/);
   assert.match(text, /DEVFLOW_TEST_IOS_VERSION: \$\{\{ inputs\.ios-runtime \|\| '26\.2' \}\}/);
   assert.match(text, /if \[\[ "\$\{\{ matrix\.framework \}\}" == maui \]\]; then\n\s+CANDIDATES=\(\/Applications\/Xcode_26\.4\.app \/Applications\/Xcode_26\.4\.1\.app\)\n\s+else\n\s+CANDIDATES=\(\/Applications\/Xcode_26\.0\.app \/Applications\/Xcode_26\.app\)/);
-  assert.match(text, /if \[\[ "\$\{\{ matrix\.framework \}\}" == maui \]\]; then[\s\S]*?workload install .* mobile-librarybuilder-net10 --from-rollback-file eng\/workloads\/dotnet11-ga-ios-net10\.json --source \$\{\{ env\.DOTNET_WORKLOAD_SOURCE \}\}\n\s+else\n\s+dotnet workload install .* --version \$\{\{ env\.DOTNET_WORKLOAD_VERSION \}\} --source \$\{\{ env\.DOTNET_WORKLOAD_SOURCE \}\}/);
+  assert.match(text, /if \[\[ "\$\{\{ matrix\.framework \}\}" == maui \]\]; then[\s\S]*?workload install .* mobile-librarybuilder-net10 --from-rollback-file eng\/workloads\/dotnet11-ga-ios-net10\.json\n\s+else\n\s+dotnet workload install .* --from-rollback-file \$\{\{ env\.DOTNET_WORKLOAD_ROLLBACK_FILE \}\}/);
   assert.match(text, /name: Verify SDK-matching iOS simulator runtime\n\s+if: matrix\.framework == 'maui'/);
   assert.match(text, /runtime\["version"\] == "26\.4\.1" and runtime\["isAvailable"\]/);
   assert.doesNotMatch(text, /xcodebuild -downloadPlatform/);
@@ -89,14 +92,31 @@ test("root-SDK callers do not install a .NET 10 workload set", () => {
   }
 });
 
-test("GA workload callers do not request the retired bundled Tizen workload", () => {
+test("GA workload callers retain the MAUI Tizen workload declared by the GA manifest", () => {
   for (const file of [
     ".github/workflows/_build.yml",
     ".github/workflows/ci-macos-appkit.yml",
     ".github/workflows/ci-wpf.yml",
     "eng/pipelines/devflow-official.yml",
   ]) {
-    assert.doesNotMatch(read(file), /maui-tizen/);
+    assert.match(read(file), /maui-tizen/);
+  }
+});
+
+test("foundation workload installs do not bypass the repository feeds", () => {
+  for (const file of [
+    ".github/CONTRIBUTING.md",
+    ".github/workflows/_build.yml",
+    ".github/workflows/_device-tests.yml",
+    ".github/workflows/ci-macos-appkit.yml",
+    ".github/workflows/ci-testing.yml",
+    ".github/workflows/ci-wpf.yml",
+    ".github/workflows/devflow-integration.yml",
+    "AGENTS.md",
+    "eng/pipelines/devflow-official.yml",
+    "src/AI/README.md",
+  ]) {
+    assert.doesNotMatch(read(file), /api\.nuget\.org|workload-source/);
   }
 });
 
@@ -115,6 +135,6 @@ test("GA Apple targets are additive and leave .NET 10 defaults intact", () => {
     const text = read(file);
     assert.match(text, /<TargetFrameworks Condition="!\$\(\[MSBuild\]::IsOSPlatform\('linux'\)\)">\$\(TargetFrameworks\);net10\.0-ios;net10\.0-maccatalyst/);
     assert.match(text, /<TargetFrameworks Condition="'\$\(UseNet11AppleTargets\)' == 'true'[^"]*">\$\(TargetFrameworks\);net11\.0-ios27\.2;net11\.0-maccatalyst27\.2/);
-    assert.doesNotMatch(text, /UseXcode27Preview|net11\.0-(?:ios|maccatalyst|macos)27\.0|net10\.0-(?:ios|maccatalyst|macos)27\./);
+    assert.doesNotMatch(text, /net11\.0-(?:ios|maccatalyst|macos)27\.0|net10\.0-(?:ios|maccatalyst|macos)27\./);
   }
 });

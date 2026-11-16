@@ -113,7 +113,7 @@ extends:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
             # DevFlow packages are built on Windows, including Apple library TFMs.
-            - script: eng\common\dotnet.cmd workload install maui maui-android ios maccatalyst macos --version 11.0.100.1 --source https://api.nuget.org/v3/index.json
+            - script: eng\common\dotnet.cmd workload install maui maui-android ios maccatalyst macos maui-tizen --from-rollback-file eng\workloads\dotnet11-ga.json
               displayName: Install MAUI and Apple workloads
             - pwsh: |
                 $arguments = @(
@@ -260,7 +260,7 @@ extends:
                 printf '%s\n' "$version" | grep -Eq '^Xcode 27\.2([.[:space:]]|$)'
                 echo "##vso[task.setvariable variable=DEVELOPER_DIR]$DEVELOPER_DIR"
               displayName: Select and verify Xcode 27.2
-            - script: .dotnet/dotnet workload install maui ios maccatalyst macos --version 11.0.100.1 --source https://api.nuget.org/v3/index.json
+            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --from-rollback-file eng/workloads/dotnet11-ga.json
               displayName: Install MAUI workloads
             - script: |
                 set -euo pipefail
@@ -335,7 +335,7 @@ extends:
                 path: '$(Build.SourcesDirectory)/artifacts/bin'
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: eng\common\dotnet.cmd workload install maui maui-android macos --version 11.0.100.1 --source https://api.nuget.org/v3/index.json
+            - script: eng\common\dotnet.cmd workload install maui maui-android macos maui-tizen --from-rollback-file eng\workloads\dotnet11-ga.json
               displayName: Install MAUI workloads
             - pwsh: |
                 $ErrorActionPreference = 'Stop'
@@ -432,7 +432,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: eng\common\dotnet.cmd workload install maui --version 11.0.100.1 --source https://api.nuget.org/v3/index.json
+            - script: eng\common\dotnet.cmd workload install maui --from-rollback-file eng\workloads\dotnet11-ga.json
               displayName: Install MAUI workload
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -459,7 +459,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: eng\common\dotnet.cmd workload install maui macos --version 11.0.100.1 --source https://api.nuget.org/v3/index.json
+            - script: eng\common\dotnet.cmd workload install maui macos --from-rollback-file eng\workloads\dotnet11-ga.json
               displayName: Install MAUI and macOS workloads
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -487,7 +487,7 @@ extends:
                 version: 11.0.100
                 installationPath: $(Build.SourcesDirectory)\.dotnet
             - powershell: |
-                dotnet workload install maui --version 11.0.100.1 --source https://api.nuget.org/v3/index.json
+                dotnet workload install maui --from-rollback-file "$(Build.SourcesDirectory)\eng\workloads\dotnet11-ga.json"
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
               displayName: Install MAUI workload
               workingDirectory: $(Build.SourcesDirectory)\src\Testing
