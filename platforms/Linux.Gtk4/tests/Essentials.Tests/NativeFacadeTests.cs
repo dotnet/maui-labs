@@ -46,10 +46,12 @@ public class NativeFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
                         .Build();
                     Assert.Equal(app.Services.GetRequiredService<IFileSystem>().AppDataDirectory, FileSystem.AppDataDirectory);
                     Assert.Equal(DeviceIdiom.Desktop, DeviceInfo.Idiom);
+#if NET11_0_OR_GREATER
                     Assert.True(MainThread.IsMainThread);
                     var invoked = false;
                     MainThread.BeginInvokeOnMainThread(() => invoked = true);
                     Assert.True(invoked);
+#endif
                     var display = DeviceDisplay.MainDisplayInfo;
                     Assert.Equal(geometry.Width * monitor.GetScaleFactor(), display.Width);
                     Assert.Equal(geometry.Height * monitor.GetScaleFactor(), display.Height);
