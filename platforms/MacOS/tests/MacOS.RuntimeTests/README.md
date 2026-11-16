@@ -28,10 +28,13 @@ sentinel and all 59 fixed assertions remain required.
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
 | `dialog-registration` | 1 | Typed MAUI 11 subscription or isolated MAUI 10 proxy, with singleton registration |
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
+| `window-page-reset` | 1 | Sheets survive root replacement / native button opens nested modal sheets, then resets Window.Page and verifies both sheets and MAUI modal state are cleared |
 | `picker` | 19 | Unselected null-title Picker displays January / selection, title, items and native activation transitions |
+| `background-reset` | 4 | Cleared Grid background keeps its colour / direct clears, DataTrigger exit, ContentView, Picker and ImageButton (10 assertions) |
 | `tap-buttons` | 3 | Left click routed to secondary recognizer / primary, secondary and dynamic `Buttons` changes |
 | `bundle-resources` | 4 | Linked image missing / processed resources, embedded fonts, view capture, and assets loaded from the app bundle |
 | `media-capture` | 1 | Camera-equipped, pre-authorized runner records and verifies a non-empty native `.mov` before deleting it |
+| `focus-state` | 5 | Entry is first responder but `IsFocused` stays false / Entry, focus moves, Editor, `Unfocus()` with ordered Focused/Unfocused events, focus redirected from an `Unfocused` handler (13 assertions) |
 | `menu-localization` | 5 per launch | English defaults in a German app / native bundle localization, app overrides, localized app names, responder actions, custom-menu replacement and option resets |
 
 The `picker` scenario covers the native state transitions of the AppKit Picker

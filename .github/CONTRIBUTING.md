@@ -23,28 +23,34 @@ maui-labs/
 ### Prerequisites
 
 - [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) (see `global.json` for the pinned version)
-- MAUI workloads: `dotnet workload install maui macos --from-rollback-file eng/workloads/dotnet11-rc2.json`
+- MAUI workloads: `dotnet workload install maui macos --version 11.0.100.1 --source https://api.nuget.org/v3/index.json`
 
-Use the exact pinned SDK with this rollback file; manifests are SDK-feature-band
-specific. Do not install a .NET 10 workload set into the .NET 11 SDK. The RC2
-manifests retain .NET 10 Apple packs for Xcode 26.0 alongside .NET 11 Apple
-packs for Xcode 27.0. Select the matching Xcode when building app heads.
+The CLI workload-set version `11.0.100.1` is published in the
+`Microsoft.NET.Workloads.11.0.100` package as version `11.100.1`. It is
+not yet mirrored by the repository's internal feeds, so workload installation
+uses NuGet.org explicitly while ordinary project restore continues to use
+`NuGet.config`. It is SDK-feature-band specific. Do not install a
+.NET 10 workload set into the .NET 11 SDK. Its Apple manifests retain .NET 10
+packs for Xcode 26.0 alongside .NET 11 packs for Xcode 27.2. Select the
+matching Xcode when building app heads.
 Resolve Xcode aliases with `pwd -P` before setting `DEVELOPER_DIR` and
 `MD_APPLE_SDK_ROOT`: the Apple pack's explicit SDK paths must use the physical
 Xcode application directory, not a runner alias such as `Xcode_26.0.app`.
 The MAUI iOS integration job instead uses
-`eng/workloads/dotnet11-rc2-ios-net10.json`: it selects the released .NET 10 iOS
-26.4.10259 manifest from feature band `10.0.100` under the same exact SDK 11 RC2.
+`eng/workloads/dotnet11-ga-ios-net10.json`: it selects the released .NET 10 iOS
+26.4.10259 manifest from feature band `10.0.100` while keeping the other GA
+.NET 11 manifests.
 Install `mobile-librarybuilder-net10` alongside the ordinary workloads so the
 SDK 11 resolver also has the .NET 10 runtime packs; the older iOS manifest extends
 the current runtime workload, which otherwise supplies .NET 11 runtime packs.
 This job uses Xcode 26.4 and verifies the hosted iOS 26.4.1 runtime for asset
-compilation, while keeping the test device on iOS 26.2. The native iOS job keeps
-the original RC2 manifests and Xcode 26.0. This job-specific manifest cannot build
-.NET 11 iOS targets; use the shared RC2 manifest for those. Do not mix entire
-.NET 10 workload sets into SDK 11 or bypass asset compilation/Xcode validation.
-Existing .NET 10 target frameworks and central MAUI package versions remain
-unchanged; AI's `UseXcode27Preview=true` adds .NET 11 OS 27 targets.
+compilation, while keeping the test device on iOS 26.2. The native iOS job uses
+the GA workload set's .NET 10 packs with Xcode 26.0. The job-specific manifest
+cannot build .NET 11 iOS targets; use workload set 11.0.100.1 for those. Do not
+mix entire .NET 10 workload sets into SDK 11 or bypass asset compilation/Xcode
+validation.
+Existing .NET 10 target frameworks and the repository-wide MAUI 10 baseline
+remain unchanged; AI's `UseNet11AppleTargets=true` adds .NET 11 OS 27.2 targets.
 
 ### Building
 

@@ -90,6 +90,11 @@ client to refresh state instead of pairing a new screenshot with stale bounds. W
 sheet is screenshotted, only that page subtree is rendered, preventing underlying window chrome
 from producing negative offsets.
 
+Browser refreshes use a monotonically increasing generation. A forced refresh aborts older state
+fetch or image-decode work; late completions are ignored, and cancellation never clears the last
+committed frame or pending tap feedback. Forced state requests also bypass the server's short
+frame-reuse window so post-action evidence cannot reuse a frame captured before the action.
+
 Browser coordinates are converted from the fit-scaled viewport back to screenshot coordinates,
 then translated to window coordinates with the frame's root offset before hit testing.
 

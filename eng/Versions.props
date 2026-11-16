@@ -26,8 +26,8 @@
     <!-- Community desktop backends consume the .NET 11 public extensibility
          contracts while the rest of the multi-product repository retains its
          established MAUI 10 compatibility baseline. -->
-    <CommunityPlatformMauiVersion>11.0.0-rc.2.26505.5</CommunityPlatformMauiVersion>
-    <CommunityPlatformAspNetCoreComponentsWebViewVersion>11.0.0-rc.2.26504.105</CommunityPlatformAspNetCoreComponentsWebViewVersion>
+    <CommunityPlatformMauiVersion>11.0.10</CommunityPlatformMauiVersion>
+    <CommunityPlatformAspNetCoreComponentsWebViewVersion>11.0.0</CommunityPlatformAspNetCoreComponentsWebViewVersion>
   </PropertyGroup>
   <PropertyGroup Label="AndroidX">
     <!-- WorkManager: used by DevFlow.Sample to exercise background job inspection/triggering.
