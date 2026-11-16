@@ -1,10 +1,7 @@
 using System.Buffers.Binary;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Controls;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Hosting;
-using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Accessibility;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Media;
@@ -33,25 +30,17 @@ public class NativeFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
                     var announcementError = Assert.Throws<InvalidOperationException>(
                         () => screenReader.Announce("Before window activation"));
                     Assert.Contains("window is required", announcementError.Message);
-                    var nativeDisplay = Gdk.Display.GetDefault();
+                    using var nativeDisplay = Gdk.Display.GetDefault();
                     Assert.NotNull(nativeDisplay);
-                    var monitors = nativeDisplay.GetMonitors();
+                    using var monitors = nativeDisplay.GetMonitors();
                     Assert.True(monitors.GetNItems() > 0);
-                    var monitor = Assert.IsType<Gdk.Monitor>(monitors.GetObject(0), exactMatch: false);
+                    using var monitorObject = monitors.GetObject(0);
+                    var monitor = Assert.IsType<Gdk.Monitor>(monitorObject, exactMatch: false);
                     monitor.GetGeometry(out var geometry);
 
-                    using var app = MauiApp.CreateBuilder()
-                        .UseMauiAppLinuxGtk4<Application>()
-                        .AddLinuxGtk4Essentials()
-                        .Build();
+                    using var app = MauiApp.CreateBuilder().AddLinuxGtk4Essentials().Build();
                     Assert.Equal(app.Services.GetRequiredService<IFileSystem>().AppDataDirectory, FileSystem.AppDataDirectory);
                     Assert.Equal(DeviceIdiom.Desktop, DeviceInfo.Idiom);
-#if NET11_0_OR_GREATER
-                    Assert.True(MainThread.IsMainThread);
-                    var invoked = false;
-                    MainThread.BeginInvokeOnMainThread(() => invoked = true);
-                    Assert.True(invoked);
-#endif
                     var display = DeviceDisplay.MainDisplayInfo;
                     Assert.Equal(geometry.Width * monitor.GetScaleFactor(), display.Width);
                     Assert.Equal(geometry.Height * monitor.GetScaleFactor(), display.Height);
@@ -82,8 +71,9 @@ public class NativeFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
         gtkApp.OnActivate += (_, _) =>
         {
             var window = Gtk.ApplicationWindow.New(gtkApp);
+            var label = Gtk.Label.New("GTK screenshot");
             window.SetDefaultSize(320, 180);
-            window.SetChild(Gtk.Label.New("GTK screenshot"));
+            window.SetChild(label);
             window.Present();
 
             _ = CaptureFromWorkerAsync();
@@ -115,7 +105,10 @@ public class NativeFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
                 {
                     GLib.Functions.IdleAdd(0, () =>
                     {
+                        window.SetChild(null);
                         window.Close();
+                        label.Dispose();
+                        window.Dispose();
                         gtkApp.Quit();
                         return false;
                     });

@@ -105,7 +105,12 @@ public class GtkSignalLifetimeTests
 			{
 				box.Remove(panel);
 				layoutHandler.DisconnectHandler();
-				GC.KeepAlive(ownedControllers);
+				// GirCore 0.7.0 allows exceptions from the unmanaged ToggleNotify callback
+				// to terminate the process. GirCore commit 70f5465090b0 (shipped in 0.8.1)
+				// hardens that callback, but wrappers should still be released deterministically
+				// on the GTK thread instead of being left to the finalizer thread.
+				foreach (var controller in ownedControllers)
+					controller.Dispose();
 			}
 		}
 	}

@@ -100,11 +100,24 @@ jobs:
         env:
           ESSENTIALS_NATIVE_GTK: '1'
           GDK_BACKEND: x11
-        run: >-
-          xvfb-run -a dotnet test
-          platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj
-          --configuration Release --logger "trx;LogFilePrefix=essentials-native"
-          --results-directory artifacts/TestResults/essentials
+          GTK_A11Y: none
+        run: |
+          status=0
+          # Run each TFM in its own process and X server. GirCore 0.7.0's unmanaged
+          # ToggleNotify callback can terminate a process when GObject wrappers from
+          # overlapping native test lifetimes reach the finalizer thread. Keep crash
+          # collection enabled until the backend moves to a GirCore release containing
+          # gircore/gir.core@70f5465090b0.
+          for framework in net10.0 net11.0; do
+            xvfb-run -a dotnet test \
+              platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj \
+              --framework "$framework" \
+              --configuration Release \
+              --blame-crash --blame-crash-dump-type mini \
+              --logger "trx;LogFileName=essentials-native-${framework}.trx" \
+              --results-directory artifacts/TestResults/essentials || status=$?
+          done
+          exit "$status"
       - name: Verify GStreamer capture codecs and containers
         run: ./eng/smoke-tests/gtk-media-capture-smoke-test.sh
       - name: Upload runtime results
@@ -113,7 +126,7 @@ jobs:
         with:
           name: essentials-native-gtk-results
           path: |
-            artifacts/TestResults/essentials/*.trx
+            artifacts/TestResults/essentials/
             artifacts/TestResults/gtk-media-capture/
 
   build:
