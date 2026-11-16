@@ -81,7 +81,7 @@ jobs:
             maui-version: ''
           - scenario: bundle-resources
             maui-version: ''
-            workloads: 'macos maui maui-tizen'
+            workloads: 'macos maui'
             packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages
@@ -97,7 +97,7 @@ jobs:
         with:
           global-json-file: global.json
       - name: Install pinned scenario workloads
-        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --from-rollback-file eng/workloads/dotnet11-rc2.json
+        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --version 11.0.100.1 --source https://api.nuget.org/v3/index.json
       - name: Download requested product packages
         if: matrix.packages == true
         uses: actions/download-artifact@v8
