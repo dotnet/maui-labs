@@ -8,6 +8,7 @@ using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 
+[Collection("MAUI app builder")]
 public class ModernizationRegistrationTests
 {
 	[Fact]
