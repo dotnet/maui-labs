@@ -424,13 +424,14 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   on completion.
 - **Android:** build ML Kit's native response schema from the JSON schema and
   apply it through ML Kit internals (AICore constrained decoding); no fixed
-  classes or shape limits. Require an explicit object-root schema and check the
-  model's structured capability. Normalize required/additional properties
+  classes or shape limits. Require an explicit schema (AICore wraps non-object
+  roots, which the bridge unwraps) and check the model's structured capability. Normalize required/additional properties
   through MEAI, validate the complete JSON against the schema, and preserve
   caller history and native input usage. Reject schema-free JSON or
   unrepresentable constraints before inference. Structured streaming emits text
-  deltas validated at completion; active tools and full thinking output cannot
-  be combined with this path.
+  deltas validated at completion. Thinking works with a schema. AICore emits no
+  calls under a schema, so with active tools each turn first runs without the
+  schema and only the final answer is regenerated under it.
 
 ## Response behavior
 

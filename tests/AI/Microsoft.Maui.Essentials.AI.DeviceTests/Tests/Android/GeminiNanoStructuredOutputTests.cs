@@ -11,6 +11,9 @@ public sealed class GeminiNanoStructuredOutputTests(ITestOutputHelper output)
 {
 	public record Reply(string Answer);
 	public record Continents(string[] Names);
+	public record SecretReport(string Secret, string Key);
+	public record Weather(string City, int TemperatureC, string Condition);
+	public record Person(string Name, int Age, string City);
 
 	[Fact]
 	public void ToNative_MapsNormalizedSchemaWithoutMutatingCallerOptions()
@@ -31,7 +34,7 @@ public sealed class GeminiNanoStructuredOutputTests(ITestOutputHelper output)
 	[InlineData("""{"type":"object","properties":{"value":{"type":"string","minLength":2}},"required":["value"]}""")]
 	[InlineData("""{"type":"object","additionalProperties":{"type":"integer"}}""")]
 	[InlineData("""{"type":"object","properties":{"next":{"$ref":"#"}},"required":["next"]}""")]
-	[InlineData("""{"type":"array","items":{"type":"string"}}""")]
+	[InlineData("""{"type":["string","null"]}""")]
 	public void UnsupportedSchema_RejectsBeforeInference(string json)
 	{
 		using var document = JsonDocument.Parse(json);
@@ -46,6 +49,9 @@ public sealed class GeminiNanoStructuredOutputTests(ITestOutputHelper output)
 	[InlineData("""{"type":"object","properties":{"data":{"type":["array","null"],"items":{"type":["array","null"],"items":{"type":["string","null"]}}}},"required":["data"],"additionalProperties":false}""")]
 	[InlineData("""{"type":"object","properties":{"data":{"type":"array","items":{"type":"integer","maximum":9223372036854775807},"maxItems":3}},"required":["data"]}""")]
 	[InlineData("""{"type":"object","properties":{"code":{"type":"string","pattern":"^[a-z]+$","format":"custom"}},"required":["code"]}""")]
+	[InlineData("""{"type":"array","items":{"type":"string"}}""")]
+	[InlineData("""{"type":"string","enum":["red","green"]}""")]
+	[InlineData("""{"type":"integer","minimum":1}""")]
 	public void CollectionAndConstrainedSchemas_AreAcceptedBeforeInference(string json)
 	{
 		using var document = JsonDocument.Parse(json);
@@ -149,17 +155,156 @@ public sealed class GeminiNanoStructuredOutputTests(ITestOutputHelper output)
 	}
 
 	[Fact]
-	public void StructuredOutput_RejectsActiveToolsAndThinkingButAllowsDisabledTools()
+	public void StructuredOutput_CombinesWithToolsAndThinking()
 	{
 		var tool = AIFunctionFactory.Create(() => "value", "lookup");
-		var options = new ChatOptions { ResponseFormat = ChatResponseFormat.ForJsonSchema<Reply>(), Tools = [tool] };
-		Assert.Throws<NotSupportedException>(() => GeminiNanoChatClient.ToNative([new(ChatRole.User, "hello")], options));
-		options.ToolMode = ChatToolMode.None;
+		var options = new ChatOptions
+		{
+			ResponseFormat = ChatResponseFormat.ForJsonSchema<Reply>(),
+			Tools = [tool],
+			Reasoning = new() { Output = ReasoningOutput.Full },
+		};
 		using var request = GeminiNanoChatClient.ToNative([new(ChatRole.User, "hello")], options);
-		Assert.Null(request.Options.ToolsJson);
+		Assert.NotNull(request.Options.ToolsJson);
 		Assert.NotNull(request.Options.ResponseSchemaJson);
-		options.Reasoning = new() { Output = ReasoningOutput.Full };
-		Assert.Throws<NotSupportedException>(() => GeminiNanoChatClient.ToNative([new(ChatRole.User, "hello")], options));
+		Assert.True(request.Options.EnableThinking);
+	}
+
+	// AICore emits no function calls under a schema; the bridge lets the model call tools first.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ToolsAndSchema_CallToolsThenReturnTypedResult(bool streaming)
+	{
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+		using var client = new GeminiNanoChatClient();
+		using var invoking = client.AsBuilder().UseFunctionInvocation().Build();
+		var secretCalls = 0;
+		var weatherCalls = 0;
+		var options = new ChatOptions
+		{
+			ModelId = "gemini-nano-preview-fast",
+			Temperature = 0,
+			Tools =
+			[
+				AIFunctionFactory.Create((string key) =>
+				{
+					Interlocked.Increment(ref secretCalls);
+					return "ORCHARD_SECRET_7291";
+				}, "lookup_secret", "Reads a secret from the local database by key."),
+				AIFunctionFactory.Create((string city) =>
+				{
+					Interlocked.Increment(ref weatherCalls);
+					return city.Contains("paris", StringComparison.OrdinalIgnoreCase)
+						? """{"temperatureC":18,"condition":"cloudy"}"""
+						: """{"temperatureC":10,"condition":"rainy"}""";
+				}, "get_weather", "Gets the current weather for a city."),
+			],
+		};
+
+		async Task<T> Run<T>(string prompt)
+		{
+			ChatMessage[] messages = [new(ChatRole.User, prompt)];
+			if (!streaming)
+			{
+				var response = await invoking.GetResponseAsync<T>(messages, options, cancellationToken: timeout.Token);
+				output.WriteLine($"{typeof(T).Name}: {response.Text}");
+				return response.Result;
+			}
+			var streamOptions = options.Clone();
+			streamOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema<T>(JsonSerializerOptions.Web);
+			var text = "";
+			await foreach (var update in invoking.GetStreamingResponseAsync(messages, streamOptions, timeout.Token))
+				text += update.Text;
+			output.WriteLine($"{typeof(T).Name} stream: {text}");
+			return JsonSerializer.Deserialize<T>(text, JsonSerializerOptions.Web)!;
+		}
+
+		var secret = await Run<SecretReport>("Use lookup_secret with key orchard and report the secret.");
+		Assert.Equal("ORCHARD_SECRET_7291", secret.Secret);
+		Assert.Equal(1, secretCalls);
+
+		var weather = await Run<Weather>("What is the weather in Paris right now?");
+		Assert.Equal(18, weather.TemperatureC);
+		Assert.Equal("cloudy", weather.Condition, StringComparer.OrdinalIgnoreCase);
+		Assert.Equal(1, weatherCalls);
+
+		var person = await Run<Person>("Extract the person: Alice is 30 years old and lives in Oslo.");
+		Assert.Equal(new Person("Alice", 30, "Oslo"), person);
+		Assert.Equal(1, secretCalls);
+		Assert.Equal(1, weatherCalls);
+	}
+
+	[Theory]
+	[InlineData("gemini-nano-preview-fast", false)]
+	[InlineData("gemini-nano-preview-fast", true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ThinkingAndSchema_ReturnThoughtsAndTypedResult(string modelId, bool streaming)
+	{
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+		using var client = new GeminiNanoChatClient();
+		var options = new ChatOptions
+		{
+			ModelId = modelId,
+			Temperature = 0,
+			Reasoning = new() { Output = ReasoningOutput.Full },
+			ResponseFormat = ChatResponseFormat.ForJsonSchema<Person>(JsonSerializerOptions.Web),
+		};
+		ChatMessage[] messages = [new(ChatRole.User, "Extract the person: Alice is 30 years old and lives in Oslo.")];
+		var response = streaming
+			? await client.GetStreamingResponseAsync(messages, options, timeout.Token).ToChatResponseAsync(timeout.Token)
+			: await client.GetResponseAsync(messages, options, timeout.Token);
+		var thoughts = string.Concat(response.Messages.SelectMany(message => message.Contents).OfType<TextReasoningContent>()
+			.Select(content => content.Text));
+		output.WriteLine($"THINKING {modelId} {streaming}: {thoughts.Length} thought chars, {response.Text}");
+		Assert.NotEmpty(thoughts);
+		Assert.Equal(new Person("Alice", 30, "Oslo"), JsonSerializer.Deserialize<Person>(response.Text, JsonSerializerOptions.Web));
+	}
+
+	[Theory]
+	[InlineData("gemini-nano-full", false)]
+	[InlineData("gemini-nano-preview-fast", false)]
+	[InlineData("gemini-nano-preview-fast", true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task NonObjectRootSchemas_ReturnTheBareValue(string modelId, bool streaming)
+	{
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+		using var client = new GeminiNanoChatClient();
+		async Task<JsonElement> Generate(string schema, string prompt)
+		{
+			using var document = JsonDocument.Parse(schema);
+			var options = new ChatOptions { ModelId = modelId, Temperature = 0, ResponseFormat = ChatResponseFormat.ForJsonSchema(document.RootElement) };
+			ChatMessage[] messages = [new(ChatRole.User, prompt)];
+			string text;
+			if (streaming)
+			{
+				List<string> updates = [];
+				await foreach (var update in client.GetStreamingResponseAsync(messages, options, timeout.Token))
+					if (update.Text.Length > 0)
+						updates.Add(update.Text);
+				text = Assert.Single(updates);
+			}
+			else
+			{
+				text = (await client.GetResponseAsync(messages, options, timeout.Token)).Text;
+			}
+			output.WriteLine($"ROOT {modelId} {schema}: {text}");
+			return JsonDocument.Parse(text).RootElement.Clone();
+		}
+
+		var colors = await Generate("""{"type":"array","items":{"type":"string","enum":["red","green","blue"]},"minItems":3,"maxItems":3}""",
+			"List the three primary colors of light.");
+		Assert.Equal(3, colors.GetArrayLength());
+		Assert.All(colors.EnumerateArray(), color => Assert.Contains(color.GetString(), new[] { "red", "green", "blue" }));
+
+		var mood = await Generate("""{"type":"string","enum":["positive","negative","neutral"]}""",
+			"Classify the sentiment: I absolutely love this phone!");
+		Assert.Equal("positive", mood.GetString());
+
+		var count = await Generate("""{"type":"integer","minimum":1,"maximum":20}""", "How many legs does a spider have?");
+		// The bounds are enforced; Nano V3 does not always answer this correctly.
+		Assert.InRange(count.GetInt32(), 1, 20);
 	}
 
 	[Theory]

@@ -218,7 +218,8 @@ Explicit MEAI JSON schemas are applied as ML Kit's native response schema
 experimental. The selected model must advertise
 `ChatModelCapability.StructuredOutput`. Both response methods support the
 schema path, and streaming delivers JSON text deltas validated at completion.
-Active tools and full thinking output cannot be combined with it.
+Full thinking output and active tools work with a schema; with tools, the model
+decides on calls without the schema and only its final answer is constrained.
 See [structured output](gemini-nano-structured-output.md) for supported
 keywords, examples, and implementation details.
 

@@ -22,7 +22,10 @@ namespace Microsoft.Maui.Essentials.AI;
 /// response schema (constrained decoding) through ML Kit SDK internals, so it is experimental.
 /// Structured streaming emits JSON text deltas; the complete text is validated against the schema
 /// before the response completes, so a stream can end with an error after partial JSON updates.
-/// Structured output cannot be combined with tools or full thinking output.
+/// Non-object roots are emitted once, after validation. Structured output works with tools and
+/// full thinking output: AICore does not emit function calls under a schema, so with tools the
+/// model first decides on calls without the schema (returning them with no text) and only its final
+/// answer is generated under the schema.
 /// Structured requests default to 512 output tokens when MaxOutputTokens is unspecified.
 /// Model download is explicit and observable; generation never downloads or falls back to a cloud provider.
 /// ChatOptions.ModelId accepts gemini-nano, gemini-nano-fast, gemini-nano-full,
@@ -312,10 +315,6 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 			return null;
 		if (format.Schema is null)
 			throw new NotSupportedException("Gemini Nano structured output requires an explicit JSON schema; schema-free JSON and typed prompt fallback are not supported.");
-		if (options.ToolMode is not NoneChatToolMode && options.Tools?.OfType<AIFunction>().Any() == true)
-			throw new NotSupportedException("Gemini Nano structured output cannot be combined with native tool calling.");
-		if (options.Reasoning?.Output == ReasoningOutput.Full)
-			throw new NotSupportedException("Gemini Nano structured output cannot return full thinking output.");
 
 		var schema = SchemaTransformCache.GetOrCreateTransformedSchema(format)?.GetRawText()
 			?? throw new InvalidOperationException("Failed to transform JSON schema for Gemini Nano structured output.");

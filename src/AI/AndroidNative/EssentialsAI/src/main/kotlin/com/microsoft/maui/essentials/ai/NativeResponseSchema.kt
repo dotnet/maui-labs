@@ -11,10 +11,26 @@ import java.math.BigDecimal
  * validator for the JSON text that AICore generates under that constraint.
  */
 internal class NativeResponseSchema private constructor(private val root: Node) {
+    /** AICore returns non-object roots as {"wrapper": value}; the value is unwrapped after validation. */
+    val wrapsRoot: Boolean get() = root.type != "object"
+
     /** Builds ML Kit's internal schema object (the same type its typed API derives from a class). */
     fun native(): zzip = root.native()
 
-    fun validate(text: String) = root.validate(StrictJson.parse(text), "$")
+    /** Validates generated text and returns the JSON that matches the caller's schema. */
+    fun validate(text: String): String {
+        val value = StrictJson.parse(text)
+        if (!wrapsRoot) {
+            root.validate(value, "$")
+            return text
+        }
+        require(value is Map<*, *> && value.keys == setOf(WRAPPER)) {
+            "Expected AICore's {\"$WRAPPER\": ...} wrapper for a non-object root."
+        }
+        val unwrapped = value[WRAPPER]
+        root.validate(unwrapped, "$")
+        return StrictJson.write(unwrapped)
+    }
 
     private class Node(
         val type: String,
@@ -98,17 +114,14 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
     }
 
     companion object {
+        private const val WRAPPER = "wrapper"
         private val annotations = setOf("description", "title", "\$schema", "\$defs", "definitions", "\$comment")
 
         fun parse(json: String): NativeResponseSchema {
             try {
                 val document = JSONObject(json)
                 val root = parseNode(document, document, "$", emptySet())
-                // AICore only constrains object roots (ML Kit's typed API always generates a class).
-                // MEAI GetResponseAsync<T> already wraps other root types in a "data" property.
-                require(root.type == "object" && !root.nullable) {
-                    "Response schemas require a non-null object root; wrap other types in an object property."
-                }
+                require(!root.nullable) { "The response schema root must not be nullable." }
                 return NativeResponseSchema(root)
             } catch (exception: JSONException) {
                 throw IllegalArgumentException("Invalid or unsupported JSON response schema: ${exception.message}", exception)
@@ -242,6 +255,47 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
 /** RFC 8259 parser: Android's org.json accepts single quotes, comments and unquoted names. */
 internal object StrictJson {
     object Null
+
+    fun write(value: Any?): String = StringBuilder().also { write(value, it) }.toString()
+
+    private fun write(value: Any?, out: StringBuilder) {
+        when (value) {
+            null, Null -> out.append("null")
+            is Boolean -> out.append(value)
+            is BigDecimal -> out.append(value.toString())
+            is String -> {
+                out.append('"')
+                value.forEach { char ->
+                    when {
+                        char == '"' -> out.append("\\\"")
+                        char == '\\' -> out.append("\\\\")
+                        char == '\n' -> out.append("\\n")
+                        char == '\r' -> out.append("\\r")
+                        char == '\t' -> out.append("\\t")
+                        char < ' ' -> out.append("\\u%04x".format(char.code))
+                        else -> out.append(char)
+                    }
+                }
+                out.append('"')
+            }
+            is List<*> -> {
+                out.append('[')
+                value.forEachIndexed { index, item -> if (index > 0) out.append(','); write(item, out) }
+                out.append(']')
+            }
+            is Map<*, *> -> {
+                out.append('{')
+                value.entries.forEachIndexed { index, (key, item) ->
+                    if (index > 0) out.append(',')
+                    write(key as String, out)
+                    out.append(':')
+                    write(item, out)
+                }
+                out.append('}')
+            }
+            else -> error("Unexpected JSON value ${value.javaClass.name}.")
+        }
+    }
 
     fun parse(text: String): Any {
         val reader = Reader(text)

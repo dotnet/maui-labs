@@ -242,11 +242,10 @@ public sealed class SettingsPaneViewModelTests
     }
 
     [Fact]
-    public void StructuredOutput_DisablesUnsupportedToolCombinationWithoutLosingSelections()
+    public void StructuredOutput_KeepsToolsEnabled()
     {
         using var client = new DescribedChatClient(new StubChatClient(),
-            new ChatClientDescriptor("nano", "Nano", "Ready", SupportsToolCalling: true,
-                SupportsStructuredOutputWithTools: false));
+            new ChatClientDescriptor("nano", "Nano", "Ready", SupportsToolCalling: true));
         var settings = new SettingsPaneViewModel([client])
         {
             ModelStatus = new(ChatModelAvailability.Available,
@@ -254,18 +253,12 @@ public sealed class SettingsPaneViewModelTests
             UseStructuredJson = true,
         };
         Assert.True(settings.SupportsStructuredOutput);
-        Assert.False(settings.SupportsToolCalling);
-        Assert.True(settings.UseCalculatorTool);
-        var options = settings.CreateChatOptions([]);
-        Assert.IsType<ChatResponseFormatJson>(options.ResponseFormat);
-        Assert.Null(options.Tools);
-        Assert.Same(ChatToolMode.None, options.ToolMode);
-
-        settings.UseStructuredJson = false;
         Assert.True(settings.SupportsToolCalling);
-        Assert.True(settings.UseCalculatorTool);
+
         var tool = AIFunctionFactory.Create(() => "value", "lookup");
-        Assert.Same(tool, Assert.Single(settings.CreateChatOptions([tool]).Tools!));
+        var options = settings.CreateChatOptions([tool]);
+        Assert.IsType<ChatResponseFormatJson>(options.ResponseFormat);
+        Assert.Same(tool, Assert.Single(options.Tools!));
     }
 
     [Fact]

@@ -90,7 +90,7 @@ class NativeResponseSchemaTest {
     }
 
     @Test
-    fun arrayBoundsAreNativeButRootsMustBeObjects() {
+    fun arrayBoundsAreNative() {
         val array = meaiWrapper("""{"type":"array","items":{"type":"integer"},"minItems":1,"maxItems":3}""")
         val data = native(array).getJSONObject("properties").getJSONObject("data")
         assertEquals(1, data.getInt("minItems"))
@@ -98,11 +98,27 @@ class NativeResponseSchemaTest {
         NativeResponseSchema.parse(array).validate("""{"data":[1,2]}""")
         assertRejected(array, """{"data":[]}""")
         assertRejected(array, """{"data":[1,2,3,4]}""")
-        listOf("""{"type":"array","items":{"type":"integer"}}""", """{"type":"boolean"}""",
-            """{"type":["object","null"],"properties":{"v":{"type":"string"}}}""").forEach { json ->
-            assertTrue(assertThrows(IllegalArgumentException::class.java) { NativeResponseSchema.parse(json) }
-                .message!!.contains("object root"))
-        }
+    }
+
+    // AICore returns every non-object root as {"wrapper": value} (verified on Nano V3 and V4).
+    @Test
+    fun nonObjectRootsAreUnwrappedFromTheAicoreWrapper() {
+        val array = NativeResponseSchema.parse("""{"type":"array","items":{"type":"string","enum":["red","green"]},"maxItems":2}""")
+        assertTrue(array.wrapsRoot)
+        assertEquals("array", native("""{"type":"array","items":{"type":"string"}}""").getString("type"))
+        assertEquals("""["red","green"]""", array.validate("""{"wrapper": ["red", "green"]}"""))
+        assertThrows(IllegalArgumentException::class.java) { array.validate("""["red","green"]""") }
+        assertThrows(IllegalArgumentException::class.java) { array.validate("""{"wrapper":["blue"]}""") }
+        assertThrows(IllegalArgumentException::class.java) { array.validate("""{"wrapper":["red"],"extra":1}""") }
+
+        assertEquals("\"Paris \\\"Lumi\u00e8re\\\" \\n\"",
+            NativeResponseSchema.parse("""{"type":"string"}""").validate("""{"wrapper":"Paris \"Lumi\u00e8re\" \n"}"""))
+        assertEquals("8", NativeResponseSchema.parse("""{"type":"integer","minimum":1}""").validate("""{"wrapper":8}"""))
+        assertEquals("false", NativeResponseSchema.parse("""{"type":"boolean"}""").validate("""{"wrapper":false}"""))
+        assertFalse(NativeResponseSchema.parse(schema).wrapsRoot)
+        assertTrue(assertThrows(IllegalArgumentException::class.java) {
+            NativeResponseSchema.parse("""{"type":["string","null"]}""")
+        }.message!!.contains("nullable"))
     }
 
     @Test

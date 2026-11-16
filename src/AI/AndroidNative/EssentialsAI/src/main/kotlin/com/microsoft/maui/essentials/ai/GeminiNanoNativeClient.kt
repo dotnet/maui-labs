@@ -167,12 +167,7 @@ class GeminiNanoNativeClient {
         val job = operationScope.launch {
             var stream: NativeChatStream? = null
             val response = try {
-                val schema = request.options.responseSchemaJson?.let {
-                    require(request.options.toolsJson == null && !request.options.enableThinking) {
-                        "Gemini Nano structured output cannot be combined with native tools or thinking output."
-                    }
-                    NativeResponseSchema.parse(it)
-                }
+                val schema = request.options.responseSchemaJson?.let { NativeResponseSchema.parse(it) }
                 val model = Generation.getClient(modelConfiguration(request.options.modelId))
                 try {
                     ensureActive()
@@ -213,21 +208,50 @@ class GeminiNanoNativeClient {
                         NativeSchemaProcessor(modelConfiguration(request.options.modelId), it)
                     }
                     try {
-                        val tokenCount = if (processor != null) countStructuredTokens(processor, nativeRequest)
-                            else model.countTokens(nativeRequest).totalTokens
-                        val nativeStream = if (streaming) {
-                            NativeChatStream(this, callback, modelName,
-                                deferToolText = request.options.toolsJson != null).also { stream = it }
-                        } else null
-                        val generated = when {
-                            processor != null -> generateStructuredContent(processor, nativeRequest, nativeStream)
-                            nativeStream != null -> model.generateContent(nativeRequest, nativeStream)
-                            else -> model.generateContent(nativeRequest)
+                        run generation@{
+                            val nativeStream = if (streaming && schema?.wrapsRoot != true) {
+                                NativeChatStream(this, callback, modelName,
+                                    deferToolText = request.options.toolsJson != null && schema == null).also { stream = it }
+                            } else null
+                            if (processor == null) {
+                                val tokenCount = model.countTokens(nativeRequest).totalTokens
+                                val generated = if (nativeStream != null) model.generateContent(nativeRequest, nativeStream)
+                                    else model.generateContent(nativeRequest)
+                                val response = generated.toNativeResponse(modelName, tokenCount)
+                                nativeStream?.finish(response)
+                                return@generation response
+                            }
+                            var toolTurnTokens = 0
+                            if (request.options.toolsJson != null) {
+                                // ML Kit beta5: AICore emits no function calls while a response schema constrains
+                                // decoding, and the typed API cannot return calls. The model chooses tools without the
+                                // schema; only its final answer is generated under the schema. Remove when ML Kit
+                                // supports both in one request.
+                                val toolRequest = request.toNative()
+                                toolTurnTokens = model.countTokens(toolRequest).totalTokens
+                                val toolTurn = model.generateContent(toolRequest).toNativeResponse(modelName, toolTurnTokens)
+                                if (toolTurn.functionCalls.isNotEmpty()) {
+                                    val calls = NativeChatResponse("", toolTurn.thoughts, toolTurn.finishReason, modelName,
+                                        toolTurnTokens).apply { functionCalls = toolTurn.functionCalls }
+                                    nativeStream?.finish(calls)
+                                    return@generation calls
+                                }
+                            }
+                            val tokenCount = toolTurnTokens + countStructuredTokens(processor, nativeRequest)
+                            val generated = generateStructuredContent(processor, nativeRequest, nativeStream)
+                                .toNativeResponse(modelName, tokenCount)
+                            val text = validateStructuredResponse(checkNotNull(schema), generated)
+                            val response = NativeChatResponse(text, generated.thoughts, generated.finishReason, modelName,
+                                tokenCount)
+                            if (nativeStream != null) {
+                                nativeStream.finish(response)
+                            } else if (streaming) {
+                                // AICore wraps non-object roots; the unwrapped value is emitted once validated.
+                                response.thoughts.forEach { callback.onThought(it, modelName) }
+                                callback.onText(response.text, modelName)
+                            }
+                            response
                         }
-                        val response = generated.toNativeResponse(modelName, tokenCount)
-                        schema?.let { validateStructuredResponse(it, response) }
-                        nativeStream?.finish(response)
-                        response
                     } finally {
                         processor?.close()
                     }

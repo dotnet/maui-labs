@@ -35,9 +35,7 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     private ChatModelStatus? modelStatus;
 
     [ObservableProperty] private bool useStreaming = true;
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SupportsToolCalling))]
-    private bool useStructuredJson;
+    [ObservableProperty] private bool useStructuredJson;
     [ObservableProperty] private bool useReasoningSummary = true;
     [ObservableProperty] private string instructions = string.Empty;
     [ObservableProperty] private bool useDateTimeTool = true;
@@ -78,7 +76,6 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     public bool HasModels => Models.Count > 0;
     public string? RequestModelId => HasModels ? SelectedModelId : null;
     public bool SupportsToolCalling => SelectedDescriptor?.SupportsToolCalling == true &&
-        (!UseStructuredJson || SelectedDescriptor.SupportsStructuredOutputWithTools) &&
         (ModelStatus?.Capabilities is not { } capabilities || capabilities.Contains(ChatModelCapability.ToolCalling));
     public bool SupportsStructuredOutput => SelectedDescriptor?.SupportsStructuredOutput == true &&
         (ModelStatus?.Capabilities is not { } capabilities || capabilities.Contains(ChatModelCapability.StructuredOutput));
