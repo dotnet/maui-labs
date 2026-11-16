@@ -10,4 +10,7 @@ internal static class ChatDiagnosticsExtensions
     public static EmbeddingGeneratorBuilder<TInput, TEmbedding> UsePlaygroundTelemetry<TInput, TEmbedding>(
         this EmbeddingGeneratorBuilder<TInput, TEmbedding> builder) where TEmbedding : Embedding =>
         builder.UseOpenTelemetry(sourceName: ChatDiagnostics.SourceName, configure: generator => generator.EnableSensitiveData = false);
+
+    public static ImageGeneratorBuilder UsePlaygroundTelemetry(this ImageGeneratorBuilder builder) =>
+        builder.UseOpenTelemetry(sourceName: ChatDiagnostics.SourceName, configure: generator => generator.EnableSensitiveData = false);
 }
