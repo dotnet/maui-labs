@@ -132,6 +132,10 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 				Microsoft.Maui.Platforms.Windows.WPF.WPFGesturePlatformManagerFactory>();
 #endif
 
+			// The WPF BlazorWebViewHandler hosts Wpf.BlazorWebView, which requires the WPF Blazor
+			// services. Register them here so AddMauiBlazorWebView() alone is enough for apps.
+			builder.Services.AddWpfBlazorWebView();
+
 			// Initialize theme detection
 			Microsoft.Maui.Platforms.Windows.WPF.ThemeManager.Initialize();
 

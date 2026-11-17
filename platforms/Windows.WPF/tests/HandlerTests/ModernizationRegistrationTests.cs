@@ -26,6 +26,19 @@ public class ModernizationRegistrationTests
     }
 
     [Fact]
+    public void UseMauiAppWpf_RegistersWpfBlazorServicesForPlatformHandler()
+    {
+        using var app = MauiApp.CreateBuilder()
+            .UseMauiAppWPF<Microsoft.Maui.Controls.Application>()
+            .Build();
+
+        // Wpf.BlazorWebView throws on template apply unless AddWpfBlazorWebView's marker is registered.
+        var markerType = typeof(Microsoft.AspNetCore.Components.WebView.Wpf.BlazorWebView).Assembly
+            .GetType("Microsoft.AspNetCore.Components.WebView.Wpf.WpfBlazorMarkerService", throwOnError: true)!;
+        Assert.NotNull(app.Services.GetService(markerType));
+    }
+
+    [Fact]
     public void BlazorHandler_ImplementsStandardPublicContract()
     {
         var handler = new Microsoft.AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler();
