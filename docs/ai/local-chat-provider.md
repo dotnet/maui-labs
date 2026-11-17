@@ -414,8 +414,9 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 **Essentials.AI implementation**
 
 - **Apple:** use built-in schema-constrained generation. Preserve nullable values,
-  constants/enums, supported scalar regex, numeric bounds, and array/item bounds;
-  reject references, dictionaries, unsupported patterns/intersections, and other
+  constants/enums, supported scalar regex, numeric bounds, and array/item bounds.
+  Explicit null schemas require OS 26.4 or later; earlier versions reject them.
+  Reject references, dictionaries, unsupported patterns/intersections, and other
   unrepresentable constraints with schema/property context. Do not gate native
   tool registration on an unused return schema.
 - **Windows:** transform the explicit schema for

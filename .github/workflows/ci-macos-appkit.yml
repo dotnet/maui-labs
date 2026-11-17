@@ -66,9 +66,15 @@ jobs:
             maui-version: '10.0.110'
           - scenario: dialogs
             maui-version: '10.0.70'
+          - scenario: window-page-reset
+            maui-version: ''
           - scenario: picker
             maui-version: ''
+          - scenario: background-reset
+            maui-version: ''
           - scenario: tap-buttons
+          - scenario: focus-state
+            maui-version: ''
           - scenario: menu-localization
             packages: true
           - scenario: collection-view-grid

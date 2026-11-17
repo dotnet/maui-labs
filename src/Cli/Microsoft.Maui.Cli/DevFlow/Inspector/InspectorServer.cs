@@ -74,8 +74,9 @@ public sealed class InspectorServer : IDisposable
     // standalone screenshot-frame + root-offset fields diagnostics originally hung off.
     private long? _captureEpoch;
     private Task<bool?>? _requiresCaptureEpochTask;
+    private readonly TimeSpan _frameReuseDuration;
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
-    private static readonly TimeSpan FrameReuseDuration = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan DefaultFrameReuseDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan FrameCacheDuration = TimeSpan.FromSeconds(10);
     private const int MaxCachedFrames = 32;
     private const int MaxScreenshotBytes = 64 * 1024 * 1024;
@@ -118,7 +119,8 @@ public sealed class InspectorServer : IDisposable
         string? sessionId,
         string? policyStartPath = null,
         int? processId = null,
-        XamlSourceWorkspace? sourceWorkspace = null)
+        XamlSourceWorkspace? sourceWorkspace = null,
+        TimeSpan? frameReuseDuration = null)
     {
         _port = port;
         _agentHost = agentHost;
@@ -129,6 +131,7 @@ public sealed class InspectorServer : IDisposable
         _platform = platform;
         _project = string.IsNullOrWhiteSpace(project) ? null : project;
         _sessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId;
+        _frameReuseDuration = frameReuseDuration ?? DefaultFrameReuseDuration;
         _sourcePropertyEditor = new XamlSourcePropertyEditor(
             project,
             sessionId,
@@ -1175,7 +1178,8 @@ public sealed class InspectorServer : IDisposable
             lock (_cacheLock)
                 _diagnosticsInterestUtc = DateTime.UtcNow;
         }
-        var frame = await CreateFrameAsync();
+        var requiresFreshFrame = IsTruthy(request.Query.GetValueOrDefault("fresh"));
+        var frame = await CreateFrameAsync(requiresFreshFrame);
         if (frame.Tree.Count == 0)
         {
             return (
@@ -1772,26 +1776,6 @@ public sealed class InspectorServer : IDisposable
             root.WindowId);
     }
 
-    /// <summary>Reads width/height from PNG IHDR chunk (bytes 16-23) after validating PNG signature.</summary>
-    private static (int width, int height) GetPngDimensions(byte[] png)
-    {
-        // PNG magic: 137 80 78 71 13 10 26 10
-        ReadOnlySpan<byte> pngSig = [137, 80, 78, 71, 13, 10, 26, 10];
-        if (png.Length < 24 || !png.AsSpan(0, 8).SequenceEqual(pngSig))
-            return (0, 0);
-        int w = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
-        int h = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
-        // Reject negative dimensions (PNG IHDR width/height are 4-byte big-endian
-        // unsigned, so a negative int here means bit 31 was set — invalid per spec)
-        // and absurdly large positive dimensions. The inspector feeds these values
-        // into CSS sizing, so an attacker-controlled or corrupt PNG could otherwise
-        // produce a multi-million-pixel viewport. 32768 is well above any real
-        // device resolution and matches common platform texture-size limits.
-        const int MaxDimension = 32768;
-        if (w <= 0 || h <= 0 || w > MaxDimension || h > MaxDimension) return (0, 0);
-        return (w, h);
-    }
-
     private async Task<(int, string, byte[])> HandleScreenshotAsync(string? frameId)
     {
         byte[]? png = null;
@@ -1813,11 +1797,13 @@ public sealed class InspectorServer : IDisposable
         return (200, "image/png", png);
     }
 
-    private async Task<InspectorFrame> CreateFrameAsync()
+    private async Task<InspectorFrame> CreateFrameAsync(bool force = false)
     {
         lock (_cacheLock)
         {
-            if (_latestFrame is not null && DateTime.UtcNow - _latestFrame.CreatedUtc < FrameReuseDuration)
+            if (!force
+                && _latestFrame is not null
+                && DateTime.UtcNow - _latestFrame.CreatedUtc < _frameReuseDuration)
                 return _latestFrame;
         }
 
@@ -1829,7 +1815,9 @@ public sealed class InspectorServer : IDisposable
                 long generation;
                 lock (_cacheLock)
                 {
-                    if (_latestFrame is not null && DateTime.UtcNow - _latestFrame.CreatedUtc < FrameReuseDuration)
+                    if (!force
+                        && _latestFrame is not null
+                        && DateTime.UtcNow - _latestFrame.CreatedUtc < _frameReuseDuration)
                         return _latestFrame;
                     generation = _cacheGeneration;
                 }
@@ -1848,9 +1836,10 @@ public sealed class InspectorServer : IDisposable
                     fullscreen ? null : rootPageId,
                     captureEpoch,
                     registryGeneration,
-                    fullscreen) ?? Array.Empty<byte>();
+                    fullscreen,
+                    force) ?? Array.Empty<byte>();
                 var hasScreenshot = screenshot.Length > 0;
-                var (width, height) = hasScreenshot ? GetPngDimensions(screenshot) : (0, 0);
+                var (width, height) = hasScreenshot ? ScreenshotImage.GetPngDimensions(screenshot) : (0, 0);
                 if (width <= 0 || height <= 0)
                 {
                     width = 800;
@@ -1929,7 +1918,8 @@ public sealed class InspectorServer : IDisposable
         string? elementId = null,
         long? captureEpoch = null,
         long? registryGeneration = null,
-        bool fullscreen = false)
+        bool fullscreen = false,
+        bool force = false)
     {
         long generation;
         lock (_cacheLock)
@@ -1938,7 +1928,8 @@ public sealed class InspectorServer : IDisposable
             // is not a valid response for a per-element request and vice versa.
             // Without this check, callers that vary elementId would receive
             // whichever shot happened to be cached first within the 200ms window.
-            if (_cachedScreenshot != null
+            if (!force
+                && _cachedScreenshot != null
                 && string.Equals(_cachedScreenshotElementId, elementId, StringComparison.Ordinal)
                 && _cachedScreenshotCaptureEpoch == captureEpoch
                 && _cachedScreenshotFullscreen == fullscreen

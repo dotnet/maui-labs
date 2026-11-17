@@ -30,7 +30,7 @@
 #   Imports:
 #     - shared/docs-output-body-limit.md
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"e68772473ba3d66dd8b0a88bd5c144eefee60edff85edba50e1262e130a746ca","compiler_version":"v0.53.5"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"c51d6d94795b62770d937ea87830bd1273a4458a464a4d9ce3a19014d92f22e9","compiler_version":"v0.53.5"}
 
 name: "PR Documentation Check"
 "on":
@@ -98,7 +98,7 @@ jobs:
         env:
           GH_AW_INFO_ENGINE_ID: "copilot"
           GH_AW_INFO_ENGINE_NAME: "GitHub Copilot CLI"
-          GH_AW_INFO_MODEL: ${{ vars.GH_AW_MODEL_AGENT_COPILOT || '' }}
+          GH_AW_INFO_MODEL: "gpt-5.6-sol"
           GH_AW_INFO_VERSION: ""
           GH_AW_INFO_AGENT_VERSION: "0.0.421"
           GH_AW_INFO_CLI_VERSION: "v0.53.5"
@@ -690,7 +690,7 @@ jobs:
         env:
           COPILOT_AGENT_RUNNER_TYPE: STANDALONE
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          COPILOT_MODEL: ${{ vars.GH_AW_MODEL_AGENT_COPILOT || '' }}
+          COPILOT_MODEL: gpt-5.6-sol
           GH_AW_MCP_CONFIG: /home/runner/.copilot/mcp-config.json
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
           GH_AW_SAFE_OUTPUTS: ${{ env.GH_AW_SAFE_OUTPUTS }}
@@ -915,7 +915,7 @@ jobs:
         env:
           COPILOT_AGENT_RUNNER_TYPE: STANDALONE
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          COPILOT_MODEL: ${{ vars.GH_AW_MODEL_DETECTION_COPILOT || '' }}
+          COPILOT_MODEL: gpt-5.6-sol
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
           GITHUB_API_URL: ${{ github.api_url }}
           GITHUB_HEAD_REF: ${{ github.head_ref }}
@@ -1083,6 +1083,7 @@ jobs:
     env:
       GH_AW_CALLER_WORKFLOW_ID: "${{ github.repository }}/pr-docs-check"
       GH_AW_ENGINE_ID: "copilot"
+      GH_AW_ENGINE_MODEL: "gpt-5.6-sol"
       GH_AW_WORKFLOW_ID: "pr-docs-check"
       GH_AW_WORKFLOW_NAME: "PR Documentation Check"
     outputs:

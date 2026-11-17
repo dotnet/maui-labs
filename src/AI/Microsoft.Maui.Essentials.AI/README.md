@@ -33,7 +33,8 @@ before offering chat. Generation never downloads a model.
 ### Apple
 
 Apple Intelligence must be available and enabled. Image input, token usage and
-explicit tool modes need OS 27+ and a native bridge built with Xcode 27+.
+explicit tool modes need OS 27+ and a native bridge built with Xcode 27+. Response
+and tool schemas that allow `null` values need OS 26.4+.
 
 ```csharp
 using Microsoft.Extensions.AI;

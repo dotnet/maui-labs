@@ -1,0 +1,20 @@
+{
+  "name": "focus-state",
+  "expectedCases": 5,
+  "expectedAssertions": 13,
+  "evidence": [
+    "focus.jsonl",
+    "assertions.txt"
+  ],
+  "baseline": {
+    "source": "platforms/MacOS/src/MacOS/Handlers/WindowHandler.cs",
+    "replace": {
+      "old": "        _focusTracker = new MacOSFocusTracker(window);\n",
+      "new": ""
+    },
+    "exitCode": 42,
+    "outcome": "regression",
+    "failureId": "focus-state.never-focused",
+    "message": "BASELINE_FOCUS: Entry became first responder but IsFocused stayed false."
+  }
+}

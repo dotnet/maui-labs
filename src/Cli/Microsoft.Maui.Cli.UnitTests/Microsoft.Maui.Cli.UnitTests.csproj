@@ -14,6 +14,8 @@
     </PackageReference>
     <PackageReference Include="xunit" />
     <PackageReference Include="Spectre.Console.Testing" />
+    <!-- Independent PNG decoder for compatibility tests, not part of the shipped tool graph. -->
+    <PackageReference Include="SkiaSharp" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,17 @@
+{
+  "name": "window-page-reset",
+  "expectedCases": 1,
+  "expectedAssertions": 11,
+  "evidence": ["states.jsonl", "assertions.txt"],
+  "baseline": {
+    "source": "platforms/MacOS/src/MacOS/Handlers/WindowHandler.cs",
+    "replace": {
+      "old": "                handler._modalManager?.ClearModalStack();\n",
+      "new": ""
+    },
+    "exitCode": 1,
+    "outcome": "failed",
+    "failureId": "window-page-reset.attached-sheets",
+    "message": "Resetting Window.Page closes all sheets attached to the original window."
+  }
+}
