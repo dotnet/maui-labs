@@ -1167,7 +1167,7 @@ public sealed class InspectorServer : IDisposable
                 ? ScreenshotResolutionKey.SupportedDefault
                 : ScreenshotResolutionKey.Legacy);
         var hasPublishedFrame = frame.FrameRevision > 0 && frame.Png.Length > 0;
-        var html = HtmlRenderer.Render(
+        var html = HtmlRenderer.RenderWithViewport(
             frame.Tree,
             hasPublishedFrame,
             frame.LogicalWidth,

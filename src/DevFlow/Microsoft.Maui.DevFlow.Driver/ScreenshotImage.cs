@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.ComponentModel;
 using System.Globalization;
+using System.IO.Compression;
 
 namespace Microsoft.Maui.DevFlow.Driver;
 
@@ -89,20 +90,25 @@ internal static class ScreenshotImage
             ? (0, 0) : (width, height);
     }
 
-    // Structural completeness check for agent screenshots: every chunk must be intact (CRC),
-    // IHDR must come first with positive dimensions, and IEND must terminate the payload after
-    // at least one IDAT. Pixel decoding is left to the consumer.
     internal static bool IsCompletePng(byte[] png)
     {
-        if (GetPngDimensions(png) == (0, 0) || png.Length < 45 ||
-            BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(8)) != 13 ||
-            BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(12)) != 0x49484452) // IHDR
-        {
+        ReadOnlySpan<byte> signature = [137, 80, 78, 71, 13, 10, 26, 10];
+        if (png.Length < 45 || !png.AsSpan(0, 8).SequenceEqual(signature))
             return false;
-        }
 
         var offset = 8;
+        var sawHeader = false;
+        var sawPalette = false;
+        var sawTransparency = false;
         var sawImageData = false;
+        var imageDataEnded = false;
+        var width = 0;
+        var height = 0;
+        byte bitDepth = 0;
+        byte colorType = 0;
+        byte interlaceMethod = 0;
+        var paletteEntries = 0;
+        using var compressedImageData = new MemoryStream();
         while (offset <= png.Length - 12)
         {
             var chunkLength = BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(offset, 4));
@@ -110,21 +116,93 @@ internal static class ScreenshotImage
             if (chunkEnd > png.Length)
                 return false;
 
-            var dataLength = (int)chunkLength;
-            var storedCrc = BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(offset + 8 + dataLength, 4));
-            if (ComputePngCrc(png.AsSpan(offset + 4, 4 + dataLength)) != storedCrc)
+            var chunkType = BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(offset + 4, 4));
+            var chunkDataLength = checked((int)chunkLength);
+            var storedCrc = BinaryPrimitives.ReadUInt32BigEndian(
+                png.AsSpan(offset + 8 + chunkDataLength, 4));
+            if (ComputePngCrc(png.AsSpan(offset + 4, 4 + chunkDataLength)) != storedCrc)
                 return false;
 
-            switch (BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(offset + 4, 4)))
+            if (sawImageData && chunkType != 0x49444154)
+                imageDataEnded = true;
+
+            switch (chunkType)
             {
+                case 0x49484452: // IHDR
+                    if (sawHeader || offset != 8 || chunkLength != 13)
+                    {
+                        return false;
+                    }
+                    (width, height) = GetPngDimensions(png);
+                    bitDepth = png[offset + 16];
+                    colorType = png[offset + 17];
+                    var compressionMethod = png[offset + 18];
+                    var filterMethod = png[offset + 19];
+                    interlaceMethod = png[offset + 20];
+                    if (width <= 0 || height <= 0 ||
+                        !IsValidPngBitDepth(colorType, bitDepth) ||
+                        compressionMethod != 0 ||
+                        filterMethod != 0 ||
+                        interlaceMethod > 1)
+                    {
+                        return false;
+                    }
+                    sawHeader = true;
+                    break;
+                case 0x504C5445: // PLTE
+                    if (!sawHeader || sawPalette || sawImageData ||
+                        colorType is 0 or 4 ||
+                        chunkLength == 0 || chunkLength % 3 != 0 ||
+                        chunkLength > 768)
+                    {
+                        return false;
+                    }
+                    paletteEntries = chunkDataLength / 3;
+                    if (colorType == 3 && paletteEntries > 1 << bitDepth)
+                        return false;
+                    sawPalette = true;
+                    break;
+                case 0x74524E53: // tRNS
+                    if (!sawHeader || sawTransparency || sawImageData ||
+                        colorType switch
+                        {
+                            0 => chunkLength != 2,
+                            2 => chunkLength != 6,
+                            3 => !sawPalette || chunkLength == 0 || chunkLength > paletteEntries,
+                            _ => true
+                        })
+                    {
+                        return false;
+                    }
+                    sawTransparency = true;
+                    break;
                 case 0x49444154: // IDAT
+                    if (!sawHeader || imageDataEnded || (colorType == 3 && !sawPalette))
+                        return false;
+                    compressedImageData.Write(png, offset + 8, chunkDataLength);
                     sawImageData = true;
                     break;
                 case 0x49454E44: // IEND
-                    return sawImageData && chunkLength == 0 && chunkEnd == png.Length;
+                    return sawHeader &&
+                        sawImageData &&
+                        chunkLength == 0 &&
+                        chunkEnd == png.Length &&
+                        HasValidPngImageData(
+                            compressedImageData,
+                            width,
+                            height,
+                            bitDepth,
+                            colorType,
+                            interlaceMethod);
+                default:
+                    // Unknown critical chunks cannot be decoded safely. Ancillary chunks are
+                    // identified by the lowercase bit on the first type byte.
+                    if ((png[offset + 4] & 0x20) == 0)
+                        return false;
+                    break;
             }
 
-            offset = (int)chunkEnd;
+            offset = checked((int)chunkEnd);
         }
 
         return false;

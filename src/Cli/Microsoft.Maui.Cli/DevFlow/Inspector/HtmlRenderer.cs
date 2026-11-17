@@ -27,6 +27,27 @@ public static class HtmlRenderer
         double rootOffsetX = 0,
         double rootOffsetY = 0,
         string? screenshotUrl = null)
+        => RenderWithViewport(
+            tree,
+            hasScreenshot,
+            screenshotWidth,
+            screenshotHeight,
+            density,
+            elementScale,
+            rootOffsetX,
+            rootOffsetY,
+            screenshotUrl);
+
+    internal static string RenderWithViewport(
+        List<ElementInfo> tree,
+        bool hasScreenshot,
+        double screenshotWidth,
+        double screenshotHeight,
+        double density = 1,
+        double elementScale = 1,
+        double rootOffsetX = 0,
+        double rootOffsetY = 0,
+        string? screenshotUrl = null)
     {
         var template = _templateCache.Value;
         var (viewportWidth, viewportHeight) = ComputeViewportSize(tree, screenshotWidth, screenshotHeight);

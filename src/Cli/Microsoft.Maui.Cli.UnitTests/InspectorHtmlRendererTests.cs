@@ -238,9 +238,9 @@ public class InspectorHtmlRendererTests
     }
 
     [Fact]
-    public void Render_PreservesFractionalLogicalSize()
+    public void RenderWithViewport_PreservesFractionalLogicalSize()
     {
-        var html = HtmlRenderer.Render(
+        var html = HtmlRenderer.RenderWithViewport(
             [],
             hasScreenshot: true,
             screenshotWidth: 320.5,

@@ -711,8 +711,6 @@ import {
       }
       if (!state && latestTap !== null && !activeRefresh)
         scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY);
-
-
     }, delayMs);
   }
   function onScreenshotError() {
