@@ -3803,12 +3803,18 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
 
     private async Task WaitForUiEventSocketAsync()
     {
+        var previousFrameId = await CurrentPreviewFrameIdAsync();
         _supportsUiEvents = true;
         await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
         for (var attempt = 0; attempt < 100; attempt++)
         {
             if (_eventSockets.Keys.Any(socket => socket.State == WebSocketState.Open))
+            {
+                // The browser's socket-open handler queues an evidence refresh.
+                // Settle it before publishing events that correlate to the current frame.
+                await WaitForPreviewFrameChangeAsync(previousFrameId);
                 return;
+            }
             await Task.Delay(50);
         }
         throw new TimeoutException("Inspector did not connect to the fixture UI event stream.");
