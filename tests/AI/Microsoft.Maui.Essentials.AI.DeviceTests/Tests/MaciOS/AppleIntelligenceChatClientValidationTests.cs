@@ -128,7 +128,7 @@ public class AppleIntelligenceChatClientValidationTests
 			Assert.Contains("null", types);
 		}
 		Assert.True(properties.GetProperty("detail").TryGetProperty("title", out _));
-		var required = schema.Value.GetProperty("required").EnumerateArray().Select(value => value.GetString()).ToArray();
+		var required = schema.Value.GetProperty("required").EnumerateArray().Select(value => value.GetString()!).ToArray();
 		Assert.Equal(["quantity", "count", "name", "detail"], required);
 	}
 
