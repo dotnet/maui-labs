@@ -3,7 +3,7 @@
   <Import Project="..\..\platforms\MacOS\MacOS.Versions.props" />
 
   <PropertyGroup>
-    <TargetFramework>net10.0-macos</TargetFramework>
+    <TargetFrameworks>net10.0-macos;net11.0-macos</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <RootNamespace>DevFlow.Sample</RootNamespace>
     <UseMaui>true</UseMaui>
@@ -13,10 +13,10 @@
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <IsPackable>false</IsPackable>
-    <!-- AppKit's net10 assets compile against the final MAUI 10 servicing release.
-         Disable repo-wide transitive pinning only for this AppKit sample so its
-         project-reference graph resolves coherently without moving other products
-         off the repository's 10.0.41 baseline. -->
+    <!-- AppKit's net10 assets compile against the final MAUI 10 servicing release and its
+         net11 assets against MAUI 11. Disable repo-wide transitive pinning only for this
+         sample (see also ..\DevFlow.Sample.Net11.props) so each target framework resolves
+         its own MAUI graph without moving other products off the 10.0.41 baseline. -->
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
@@ -24,8 +24,10 @@
     <ProjectReference Include="..\..\platforms\MacOS\src\MacOS\MacOS.csproj" />
     <ProjectReference Include="..\..\platforms\MacOS\src\MacOS.BlazorWebView\MacOS.BlazorWebView.csproj" />
     <ProjectReference Include="..\..\platforms\MacOS\src\MacOS.Essentials\MacOS.Essentials.csproj" />
-    <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(MacOSMaui10Version)" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" VersionOverride="$(MacOSBlazorWebView10Version)" />
+    <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(MacOSMaui10Version)" Condition="'$(TargetFramework)' == 'net10.0-macos'" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" VersionOverride="$(MacOSBlazorWebView10Version)" Condition="'$(TargetFramework)' == 'net10.0-macos'" />
+    <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(MacOSMaui11Version)" Condition="'$(TargetFramework)' == 'net11.0-macos'" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" VersionOverride="$(MacOSBlazorWebView11Version)" Condition="'$(TargetFramework)' == 'net11.0-macos'" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
   </ItemGroup>
 
@@ -100,5 +102,7 @@
           Condition="'%(SourceId)' == 'Microsoft.Maui.DevFlow.Blazor' AND $([System.String]::Copy('%(RelativePath)').StartsWith('_framework/'))" />
     </ItemGroup>
   </Target>
+
+  <Import Project="..\DevFlow.Sample.Net11.props" />
 
 </Project>

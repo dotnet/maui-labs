@@ -40,7 +40,7 @@ public static class AgentServiceExtensions
 
         if (options.EnableFileLogging)
         {
-            var logDir = Path.Combine(FileSystem.CacheDirectory, "mauidevflow-logs");
+            var logDir = Path.Combine(AgentFileSystem.GetCacheDirectory(builder.Services), "mauidevflow-logs");
             var logProvider = new FileLogProvider(logDir, options.MaxLogFileSize, options.MaxLogFiles);
             service.SetLogProvider(logProvider);
 

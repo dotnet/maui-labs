@@ -454,11 +454,19 @@ jobs:
       fail-fast: false
       matrix:
         framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
-    runs-on: macos-15
+        # The MAUI-on-AppKit sample runs on both backend generations; the native sample is net10 only.
+        dotnet: ['10', '11']
+        exclude:
+          - framework: native
+            dotnet: '11'
+    name: macos (${{ matrix.framework }}, net${{ matrix.dotnet }})
+    # net11.0-macos requires the GA Apple workload's exact Xcode 27.2.
+    runs-on: ${{ matrix.dotnet == '11' && 'xcode-27' || 'macos-15' }}
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: macos
       DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
+      DEVFLOW_TEST_DOTNET: ${{ matrix.dotnet }}
       # The custom AppKit backend does not yet provide Blazor CDP, generic gestures/list scrolling,
       # or every Essentials API. Keep those known platform gaps explicit while still running the
       # full UI tree/action/property suite, including the registered native-element bridge.
@@ -471,9 +479,12 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # Match the net10 Apple packs carried by the GA workload set.
+          # Match the Apple packs carried by the GA workload set: net10 uses Xcode 26.0,
+          # net11 requires exactly Xcode 27.2.
           COMPATIBLE="${COMPATIBLE:-}"
-          for candidate in /Applications/Xcode_26.0.app /Applications/Xcode_26.app; do
+          candidates="/Applications/Xcode_26.0.app /Applications/Xcode_26.app"
+          [[ "${{ matrix.dotnet }}" == "11" ]] && candidates="/Applications/Xcode_27.2.app"
+          for candidate in $candidates; do
             if [[ -d "$candidate" ]]; then
               COMPATIBLE="$candidate"
               break
@@ -505,7 +516,7 @@ jobs:
         run: >
           dotnet test $TEST_PROJECT
           -c Debug
-          --logger "trx;LogFileName=devflow-integration-macos-${{ matrix.framework }}.trx"
+          --logger "trx;LogFileName=devflow-integration-macos-${{ matrix.framework }}-net${{ matrix.dotnet }}.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/macos
           --filter "$TEST_FILTER"
@@ -514,7 +525,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-macos-${{ matrix.framework }}-results
+          name: devflow-integration-macos-${{ matrix.framework }}-net${{ matrix.dotnet }}-results
           path: ./artifacts/TestResults/devflow-integration/macos/
           retention-days: 30
 
