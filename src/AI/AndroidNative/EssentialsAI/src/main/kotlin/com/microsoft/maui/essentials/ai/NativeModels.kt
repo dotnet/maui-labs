@@ -28,6 +28,16 @@ class NativeChatOptions(
     val modelId: String?,
 ) {
     var toolsJson: String? = null
+
+    /** Setting a schema checks that ML Kit can represent it; unsupported schemas throw IllegalArgumentException. */
+    var responseSchemaJson: String? = null
+        set(value) {
+            responseSchema = value?.let(NativeResponseSchema::parse)
+            field = value
+        }
+
+    internal var responseSchema: NativeResponseSchema? = null
+        private set
 }
 
 class NativeChatRequest(
@@ -63,6 +73,7 @@ class NativeModelStatus(
     val modelName: String?,
 ) {
     var toolCallingAvailable: Boolean = false
+    var structuredOutputAvailable: Boolean = false
 }
 
 interface NativeCheckStatusCallback {

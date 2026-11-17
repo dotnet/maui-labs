@@ -1,5 +1,7 @@
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Hosting;
@@ -66,6 +68,10 @@ public class NativeFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
     [NativeGtkFact]
     public void PresentedGtkWindow_ScreenshotReturnsReusablePngResult()
     {
+        var criticals = new ConcurrentQueue<string>();
+        NativeLogHandler logHandler = (_, _, message, _) =>
+            criticals.Enqueue(Marshal.PtrToStringUTF8(message) ?? "Unknown GObject critical");
+        var logId = SetLogHandler("GLib-GObject", 1 << 3, logHandler, 0);
         using var gtkApp = Gtk.Application.New(null, Gio.ApplicationFlags.NonUnique);
         Exception? error = null;
         var executed = false;
@@ -85,19 +91,27 @@ public class NativeFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
                 try
                 {
                     await WaitForAllocationAsync(window, TimeSpan.FromSeconds(5));
-                    var result = await Task.Run(
-                        async () => await new LinuxScreenshot().CaptureAsync());
-                    Assert.True(result.Width > 0);
-                    Assert.True(result.Height > 0);
+                    for (var capture = 0; capture < 8; capture++)
+                    {
+                        var result = await Task.Run(
+                            async () => await new LinuxScreenshot().CaptureAsync());
+                        Assert.True(result.Width > 0);
+                        Assert.True(result.Height > 0);
 
-                    using var first = await result.OpenReadAsync();
-                    using var second = await result.OpenReadAsync();
-                    var png = new byte[first.Length];
-                    await first.ReadExactlyAsync(png);
-                    Assert.True(png.Length > 24);
-                    Assert.Equal(first.Length, second.Length);
-                    Assert.Equal(result.Width, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16, 4)));
-                    Assert.Equal(result.Height, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20, 4)));
+                        using var first = await result.OpenReadAsync();
+                        using var second = await result.OpenReadAsync();
+                        var png = new byte[first.Length];
+                        await first.ReadExactlyAsync(png);
+                        Assert.True(png.Length > 24);
+                        Assert.Equal(first.Length, second.Length);
+                        Assert.Equal(result.Width, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16, 4)));
+                        Assert.Equal(result.Height, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20, 4)));
+                        await Task.Run(() =>
+                        {
+                            GC.Collect();
+                            GC.WaitForPendingFinalizers();
+                        });
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -118,11 +132,29 @@ public class NativeFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
             }
         };
 
-        Assert.Equal(0, gtkApp.Run([]));
+        try
+        {
+            Assert.Equal(0, gtkApp.Run([]));
+        }
+        finally
+        {
+            RemoveLogHandler("GLib-GObject", logId);
+            GC.KeepAlive(logHandler);
+        }
         Assert.True(executed);
         if (error is not null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
+        Assert.Empty(criticals);
     }
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    delegate void NativeLogHandler(nint domain, uint level, nint message, nint userData);
+
+    [DllImport("libglib-2.0.so.0", EntryPoint = "g_log_set_handler", CallingConvention = CallingConvention.Cdecl)]
+    static extern uint SetLogHandler(string domain, uint levels, NativeLogHandler handler, nint userData);
+
+    [DllImport("libglib-2.0.so.0", EntryPoint = "g_log_remove_handler", CallingConvention = CallingConvention.Cdecl)]
+    static extern void RemoveLogHandler(string domain, uint handlerId);
 
     static Task WaitForAllocationAsync(Gtk.Widget widget, TimeSpan timeout)
     {

@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.Maui.DevFlow.Blazor.Gtk;
 using Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 
 namespace Microsoft.Maui.DevFlow.Agent.Gtk.Tests;
 
@@ -22,9 +23,12 @@ public class GtkWebViewSnapshotRuntimeTests
         window.SetDefaultSize(320, 240);
         window.SetChild(wrapper);
         var loaded = false;
-        void OnLoadChanged(WebKit.WebView sender, WebKit.WebView.LoadChangedSignalArgs args)
-            => loaded |= args.LoadEvent == WebKit.LoadEvent.Finished;
-        view.OnLoadChanged += OnLoadChanged;
+        void OnLoadChanged(WebKit.WebView sender, GtkWebViewSignals.LoadChangedArgs args)
+        {
+            using var signalArgs = args;
+            loaded |= args.LoadEvent == WebKit.LoadEvent.Finished;
+        }
+        GtkWebViewSignals.LoadChanged.Connect(view, OnLoadChanged);
         try
         {
             Assert.Throws<InvalidOperationException>(() => { _ = WebKitSnapshot.CaptureAsync(view, CancellationToken.None); });
@@ -51,7 +55,7 @@ public class GtkWebViewSnapshotRuntimeTests
         }
         finally
         {
-            view.OnLoadChanged -= OnLoadChanged;
+            GtkWebViewSignals.LoadChanged.Disconnect(view, OnLoadChanged);
             window.SetChild(null);
             wrapper.Remove(view);
             window.Destroy();
@@ -145,6 +149,13 @@ public class GtkWebViewSnapshotRuntimeTests
                 Assert.False(string.IsNullOrEmpty(
                     response.RootElement.GetProperty("result").GetProperty("data").GetString()));
 
+                var collect = Task.Run(() =>
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                });
+                PumpUntil(() => collect.IsCompleted);
+                collect.GetAwaiter().GetResult();
                 DrainPendingMainContextCallbacks();
             }
 

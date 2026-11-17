@@ -25,6 +25,9 @@
       "minimum": 0,
       "description": "Native registration generation returned with captureEpoch. When supplied, captureEpoch is required."
     },
+    "ActionCorrelation": {
+      "$ref": "frame.json#/$defs/ActionCorrelation"
+    },
     "TapRequest": {
       "type": "object",
       "description": "Request to tap an element, or a point inside it when x and y are given.",
@@ -56,6 +59,9 @@
           ],
           "description": "Tap at this Y inside the element, in device-independent units from its top edge. Given together with x."
         },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
+        },
         "include": {
           "$ref": "#/$defs/IncludeOption",
           "description": "Optional data to include in the response."
@@ -84,6 +90,9 @@
         "registryGeneration": {
           "$ref": "#/$defs/RegistryGeneration"
         },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
+        },
         "include": {
           "$ref": "#/$defs/IncludeOption",
           "description": "Optional data to include in the response."
@@ -107,6 +116,9 @@
         "registryGeneration": {
           "$ref": "#/$defs/RegistryGeneration"
         },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
+        },
         "include": {
           "$ref": "#/$defs/IncludeOption",
           "description": "Optional data to include in the response."
@@ -129,6 +141,9 @@
         },
         "registryGeneration": {
           "$ref": "#/$defs/RegistryGeneration"
+        },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
         },
         "include": {
           "$ref": "#/$defs/IncludeOption",
@@ -196,6 +211,9 @@
           ],
           "description": "Alignment of the target item within the viewport after scrolling."
         },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
+        },
         "include": {
           "$ref": "#/$defs/IncludeOption",
           "description": "Optional data to include in the response."
@@ -212,6 +230,9 @@
         "route": {
           "type": "string",
           "description": "Route or URI to navigate to."
+        },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
         },
         "include": {
           "$ref": "#/$defs/IncludeOption",
@@ -244,6 +265,9 @@
           "description": "Target height in device-independent pixels.",
           "minimum": 1
         },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
+        },
         "include": {
           "$ref": "#/$defs/IncludeOption",
           "description": "Optional data to include in the response."
@@ -254,6 +278,9 @@
       "type": "object",
       "description": "Request to perform a back navigation action.",
       "properties": {
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
+        },
         "include": {
           "$ref": "#/$defs/IncludeOption",
           "description": "Optional data to include in the response."
@@ -283,6 +310,9 @@
         },
         "registryGeneration": {
           "$ref": "#/$defs/RegistryGeneration"
+        },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
         },
         "include": {
           "$ref": "#/$defs/IncludeOption",
@@ -455,6 +485,9 @@
         },
         "registryGeneration": {
           "$ref": "#/$defs/RegistryGeneration"
+        },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
         },
         "include": {
           "$ref": "#/$defs/IncludeOption",
@@ -804,6 +837,9 @@
           "description": "Interpolation steps between gesture start and end.",
           "minimum": 1,
           "maximum": 120
+        },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
         }
       }
     },
@@ -826,6 +862,9 @@
         },
         "registryGeneration": {
           "$ref": "#/$defs/RegistryGeneration"
+        },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
         },
         "include": {
           "$ref": "#/$defs/IncludeOption",

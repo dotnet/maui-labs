@@ -132,8 +132,10 @@ options do not override that dynamic mode. See the shared guide for the MEAI mod
 ## Native schema mapping
 
 Response and tool-parameter schemas preserve nullable values independently of parent
-`required` properties. Native guides carry string constants/enums, a scalar ASCII
-regex subset, numeric bounds, and array/item bounds. Unrepresentable constraints,
+`required` properties. Explicit null schemas require iOS, Mac Catalyst, or macOS
+26.4 or later; earlier versions reject them with a schema error. Native guides
+carry string constants/enums, a scalar ASCII regex subset, numeric bounds, and
+array/item bounds. Unrepresentable constraints,
 references, dictionaries, and compound enum/const-plus-pattern intersections fail
 with schema/property context rather than being dropped. The current system model
 can reject regex guides with `unsupportedGenerationGuide`; that error is propagated

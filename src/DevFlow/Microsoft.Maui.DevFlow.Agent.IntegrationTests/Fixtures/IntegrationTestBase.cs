@@ -192,7 +192,11 @@ public abstract class IntegrationTestBase
 
         while (DateTime.UtcNow < deadline)
         {
-            results = await Client.QueryAsync(automationId: automationId);
+            var remainingMs = Math.Max(1, (int)(deadline - DateTime.UtcNow).TotalMilliseconds);
+            var capture = await SendHttpWithTransportRetryAsync(() => AppFixture.ReadCaptureAsync(
+                Http, $"/api/v1/ui/elements?automationId={Uri.EscapeDataString(automationId)}", remainingMs));
+            results = capture.Deserialize<List<ElementInfo>>(JsonOptions)
+                ?? throw new JsonException("The element query returned a null capture.");
             if (results.Count > 0)
                 return results[0];
             await Task.Delay(250);

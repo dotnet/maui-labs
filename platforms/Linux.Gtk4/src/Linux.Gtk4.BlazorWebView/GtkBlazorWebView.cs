@@ -118,7 +118,7 @@ public sealed class GtkBlazorWebView : IDisposable
 		{
 			// The detailed signal connection is independent of the registered JS
 			// message handler and must be disconnected before releasing its owner.
-			UserContentManager.ScriptMessageReceivedSignal.Disconnect(_userContentManager, HandleScriptMessage);
+			GtkWebViewSignals.ScriptMessageReceived.Disconnect(_userContentManager, HandleScriptMessage);
 			_userContentManager.UnregisterScriptMessageHandler(InteropName, null);
 			_userContentManager = null;
 		}
@@ -152,7 +152,7 @@ public sealed class GtkBlazorWebView : IDisposable
 
 		// Handle JS→.NET messages
 		_userContentManager = webView.GetUserContentManager();
-		UserContentManager.ScriptMessageReceivedSignal.Connect(
+		GtkWebViewSignals.ScriptMessageReceived.Connect(
 			_userContentManager,
 			HandleScriptMessage,
 			after: false,
@@ -176,8 +176,9 @@ public sealed class GtkBlazorWebView : IDisposable
 
 	private void HandleScriptMessage(
 		UserContentManager ucm,
-		UserContentManager.ScriptMessageReceivedSignalArgs args)
+		GtkWebViewSignals.ScriptMessageArgs args)
 	{
+		using var signalArgs = args;
 		// The message JSCValue is only valid while its JavaScript context lives. Release GirCore's
 		// wrapper here, on the GTK thread, instead of leaving it to a finalizer whose queued
 		// toggle-ref removal can run after navigation has destroyed that context.

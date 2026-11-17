@@ -27,17 +27,31 @@ public class GeminiNanoChatClientCancellationTests : ChatClientCancellationTests
 [Collection(nameof(GeminiNanoCollection))]
 public class GeminiNanoNativeFunctionCallingTests : ChatClientFunctionCallingTestsBase<GeminiNanoChatClient>
 {
+	internal const string ToolModelId = "gemini-nano-preview-fast";
+
 	// Native tool support is profile-dependent; V3 cannot register tools.
 	protected override bool? SupportsRequiredToolMode => false;
 	protected override bool PreservesToolActivityContext => true;
+	// AICore emits no function calls under a schema; the bridge lets the model call tools first.
+	protected override bool SupportsStructuredOutputWithTools => true;
+	protected override bool SupportsReasoningOutput => true;
+	// Thinking spends the output budget before the tool call and again before the final answer.
+	protected override int? ReasoningMaxOutputTokens => 2048;
 
 	protected override IChatClient EnableFunctionCalling(GeminiNanoChatClient client, Action<ChatOptions>? configureOptions = null) =>
 		client.AsBuilder().UseFunctionInvocation().ConfigureOptions(options =>
 		{
-			options.ModelId = "gemini-nano-preview-fast";
+			options.ModelId = ToolModelId;
 			options.Temperature = 0;
 			configureOptions?.Invoke(options);
 		}).Build();
+
+	// Gemma function-call control tokens must never leak into streamed text.
+	protected override void AssertStreamingUpdate(ChatResponseUpdate update)
+	{
+		Assert.DoesNotContain("<ctrl42>", update.Text, StringComparison.Ordinal);
+		Assert.DoesNotContain("<ctrl43>", update.Text, StringComparison.Ordinal);
+	}
 }
 
 [Collection(nameof(GeminiNanoCollection))]
@@ -48,7 +62,9 @@ public class GeminiNanoChatClientMessagesTests : ChatClientMessagesTestsBase<Gem
 	protected override bool RejectsUnsupportedMedia => true;
 	protected override bool SupportsBinaryMedia(string mediaType) =>
 		string.Equals(mediaType, "image/png", StringComparison.OrdinalIgnoreCase);
-	protected override bool RejectsUnsupportedStandardContent(string kind, ChatRole role) => true;
+	// The model's own reasoning is dropped from Assistant history so function invocation can replay it.
+	protected override bool RejectsUnsupportedStandardContent(string kind, ChatRole role) =>
+		kind != "reasoning" || role != ChatRole.Assistant;
 	protected override bool RejectsMisplacedFunctionContent(ChatRole role, bool isCall) => true;
 	protected override bool SupportsTrailingSystemInstruction => true;
 }
@@ -59,7 +75,7 @@ public class GeminiNanoChatClientOptionsTests : ChatClientOptionsTestsBase<Gemin
 	protected override bool RejectsStatefulConversationOptions => true;
 	protected override bool SupportsReasoningEffortNone => true;
 
-	// The untyped ML Kit Prompt API adapter has no JSON guarantee, including schema-free JSON.
+	// Native structured output needs an explicit schema; schema-free JSON remains unsupported.
 	[Fact]
 	public override Task GetResponseAsync_WithResponseFormat_AcceptsJsonFormat() => RejectJsonAsync(false);
 
@@ -103,8 +119,19 @@ public class GeminiNanoChatClientUsageTests(ITestOutputHelper output) : ChatClie
 [Collection(nameof(GeminiNanoCollection))]
 public class GeminiNanoChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<GeminiNanoChatClient>
 {
-	// The adapter deliberately rejects structured output rather than pretending a prompt is a schema guarantee.
-	protected override bool SupportsStructuredOutput => false;
+	protected override bool? RequiresExplicitJsonSchema => true;
+	protected override bool SupportsBaselineSamplingOptions => true;
+	// The default model (Nano V3) stops after about 40 tokens when MaxOutputTokens is unset.
+	protected override int? BaselineMaxOutputTokens => 512;
+	// Schema-shape scenarios cover both native profiles; only the preview profile supports thinking.
+	protected override IReadOnlyList<string?> StructuredOutputModelIds => ["gemini-nano-full", GeminiNanoNativeFunctionCallingTests.ToolModelId];
+	protected override bool SupportsReasoningOutput => true;
+	protected override string? ReasoningModelId => GeminiNanoNativeFunctionCallingTests.ToolModelId;
+	// Thinking spends output tokens before the answer, so it needs more than the baseline.
+	protected override int? ReasoningMaxOutputTokens => 2048;
+	// AICore constrained decoding accepts 20 nested object levels.
+	protected override int StructuredSchemaNestingDepth => 20;
+	protected override bool StreamsStructuredOutputIncrementally => true;
 
 	// ML Kit's untyped Prompt API adapter also rejects schema-free JSON.
 	[Fact]
@@ -154,6 +181,58 @@ public class GeminiNanoChatClientInteropTests
 		Assert.Equal(0, none.GetMessages()[1].GetParts()[0].Kind);
 		Assert.Same(function, Assert.Single(options.Tools));
 	}
+
+	// Function invocation replays the model's own reasoning; only Assistant reasoning is dropped.
+	[Fact]
+	public void ToNative_DropsAssistantReasoningButRejectsItElsewhere()
+	{
+		using var request = GeminiNanoChatClient.ToNative(
+		[
+			new(ChatRole.User, "hello"),
+			new(ChatRole.Assistant, [new TextReasoningContent("thinking"), new TextContent("hi")]),
+			new(ChatRole.Assistant, [new TextReasoningContent("only thinking")]),
+			new(ChatRole.User, "again"),
+		], null);
+		var messages = request.GetMessages();
+		Assert.Equal(4, messages.Length);
+		Assert.Equal("hi", Assert.Single(messages[1].GetParts()).Text);
+		Assert.Empty(messages[2].GetParts());
+
+		Assert.Throws<NotSupportedException>(() => GeminiNanoChatClient.ToNative(
+			[new(ChatRole.User, [new TextContent("hello"), new TextReasoningContent("thinking")])], null));
+	}
+
+	[Fact]
+	public void ToNative_StrictToolSchemasDropOnlyClosedObjectMarkers()
+	{
+		var strict = new AIFunctionFactoryOptions
+		{
+			Name = "search",
+			JsonSchemaCreateOptions = new() { TransformOptions = new() { DisallowAdditionalProperties = true } },
+		};
+		var function = AIFunctionFactory.Create((string query, Filter? filter) => query, strict);
+		var clock = AIFunctionFactory.Create(() => "12:00",
+			new AIFunctionFactoryOptions { Name = "clock", JsonSchemaCreateOptions = strict.JsonSchemaCreateOptions });
+		Assert.False(function.JsonSchema.GetProperty("additionalProperties").GetBoolean());
+		using var request = GeminiNanoChatClient.ToNative([new(ChatRole.User, "hello")], new ChatOptions { Tools = [function, clock] });
+		var json = request.Options.ToolsJson!;
+		Assert.DoesNotContain("additionalProperties", json, StringComparison.Ordinal);
+		Assert.DoesNotContain("$schema", json, StringComparison.Ordinal);
+		using var tools = JsonDocument.Parse(json);
+		var parameters = tools.RootElement[0].GetProperty("parameters");
+		Assert.True(parameters.GetProperty("properties").GetProperty("filter").GetProperty("properties").TryGetProperty("track", out _));
+		Assert.Contains(parameters.GetProperty("required").EnumerateArray(), name => name.GetString() == "query");
+		Assert.False(function.JsonSchema.GetProperty("additionalProperties").GetBoolean());
+
+		// Schema-valued additionalProperties (dictionaries) stay intact so the native bridge rejects them.
+		var dictionary = AIFunctionFactory.Create((Dictionary<string, int> values) => values.Count, "count");
+		using var dictionaryRequest = GeminiNanoChatClient.ToNative([new(ChatRole.User, "hello")], new ChatOptions { Tools = [dictionary] });
+		using var dictionaryTools = JsonDocument.Parse(dictionaryRequest.Options.ToolsJson!);
+		Assert.Equal("integer", dictionaryTools.RootElement[0].GetProperty("parameters").GetProperty("properties")
+			.GetProperty("values").GetProperty("additionalProperties").GetProperty("type").GetString());
+	}
+
+	public sealed record Filter(string Track);
 
 	[Theory]
 	[InlineData(false)]
@@ -529,7 +608,6 @@ public class GeminiNanoChatClientInteropTests
 			Assert.Contains(ChatModelCapability.ImageInput, status.Capabilities!);
 			Assert.Contains(ChatModelCapability.TokenUsage, status.Capabilities!);
 			Assert.DoesNotContain(ChatModelCapability.ToolCalling, status.Capabilities!);
-			Assert.DoesNotContain(ChatModelCapability.StructuredOutput, status.Capabilities!);
 		}
 	}
 

@@ -574,26 +574,15 @@ jobs:
 
       - name: Run DevFlow integration tests (GTK)
         id: tests
-        # net11 is reported but not yet blocking: the net11 GTK sample intermittently aborts in a
-        # GirCore/WebKitGTK native object-lifetime path (JSCValue toggle-ref release after
-        # navigation). net10 remains blocking. See platforms/Linux.Gtk4/README.md.
-        continue-on-error: ${{ matrix.dotnet == '11' }}
         run: >
           dbus-run-session --
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24"
           dotnet test $TEST_PROJECT
           -c Debug
-          --filter "Category!=Device&Category!=Sensors&Category!=SecureStorage"
+          --filter "Category!=Device&Category!=Sensors"
           --logger "trx;LogFileName=devflow-integration-gtk-maui-net${{ matrix.dotnet }}.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/gtk
-
-      - name: Flag non-blocking net11 failure
-        if: steps.tests.outcome == 'failure' && matrix.dotnet == '11'
-        run: |
-          echo "::warning title=GTK net11 DevFlow integration::The net11 GTK DevFlow suite failed (non-blocking known native lifetime issue). See the uploaded results and crash backtraces."
-          echo "### :warning: GTK net11 DevFlow integration failed (non-blocking)" >> "$GITHUB_STEP_SUMMARY"
-          echo "Known intermittent GirCore/WebKitGTK native lifetime crash; see platforms/Linux.Gtk4/README.md." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report GTK crash backtraces
         if: failure() || steps.tests.outcome == 'failure'

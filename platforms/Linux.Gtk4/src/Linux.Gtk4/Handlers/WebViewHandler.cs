@@ -45,14 +45,14 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 	protected override void ConnectHandler(WebKit.WebView platformView)
 	{
 		base.ConnectHandler(platformView);
-		platformView.OnLoadChanged += OnLoadChanged;
-		platformView.OnLoadFailed += OnLoadFailed;
+		GtkWebViewSignals.LoadChanged.Connect(platformView, OnLoadChanged);
+		GtkWebViewSignals.LoadFailed.Connect(platformView, OnLoadFailed);
 	}
 
 	protected override void DisconnectHandler(WebKit.WebView platformView)
 	{
-		platformView.OnLoadChanged -= OnLoadChanged;
-		platformView.OnLoadFailed -= OnLoadFailed;
+		GtkWebViewSignals.LoadChanged.Disconnect(platformView, OnLoadChanged);
+		GtkWebViewSignals.LoadFailed.Disconnect(platformView, OnLoadFailed);
 		base.DisconnectHandler(platformView);
 	}
 
@@ -161,8 +161,9 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 		}
 	}
 
-	void OnLoadChanged(WebKit.WebView sender, WebKit.WebView.LoadChangedSignalArgs args)
+	void OnLoadChanged(WebKit.WebView sender, GtkWebViewSignals.LoadChangedArgs args)
 	{
+		using var signalArgs = args;
 		UpdateNavigationState();
 
 		if (args.LoadEvent == WebKit.LoadEvent.Finished)
@@ -171,8 +172,9 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 		}
 	}
 
-	bool OnLoadFailed(WebKit.WebView sender, WebKit.WebView.LoadFailedSignalArgs args)
+	bool OnLoadFailed(WebKit.WebView sender, GtkWebViewSignals.LoadFailedArgs args)
 	{
+		using var signalArgs = args;
 		UpdateNavigationState();
 		var failedUrl = string.IsNullOrWhiteSpace(args.FailingUri) ? _lastUrl : args.FailingUri;
 		VirtualView?.Navigated(_currentNavigationEvent, failedUrl, WebNavigationResult.Failure);
