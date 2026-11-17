@@ -227,7 +227,7 @@ jobs:
       fail-fast: false
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [CollectionViewHandlerTests, GtkBlazorWebViewLifetimeTests, PickerSelectionTests, GtkSignalLifetimeTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests, WindowSizingTests, GtkTransformTests, StartupLayoutTests, ResourceImageRuntimeTests, ResourceFontRuntimeTests, ModalNavigationRuntimeTests]
+        test-class: [CollectionViewHandlerTests, GtkBlazorWebViewLifetimeTests, EntryTextTests, PickerSelectionTests, GtkSignalLifetimeTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests, WindowSizingTests, GtkTransformTests, StartupLayoutTests, ResourceImageRuntimeTests, ResourceFontRuntimeTests, ModalNavigationRuntimeTests]
         maui: ['']
         include:
           - test-class: GtkSignalLifetimeTests
