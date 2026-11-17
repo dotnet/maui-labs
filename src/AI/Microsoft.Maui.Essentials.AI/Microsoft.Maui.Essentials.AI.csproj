@@ -16,7 +16,7 @@
     <IsBindingProject>true</IsBindingProject>
     <!-- CA1416: Apple Intelligence APIs require iOS/macOS 26+ but the library supports
          older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
-    <NoWarn>$(NoWarn);CA1416;XCODE_27_0_PREVIEW</NoWarn>
+    <NoWarn>$(NoWarn);CA1416;MEDE0001;EXTEXP0019;XCODE_27_0_PREVIEW</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition="$(TargetFramework.Contains('-android'))">
     <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
@@ -25,8 +25,9 @@
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
-    <IsShipping>true</IsShipping>
-    <IsPackable>true</IsPackable>
+    <!-- Prototype only: daily extraction contracts are still experimental. -->
+    <IsShipping>false</IsShipping>
+    <IsPackable>false</IsPackable>
     <PackageId>Microsoft.Maui.Essentials.AI</PackageId>
     <!-- Keep this package always preview on its independent NuGet version line for all package builds.
          Bump the EssentialsAI version properties in eng/Versions.props for new previews. -->
@@ -51,6 +52,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DocumentExtraction.Abstractions" />
   </ItemGroup>
   <ItemGroup Condition="$(TargetFramework.Contains('-android'))">
     <PackageReference Include="Xamarin.AndroidX.Lifecycle.Process" />
@@ -117,6 +119,7 @@
   <!-- Exclude Apple-only files from non-Apple TFMs (including net11.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
     <Compile Remove="Platform\MaciOS\**\*.cs" />
+    <Compile Remove="DocumentExtraction\AppleVisionRecognizeDocumentsClient.cs" />
   </ItemGroup>
   <ItemGroup Condition="!$(TargetFramework.Contains('-android'))">
     <Compile Remove="Platform\Android\**\*.cs" />
@@ -130,6 +133,7 @@
       <SchemeName>EssentialsAI</SchemeName>
     </XcodeProject>
     <ObjcBindingApiDefinition Include="..\AppleNative\ApiDefinitions.cs" />
+    <ObjcBindingApiDefinition Include="..\AppleNative\RecognizeDocumentsRequestApiDefinitions.cs" />
     <ObjcBindingCoreSource Include="..\AppleNative\StructsAndEnums.cs" />
   </ItemGroup>
   <Import Project="..\AppleBindings.targets" />

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">
+  <rect width="1600" height="1200" fill="white"/>
+  <g fill="#111111" font-family="Helvetica, Arial, sans-serif">
+    <text x="120" y="110" font-size="62" font-weight="700">APPLICATION CHECKLIST</text>
+    <text x="120" y="205" font-size="42">Mark whether each required document is included.</text>
+  </g>
+
+  <g fill="none" stroke="#111111" stroke-width="4">
+    <rect x="110" y="285" width="1380" height="630"/>
+    <line x1="1180" y1="285" x2="1180" y2="915"/>
+    <line x1="110" y1="420" x2="1490" y2="420"/>
+    <line x1="110" y1="585" x2="1490" y2="585"/>
+    <line x1="110" y1="750" x2="1490" y2="750"/>
+  </g>
+
+  <g fill="#111111" font-family="Helvetica, Arial, sans-serif">
+    <text x="155" y="370" font-size="46" font-weight="700">Document</text>
+    <text x="1230" y="370" font-size="46" font-weight="700">Included</text>
+    <text x="155" y="525" font-size="43">&#x2022; Signed application form</text>
+    <text x="1280" y="525" font-size="43">Yes</text>
+    <text x="155" y="690" font-size="43">&#x2022; Passport copy</text>
+    <text x="1280" y="690" font-size="43">Yes</text>
+    <text x="155" y="855" font-size="43">&#x2022; Proof of address</text>
+    <text x="1280" y="855" font-size="43">No</text>
+    <text x="120" y="1050" font-size="42">Attach any missing documents before submission.</text>
+  </g>
+</svg>

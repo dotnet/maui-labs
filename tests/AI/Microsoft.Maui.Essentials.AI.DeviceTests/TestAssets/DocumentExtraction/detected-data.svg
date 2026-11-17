@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">
+  <rect width="1600" height="1200" fill="white"/>
+  <g fill="#111111" font-family="Helvetica, Arial, sans-serif">
+    <text x="120" y="115" font-size="64" font-weight="700">CONTACT AND PAYMENT</text>
+    <text x="120" y="260" font-size="42">Website: https://www.microsoft.com</text>
+    <text x="120" y="365" font-size="42">Email: travel@example.com</text>
+    <text x="120" y="470" font-size="42">Phone: +1 425 555 0100</text>
+    <text x="120" y="575" font-size="42">Office: One Microsoft Way, Redmond, WA 98052</text>
+    <text x="120" y="680" font-size="42">Meeting: August 30, 2026 at 10:30 AM</text>
+    <text x="120" y="785" font-size="42">Total amount due: $1,234.56</text>
+    <text x="120" y="930" font-size="42">Use the website or email address if assistance is required.</text>
+  </g>
+</svg>
