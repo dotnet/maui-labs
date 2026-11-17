@@ -123,11 +123,26 @@ public class GtkWebViewManager : WebViewManager
 				// WebKit API calls must be on the GTK main thread
 				GLib.Functions.IdleAdd(0, () =>
 				{
-					_webview.EvaluateJavascriptAsync(script);
+					_ = EvaluateMessageAsync(script);
 					return false;
 				});
 			}
 		}
 		catch (ChannelClosedException) { }
+	}
+
+	private async Task EvaluateMessageAsync(string script)
+	{
+		try
+		{
+			// EvaluateJavascriptAsync returns a transfer-full JSCValue. Prompt
+			// disposal keeps its toggle-ref removal on the GTK thread and before
+			// navigation can destroy the JavaScript context.
+			using var result = await _webview.EvaluateJavascriptAsync(script);
+		}
+		catch (Exception ex)
+		{
+			System.Diagnostics.Debug.WriteLine($"WebView message evaluation failed: {ex.Message}");
+		}
 	}
 }

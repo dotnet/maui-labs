@@ -120,11 +120,7 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 		if (handler.PlatformView == null || arg is not string script || string.IsNullOrWhiteSpace(script))
 			return;
 
-		_ = handler.PlatformView.EvaluateJavascriptAsync(script).ContinueWith(t =>
-		{
-			if (t.IsFaulted)
-				System.Diagnostics.Debug.WriteLine($"WebView Eval failed: {t.Exception?.InnerException?.Message}");
-		}, TaskScheduler.Default);
+		_ = handler.EvaluateAndDiscardAsync(script);
 	}
 
 	public static void MapEvaluateJavaScriptAsync(WebViewHandler handler, IWebView webView, object? arg)
@@ -143,12 +139,27 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 	{
 		try
 		{
-			var result = await PlatformView.EvaluateJavascriptAsync(request.Script);
+			// WebKit transfers ownership of the JSCValue returned by
+			// evaluate_javascript_finish. Dispose it while its JSCContext is alive
+			// instead of leaving GirCore toggle-ref cleanup to a later GC.
+			using var result = await PlatformView.EvaluateJavascriptAsync(request.Script);
 			request.SetResult(result?.ToString() ?? string.Empty);
 		}
 		catch (Exception ex)
 		{
 			request.SetException(ex);
+		}
+	}
+
+	async Task EvaluateAndDiscardAsync(string script)
+	{
+		try
+		{
+			using var result = await PlatformView.EvaluateJavascriptAsync(script);
+		}
+		catch (Exception ex)
+		{
+			System.Diagnostics.Debug.WriteLine($"WebView Eval failed: {ex.Message}");
 		}
 	}
 

@@ -225,7 +225,10 @@ public class GtkBlazorWebViewDebugService : IDisposable
                 var evaluation = _evaluateJavaScript != null ? _evaluateJavaScript(script) : DispatchOnUiAsync(async () =>
                 {
                     if (_webView == null) return null;
-                    var value = await _webView.EvaluateJavascriptAsync(script);
+                    // GirCore wraps WebKit's transfer-full JSCValue in a GObject
+                    // toggle ref. Dispose it on the GTK thread before a navigation
+                    // can tear down the value's JavaScript context.
+                    using var value = await _webView.EvaluateJavascriptAsync(script);
                     return value?.ToString();
                 });
                 return await evaluation.WaitAsync(_lifetimeToken);

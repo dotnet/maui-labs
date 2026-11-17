@@ -218,7 +218,7 @@ jobs:
           if-no-files-found: error
 
   runtime:
-    name: Native GTK runtime (${{ matrix.test-class }}${{ matrix.maui && format(', MAUI {0}', matrix.maui) || '' }})
+    name: Native GTK runtime (${{ matrix.test-class }}${{ matrix.test-framework && format(', {0}', matrix.test-framework) || '' }}${{ matrix.maui && format(', MAUI {0}', matrix.maui) || '' }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -235,6 +235,11 @@ jobs:
           - test-class: GtkWebViewSnapshotRuntimeTests
             maui: ''
             test-framework: net10.0
+            test-project: src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/Microsoft.Maui.DevFlow.Agent.Gtk.Tests.csproj
+            test-namespace: Microsoft.Maui.DevFlow.Agent.Gtk.Tests
+          - test-class: GtkWebViewSnapshotRuntimeTests
+            maui: ''
+            test-framework: net11.0
             test-project: src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/Microsoft.Maui.DevFlow.Agent.Gtk.Tests.csproj
             test-namespace: Microsoft.Maui.DevFlow.Agent.Gtk.Tests
           - test-class: WindowSizingTests
@@ -284,7 +289,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: gtk-runtime-${{ matrix.test-class }}${{ matrix.maui && format('-maui-{0}', matrix.maui) || '' }}
+          name: gtk-runtime-${{ matrix.test-class }}${{ matrix.test-framework && format('-{0}', matrix.test-framework) || '' }}${{ matrix.maui && format('-maui-{0}', matrix.maui) || '' }}
           path: artifacts/TestResults/gtk-runtime/
           if-no-files-found: error
       - name: Upload DevFlow runtime evidence
