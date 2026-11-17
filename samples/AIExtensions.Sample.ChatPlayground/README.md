@@ -53,17 +53,14 @@ input does not imply image-generation support.
 
 ### Documents
 
-Choose a PDF or image, or use a packaged sample, then select Apple Vision (iOS/Mac Catalyst 26+)
-or your Foundry Mistral deployment. Processing uses the selected provider without fallback.
+Pick a PDF or image, or a packaged sample, and choose a client: Apple Vision
+(iOS/Mac Catalyst 26+) or a configured Foundry Mistral deployment.
 
-**Extract** calls `DocumentExtractionClient` and displays content, source geometry, hierarchy and table cells.
-**Native** displays the provider's raw representation on request; **Normalized** switches back to the shared model.
-All registered clients use the same UI and execution path. The sample forwards shared options without
-cloud/local capability flags or provider-specific controls; the client validates supported options.
-
-Under `Documents/`, services run the API calls, `DocumentResultFormatter` formats output, result files hold results,
-and view-model files own selection and commands, following the other tabs' structure.
-See [Apple document extraction](../../docs/ai/apple-document-extraction.md) for API usage, platform support and mapping limitations.
+**Extract** runs the selected `DocumentExtractionClient` and shows the content,
+source geometry, hierarchy, and table cells. **Native** shows the client's raw
+output; **Normalized** switches back. Every client uses the same UI and options.
+See [Apple document extraction](../../docs/ai/apple-document-extraction.md) for
+what the Apple client maps.
 
 ## Diagnostics
 
@@ -162,8 +159,8 @@ dotnet user-secrets set "AI:DocumentDeploymentName" "<mistral-ocr-deployment>" -
 and `AI:ImageDeploymentName` enables Images and Chat's image-generation tool for
 providers that support tool calling. The endpoint and key are required only
 when at least one Azure deployment is configured.
-`AI:DocumentDeploymentName` enables Documents using the same `AI:Endpoint` and `AI:ApiKey`;
-the Foundry OCR route is derived from that resource URL. No separate document endpoint or key is needed.
+`AI:DocumentDeploymentName` enables Foundry Mistral in Documents using the same
+`AI:Endpoint` and `AI:ApiKey`.
 
 **Debug builds embed your local user secrets. Do not distribute these builds
 or commit credentials.** Azure prompts, images, and indexed text may leave the

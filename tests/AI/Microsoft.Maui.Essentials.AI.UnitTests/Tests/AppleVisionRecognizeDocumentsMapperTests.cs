@@ -217,6 +217,22 @@ public class AppleVisionRecognizeDocumentsMapperTests
 		Assert.Equal("1.Apples\n•Pears", Text(Assert.Single(result.Sections[0].Elements)));
 	}
 
+	[Fact]
+	public void AddPage_ListItemKeepsNestedTitleTableAndBarcodeText()
+	{
+		var result = Map("""
+			[{"nodes":[
+			{"path":"list","kind":"list"},
+			{"path":"item","parentPath":"list","kind":"listItem","text":"Order","itemString":"Order","markerString":"1."},
+			{"path":"title","parentPath":"item","kind":"title","text":"Summary"},
+			{"path":"table","parentPath":"item","kind":"table"},
+			{"path":"b","parentPath":"table","kind":"tableCell","text":"2","rowIndex":0,"columnIndex":1,"rowSpan":1,"columnSpan":1},
+			{"path":"a","parentPath":"table","kind":"tableCell","text":"Qty","rowIndex":0,"columnIndex":0,"rowSpan":1,"columnSpan":1},
+			{"path":"code","parentPath":"item","kind":"barcode","text":"QR content","payloadString":"QR content"}]}]
+			""");
+		Assert.Equal("1. Order\nSummary\nQty\t2\nQR content", Text(Assert.Single(result.Sections[0].Elements)));
+	}
+
 	[Theory]
 	[InlineData("""[{"transcript":"Actual transcript","nodes":[]} ]""", "Actual transcript")]
 	[InlineData("""[]""", "")]
@@ -247,8 +263,8 @@ public class AppleVisionRecognizeDocumentsMapperTests
 		Assert.Throws<InvalidDataException>(() => Map(snapshot));
 
 	[Theory]
-	[InlineData(64, false)]
-	[InlineData(65, true)]
+	[InlineData(130, false)]
+	[InlineData(131, true)]
 	public void AddPage_EnforcesTraversalDepth(int depth, bool invalid)
 	{
 		var nodes = Enumerable.Range(0, depth + 1).Select(index => new

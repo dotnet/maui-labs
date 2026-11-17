@@ -249,18 +249,15 @@ the constructor for another supported language, or wrap an existing
 
 ## Document extraction
 
-On iOS, Mac Catalyst, and macOS 26+, Apple Vision recognizes documents locally.
-This feature uses the experimental `Microsoft.Extensions.DocumentExtraction`
-and `Microsoft.Extensions.Documents` contracts. It does not require Apple
-Intelligence or a cloud deployment.
+On iOS, Mac Catalyst, and macOS 26+, `AppleVisionRecognizeDocumentsClient` extracts
+text, tables, and source geometry on-device with Apple Vision. It implements the
+experimental `Microsoft.Extensions.DocumentExtraction` client and does not require
+Apple Intelligence.
 
 | Input | Support |
 |-------|---------|
-| PDF | Each page is rendered internally with PDFKit |
-| JPEG, PNG, HEIC, TIFF | Orientation-aware image input; only the first raster frame |
-| Android and Windows | No Apple Vision extraction support |
-
-Use the extraction client when you need document structure and source geometry:
+| PDF | Each page is rendered with PDFKit |
+| JPEG, PNG, HEIC, TIFF | Orientation is honored; only the first frame is used |
 
 ```csharp
 using Microsoft.Extensions.DocumentExtraction;
@@ -275,15 +272,9 @@ foreach (var element in result.EnumerateContent().OfType<ExtractionDocumentTextE
     Console.WriteLine(((TextContent)element.Content!).Text);
 ```
 
-The result is non-disposable data; the input remains caller-owned. Source
-references retain exact polygons and coordinate frames. Tables preserve spans,
-empty anchor cells, and mixed cell content. Confidence, OCR candidates, detected
-entities, barcodes, and list-specific details remain available through explicit
-native inspection rather than fabricated normalized fields.
-
-Native representations are detached, bounded bridge snapshots, not
-live Swift objects or original response bytes; inspect them deliberately rather
-than including them automatically in logs or embeddings.
+The input stream is not disposed. Data the shared model has no place for, such as
+confidence, OCR candidates, list structure, and detected entities, is available as
+JSON through `RawRepresentation`.
 
 See the [Apple document extraction guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-document-extraction.md)
 for architecture, request settings, and fidelity limits.
