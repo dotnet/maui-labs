@@ -22,9 +22,8 @@
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
-    <!-- Prototype only: daily extraction contracts are still experimental. -->
-    <IsShipping>false</IsShipping>
-    <IsPackable>false</IsPackable>
+    <IsShipping>true</IsShipping>
+    <IsPackable>true</IsPackable>
     <PackageId>Microsoft.Maui.Essentials.AI</PackageId>
     <!-- Keep this package always preview on its independent NuGet version line for all package builds.
          Bump the EssentialsAI version properties in eng/Versions.props for new previews. -->

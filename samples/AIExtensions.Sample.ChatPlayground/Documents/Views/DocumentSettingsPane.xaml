@@ -21,12 +21,10 @@
                     </DataTemplate>
                 </BindableLayout.ItemTemplate>
             </VerticalStackLayout>
-            <Label Text="Extraction returns one completed document. Native results are inspected only on request."
-                   Style="{StaticResource MutedLabel}" />
             <VerticalStackLayout IsEnabled="{Binding IsIdle}">
                 <Label Text="Extractor name (optional)" Style="{StaticResource MutedLabel}" />
                 <Entry Text="{Binding ExtractorName}" AutomationId="DocumentExtractorNameEntry" />
-                <Label Text="Leave blank to use the client's defaults. The selected client validates supported options."
+                <Label Text="Leave blank for the client's default."
                        Style="{StaticResource MutedLabel}" />
             </VerticalStackLayout>
             <BoxView HeightRequest="1"

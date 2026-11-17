@@ -7,7 +7,8 @@ namespace Microsoft.Maui.Essentials.AI;
 internal static class AppleVisionRecognizeDocumentsMapper
 {
 	private const int MaximumNodes = 20_000;
-	private const int MaximumDepth = 64;
+	// The Swift bridge allows 64 nested containers; each adds a table/cell or list/item edge pair.
+	private const int MaximumDepth = 2 * 64 + 2;
 
 	internal static void AddPage(ExtractionDocument document, JsonElement snapshot, int pageNumber)
 	{
@@ -230,7 +231,12 @@ internal static class AppleVisionRecognizeDocumentsMapper
 				if (nested.Kind == "paragraph" && MatchesItemText(nested.Text, item) && Overlap(nested, item) >= 0.85 ||
 					IsRepeatedItemList(nested, item))
 					continue;
-				var childText = nested.Kind == "list" ? RenderList(nested) : nested.Kind == "paragraph" ? nested.Text : "";
+				var childText = nested.Kind switch
+				{
+					"list" => RenderList(nested),
+					"table" => RenderTable(nested),
+					_ => nested.Text,
+				};
 				if (childText.Length == 0)
 					continue;
 				text += "\n" + childText;
@@ -238,6 +244,12 @@ internal static class AppleVisionRecognizeDocumentsMapper
 			return text;
 		}));
 	}
+
+	private static string RenderTable(Node table) =>
+		string.Join("\n", table.Children.Where(child => child.Kind == "tableCell")
+			.GroupBy(cell => Integer(cell.Json, "rowIndex"))
+			.OrderBy(row => row.Key)
+			.Select(row => string.Join("\t", row.OrderBy(cell => Integer(cell.Json, "columnIndex")).Select(cell => cell.Text))));
 
 	private static bool IsRepeatedItemList(Node node, Node item) =>
 		node.Kind == "list" && node.Children.Count > 0 && node.Children.All(child =>
