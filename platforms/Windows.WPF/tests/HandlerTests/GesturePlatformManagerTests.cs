@@ -37,9 +37,13 @@ public class GesturePlatformManagerTests
 			using var manager = new WPFGesturePlatformManagerFactory().CreateGesturePlatformManager(handler);
 			platformView.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseLeaveEvent });
 
-			var exit = Assert.Single(exits);
-			Assert.NotNull(exit.GetPosition(null));
-			Assert.Null(exit.GetPosition(other));
+			// MAUI's own GestureManager may also attach a platform manager to the view.
+			Assert.NotEmpty(exits);
+			Assert.All(exits, exit =>
+			{
+				Assert.NotNull(exit.GetPosition(null));
+				Assert.Null(exit.GetPosition(other));
+			});
 		});
 	}
 }
