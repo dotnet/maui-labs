@@ -492,13 +492,27 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		if (semantics == null)
 		{
 			widget.ResetProperty(Gtk.AccessibleProperty.Description);
-			widget.ResetProperty(Gtk.AccessibleProperty.HelpText);
+			if (GtkRuntime.SupportsAccessibleHelpText)
+				widget.ResetProperty(Gtk.AccessibleProperty.HelpText);
 			widget.SetHeading(false);
 			return;
 		}
 
-		widget.SetAccessibleText(Gtk.AccessibleProperty.Description, semantics.Description);
-		widget.SetAccessibleText(Gtk.AccessibleProperty.HelpText, semantics.Hint);
+		if (GtkRuntime.SupportsAccessibleHelpText)
+		{
+			widget.SetAccessibleText(Gtk.AccessibleProperty.Description, semantics.Description);
+			widget.SetAccessibleText(Gtk.AccessibleProperty.HelpText, semantics.Hint);
+		}
+		else
+		{
+			// GtkAccessibleProperty.HelpText was added in GTK 4.16. Preserve the
+			// hint for the supported 4.12/4.14 runtimes without passing enum value
+			// 19 to an older GTK, which emits gtk_accessible_attribute_set_remove.
+			var description = string.Join(" — ",
+				new[] { semantics.Description, semantics.Hint }
+					.Where(value => !string.IsNullOrWhiteSpace(value)));
+			widget.SetAccessibleText(Gtk.AccessibleProperty.Description, description);
+		}
 		widget.SetHeading(semantics.HeadingLevel != SemanticHeadingLevel.None);
 
 		var tooltipParts = new List<string>();
