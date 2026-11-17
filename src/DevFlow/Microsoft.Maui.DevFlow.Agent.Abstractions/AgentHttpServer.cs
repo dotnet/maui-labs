@@ -61,12 +61,14 @@ public class AgentHttpServer : IDisposable
         Func<HttpRequest, Task<HttpResponse>> handler,
         bool requiresMutationLease,
         Func<HttpRequest, bool>? mutationLeaseExemption,
-        bool serializeMutation)
+        bool serializeMutation,
+        Func<HttpRequest, Task>? beforeMutationAdmission = null)
         => _postRoutes[path.TrimEnd('/')] = new RouteHandler(
             handler,
             requiresMutationLease,
             mutationLeaseExemption,
-            serializeMutation);
+            serializeMutation,
+            beforeMutationAdmission);
 
     public void MapPut(string path, Func<HttpRequest, Task<HttpResponse>> handler, bool requiresMutationLease = true)
         => _putRoutes[path.TrimEnd('/')] = new RouteHandler(handler, requiresMutationLease);
@@ -428,6 +430,17 @@ public class AgentHttpServer : IDisposable
         var requiresMutationLease = route.RequiresMutationLease &&
             !(route.MutationLeaseExemption?.Invoke(request) ?? false);
 
+        if (route.BeforeMutationAdmission is not null)
+        {
+            if (await ValidateMutationLeaseAsync(request, requiresMutationLease).ConfigureAwait(false)
+                is { } leaseFailure)
+            {
+                return leaseFailure;
+            }
+
+            await route.BeforeMutationAdmission(request).ConfigureAwait(false);
+        }
+
         // Most mutations are admitted one at a time. A route may opt out while keeping lease
         // validation when it exists to cancel the mutation currently holding this gate.
         // Lease control (/api/v1/agent/lease) must
@@ -472,25 +485,9 @@ public class AgentHttpServer : IDisposable
         HttpRequest request,
         bool requiresMutationLease)
     {
-        if (requiresMutationLease && MutationLeaseValidator is not null)
-        {
-            var status = await MutationLeaseValidator(request).ConfigureAwait(false);
-            request.MutationLease = status;
-            if (!status.Allowed)
-            {
-                return HttpResponse.Error(
-                    "Another DevFlow session is driving this app. Take control before mutating it.",
-                    statusCode: 409,
-                    reason: "lease",
-                    details: new Dictionary<string, object?>
-                    {
-                        ["HolderKind"] = status.HolderKind,
-                        ["Label"] = status.Label,
-                        ["ExpiresInMs"] = status.ExpiresInMs,
-                        ["Authority"] = status.Authority
-                    }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value));
-            }
-        }
+        if (await ValidateMutationLeaseAsync(request, requiresMutationLease).ConfigureAwait(false)
+            is { } leaseFailure)
+            return leaseFailure;
 
         if (requiresMutationLease
             && MutationAdmissionValidator?.Invoke(request) is { } admissionFailure)
@@ -507,6 +504,31 @@ public class AgentHttpServer : IDisposable
             catch { }
         }
         return response;
+    }
+
+    private async Task<HttpResponse?> ValidateMutationLeaseAsync(
+        HttpRequest request,
+        bool requiresMutationLease)
+    {
+        if (!requiresMutationLease || MutationLeaseValidator is null)
+            return null;
+
+        var status = await MutationLeaseValidator(request).ConfigureAwait(false);
+        request.MutationLease = status;
+        if (status.Allowed)
+            return null;
+
+        return HttpResponse.Error(
+            "Another DevFlow session is driving this app. Take control before mutating it.",
+            statusCode: 409,
+            reason: "lease",
+            details: new Dictionary<string, object?>
+            {
+                ["HolderKind"] = status.HolderKind,
+                ["Label"] = status.Label,
+                ["ExpiresInMs"] = status.ExpiresInMs,
+                ["Authority"] = status.Authority
+            }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value));
     }
 
     private static async Task WriteResponseAsync(
@@ -569,7 +591,8 @@ public class AgentHttpServer : IDisposable
         Func<HttpRequest, Task<HttpResponse>> Handler,
         bool RequiresMutationLease,
         Func<HttpRequest, bool>? MutationLeaseExemption = null,
-        bool SerializeMutation = true);
+        bool SerializeMutation = true,
+        Func<HttpRequest, Task>? BeforeMutationAdmission = null);
 
     private sealed class RequestBodyTooLargeException : Exception;
 

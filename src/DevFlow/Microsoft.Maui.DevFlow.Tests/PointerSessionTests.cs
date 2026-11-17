@@ -121,6 +121,28 @@ public class PointerSessionTests
             });
     }
 
+    [Theory]
+    [InlineData("{\"sequence\":1,\"samples\":null}")]
+    [InlineData("{\"sequence\":1,\"samples\":[null]}")]
+    public async Task PointerSession_NullMoveSamples_AreRejectedWithoutEndingSession(string body)
+    {
+        await WithServiceAsync(async (service, client) =>
+        {
+            Assert.True((await client.StartPointerSessionAsync(Start("null-samples"))).Success);
+
+            using var http = new HttpClient();
+            using var response = await http.PostAsync(
+                $"{client.BaseUrl}/api/v1/ui/actions/pointer-sessions/null-samples/move",
+                new StringContent(body, System.Text.Encoding.UTF8, "application/json"));
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Contains("invalid-request", responseBody);
+            Assert.True((await client.CancelPointerSessionAsync("null-samples")).Success);
+            Assert.Equal(["start", "cancel:client-cancel"], service.Events);
+        });
+    }
+
     [Fact]
     public async Task PointerSession_TimestampsMustIncreaseWithinCoalescedBatch()
     {
@@ -221,6 +243,29 @@ public class PointerSessionTests
     }
 
     [Fact]
+    public async Task PointerSession_NavigationPreemptsInFlightMove()
+    {
+        await WithServiceAsync(async (service, client) =>
+        {
+            service.BlockMoves = true;
+            Assert.True((await client.StartPointerSessionAsync(Start("navigation-race"))).Success);
+
+            var moveTask = client.MovePointerSessionAsync(
+                "navigation-race",
+                1,
+                [Sample(10, 10, 10)]);
+            await service.MoveStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.True(await client.BackAsync().WaitAsync(TimeSpan.FromSeconds(5)));
+            var move = await moveTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.False(move.Success);
+            Assert.Equal(1, service.BackCalls);
+            Assert.Single(service.Events, value => value == "cancel:pointer-session-cancelled");
+        });
+    }
+
+    [Fact]
     public async Task PointerSession_CancelPreemptsInFlightMove_AndEmitsOneTerminalCancel()
     {
         await WithServiceAsync(async (service, client) =>
@@ -302,6 +347,7 @@ public class PointerSessionTests
             Assert.False(start.Success);
             Assert.Equal("pointer-start-cancelled", start.Reason);
             Assert.Single(service.Events, value => value == "cancel:pointer-start-cancelled");
+            Assert.Equal(1, service.PointerMutationInvalidations);
         });
     }
 
@@ -547,6 +593,8 @@ public class PointerSessionTests
         public bool RejectRepeatedPrepare { get; set; }
         public int PrepareStartCalls { get; private set; }
         public int BackCalls { get; private set; }
+        public int PointerMutationInvalidations => Volatile.Read(ref _pointerMutationInvalidations);
+        private int _pointerMutationInvalidations;
 
         protected override PointerStreamSupport GetPointerStreamSupport()
             => new(
@@ -633,6 +681,9 @@ public class PointerSessionTests
             Cancelled.TrySetResult(reason);
             return Task.FromResult(PointerSessionBackendResult.Applied());
         }
+
+        protected override void InvalidatePointerSessionMutationState()
+            => Interlocked.Increment(ref _pointerMutationInvalidations);
 
         protected override async Task<HttpResponse> HandleBack(HttpRequest request)
         {

@@ -385,10 +385,22 @@ public partial class DevFlowAgentService
         _server.MapPost("/api/v1/ui/actions/fill", request => ExecuteUiMutationAsync(request, HandleFill));
         _server.MapPost("/api/v1/ui/actions/clear", request => ExecuteUiMutationAsync(request, HandleClear));
         _server.MapPost("/api/v1/ui/actions/focus", request => ExecuteUiMutationAsync(request, HandleFocus));
-        _server.MapPost("/api/v1/ui/actions/navigate", request => ExecutePointerTerminatingMutationAsync(request, HandleNavigate));
+        _server.MapPost(
+            "/api/v1/ui/actions/navigate",
+            request => ExecuteUiMutationAsync(request, HandleNavigate),
+            requiresMutationLease: true,
+            mutationLeaseExemption: null,
+            serializeMutation: true,
+            beforeMutationAdmission: CancelPointerBeforeNavigationAsync);
         _server.MapPost("/api/v1/ui/actions/resize", request => ExecuteUiMutationAsync(request, HandleResize));
         _server.MapPost("/api/v1/ui/actions/scroll", request => ExecuteUiMutationAsync(request, HandleScroll));
-        _server.MapPost("/api/v1/ui/actions/back", request => ExecutePointerTerminatingMutationAsync(request, HandleBack));
+        _server.MapPost(
+            "/api/v1/ui/actions/back",
+            request => ExecuteUiMutationAsync(request, HandleBack),
+            requiresMutationLease: true,
+            mutationLeaseExemption: null,
+            serializeMutation: true,
+            beforeMutationAdmission: CancelPointerBeforeNavigationAsync);
         _server.MapPost("/api/v1/ui/actions/key", request => ExecuteUiMutationAsync(request, HandleKey));
         _server.MapPost("/api/v1/ui/actions/gesture", request => ExecuteUiMutationAsync(request, HandleGesture));
         _server.MapPost("/api/v1/ui/actions/pointer-sessions", request => ExecuteUiMutationAsync(request, HandlePointerSessionStart));
@@ -410,7 +422,13 @@ public partial class DevFlowAgentService
         _server.MapGet("/api/v1/webview/source", HandleCdpSource);
         _server.MapGet("/api/v1/webview/dom", HandleWebViewDom);
         _server.MapPost("/api/v1/webview/dom/query", HandleWebViewDomQuery, requiresMutationLease: false);
-        _server.MapPost("/api/v1/webview/navigate", request => ExecutePointerTerminatingMutationAsync(request, HandleWebViewNavigate));
+        _server.MapPost(
+            "/api/v1/webview/navigate",
+            request => ExecuteUiMutationAsync(request, HandleWebViewNavigate),
+            requiresMutationLease: true,
+            mutationLeaseExemption: null,
+            serializeMutation: true,
+            beforeMutationAdmission: CancelPointerBeforeNavigationAsync);
         _server.MapPost("/api/v1/webview/input/click", request => ExecuteUiMutationAsync(request, HandleWebViewInputClick));
         _server.MapPost("/api/v1/webview/input/fill", request => ExecuteUiMutationAsync(request, HandleWebViewInputFill));
         _server.MapPost("/api/v1/webview/input/text", request => ExecuteUiMutationAsync(request, HandleWebViewInputText));

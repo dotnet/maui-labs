@@ -500,6 +500,8 @@ public partial class DevFlowAgentService
                 catch { }
                 try { DisposePointerSessionBackendState(backend.State); }
                 catch { }
+                try { InvalidatePointerSessionMutationState(); }
+                catch { }
                 sessionCancellation.Dispose();
                 return PointerError(
                     body.SessionId!,
@@ -541,7 +543,9 @@ public partial class DevFlowAgentService
         }
         if (body is null)
             return PointerError(sessionId, "A pointer move body is required.", 400, "invalid-request");
-        if (body.Samples.Count > PointerMaxSamplesPerMove)
+        if (body.Samples is not { } samples || samples.Any(static sample => sample is null))
+            return PointerError(sessionId, "Pointer move samples must be a non-null array.", 400, "invalid-request");
+        if (samples.Count > PointerMaxSamplesPerMove)
         {
             return PointerError(
                 sessionId,
@@ -566,7 +570,7 @@ public partial class DevFlowAgentService
                 return sequenceResponse;
 
             var previousElapsedMs = active.LastElapsedMs;
-            foreach (var sample in body.Samples)
+            foreach (var sample in samples)
             {
                 if (ValidateSample(sample.X, sample.Y, sample.ElapsedMs) is { } sampleError)
                 {
@@ -837,13 +841,8 @@ public partial class DevFlowAgentService
             or "/api/v1/ui/actions/back"
             or "/api/v1/webview/navigate";
 
-    private async Task<HttpResponse> ExecutePointerTerminatingMutationAsync(
-        HttpRequest request,
-        Func<HttpRequest, Task<HttpResponse>> handler)
-    {
-        await CancelActivePointerSessionAsync("navigation").ConfigureAwait(false);
-        return await ExecuteUiMutationAsync(request, handler).ConfigureAwait(false);
-    }
+    private Task CancelPointerBeforeNavigationAsync(HttpRequest _)
+        => CancelActivePointerSessionAsync("navigation");
 
     private PointerSessionState? GetActivePointerSession(string sessionId)
     {
