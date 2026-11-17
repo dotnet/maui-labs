@@ -1,3 +1,4 @@
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using System.Text.Encodings.Web;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Components;
@@ -135,10 +136,7 @@ public class GtkWebViewManager : WebViewManager
 	{
 		try
 		{
-			// EvaluateJavascriptAsync returns a transfer-full JSCValue. Prompt
-			// disposal keeps its toggle-ref removal on the GTK thread and before
-			// navigation can destroy the JavaScript context.
-			using var result = await _webview.EvaluateJavascriptAsync(script);
+			await _webview.RunJavaScriptAsync(script);
 		}
 		catch (Exception ex)
 		{
