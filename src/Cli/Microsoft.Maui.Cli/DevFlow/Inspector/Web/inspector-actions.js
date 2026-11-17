@@ -1,6 +1,5 @@
 import {
   CoordinateSpace,
-  inspectorCssToAppLogical,
   screenshotPixelToAppLogical,
   windowLogicalToAppLogical,
 } from './inspector-frame.js';
@@ -278,7 +277,6 @@ export function createActionOverlayController({
       case CoordinateSpace.screenshotPixel:
         return screenshotPixelToAppLogical(raw, frame);
       case CoordinateSpace.inspectorCss:
-        return inspectorCssToAppLogical(raw);
       case CoordinateSpace.appLogical:
       case undefined:
       case null:
