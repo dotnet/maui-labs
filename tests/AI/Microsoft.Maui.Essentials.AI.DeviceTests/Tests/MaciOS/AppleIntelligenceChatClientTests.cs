@@ -253,6 +253,9 @@ public class AppleIntelligenceChatClientJsonSchemaTests : ChatClientJsonSchemaTe
 {
 	protected override bool? RequiresExplicitJsonSchema => true;
 	protected override bool StreamsStructuredOutputIncrementally => true;
+	// Foundation Models rejects schemas that allow null before OS 26.4.
+	protected override bool SupportsNullableSchemaTypes =>
+		OperatingSystem.IsIOSVersionAtLeast(26, 4) || OperatingSystem.IsMacCatalystVersionAtLeast(26, 4);
 
 	// Foundation Models reports usage starting in OS 27.
 	protected override bool IsUsageAvailable =>

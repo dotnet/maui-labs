@@ -127,6 +127,8 @@ public class GeminiNanoChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase
 	protected override IReadOnlyList<string?> StructuredOutputModelIds => ["gemini-nano-full", GeminiNanoNativeFunctionCallingTests.ToolModelId];
 	protected override bool SupportsReasoningOutput => true;
 	protected override string? ReasoningModelId => GeminiNanoNativeFunctionCallingTests.ToolModelId;
+	// Thinking spends output tokens before the answer, so it needs more than the baseline.
+	protected override int? ReasoningMaxOutputTokens => 2048;
 	// AICore constrained decoding accepts 20 nested object levels.
 	protected override int StructuredSchemaNestingDepth => 20;
 	protected override bool StreamsStructuredOutputIncrementally => true;

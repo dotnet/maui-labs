@@ -81,7 +81,10 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
                     require(key == "\$ref" || key in annotations) { "$path: unsupported reference keyword '$key'." }
                 }
                 var target: Any = document
-                reference.removePrefix("#").split("/").filter { it.isNotEmpty() }.forEach { token ->
+                // A URI fragment holding a JSON pointer: percent-decode it, then split after the leading "/".
+                val pointer = java.net.URLDecoder.decode(reference.removePrefix("#").replace("+", "%2B"), "UTF-8")
+                val tokens = if (pointer.isEmpty()) emptyList() else pointer.removePrefix("/").split("/")
+                tokens.forEach { token ->
                     target = (target as? JSONObject)?.opt(token.replace("~1", "/").replace("~0", "~"))
                         ?: throw IllegalArgumentException("$path: invalid schema reference '$reference'.")
                 }

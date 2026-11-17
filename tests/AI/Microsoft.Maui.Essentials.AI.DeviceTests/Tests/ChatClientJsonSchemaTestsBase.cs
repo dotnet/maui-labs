@@ -23,6 +23,10 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	// True when ReasoningOutput.Full can be combined with a JSON schema on ReasoningModelId.
 	protected virtual bool SupportsReasoningOutput => false;
 	protected virtual string? ReasoningModelId => null;
+	// Output budget for reasoning scenarios; thinking spends tokens before the answer.
+	protected virtual int? ReasoningMaxOutputTokens => null;
+	// False when the provider rejects schemas whose type allows null (e.g. "type": ["string", "null"]).
+	protected virtual bool SupportsNullableSchemaTypes => true;
 	// False when the model may skip reasoning or return empty summaries for simple prompts.
 	protected virtual bool ReasoningContentIsGuaranteed => SupportsReasoningOutput;
 	// Mirrors ChatClientUsageTestsBase: false asserts that structured responses report no usage.
@@ -46,7 +50,10 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	{
 		var options = new ChatOptions { ModelId = modelId, MaxOutputTokens = maxOutputTokens, ResponseFormat = responseFormat };
 		if (SupportsBaselineSamplingOptions)
+		{
 			options.Temperature = 0;
+			options.MaxOutputTokens ??= BaselineMaxOutputTokens;
+		}
 		return options;
 	}
 
@@ -719,9 +726,14 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 				value = value.GetProperty($"level{level}");
 			Assert.Contains("earth", value.GetString(), StringComparison.OrdinalIgnoreCase);
 
-			var arrayResponse = await client.GetResponseAsync([new(ChatRole.User, "List the three primary colors of light.")],
-				CreateStructuredOptions(modelId, ChatResponseFormat.ForJsonSchema(arraySchema.RootElement), maxOutputTokens: 512),
-				timeout.Token);
+			ChatMessage[] colorPrompt = [new(ChatRole.User, "List the three primary colors of light.")];
+			var arrayOptions = CreateStructuredOptions(modelId, ChatResponseFormat.ForJsonSchema(arraySchema.RootElement), maxOutputTokens: 512);
+			if (!SupportsNullableSchemaTypes)
+			{
+				await Assert.ThrowsAnyAsync<Exception>(() => client.GetResponseAsync(colorPrompt, arrayOptions, timeout.Token));
+				continue;
+			}
+			var arrayResponse = await client.GetResponseAsync(colorPrompt, arrayOptions, timeout.Token);
 			Assert.Equal(3, JsonDocument.Parse(arrayResponse.Text).RootElement.GetProperty("colors").GetArrayLength());
 		}
 	}
@@ -737,7 +749,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 
 		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
 		using var client = new T();
-		var options = CreateStructuredOptions(ReasoningModelId, ChatResponseFormat.ForJsonSchema<Person>(JsonSerializerOptions.Web));
+		var options = CreateStructuredOptions(ReasoningModelId, ChatResponseFormat.ForJsonSchema<Person>(JsonSerializerOptions.Web),
+			maxOutputTokens: ReasoningMaxOutputTokens);
 		options.Reasoning = new() { Output = ReasoningOutput.Full };
 		var response = await GetResponseAsync(client,
 			[new(ChatRole.User, "Extract the person: Alice is 30 years old and lives in Oslo.")], options, streaming, timeout.Token);

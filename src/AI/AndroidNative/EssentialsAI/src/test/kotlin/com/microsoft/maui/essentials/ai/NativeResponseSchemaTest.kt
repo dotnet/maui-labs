@@ -105,6 +105,15 @@ class NativeResponseSchemaTest {
         assertEquals("first", native.getJSONObject("a").getString("description"))
         assertTrue(native.getJSONObject("b").getJSONObject("properties").has("x"))
 
+        // Empty names, percent escapes and literal plus signs follow JSON pointer and URI fragment rules.
+        val names = """{"type":"object","${'$'}defs":{"":{"type":"string"},"a b":{"type":"integer"},"a+b":{"type":"boolean"}},
+            "properties":{"e":{"${'$'}ref":"#/${'$'}defs/"},"s":{"${'$'}ref":"#/${'$'}defs/a%20b"},"p":{"${'$'}ref":"#/${'$'}defs/a+b"}},"required":["e","s","p"]}"""
+        val named = native(names).getJSONObject("properties")
+        assertEquals(native("""{"type":"object","properties":{"v":{"type":"string"}}}""")
+            .getJSONObject("properties").getJSONObject("v").get("type"), named.getJSONObject("e").get("type"))
+        assertNotEquals(named.getJSONObject("e").get("type"), named.getJSONObject("s").get("type"))
+        assertNotEquals(named.getJSONObject("s").get("type"), named.getJSONObject("p").get("type"))
+
         val recursive = """{"type":"object","properties":{"next":{"${'$'}ref":"#"}}}"""
         assertTrue(assertThrows(IllegalArgumentException::class.java) { NativeResponseSchema.parse(recursive) }
             .message!!.contains("recursive"))
