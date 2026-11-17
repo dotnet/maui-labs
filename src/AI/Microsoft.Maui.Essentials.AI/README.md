@@ -79,7 +79,10 @@ if (status.Availability == ChatModelAvailability.NotReady)
 
 ```csharp
 #if ANDROID
-builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
+if (OperatingSystem.IsAndroidVersionAtLeast(26))
+{
+    builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
+}
 #endif
 ```
 
