@@ -1,4 +1,3 @@
-using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Components.WebView.Maui;
@@ -226,7 +225,11 @@ public class GtkBlazorWebViewDebugService : IDisposable
                 var evaluation = _evaluateJavaScript != null ? _evaluateJavaScript(script) : DispatchOnUiAsync(async () =>
                 {
                     if (_webView == null) return null;
-                    return await _webView.EvaluateJavaScriptToStringAsync(script);
+                    // GirCore wraps WebKit's transfer-full JSCValue in a GObject
+                    // toggle ref. Dispose it on the GTK thread before a navigation
+                    // can tear down the value's JavaScript context.
+                    using var value = await _webView.EvaluateJavascriptAsync(script);
+                    return value?.ToString();
                 });
                 return await evaluation.WaitAsync(_lifetimeToken);
             }

@@ -1,4 +1,3 @@
-using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using Microsoft.Maui;
 using WebKit;
 
@@ -140,8 +139,11 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 	{
 		try
 		{
-			var result = await PlatformView.EvaluateJavaScriptToStringAsync(request.Script);
-			request.SetResult(result ?? string.Empty);
+			// WebKit transfers ownership of the JSCValue returned by
+			// evaluate_javascript_finish. Dispose it while its JSCContext is alive
+			// instead of leaving GirCore toggle-ref cleanup to a later GC.
+			using var result = await PlatformView.EvaluateJavascriptAsync(request.Script);
+			request.SetResult(result?.ToString() ?? string.Empty);
 		}
 		catch (Exception ex)
 		{
@@ -153,7 +155,7 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 	{
 		try
 		{
-			await PlatformView.RunJavaScriptAsync(script);
+			using var result = await PlatformView.EvaluateJavascriptAsync(script);
 		}
 		catch (Exception ex)
 		{
