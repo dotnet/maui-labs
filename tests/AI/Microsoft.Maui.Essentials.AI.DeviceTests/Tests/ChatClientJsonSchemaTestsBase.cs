@@ -19,7 +19,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	protected virtual bool SupportsBaselineSamplingOptions => false;
 	protected virtual int? BaselineMaxOutputTokens => null;
 	// Models (null = the client default) that each live schema-shape scenario runs against.
-	protected virtual IReadOnlyList<string?> StructuredOutputModelIds => [null];
+	protected virtual IReadOnlyList<string?> StructuredOutputModelIds => new string?[] { null };
 	// True when ReasoningOutput.Full can be combined with a JSON schema on ReasoningModelId.
 	protected virtual bool SupportsReasoningOutput => false;
 	protected virtual string? ReasoningModelId => null;
@@ -609,7 +609,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 			var options = CreateStructuredOptions(modelId, ChatResponseFormat.ForJsonSchema<Continents>());
 			List<ChatResponseUpdate> updates = [];
 			await foreach (var update in client.GetStreamingResponseAsync(
-				[new(ChatRole.User, "List the names of the seven continents.")], options, timeout.Token))
+				new ChatMessage[] { new(ChatRole.User, "List the names of the seven continents.") }, options, timeout.Token))
 				updates.Add(update);
 			var text = string.Concat(updates.Select(update => update.Text));
 			var textUpdates = updates.Count(update => update.Text.Length > 0);
@@ -642,20 +642,20 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 			]);
 
 			var summaries = await client.GetResponseAsync<string[]>(
-			[
+			new ChatMessage[] {
 				new(ChatRole.System, "For each of the following texts, write a summary text with no more than 24 words."),
 				chunks,
-			], options, cancellationToken: timeout.Token);
+			}, options, cancellationToken: timeout.Token);
 			Assert.NotEmpty(summaries.Result);
 			Assert.All(summaries.Result, summary => Assert.False(string.IsNullOrWhiteSpace(summary)));
 
 			var keywords = await client.GetResponseAsync<string[][]>(
-			[
+			new ChatMessage[] {
 				new(ChatRole.System, "You are a keyword extraction expert. For each of the following texts, extract up to 3 most relevant keywords. " +
 					"Focus on extracting keywords from the following predefined list: AI, Cloud, Data, Mobile, Web, Security. " +
 					"Exclude keywords with confidence score below 0.7."),
 				chunks,
-			], options, cancellationToken: timeout.Token);
+			}, options, cancellationToken: timeout.Token);
 			Assert.NotEmpty(keywords.Result);
 			Assert.All(keywords.Result, Assert.NotNull);
 			Assert.Contains(keywords.Result.SelectMany(values => values),
@@ -718,7 +718,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		foreach (var modelId in StructuredOutputModelIds)
 		{
 			using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
-			var deepResponse = await client.GetResponseAsync([new(ChatRole.User, "Which planet do we live on?")],
+			var deepResponse = await client.GetResponseAsync(new ChatMessage[] { new(ChatRole.User, "Which planet do we live on?") },
 				CreateStructuredOptions(modelId, ChatResponseFormat.ForJsonSchema(deepSchema.RootElement), maxOutputTokens: 512),
 				timeout.Token);
 			var value = JsonDocument.Parse(deepResponse.Text).RootElement;
@@ -804,13 +804,13 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		using var cancelled = new CancellationTokenSource();
 		cancelled.Cancel();
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetResponseAsync<Reply>(
-			[new(ChatRole.User, "Return hello.")], cancellationToken: cancelled.Token));
+			new ChatMessage[] { new(ChatRole.User, "Return hello.") }, cancellationToken: cancelled.Token));
 
 		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
 		var first = client.GetResponseAsync<Reply>(
-			[new(ChatRole.User, "Return exactly hello in the answer field.")], cancellationToken: timeout.Token);
+			new ChatMessage[] { new(ChatRole.User, "Return exactly hello in the answer field.") }, cancellationToken: timeout.Token);
 		var second = client.GetResponseAsync<WeatherResponse>(
-			[new(ChatRole.User, "Return location Seattle, temperature 72, and condition sunny.")], cancellationToken: timeout.Token);
+			new ChatMessage[] { new(ChatRole.User, "Return location Seattle, temperature 72, and condition sunny.") }, cancellationToken: timeout.Token);
 		Assert.Equal("hello", (await first).Result.Answer, ignoreCase: true);
 		var weather = (await second).Result;
 		Assert.Equal("Seattle", weather.Location, ignoreCase: true);
@@ -827,11 +827,11 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		using var client = new T();
 		using var cancelled = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetResponseAsync<Reply>(
-			[new(ChatRole.User, "Write a long answer about every country in Europe.")],
+			new ChatMessage[] { new(ChatRole.User, "Write a long answer about every country in Europe.") },
 			cancellationToken: cancelled.Token));
 		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
 		var next = await client.GetResponseAsync<Reply>(
-			[new(ChatRole.User, "Return exactly hello in the answer field.")],
+			new ChatMessage[] { new(ChatRole.User, "Return exactly hello in the answer field.") },
 			cancellationToken: timeout.Token);
 		Assert.Equal("hello", next.Result.Answer, ignoreCase: true);
 	}
