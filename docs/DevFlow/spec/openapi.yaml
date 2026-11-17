@@ -1192,6 +1192,8 @@ paths:
                   $ref: "./schemas/actions.json#/$defs/CaptureEpoch"
                 registryGeneration:
                   $ref: "./schemas/actions.json#/$defs/RegistryGeneration"
+                correlation:
+                  $ref: "./schemas/frame.json#/$defs/ActionCorrelation"
       responses:
         "200":
           description: The new property value after setting.

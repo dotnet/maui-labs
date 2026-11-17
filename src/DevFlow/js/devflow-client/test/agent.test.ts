@@ -49,3 +49,35 @@ test("getProperty parse: value → result → [name] → raw string fallbacks", 
   assert.equal(p({ other: 1 }), null);
   assert.equal(p(null), null);
 });
+
+test("action builders preserve optional frame correlation", () => {
+  const correlation = {
+    actionId: "action-1",
+    source: "inspector" as const,
+    streamId: "stream-1",
+    frameId: "frame-7",
+    frameRevision: 7,
+    coordinateSpace: "appLogical" as const,
+  };
+
+  assert.deepEqual(requests.tapElement("element-1", correlation).body, {
+    elementId: "element-1",
+    correlation,
+  });
+  assert.deepEqual(requests.scroll({ elementId: "element-1", deltaY: 10, correlation }).body, {
+    deltaX: 0,
+    deltaY: 10,
+    animated: false,
+    elementId: "element-1",
+    correlation,
+  });
+  assert.deepEqual(requests.gesture({
+    points: [{ x: 0, y: 0 }, { x: 3, y: 4 }],
+    correlation,
+  }).body, {
+    type: "swipe",
+    direction: "down",
+    distance: 5,
+    correlation,
+  });
+});
