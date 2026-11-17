@@ -169,6 +169,6 @@ Only the driver backend should reach for `xdotool` or `ydotool`.
 
 ### WebKitGTK CDP Issues
 
-- WebKitGTK JS evaluation uses the backend's `EvaluateJavaScriptToStringAsync`, which releases the native result on the GTK thread
+- WebKitGTK uses `EvaluateJavascriptAsync` for JS evaluation
 - The same two-eval CDP pattern (send + poll) applies as other platforms
 - Check that `chobitsu.js` is properly loaded in the WebView
