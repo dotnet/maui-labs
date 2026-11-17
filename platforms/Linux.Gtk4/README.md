@@ -626,6 +626,16 @@ callback. Native tests still deterministically dispose GObject wrappers on the G
 thread and run target frameworks in separate test hosts to catch future lifetime
 regressions without sharing GTK global state.
 
+**Known issue (net11 DevFlow integration):** the `DevFlow Integration Tests / gtk (net11)` lane
+intermittently aborts the net11 GTK sample after its WebView tests. Crash reports show GirCore's
+queued toggle-ref removal (`GLib.Internal.SourceFuncAsyncHandler` on the main loop) reaching a
+WebKit/JavaScriptCore object that is already gone (`g_object_remove_toggle_ref: assertion
+'G_IS_OBJECT (object)' failed`, SIGSEGV in `libjavascriptcoregtk`). Evaluation results and Blazor
+script-message `JSCValue`s are released deterministically on the GTK thread, which reduces but
+has not eliminated the crash. The net10 lane is blocking; the net11 lane runs on every PR,
+uploads results and crash backtraces, and raises a warning instead of failing the check until the
+remaining lifetime path is fixed.
+
 The transform regression creates a real GTK window and repeatedly scales and
 rotates a button at origin, off-origin, translated, and translation-cancelled
 positions. Forced finalization detects native point double frees; coordinate
