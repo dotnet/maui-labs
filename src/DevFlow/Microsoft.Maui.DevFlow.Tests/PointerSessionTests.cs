@@ -93,7 +93,7 @@ public class PointerSessionTests
             Assert.Single(
                 service.Events,
                 value => value == (operation == "move" ? "move:1" : "end"));
-            Assert.Equal(1, service.InvalidationCount);
+            Assert.Equal(1, service.PointerMutationInvalidations);
         });
     }
 
@@ -470,7 +470,7 @@ public class PointerSessionTests
             Assert.False(move.Success);
             Assert.Equal("cancelled", cancel.State);
             Assert.Single(service.Events, value => value == "cancel:pointer-session-cancelled");
-            Assert.Equal(1, service.InvalidationCount);
+            Assert.Equal(1, service.PointerMutationInvalidations);
             var cancelRetry = await client.CancelPointerSessionAsync("race", "pointercancel");
             Assert.Equal(200, cancelRetry.StatusCode);
             using var completed = await ReceiveUiEventAsync(
@@ -483,7 +483,7 @@ public class PointerSessionTests
             Assert.Equal(
                 "pointer-session-cancelled",
                 completedData.GetProperty("reason").GetString());
-            Assert.Equal(1, service.InvalidationCount);
+            Assert.Equal(1, service.PointerMutationInvalidations);
             await AssertNoUiEventAsync(socket);
         });
     }
@@ -580,7 +580,7 @@ public class PointerSessionTests
             Assert.Equal(
                 "pointer-session-cancelled",
                 completedData.GetProperty("reason").GetString());
-            Assert.Equal(1, service.InvalidationCount);
+            Assert.Equal(1, service.PointerMutationInvalidations);
             await AssertNoUiEventAsync(socket);
         });
     }
@@ -971,8 +971,7 @@ public class PointerSessionTests
         public bool RejectRepeatedPrepare { get; set; }
         public int PrepareStartCalls { get; private set; }
         public int BackCalls { get; private set; }
-        public int InvalidationCount => Volatile.Read(ref _pointerMutationInvalidations);
-        public int PointerMutationInvalidations => InvalidationCount;
+        public int PointerMutationInvalidations => Volatile.Read(ref _pointerMutationInvalidations);
         private int _pointerMutationInvalidations;
 
         protected override PointerStreamSupport GetPointerStreamSupport()
