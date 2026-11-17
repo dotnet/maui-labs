@@ -614,8 +614,8 @@ The runner requires a .NET 11 SDK, creates a private DBus session and display, r
 tests with no failures or skips in the TRX, and rejects missing/empty filtered
 classes. Use a fresh `-ResultsDirectory` when repeating a run to preserve prior
 evidence. Use `-TestProject` and `-TestNamespace` to select tests in another project.
-For a project with a different target framework, pass `-TestFramework` explicitly
-(the DevFlow GTK snapshot project targets both `net10.0` and `net11.0`, and CI runs each).
+For a project with a different target framework, pass `-TestFramework` explicitly:
+the DevFlow GTK snapshot project targets `net10.0`, even under the .NET 11 SDK.
 Without an override, the runner selects `net11.0`, or `net10.0` for a MAUI 10 version.
 CI's `runtime` matrix runs one existing native class per process; retain
 the union of native class entries when integrating other platform changes.
@@ -626,15 +626,15 @@ callback. Native tests still deterministically dispose GObject wrappers on the G
 thread and run target frameworks in separate test hosts to catch future lifetime
 regressions without sharing GTK global state.
 
-JavaScript evaluation in the backend and the DevFlow GTK bridge goes through
-`WebViewJavaScriptExtensions.EvaluateJavaScriptToStringAsync`/`RunJavaScriptAsync`
-rather than GirCore's `WebView.EvaluateJavascriptAsync`. GirCore wraps the returned
-`JSCValue` in a toggle-referenced object whose release is queued onto the main loop
-when it is collected or disposed; that release could run after navigation destroyed
-the JavaScript context (or after JavaScriptCore reused the pointer), crashing inside
-`libjavascriptcoregtk`. The helpers convert the result and unref the native value
-inside WebKit's completion callback on the GTK thread instead. Use them in
-application code too.
+**Known issue (net11 DevFlow integration):** the `DevFlow Integration Tests / gtk (net11)` lane
+intermittently aborts the net11 GTK sample after its WebView tests. Crash reports show GirCore's
+queued toggle-ref removal (`GLib.Internal.SourceFuncAsyncHandler` on the main loop) reaching a
+WebKit/JavaScriptCore object that is already gone (`g_object_remove_toggle_ref: assertion
+'G_IS_OBJECT (object)' failed`, SIGSEGV in `libjavascriptcoregtk`). Evaluation results and Blazor
+script-message `JSCValue`s are released deterministically on the GTK thread, which reduces but
+has not eliminated the crash. The net10 lane is blocking; the net11 lane runs on every PR,
+uploads results and crash backtraces, and raises a warning instead of failing the check until the
+remaining lifetime path is fixed.
 
 The transform regression creates a real GTK window and repeatedly scales and
 rotates a button at origin, off-origin, translated, and translation-cancelled
