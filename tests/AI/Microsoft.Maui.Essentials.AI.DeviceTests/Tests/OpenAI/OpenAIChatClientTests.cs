@@ -24,6 +24,11 @@ public class OpenAIChatClientFunctionCallingTestsBase : ChatClientFunctionCallin
 	protected override bool SupportsDeterministicChainedToolCalls => true;
 	protected override bool PreservesToolActivityContext => true;
 	protected override bool PreservesToolCancellation => true;
+	protected override bool SupportsStructuredOutputWithTools => true;
+	// Reasoning deployments decide per request whether to reason; these prompts report 0 reasoning
+	// tokens or an empty summary, so only the reasoning-enabled tool and schema results are asserted.
+	protected override bool SupportsReasoningOutput => true;
+	protected override bool ReasoningContentIsGuaranteed => false;
 
 	protected override IChatClient EnableFunctionCalling(OpenAIChatClient client, Action<ChatOptions>? configureOptions = null)
 	{
@@ -99,6 +104,10 @@ public class OpenAIChatClientUsageTests(ITestOutputHelper output) : ChatClientUs
 public class OpenAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<OpenAIChatClient>
 {
 	protected override bool? RequiresExplicitJsonSchema => false;
+	protected override bool StreamsStructuredOutputIncrementally => true;
+	// Reasoning deployments decide per request whether to reason and can return an empty summary.
+	protected override bool SupportsReasoningOutput => true;
+	protected override bool ReasoningContentIsGuaranteed => false;
 }
 
 #endif

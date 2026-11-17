@@ -679,6 +679,14 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - Bind deterministic chained-tool tests separately from basic Required support.
   Providers that cannot force a different tool on every round still run the
   single Required exactly-once, schema, cancellation, and Activity contracts.
+- Bind live structured-output and tool scenarios through model and capability
+  hooks (`StructuredOutputModelIds`, `ReasoningModelId`,
+  `SupportsReasoningOutput`, `SupportsStructuredOutputWithTools`,
+  `StructuredSchemaNestingDepth`) rather than provider-only copies. Observed
+  model behavior that is not part of the contract, such as optional reasoning
+  summaries or unneeded tool calls, gets its own hook
+  (`ReasoningContentIsGuaranteed`, `AvoidsUnneededToolCalls`) so the remaining
+  assertions still run.
 
 ### Model-free rejection and live inference
 

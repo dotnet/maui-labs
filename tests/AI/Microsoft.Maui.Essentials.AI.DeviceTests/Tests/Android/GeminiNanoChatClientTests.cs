@@ -27,17 +27,31 @@ public class GeminiNanoChatClientCancellationTests : ChatClientCancellationTests
 [Collection(nameof(GeminiNanoCollection))]
 public class GeminiNanoNativeFunctionCallingTests : ChatClientFunctionCallingTestsBase<GeminiNanoChatClient>
 {
+	internal const string ToolModelId = "gemini-nano-preview-fast";
+
 	// Native tool support is profile-dependent; V3 cannot register tools.
 	protected override bool? SupportsRequiredToolMode => false;
 	protected override bool PreservesToolActivityContext => true;
+	// AICore emits no function calls under a schema; the bridge lets the model call tools first.
+	protected override bool SupportsStructuredOutputWithTools => true;
+	protected override bool SupportsReasoningOutput => true;
+	// Thinking spends the output budget before the tool call and again before the final answer.
+	protected override int? ReasoningMaxOutputTokens => 2048;
 
 	protected override IChatClient EnableFunctionCalling(GeminiNanoChatClient client, Action<ChatOptions>? configureOptions = null) =>
 		client.AsBuilder().UseFunctionInvocation().ConfigureOptions(options =>
 		{
-			options.ModelId = "gemini-nano-preview-fast";
+			options.ModelId = ToolModelId;
 			options.Temperature = 0;
 			configureOptions?.Invoke(options);
 		}).Build();
+
+	// Gemma function-call control tokens must never leak into streamed text.
+	protected override void AssertStreamingUpdate(ChatResponseUpdate update)
+	{
+		Assert.DoesNotContain("<ctrl42>", update.Text, StringComparison.Ordinal);
+		Assert.DoesNotContain("<ctrl43>", update.Text, StringComparison.Ordinal);
+	}
 }
 
 [Collection(nameof(GeminiNanoCollection))]
@@ -109,6 +123,13 @@ public class GeminiNanoChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase
 	protected override bool SupportsBaselineSamplingOptions => true;
 	// The default model (Nano V3) stops after about 40 tokens when MaxOutputTokens is unset.
 	protected override int? BaselineMaxOutputTokens => 512;
+	// Schema-shape scenarios cover both native profiles; only the preview profile supports thinking.
+	protected override IReadOnlyList<string?> StructuredOutputModelIds => ["gemini-nano-full", GeminiNanoNativeFunctionCallingTests.ToolModelId];
+	protected override bool SupportsReasoningOutput => true;
+	protected override string? ReasoningModelId => GeminiNanoNativeFunctionCallingTests.ToolModelId;
+	// AICore constrained decoding accepts 20 nested object levels.
+	protected override int StructuredSchemaNestingDepth => 20;
+	protected override bool StreamsStructuredOutputIncrementally => true;
 
 	// ML Kit's untyped Prompt API adapter also rejects schema-free JSON.
 	[Fact]
