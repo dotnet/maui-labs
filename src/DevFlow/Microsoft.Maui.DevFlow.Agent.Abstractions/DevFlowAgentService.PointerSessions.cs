@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Microsoft.Maui.DevFlow.Agent.Core;
@@ -86,6 +87,7 @@ public partial class DevFlowAgentService
         public double Y { get; set; }
         public double ElapsedMs { get; set; }
         public int? WindowId { get; set; }
+        public JsonElement? Correlation { get; set; }
     }
 
     protected sealed class PointerSessionMoveRequest
@@ -356,6 +358,18 @@ public partial class DevFlowAgentService
             return PointerError(
                 body.SessionId!,
                 "Pointer coordinates must use the 'windowLogical' coordinate space.",
+                422,
+                "unsupported-coordinate-space");
+        }
+        if (body.Correlation is { } correlation &&
+            (correlation.ValueKind != JsonValueKind.Object ||
+             !correlation.TryGetProperty("coordinateSpace", out var correlationSpace) ||
+             correlationSpace.ValueKind != JsonValueKind.String ||
+             !string.Equals(correlationSpace.GetString(), "windowLogical", StringComparison.Ordinal)))
+        {
+            return PointerError(
+                body.SessionId!,
+                "Pointer correlation must declare the 'windowLogical' coordinate space.",
                 422,
                 "unsupported-coordinate-space");
         }

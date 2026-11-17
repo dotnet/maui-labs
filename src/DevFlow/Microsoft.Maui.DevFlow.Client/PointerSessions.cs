@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Microsoft.Maui.DevFlow.Driver;
@@ -55,6 +56,13 @@ public sealed class PointerSessionStartRequest
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? RegistryGeneration { get; set; }
 
+    /// <summary>
+    /// Optional action tracing metadata. Its coordinate space must match the forwarded pointer
+    /// coordinates; direct agent requests use window-logical units.
+    /// </summary>
+    [JsonPropertyName("correlation")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Correlation { get; set; }
 }
 
 /// <summary>Reports the applied or terminal state of a pointer session operation.</summary>

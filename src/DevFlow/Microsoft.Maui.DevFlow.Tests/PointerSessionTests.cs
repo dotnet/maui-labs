@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Driver;
 
@@ -78,6 +79,25 @@ public class PointerSessionTests
 
             Assert.True((await client.CancelPointerSessionAsync("sequence", "test-cleanup")).Success);
             Assert.Equal(["start", "move:1", "cancel:test-cleanup"], service.Events);
+        });
+    }
+
+    [Fact]
+    public async Task PointerSession_CorrelationMustDeclareWindowLogicalCoordinates()
+    {
+        await WithServiceAsync(async (service, client) =>
+        {
+            var request = Start("correlation-space");
+            using var correlation = JsonDocument.Parse(
+                """{"actionId":"pointer-action","source":"inspector","frameId":"frame-1","coordinateSpace":"appLogical"}""");
+            request.Correlation = correlation.RootElement.Clone();
+
+            var result = await client.StartPointerSessionAsync(request);
+
+            Assert.False(result.Success);
+            Assert.Equal(422, result.StatusCode);
+            Assert.Equal("unsupported-coordinate-space", result.Reason);
+            Assert.Empty(service.Events);
         });
     }
 

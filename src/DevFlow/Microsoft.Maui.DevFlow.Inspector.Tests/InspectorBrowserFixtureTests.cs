@@ -36,7 +36,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private readonly ConcurrentQueue<(string Name, string Value)> _writes = new();
     private readonly ConcurrentQueue<string> _pointerEvents = new();
     private readonly ConcurrentQueue<string> _agentControlEvents = new();
-    private readonly ConcurrentQueue<(string? CoordinateSpace, bool HasCorrelation)> _pointerStarts = new();
+    private readonly ConcurrentQueue<(string? CoordinateSpace, string? CorrelationCoordinateSpace)> _pointerStarts = new();
     private readonly ConcurrentQueue<int> _pointerMoveBytes = new();
     private readonly ConcurrentQueue<string> _pageErrors = new();
     private readonly ConcurrentDictionary<IRequest, byte> _pendingRequests = new();
@@ -168,9 +168,14 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 using var body = await JsonDocument.ParseAsync(context.Request.Body);
                 var root = body.RootElement;
                 var sessionId = root.GetProperty("sessionId").GetString();
+                var correlationCoordinateSpace =
+                    root.TryGetProperty("correlation", out var correlation) &&
+                    correlation.TryGetProperty("coordinateSpace", out var correlationSpace)
+                        ? correlationSpace.GetString()
+                        : null;
                 _pointerStarts.Enqueue((
                     root.GetProperty("coordinateSpace").GetString(),
-                    root.TryGetProperty("correlation", out _)));
+                    correlationCoordinateSpace));
                 _pointerEvents.Enqueue($"start:{sessionId}");
                 return Results.Json(new
                 {
@@ -1011,7 +1016,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await WaitForPointerEventAsync("start:");
         var start = Assert.Single(_pointerStarts);
         Assert.Equal("windowLogical", start.CoordinateSpace);
-        Assert.False(start.HasCorrelation);
+        Assert.Equal("windowLogical", start.CorrelationCoordinateSpace);
         await Page.WaitForTimeoutAsync(250);
         await Page.RunAndWaitForResponseAsync(
             () => Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),

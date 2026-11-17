@@ -578,6 +578,10 @@
         },
         "registryGeneration": {
           "$ref": "#/$defs/RegistryGeneration"
+        },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation",
+          "description": "Optional tracing metadata for the forwarded pointer start. Its coordinateSpace must be windowLogical."
         }
       }
     },

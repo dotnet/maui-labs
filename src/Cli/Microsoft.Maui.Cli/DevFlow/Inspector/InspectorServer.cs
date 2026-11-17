@@ -3115,6 +3115,8 @@ public sealed class InspectorServer : IDisposable
             start.Y,
             coordinateSpace,
             frame);
+        var correlation = RewritePointerCorrelationForAgent(
+            document.RootElement.GetProperty("correlation"));
         var result = await _client.StartPointerSessionAsync(new PointerSessionStartRequest
         {
             SessionId = start.SessionId,
@@ -3126,7 +3128,8 @@ public sealed class InspectorServer : IDisposable
             ElapsedMs = start.ElapsedMs,
             WindowId = frame.WindowId,
             CaptureEpoch = frame.CaptureEpoch,
-            RegistryGeneration = frame.RegistryGeneration
+            RegistryGeneration = frame.RegistryGeneration,
+            Correlation = correlation
         });
 
         var fallback = CanFallbackPointerStart(result);
@@ -3222,6 +3225,13 @@ public sealed class InspectorServer : IDisposable
             });
     }
 
+    private static JsonElement RewritePointerCorrelationForAgent(JsonElement correlation)
+    {
+        var rewritten = JsonNode.Parse(correlation.GetRawText())!.AsObject();
+        rewritten["coordinateSpace"] = "windowLogical";
+        return JsonSerializer.SerializeToElement(rewritten);
+    }
+
     internal static bool CanFallbackPointerStart(PointerSessionResult result)
         => CanFallbackPointerStart(
             result.TransportFailure,
@@ -3242,18 +3252,33 @@ public sealed class InspectorServer : IDisposable
             return JsonResponse(400, new { ok = false, error });
         if (move is null || string.IsNullOrWhiteSpace(move.SessionId))
             return JsonResponse(400, new { ok = false, error = "sessionId is required" });
-        if (move.Samples is null || move.Samples.Count > 64)
+        if (move.Samples is null || move.Samples.Any(static sample => sample is null))
+        {
+            return JsonResponse(
+                400,
+                new
+                {
+                    ok = false,
+                    reason = "invalid-request",
+                    error = "Pointer move samples must be a non-null array of samples."
+                });
+        }
+        if (move.Samples.Count > 64)
             return JsonResponse(413, new { ok = false, error = "A move may contain at most 64 samples." });
         if (!TryGetPointerProxySession(move.SessionId, out var proxy))
             return JsonResponse(410, new { ok = false, reason = "session-gone", error = "Pointer session not found." });
         if (!IsPointerProxyFrameCompatible(proxy))
             return await CancelSupersededPointerProxyAsync(move.SessionId);
 
-        var samples = move.Samples.Select(sample => new PointerSessionSample
+        var samples = move.Samples.Select(sample =>
         {
-            X = sample.X + proxy.RootOffsetX,
-            Y = sample.Y + proxy.RootOffsetY,
-            ElapsedMs = sample.ElapsedMs
+            var validSample = sample!;
+            return new PointerSessionSample
+            {
+                X = validSample.X + proxy.RootOffsetX,
+                Y = validSample.Y + proxy.RootOffsetY,
+                ElapsedMs = validSample.ElapsedMs
+            };
         }).ToArray();
         var result = await _client.MovePointerSessionAsync(move.SessionId, move.Sequence, samples);
         if (!result.Success && !result.TransportFailure && result.State is "cancelled" or "gone")
@@ -3539,7 +3564,7 @@ public sealed class InspectorServer : IDisposable
     {
         public string? SessionId { get; set; }
         public int Sequence { get; set; }
-        public List<PointerSessionSample> Samples { get; set; } = [];
+        public List<PointerSessionSample?> Samples { get; set; } = [];
     }
 
     private sealed class InspectorPointerEndRequest

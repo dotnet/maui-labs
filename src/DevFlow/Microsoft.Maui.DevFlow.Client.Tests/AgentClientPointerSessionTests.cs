@@ -13,6 +13,8 @@ public class AgentClientPointerSessionTests
                 ? """{"success":true,"sessionId":"pointer-1","state":"ended","lastSequence":2}"""
                 : """{"success":true,"sessionId":"pointer-1","state":"active","lastSequence":1,"maxSamplesPerMove":64}"""));
         using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
+        using var correlation = JsonDocument.Parse(
+            """{"actionId":"pointer-action","source":"inspector","frameId":"frame-1","coordinateSpace":"windowLogical"}""");
 
         var start = await client.StartPointerSessionAsync(new PointerSessionStartRequest
         {
@@ -21,7 +23,8 @@ public class AgentClientPointerSessionTests
             X = 10,
             Y = 20,
             CaptureEpoch = 5,
-            RegistryGeneration = 3
+            RegistryGeneration = 3,
+            Correlation = correlation.RootElement.Clone()
         });
         var move = await client.MovePointerSessionAsync(
             "pointer-1",
@@ -46,6 +49,9 @@ public class AgentClientPointerSessionTests
 
         using var startBody = JsonDocument.Parse(agent.Requests[0].Body);
         Assert.Equal("windowLogical", startBody.RootElement.GetProperty("coordinateSpace").GetString());
+        Assert.Equal(
+            "windowLogical",
+            startBody.RootElement.GetProperty("correlation").GetProperty("coordinateSpace").GetString());
         Assert.Equal(5, startBody.RootElement.GetProperty("captureEpoch").GetInt64());
 
         using var moveBody = JsonDocument.Parse(agent.Requests[1].Body);
