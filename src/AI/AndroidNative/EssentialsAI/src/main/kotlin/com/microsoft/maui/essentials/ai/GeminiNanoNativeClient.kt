@@ -209,7 +209,7 @@ class GeminiNanoNativeClient {
                     }
                     try {
                         run generation@{
-                            val nativeStream = if (streaming && schema?.wrapsRoot != true) {
+                            val nativeStream = if (streaming) {
                                 NativeChatStream(this, callback, modelName,
                                     deferToolText = request.options.toolsJson != null && schema == null).also { stream = it }
                             } else null
@@ -231,30 +231,15 @@ class GeminiNanoNativeClient {
                                 if (toolTurn.functionCalls.isNotEmpty()) {
                                     val calls = NativeChatResponse("", toolTurn.thoughts, toolTurn.finishReason, modelName,
                                         toolTurnTokens).apply { functionCalls = toolTurn.functionCalls }
-                                    if (nativeStream != null) {
-                                        nativeStream.finish(calls)
-                                    } else if (streaming) {
-                                        ensureActive()
-                                        calls.thoughts.forEach { callback.onThought(it, modelName) }
-                                    }
+                                    nativeStream?.finish(calls)
                                     return@generation calls
                                 }
                                 checkToolTurnFinished(toolTurn.finishReason)
                             }
                             val tokenCount = toolTurnTokens + countStructuredTokens(processor, nativeRequest)
-                            val generated = generateStructuredContent(processor, nativeRequest, nativeStream)
+                            val response = generateStructuredContent(processor, nativeRequest, nativeStream)
                                 .toNativeResponse(modelName, tokenCount)
-                            val text = validateStructuredResponse(checkNotNull(schema), generated)
-                            val response = NativeChatResponse(text, generated.thoughts, generated.finishReason, modelName,
-                                tokenCount)
-                            if (nativeStream != null) {
-                                nativeStream.finish(response)
-                            } else if (streaming) {
-                                // AICore wraps non-object roots; the unwrapped value is emitted once validated.
-                                ensureActive()
-                                response.thoughts.forEach { callback.onThought(it, modelName) }
-                                callback.onText(response.text, modelName)
-                            }
+                            nativeStream?.finish(response)
                             response
                         }
                     } finally {
@@ -381,7 +366,7 @@ internal fun NativeChatRequest.toNative(responseSchema: zzip? = null): GenerateC
     builder.temperature = options.temperature
     builder.topK = options.topK
     builder.seed = options.seed
-    builder.maxOutputTokens = options.maxOutputTokens ?: if (options.responseSchemaJson != null) 512 else null
+    builder.maxOutputTokens = options.maxOutputTokens
     builder.enableThinking = options.enableThinking
     options.toolsJson?.let { builder.setTools(nativeTools(it)) }
     return builder.build()

@@ -18,11 +18,11 @@ namespace Microsoft.Maui.Essentials.AI;
 /// included in the prompt by the Kotlin bridge, with in-memory images and native
 /// system instructions. Native tool calling requires ML Kit model support;
 /// use Microsoft.Extensions.AI function invocation middleware to execute returned calls.
-/// Structured output requires a JSON schema, which AICore enforces with constrained decoding.
-/// Structured streams emit JSON text that is validated when the response ends, so a stream can fail
-/// after partial JSON. Structured output works with tools and full thinking output; with tools, the
-/// model decides on calls without the schema and only its final answer is generated under it.
-/// Structured requests default to 512 output tokens when MaxOutputTokens is unset.
+/// Structured output requires a JSON schema with an object root, which AICore enforces with
+/// constrained decoding; the generated text is returned as is. Structured output works with tools
+/// and full thinking output; with tools, the model decides on calls without the schema and only its
+/// final answer is generated under it. MaxOutputTokens has no default; when it is unset, Nano V3
+/// (the default model) stops after about 40 tokens.
 /// Model download is explicit and observable; generation never downloads or falls back to a cloud provider.
 /// ChatOptions.ModelId accepts gemini-nano, gemini-nano-fast, gemini-nano-full,
 /// gemini-nano-preview-fast, or gemini-nano-preview-full. The default is stable/full.

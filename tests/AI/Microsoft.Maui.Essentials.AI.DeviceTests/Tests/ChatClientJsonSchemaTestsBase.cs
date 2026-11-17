@@ -17,6 +17,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	// Null preserves legacy bindings, including their existing schema-free JSON overrides.
 	protected virtual bool? RequiresExplicitJsonSchema => null;
 	protected virtual bool SupportsBaselineSamplingOptions => false;
+	protected virtual int? BaselineMaxOutputTokens => null;
 
 	private void ConfigureBaselineSamplingOptions(ChatOptions options, float temperature)
 	{
@@ -25,6 +26,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 
 		options.Temperature = temperature;
 		options.Reasoning = new() { Effort = ReasoningEffort.None };
+		options.MaxOutputTokens ??= BaselineMaxOutputTokens;
 	}
 
 	// Record types for testing JSON schema responses

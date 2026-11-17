@@ -4,33 +4,11 @@ import com.google.android.gms.internal.mlkit_genai_prompt.zzip
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
-import java.math.BigDecimal
 
-/**
- * A JSON schema compiled for ML Kit's native response-schema field, plus a strict
- * validator for the JSON text that AICore generates under that constraint.
- */
+/** A JSON schema converted to ML Kit's native response schema. */
 internal class NativeResponseSchema private constructor(private val root: Node) {
-    /** AICore returns non-object roots as {"wrapper": value}; the value is unwrapped after validation. */
-    val wrapsRoot: Boolean get() = root.type != "object"
-
     /** Builds ML Kit's internal schema object (the same type its typed API derives from a class). */
     fun native(): zzip = root.native()
-
-    /** Validates generated text and returns the JSON that matches the caller's schema. */
-    fun validate(text: String): String {
-        val value = StrictJson.parse(text)
-        if (!wrapsRoot) {
-            root.validate(value, "$")
-            return text
-        }
-        require(value is Map<*, *> && value.keys == setOf(WRAPPER)) {
-            "Expected AICore's {\"$WRAPPER\": ...} wrapper for a non-object root."
-        }
-        val unwrapped = value[WRAPPER]
-        root.validate(unwrapped, "$")
-        return StrictJson.write(unwrapped)
-    }
 
     private class Node(
         val type: String,
@@ -38,13 +16,12 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
         val description: String?,
         val properties: Map<String, Node> = emptyMap(),
         val required: List<String> = emptyList(),
-        val closed: Boolean = false,
         val items: Node? = null,
         val choices: List<String>? = null,
         val format: String? = null,
-        val pattern: Regex? = null,
-        val minimum: BigDecimal? = null,
-        val maximum: BigDecimal? = null,
+        val pattern: String? = null,
+        val minimum: Double? = null,
+        val maximum: Double? = null,
         val minItems: Long? = null,
         val maxItems: Long? = null,
     ) {
@@ -60,9 +37,9 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
             if (nullable) builder.zzc(true)
             description?.let { builder.zzb(it) }
             format?.let { builder.zza(it) }
-            pattern?.let { builder.zzl(it.pattern) }
-            minimum?.let { builder.zzj(it.toDouble()) }
-            maximum?.let { builder.zzk(it.toDouble()) }
+            pattern?.let { builder.zzl(it) }
+            minimum?.let { builder.zzj(it) }
+            maximum?.let { builder.zzk(it) }
             minItems?.let { builder.zzg(it) }
             maxItems?.let { builder.zzf(it) }
             choices?.let { builder.zzo(it) }
@@ -73,85 +50,22 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
             }
             return builder.zzm()
         }
-
-        fun validate(value: Any?, path: String) {
-            if (value === StrictJson.Null) {
-                require(nullable) { "$path must not be null." }
-                return
-            }
-            when (type) {
-                "object" -> {
-                    require(value is Map<*, *>) { "$path must be an object." }
-                    required.forEach { require(value.containsKey(it)) { "$path is missing required property '$it'." } }
-                    value.forEach { (name, item) ->
-                        val property = properties[name]
-                        require(property != null || !closed) { "$path has unexpected property '$name'." }
-                        property?.validate(item, "$path.$name")
-                    }
-                }
-                "array" -> {
-                    require(value is List<*>) { "$path must be an array." }
-                    require(minItems == null || value.size >= minItems) { "$path has fewer than $minItems items." }
-                    require(maxItems == null || value.size <= maxItems) { "$path has more than $maxItems items." }
-                    value.forEachIndexed { index, item -> checkNotNull(items).validate(item, "$path[$index]") }
-                }
-                "string" -> {
-                    require(value is String) { "$path must be a string." }
-                    require(choices == null || value in choices) { "$path is outside its enum." }
-                    require(pattern == null || pattern.containsMatchIn(value)) { "$path does not match its pattern." }
-                }
-                "boolean" -> require(value is Boolean) { "$path must be a boolean." }
-                else -> {
-                    require(value is BigDecimal) { "$path must be a number." }
-                    require(type == "number" || value.signum() == 0 || value.stripTrailingZeros().scale() <= 0) {
-                        "$path must be an integer."
-                    }
-                    require(minimum == null || value >= minimum) { "$path is below its minimum." }
-                    require(maximum == null || value <= maximum) { "$path is above its maximum." }
-                }
-            }
-        }
     }
 
     companion object {
-        private const val WRAPPER = "wrapper"
         /** System.Text.Json's default maximum depth. */
         const val MAX_DEPTH = 64
         private val annotations = setOf("description", "title", "\$schema", "\$defs", "definitions", "\$comment")
 
         fun parse(json: String): NativeResponseSchema {
             try {
-                // The strict reader bounds raw nesting before org.json recurses, and sees each bound's exact lexeme.
-                val lexemes = try {
-                    StrictJson.parse(json)
-                } catch (exception: IllegalArgumentException) {
-                    throw IllegalArgumentException("Invalid or unsupported JSON response schema: ${exception.message}", exception)
-                }
-                requireExactBounds(lexemes, "$")
                 val document = JSONObject(json)
                 val root = parseNode(document, document, "$", emptySet(), 0)
-                require(!root.nullable) { "The response schema root must not be nullable." }
+                // AICore only generates object roots, as OpenAI structured outputs require.
+                require(root.type == "object" && !root.nullable) { "The response schema root must be a non-null object." }
                 return NativeResponseSchema(root)
             } catch (exception: JSONException) {
                 throw IllegalArgumentException("Invalid or unsupported JSON response schema: ${exception.message}", exception)
-            }
-        }
-
-        // org.json reads fractional numbers as Double; reject bounds that a Double cannot hold exactly,
-        // so validation never compares against a rounded value.
-        private fun requireExactBounds(value: Any?, path: String) {
-            when (value) {
-                is Map<*, *> -> value.forEach { (key, item) ->
-                    if ((key == "minimum" || key == "maximum") && item is BigDecimal) {
-                        val integral = item.stripTrailingZeros().scale() <= 0 &&
-                            item >= BigDecimal(Long.MIN_VALUE) && item <= BigDecimal(Long.MAX_VALUE)
-                        require(integral || BigDecimal(item.toDouble().toString()).compareTo(item) == 0) {
-                            "$path.$key: cannot preserve the exact numeric bound $item; use a bound representable without rounding."
-                        }
-                    }
-                    requireExactBounds(item, "$path.$key")
-                }
-                is List<*> -> value.forEachIndexed { index, item -> requireExactBounds(item, "$path[$index]") }
             }
         }
 
@@ -201,17 +115,15 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
             }
             val description = if (source.has("description")) source.getString("description") else null
 
-            // Bounds keep their exact JSON value for validation; ML Kit's native schema takes doubles.
-            fun number(key: String): BigDecimal? {
+            fun number(key: String): Double? {
                 if (!source.has(key)) return null
                 val raw = source.get(key)
                 require(raw is Number && raw.toDouble().isFinite()) { "$path.$key must be a finite number." }
-                return BigDecimal(raw.toString())
+                return raw.toDouble()
             }
             fun count(key: String): Long? {
                 val value = number(key) ?: return null
-                require(value.signum() >= 0 && value.stripTrailingZeros().scale() <= 0 &&
-                    value <= BigDecimal(Int.MAX_VALUE)) {
+                require(value >= 0 && value % 1.0 == 0.0 && value <= Int.MAX_VALUE) {
                     "$path.$key must be a nonnegative integer."
                 }
                 return value.toLong()
@@ -219,11 +131,8 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
 
             return when (type) {
                 "object" -> {
-                    val closed = when (val additional = source.opt("additionalProperties")) {
-                        null -> false
-                        is Boolean -> !additional
-                        else -> throw IllegalArgumentException(
-                            "$path: additionalProperties must be a boolean; dictionary schemas are unsupported.")
+                    require(source.opt("additionalProperties").let { it == null || it is Boolean }) {
+                        "$path: additionalProperties must be a boolean; dictionary schemas are unsupported."
                     }
                     val properties = source.optJSONObject("properties")
                     require(properties != null && properties.length() > 0) {
@@ -239,7 +148,7 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
                     properties.keys().forEach { name ->
                         nodes[name] = parseNode(properties.getJSONObject(name), document, "$path.$name", references, depth + 1)
                     }
-                    Node(type, nullable, description, nodes, required, closed)
+                    Node(type, nullable, description, nodes, required)
                 }
                 "array" -> {
                     val items = source.optJSONObject("items")
@@ -268,208 +177,12 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
                             array.getString(it)
                         }.also { require(it.isNotEmpty()) { "$path: null-only enums are unsupported." } }
                     }
-                    val pattern = if (source.has("pattern")) {
-                        try {
-                            Regex(source.getString("pattern"))
-                        } catch (exception: IllegalArgumentException) {
-                            throw IllegalArgumentException("$path: invalid pattern: ${exception.message}", exception)
-                        }
-                    } else null
                     Node(type, nullable && (enum == null || enumAllowsNull), description, choices = choices,
-                        format = if (source.has("format")) source.getString("format") else null, pattern = pattern)
+                        format = if (source.has("format")) source.getString("format") else null,
+                        pattern = if (source.has("pattern")) source.getString("pattern") else null)
                 }
                 else -> Node(type, nullable, description)
             }
         }
-    }
-}
-
-/** RFC 8259 parser: Android's org.json accepts single quotes, comments and unquoted names. */
-internal object StrictJson {
-    object Null
-
-    fun write(value: Any?): String = StringBuilder().also { write(value, it) }.toString()
-
-    private fun write(value: Any?, out: StringBuilder) {
-        when (value) {
-            null, Null -> out.append("null")
-            is Boolean -> out.append(value)
-            is BigDecimal -> out.append(value.toString())
-            is String -> {
-                out.append('"')
-                value.forEach { char ->
-                    when {
-                        char == '"' -> out.append("\\\"")
-                        char == '\\' -> out.append("\\\\")
-                        char == '\n' -> out.append("\\n")
-                        char == '\r' -> out.append("\\r")
-                        char == '\t' -> out.append("\\t")
-                        char < ' ' -> out.append("\\u%04x".format(char.code))
-                        else -> out.append(char)
-                    }
-                }
-                out.append('"')
-            }
-            is List<*> -> {
-                out.append('[')
-                value.forEachIndexed { index, item -> if (index > 0) out.append(','); write(item, out) }
-                out.append(']')
-            }
-            is Map<*, *> -> {
-                out.append('{')
-                value.entries.forEachIndexed { index, (key, item) ->
-                    if (index > 0) out.append(',')
-                    write(key as String, out)
-                    out.append(':')
-                    write(item, out)
-                }
-                out.append('}')
-            }
-            else -> error("Unexpected JSON value ${value.javaClass.name}.")
-        }
-    }
-
-    fun parse(text: String): Any {
-        val reader = Reader(text)
-        reader.whitespace()
-        val value = reader.value(0)
-        reader.whitespace()
-        reader.require(reader.index == text.length, "Unexpected trailing content")
-        return value
-    }
-
-    private class Reader(val text: String) {
-        var index = 0
-
-        fun fail(message: String): Nothing =
-            throw IllegalArgumentException("Not valid JSON: $message at offset $index.")
-
-        fun require(condition: Boolean, message: String) {
-            if (!condition) fail(message)
-        }
-
-        fun whitespace() {
-            while (index < text.length && text[index] in " \t\r\n") index++
-        }
-
-        fun value(depth: Int): Any {
-            require(depth < 512, "Nesting is too deep")
-            require(index < text.length, "Unexpected end")
-            return when (text[index]) {
-                '{' -> obj(depth)
-                '[' -> array(depth)
-                '"' -> string()
-                't' -> literal("true", true)
-                'f' -> literal("false", false)
-                'n' -> literal("null", Null)
-                else -> number()
-            }
-        }
-
-        private fun literal(word: String, result: Any): Any {
-            require(text.startsWith(word, index), "Invalid literal")
-            index += word.length
-            return result
-        }
-
-        private fun obj(depth: Int): Map<String, Any?> {
-            index++
-            val result = linkedMapOf<String, Any?>()
-            whitespace()
-            if (index < text.length && text[index] == '}') { index++; return result }
-            while (true) {
-                whitespace()
-                require(index < text.length && text[index] == '"', "Expected a property name")
-                val name = string()
-                require(name !in result, "Duplicate property '$name'")
-                whitespace()
-                require(index < text.length && text[index] == ':', "Expected ':'")
-                index++
-                whitespace()
-                result[name] = value(depth + 1)
-                whitespace()
-                require(index < text.length, "Unexpected end")
-                when (text[index++]) {
-                    ',' -> continue
-                    '}' -> return result
-                    else -> { index--; fail("Expected ',' or '}'") }
-                }
-            }
-        }
-
-        private fun array(depth: Int): List<Any?> {
-            index++
-            val result = mutableListOf<Any?>()
-            whitespace()
-            if (index < text.length && text[index] == ']') { index++; return result }
-            while (true) {
-                whitespace()
-                result.add(value(depth + 1))
-                whitespace()
-                require(index < text.length, "Unexpected end")
-                when (text[index++]) {
-                    ',' -> continue
-                    ']' -> return result
-                    else -> { index--; fail("Expected ',' or ']'") }
-                }
-            }
-        }
-
-        private fun string(): String {
-            index++
-            val result = StringBuilder()
-            while (true) {
-                require(index < text.length, "Unterminated string")
-                val char = text[index++]
-                when {
-                    char == '"' -> return result.toString()
-                    char == '\\' -> {
-                        require(index < text.length, "Unterminated escape")
-                        when (val escape = text[index++]) {
-                            '"', '\\', '/' -> result.append(escape)
-                            'b' -> result.append('\b')
-                            'f' -> result.append('\u000C')
-                            'n' -> result.append('\n')
-                            'r' -> result.append('\r')
-                            't' -> result.append('\t')
-                            'u' -> {
-                                require(index + 4 <= text.length, "Invalid unicode escape")
-                                val digits = text.substring(index, index + 4)
-                                require(digits.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' },
-                                    "Invalid unicode escape")
-                                result.append(digits.toInt(16).toChar())
-                                index += 4
-                            }
-                            else -> fail("Invalid escape")
-                        }
-                    }
-                    else -> {
-                        require(char >= ' ', "Unescaped control character")
-                        result.append(char)
-                    }
-                }
-            }
-        }
-
-        private fun number(): BigDecimal {
-            val start = index
-            if (index < text.length && text[index] == '-') index++
-            require(index < text.length && text[index].isAsciiDigit(), "Invalid value")
-            if (text[index] == '0') index++ else while (index < text.length && text[index].isAsciiDigit()) index++
-            if (index < text.length && text[index] == '.') {
-                index++
-                require(index < text.length && text[index].isAsciiDigit(), "Invalid number")
-                while (index < text.length && text[index].isAsciiDigit()) index++
-            }
-            if (index < text.length && text[index] in "eE") {
-                index++
-                if (index < text.length && text[index] in "+-") index++
-                require(index < text.length && text[index].isAsciiDigit(), "Invalid number")
-                while (index < text.length && text[index].isAsciiDigit()) index++
-            }
-            return BigDecimal(text.substring(start, index))
-        }
-
-        private fun Char.isAsciiDigit() = this in '0'..'9'
     }
 }

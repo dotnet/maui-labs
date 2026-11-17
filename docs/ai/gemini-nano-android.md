@@ -27,6 +27,9 @@ Kotlin constructs the Google request:
 - Temperature, TopK, Seed, and MaxOutputTokens map to the native builder.
   C# checks known ranges and Seed's 32-bit representability; Google's builder
   also validates native numeric constraints.
+- MaxOutputTokens has no default. ML Kit sends 0 when it is unset, and Nano V3
+  (the default model) then stops after about 40 tokens, for text and structured
+  output alike; Nano V4 does not. Set MaxOutputTokens for longer responses.
 - `Reasoning.Output = ReasoningOutput.Full` enables thinking after checking
   `Feature.THINKING_MODE` in `getAvailableFeatures()`. Effort levels and summaries
   have no native mapping. Reasoning in Assistant history (for example from
@@ -216,9 +219,9 @@ Status queries propagate errors if ML Kit cannot resolve the selected model.
 
 JSON schemas become ML Kit's native response schema, which AICore enforces with
 constrained decoding. The selected model must advertise
-`ChatModelCapability.StructuredOutput`. Both response methods support schemas,
-and streaming delivers JSON text that is validated when the response ends.
-Thinking and tools work with a schema; with tools, the model decides on calls
+`ChatModelCapability.StructuredOutput`. The schema root must be an object, and
+the generated JSON is returned unchanged, as with OpenAI. Both response methods
+support schemas. Thinking and tools work with a schema; with tools, the model decides on calls
 without the schema and only its final answer is constrained. See
 [structured output](gemini-nano-structured-output.md) for supported keywords and
 how it works.

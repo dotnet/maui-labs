@@ -425,13 +425,13 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   on completion.
 - **Android:** build ML Kit's native response schema from the JSON schema and
   set it through ML Kit internals (AICore constrained decoding). Require an
-  explicit schema and the model's structured capability. Normalize required and
-  additional properties through MEAI, validate the complete JSON against the
-  schema, and preserve caller history and input usage. Reject schema-free JSON
-  and unrepresentable constraints before inference. AICore wraps non-object
-  roots, which the bridge unwraps. Thinking works with a schema. AICore emits no
-  function calls under a schema, so with tools each turn first runs without the
-  schema and only the final answer is regenerated under it.
+  explicit object-root schema and the model's structured capability. Normalize
+  required and additional properties through MEAI, return the generated JSON
+  unchanged, and preserve caller history and input usage. Reject schema-free JSON
+  and unrepresentable constraints before inference. Thinking works with a
+  schema. AICore emits no function calls under a schema, so with tools each turn
+  first runs without the schema and only the final answer is regenerated under
+  it.
 
 ## Response behavior
 
@@ -492,8 +492,7 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   text/thought order, and reconcile the final candidate against accumulated
   additional-text deltas with the same equal/suffix/divergence contract. Finish
   admitted callbacks before releasing the managed JNI callback. Structured
-  requests stream JSON deltas, except non-object roots, which emit one validated
-  update.
+  requests stream JSON deltas.
 
 ### Token usage
 

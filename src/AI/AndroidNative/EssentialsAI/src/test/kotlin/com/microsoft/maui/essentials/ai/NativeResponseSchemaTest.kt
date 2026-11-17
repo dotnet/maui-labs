@@ -23,10 +23,6 @@ class NativeResponseSchemaTest {
 
     private fun native(json: String): JSONObject = NativeResponseSchema.parse(json).native().zzv()
 
-    private fun assertRejected(json: String, output: String) {
-        assertThrows(output, IllegalArgumentException::class.java) { NativeResponseSchema.parse(json).validate(output) }
-    }
-
     private fun textMessage(role: String, vararg text: String) =
         NativeChatMessage(role, text.map { NativeContentPart(CONTENT_TEXT, it, null) }.toTypedArray())
 
@@ -51,11 +47,7 @@ class NativeResponseSchemaTest {
         val nested = native(keywords).getJSONObject("properties").getJSONObject("data")
         assertTrue(nested.getJSONObject("items").has("items"))
         assertFalse(nested.getJSONObject("items").getJSONObject("items").has("properties"))
-
-        NativeResponseSchema.parse(summaries).validate("""{"data":["one","two"]}""")
-        NativeResponseSchema.parse(keywords).validate("""{"data":[["a","b"],[],["c"]]}""")
-        assertRejected(keywords, """{"data":["a","b"]}""")
-        assertRejected(summaries, """{"data":[["a"]]}""")
+        assertFalse(native(summaries).getJSONObject("properties").getJSONObject("data").getJSONObject("items").has("items"))
     }
 
     @Test
@@ -65,28 +57,21 @@ class NativeResponseSchemaTest {
         assertTrue(data.getBoolean("nullable"))
         assertTrue(data.getJSONObject("items").getBoolean("nullable"))
         assertTrue(data.getJSONObject("items").getJSONObject("items").getBoolean("nullable"))
-
-        val compiled = NativeResponseSchema.parse(json)
-        compiled.validate("""{"data":null}""")
-        compiled.validate("""{"data":[null,["a",null]]}""")
-        assertRejected(json, """{"data":[["b"]]}""")
-        assertRejected("""{"type":"object","properties":{"v":{"type":"string"}},"required":["v"]}""", """{"v":null}""")
+        assertFalse(native("""{"type":"object","properties":{"v":{"type":"string"}},"required":["v"]}""")
+            .getJSONObject("properties").getJSONObject("v").optBoolean("nullable"))
     }
 
     @Test
-    fun deepObjectGraphsHaveNoShapeLimit() {
+    fun deepObjectGraphsMapNatively() {
         var json = """{"type":"string"}"""
         val leafType = native("""{"type":"object","properties":{"v":{"type":"string"}}}""")
             .getJSONObject("properties").getJSONObject("v").get("type")
-        var output = "\"leaf\""
         repeat(40) { level ->
             json = """{"type":"object","properties":{"n$level":$json,"id":{"type":"integer"}},"required":["n$level","id"],"additionalProperties":false}"""
-            output = """{"n$level":$output,"id":$level}"""
         }
         var native = native(json)
         repeat(40) { level -> native = native.getJSONObject("properties").getJSONObject("n${39 - level}") }
         assertEquals(leafType, native.get("type"))
-        NativeResponseSchema.parse(json).validate(output)
     }
 
     @Test
@@ -95,30 +80,21 @@ class NativeResponseSchemaTest {
         val data = native(array).getJSONObject("properties").getJSONObject("data")
         assertEquals(1, data.getInt("minItems"))
         assertEquals(3, data.getInt("maxItems"))
-        NativeResponseSchema.parse(array).validate("""{"data":[1,2]}""")
-        assertRejected(array, """{"data":[]}""")
-        assertRejected(array, """{"data":[1,2,3,4]}""")
     }
 
-    // AICore returns every non-object root as {"wrapper": value} (verified on Nano V3 and V4).
+    // AICore only generates object roots; OpenAI structured outputs have the same rule.
     @Test
-    fun nonObjectRootsAreUnwrappedFromTheAicoreWrapper() {
-        val array = NativeResponseSchema.parse("""{"type":"array","items":{"type":"string","enum":["red","green"]},"maxItems":2}""")
-        assertTrue(array.wrapsRoot)
-        assertEquals("array", native("""{"type":"array","items":{"type":"string"}}""").getString("type"))
-        assertEquals("""["red","green"]""", array.validate("""{"wrapper": ["red", "green"]}"""))
-        assertThrows(IllegalArgumentException::class.java) { array.validate("""["red","green"]""") }
-        assertThrows(IllegalArgumentException::class.java) { array.validate("""{"wrapper":["blue"]}""") }
-        assertThrows(IllegalArgumentException::class.java) { array.validate("""{"wrapper":["red"],"extra":1}""") }
-
-        assertEquals("\"Paris \\\"Lumi\u00e8re\\\" \\n\"",
-            NativeResponseSchema.parse("""{"type":"string"}""").validate("""{"wrapper":"Paris \"Lumi\u00e8re\" \n"}"""))
-        assertEquals("8", NativeResponseSchema.parse("""{"type":"integer","minimum":1}""").validate("""{"wrapper":8}"""))
-        assertEquals("false", NativeResponseSchema.parse("""{"type":"boolean"}""").validate("""{"wrapper":false}"""))
-        assertFalse(NativeResponseSchema.parse(schema).wrapsRoot)
-        assertTrue(assertThrows(IllegalArgumentException::class.java) {
-            NativeResponseSchema.parse("""{"type":["string","null"]}""")
-        }.message!!.contains("nullable"))
+    fun rootMustBeANonNullObject() {
+        listOf(
+            """{"type":"array","items":{"type":"string"}}""",
+            """{"type":"string","enum":["red","green"]}""",
+            """{"type":"integer","minimum":1}""",
+            """{"type":"boolean"}""",
+            """{"type":["object","null"],"properties":{"v":{"type":"string"}}}""",
+        ).forEach { json ->
+            assertTrue(json, assertThrows(json, IllegalArgumentException::class.java) { NativeResponseSchema.parse(json) }
+                .message!!.contains("non-null object"))
+        }
     }
 
     @Test
@@ -128,7 +104,6 @@ class NativeResponseSchemaTest {
         val native = native(json).getJSONObject("properties")
         assertEquals("first", native.getJSONObject("a").getString("description"))
         assertTrue(native.getJSONObject("b").getJSONObject("properties").has("x"))
-        NativeResponseSchema.parse(json).validate("""{"a":{"x":1.5},"b":{"x":-2}}""")
 
         val recursive = """{"type":"object","properties":{"next":{"${'$'}ref":"#"}}}"""
         assertTrue(assertThrows(IllegalArgumentException::class.java) { NativeResponseSchema.parse(recursive) }
@@ -143,7 +118,6 @@ class NativeResponseSchemaTest {
             """{"type":"object","properties":{"v":{"type":"string","minLength":2}}}""",
             """{"type":"object","properties":{"v":{"type":"integer","exclusiveMinimum":2}}}""",
             """{"type":"object","properties":{"v":{"type":"integer","enum":[1,2]}}}""",
-            """{"type":"object","properties":{"v":{"type":"string","pattern":"("}}}""",
             """{"type":"object","properties":{"v":{}}}""",
             """{"type":"object","additionalProperties":{"type":"integer"}}""",
             """{"type":"object","properties":{}}""",
@@ -160,50 +134,11 @@ class NativeResponseSchemaTest {
     }
 
     @Test
-    fun validationEnforcesTheSchemaOnGeneratedText() {
-        val compiled = NativeResponseSchema.parse(schema)
-        compiled.validate("""  {"sentiment":"positive","confidence":90}  """)
-        compiled.validate("""{"sentiment":"neutral","confidence":5.0}""")
-        listOf(
-            """{"sentiment":"angry","confidence":90}""",
-            """{"sentiment":"positive","confidence":101}""",
-            """{"sentiment":"positive","confidence":1.5}""",
-            """{"sentiment":"positive"}""",
-            """{"sentiment":"positive","confidence":90,"extra":true}""",
-            """{"sentiment":1,"confidence":90}""",
-            """["positive",90]""",
-        ).forEach { assertRejected(schema, it) }
-
-        val open = """{"type":"object","properties":{"v":{"type":"string","pattern":"^[a-z]+${'$'}","format":"custom"}}}"""
-        NativeResponseSchema.parse(open).validate("""{"v":"abc","other":1}""")
-        NativeResponseSchema.parse(open).validate("""{}""")
-        assertRejected(open, """{"v":"ABC"}""")
-        assertEquals("custom", native(open).getJSONObject("properties").getJSONObject("v").getString("format"))
-    }
-
-    @Test
-    fun generatedTextMustBeStrictJson() {
-        val json = """{"type":"object","properties":{"v":{"type":"string"}},"required":["v"]}"""
-        NativeResponseSchema.parse(json).validate("""{"v":"\u00e9\n\"quoted\""}""")
-        listOf(
-            "```json\n{\"v\":\"x\"}\n```",
-            "{'v':'x'}",
-            "{v:\"x\"}",
-            "{\"v\":\"x\",}",
-            "{\"v\":\"x\"} trailing",
-            "{\"v\":\"x\",\"v\":\"y\"}",
-            "{\"v\":\"x\" /* comment */}",
-            "{\"v\":\"line\nbreak\"}",
-            "{\"v\":\"x\"",
-            "",
-        ).forEach { assertRejected(json, it) }
-        val number = """{"type":"object","properties":{"n":{"type":"number"}},"required":["n"]}"""
-        assertRejected(number, """{"n":01}""")
-        assertRejected(number, """{"n":NaN}""")
-        assertRejected(number, """{"n":1.}""")
-        assertRejected(json, """{"v":"\u+041"}""")
-        assertRejected(json, """{"v":"\u-001"}""")
-        assertRejected(json, """{"v":"\u 041"}""")
+    fun patternAndFormatArePassedToAicore() {
+        val json = """{"type":"object","properties":{"v":{"type":"string","pattern":"^[a-z]+${'$'}","format":"custom"}}}"""
+        val v = native(json).getJSONObject("properties").getJSONObject("v")
+        assertEquals("^[a-z]+${'$'}", v.getString("pattern"))
+        assertEquals("custom", v.getString("format"))
     }
 
     @Test
@@ -220,30 +155,19 @@ class NativeResponseSchemaTest {
     }
 
     @Test
-    fun numericBoundsAreValidatedExactly() {
+    fun numericBoundsMapToNativeDoubles() {
         val decimal = """{"type":"object","properties":{"n":{"type":"number","minimum":0.1,"maximum":0.3}},"required":["n"]}"""
-        NativeResponseSchema.parse(decimal).validate("""{"n":0.1}""")
-        NativeResponseSchema.parse(decimal).validate("""{"n":0.3}""")
-        assertRejected(decimal, """{"n":0.09999}""")
-        assertRejected(decimal, """{"n":0.30001}""")
-        assertEquals(0.1, native(decimal).getJSONObject("properties").getJSONObject("n").getDouble("minimum"), 0.0)
-
-        val long = """{"type":"object","properties":{"n":{"type":"integer","maximum":9223372036854775807}},"required":["n"]}"""
-        NativeResponseSchema.parse(long).validate("""{"n":9223372036854775807}""")
-        assertRejected(long, """{"n":9223372036854775808}""")
+        val n = native(decimal).getJSONObject("properties").getJSONObject("n")
+        assertEquals(0.1, n.getDouble("minimum"), 0.0)
+        assertEquals(0.3, n.getDouble("maximum"), 0.0)
+        NativeResponseSchema.parse("""{"type":"object","properties":{"n":{"type":"integer","maximum":9223372036854775807}},"required":["n"]}""")
+        assertThrows(IllegalArgumentException::class.java) {
+            NativeResponseSchema.parse("""{"type":"object","properties":{"n":{"type":"number","minimum":2,"maximum":1}}}""")
+        }
     }
 
     @Test
-    fun boundsThatADoubleCannotHoldExactlyAreRejected() {
-        val rounded = """{"type":"object","properties":{"n":{"type":"number","minimum":0.10000000000000001}},"required":["n"]}"""
-        assertTrue(assertThrows(IllegalArgumentException::class.java) { NativeResponseSchema.parse(rounded) }
-            .message!!.contains("exact numeric bound"))
-        // A property named "minimum" is not a bound.
-        NativeResponseSchema.parse("""{"type":"object","properties":{"minimum":{"type":"number","maximum":1e2}},"required":["minimum"]}""")
-    }
-
-    @Test
-    fun nestingIsBoundedBeforeRecursion() {
+    fun nestingIsLimited() {
         fun nested(levels: Int): String {
             var json = """{"type":"string"}"""
             repeat(levels) { json = """{"type":"object","properties":{"v":$json},"required":["v"]}""" }
@@ -251,8 +175,6 @@ class NativeResponseSchemaTest {
         }
         NativeResponseSchema.parse(nested(NativeResponseSchema.MAX_DEPTH - 1))
         assertThrows(IllegalArgumentException::class.java) { NativeResponseSchema.parse(nested(NativeResponseSchema.MAX_DEPTH)) }
-        // Far deeper than the stack could recurse through org.json.
-        assertThrows(IllegalArgumentException::class.java) { NativeResponseSchema.parse("[".repeat(100_000)) }
     }
 
     @Test
@@ -268,12 +190,9 @@ class NativeResponseSchemaTest {
     @Test
     fun nullableEnumsOnlyAllowNullWhenListed() {
         val excluded = """{"type":"object","properties":{"c":{"type":["string","null"],"enum":["red"]}},"required":["c"]}"""
-        assertRejected(excluded, """{"c":null}""")
-        NativeResponseSchema.parse(excluded).validate("""{"c":"red"}""")
         assertFalse(native(excluded).getJSONObject("properties").getJSONObject("c").optBoolean("nullable"))
 
         val listed = """{"type":"object","properties":{"c":{"type":["string","null"],"enum":["red",null]}},"required":["c"]}"""
-        NativeResponseSchema.parse(listed).validate("""{"c":null}""")
         assertTrue(native(listed).getJSONObject("properties").getJSONObject("c").getBoolean("nullable"))
     }
 

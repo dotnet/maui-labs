@@ -18,11 +18,12 @@ class NativeChatRequestTest {
     ) = NativeChatRequest(arrayOf(*messages), options)
 
     @Test
-    fun structuredOutputDefaultBudgetDoesNotOverrideAnExplicitLimitOrTextDefaults() {
+    fun structuredOutputUsesTheCallersOutputLimitUnchanged() {
         val options = NativeChatOptions(null, null, null, null, false, null).apply {
             responseSchemaJson = """{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}"""
         }
-        assertEquals(512, request(message("user", "hello"), options = options).toNative().maxOutputTokens)
+        val unset = GenerateContentRequest.Builder(TextPart("hello")).build().maxOutputTokens
+        assertEquals(unset, request(message("user", "hello"), options = options).toNative().maxOutputTokens)
         assertEquals(128, request(message("user", "hello"),
             options = NativeChatOptions(null, null, null, 128, false, null).apply {
                 responseSchemaJson = options.responseSchemaJson

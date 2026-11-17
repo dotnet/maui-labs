@@ -107,6 +107,8 @@ public class GeminiNanoChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase
 {
 	protected override bool? RequiresExplicitJsonSchema => true;
 	protected override bool SupportsBaselineSamplingOptions => true;
+	// The default model (Nano V3) stops after about 40 tokens when MaxOutputTokens is unset.
+	protected override int? BaselineMaxOutputTokens => 512;
 
 	// ML Kit's untyped Prompt API adapter also rejects schema-free JSON.
 	[Fact]

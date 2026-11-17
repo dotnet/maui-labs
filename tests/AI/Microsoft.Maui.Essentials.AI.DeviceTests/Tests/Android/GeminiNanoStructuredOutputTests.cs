@@ -35,6 +35,8 @@ public sealed class GeminiNanoStructuredOutputTests(ITestOutputHelper output)
 	[InlineData("""{"type":"object","additionalProperties":{"type":"integer"}}""")]
 	[InlineData("""{"type":"object","properties":{"next":{"$ref":"#"}},"required":["next"]}""")]
 	[InlineData("""{"type":["string","null"]}""")]
+	[InlineData("""{"type":"array","items":{"type":"string"}}""")]
+	[InlineData("""{"type":"integer","minimum":1}""")]
 	public void UnsupportedSchema_RejectsBeforeInference(string json)
 	{
 		using var document = JsonDocument.Parse(json);
@@ -49,9 +51,7 @@ public sealed class GeminiNanoStructuredOutputTests(ITestOutputHelper output)
 	[InlineData("""{"type":"object","properties":{"data":{"type":["array","null"],"items":{"type":["array","null"],"items":{"type":["string","null"]}}}},"required":["data"],"additionalProperties":false}""")]
 	[InlineData("""{"type":"object","properties":{"data":{"type":"array","items":{"type":"integer","maximum":9223372036854775807},"maxItems":3}},"required":["data"]}""")]
 	[InlineData("""{"type":"object","properties":{"code":{"type":"string","pattern":"^[a-z]+$","format":"custom"}},"required":["code"]}""")]
-	[InlineData("""{"type":"array","items":{"type":"string"}}""")]
-	[InlineData("""{"type":"string","enum":["red","green"]}""")]
-	[InlineData("""{"type":"integer","minimum":1}""")]
+	[InlineData("""{"type":"object","properties":{"ratio":{"type":"number","minimum":0.1,"maximum":0.30000000000000004}},"required":["ratio"]}""")]
 	public void CollectionAndConstrainedSchemas_AreAcceptedBeforeInference(string json)
 	{
 		using var document = JsonDocument.Parse(json);
@@ -74,7 +74,7 @@ public sealed class GeminiNanoStructuredOutputTests(ITestOutputHelper output)
 			deep = $$"""{"type":"object","properties":{"level{{level}}":{{deep}}},"required":["level{{level}}"],"additionalProperties":false}""";
 		using var deepSchema = JsonDocument.Parse(deep);
 		var deepResponse = await client.GetResponseAsync([new(ChatRole.User, "Which planet do we live on?")],
-			new ChatOptions { ModelId = modelId, Temperature = 0, ResponseFormat = ChatResponseFormat.ForJsonSchema(deepSchema.RootElement) },
+			new ChatOptions { ModelId = modelId, Temperature = 0, MaxOutputTokens = 512, ResponseFormat = ChatResponseFormat.ForJsonSchema(deepSchema.RootElement) },
 			timeout.Token);
 		output.WriteLine($"DEEP {modelId}: {deepResponse.Text}");
 		var value = JsonDocument.Parse(deepResponse.Text).RootElement;
@@ -84,7 +84,7 @@ public sealed class GeminiNanoStructuredOutputTests(ITestOutputHelper output)
 
 		using var arraySchema = JsonDocument.Parse("""{"type":"object","properties":{"colors":{"type":"array","items":{"type":["string","null"]},"minItems":3,"maxItems":3}},"required":["colors"],"additionalProperties":false}""");
 		var arrayResponse = await client.GetResponseAsync([new(ChatRole.User, "List the three primary colors of light.")],
-			new ChatOptions { ModelId = modelId, Temperature = 0, ResponseFormat = ChatResponseFormat.ForJsonSchema(arraySchema.RootElement) },
+			new ChatOptions { ModelId = modelId, Temperature = 0, MaxOutputTokens = 512, ResponseFormat = ChatResponseFormat.ForJsonSchema(arraySchema.RootElement) },
 			timeout.Token);
 		output.WriteLine($"ARRAY {modelId}: {arrayResponse.Text}");
 		Assert.Equal(3, JsonDocument.Parse(arrayResponse.Text).RootElement.GetProperty("colors").GetArrayLength());
@@ -344,30 +344,20 @@ public sealed class GeminiNanoStructuredOutputTests(ITestOutputHelper output)
 	[InlineData("gemini-nano-preview-fast", false)]
 	[InlineData("gemini-nano-preview-fast", true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task NonObjectRootSchemas_ReturnTheBareValue(string modelId, bool streaming)
+	public async Task EnumsArraysAndBounds_ConstrainGeneration(string modelId, bool streaming)
 	{
 		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
 		using var client = new GeminiNanoChatClient();
-		async Task<JsonElement> Generate(string schema, string prompt)
+		async Task<JsonElement> Generate(string property, string prompt)
 		{
-			using var document = JsonDocument.Parse(schema);
+			using var document = JsonDocument.Parse($$"""{"type":"object","properties":{"value":{{property}}},"required":["value"]}""");
 			var options = new ChatOptions { ModelId = modelId, Temperature = 0, ResponseFormat = ChatResponseFormat.ForJsonSchema(document.RootElement) };
 			ChatMessage[] messages = [new(ChatRole.User, prompt)];
-			string text;
-			if (streaming)
-			{
-				List<string> updates = [];
-				await foreach (var update in client.GetStreamingResponseAsync(messages, options, timeout.Token))
-					if (update.Text.Length > 0)
-						updates.Add(update.Text);
-				text = Assert.Single(updates);
-			}
-			else
-			{
-				text = (await client.GetResponseAsync(messages, options, timeout.Token)).Text;
-			}
-			output.WriteLine($"ROOT {modelId} {schema}: {text}");
-			return JsonDocument.Parse(text).RootElement.Clone();
+			var text = streaming
+				? (await client.GetStreamingResponseAsync(messages, options, timeout.Token).ToChatResponseAsync(timeout.Token)).Text
+				: (await client.GetResponseAsync(messages, options, timeout.Token)).Text;
+			output.WriteLine($"CONSTRAINED {modelId} {property}: {text}");
+			return JsonDocument.Parse(text).RootElement.GetProperty("value").Clone();
 		}
 
 		var colors = await Generate("""{"type":"array","items":{"type":"string","enum":["red","green","blue"]},"minItems":3,"maxItems":3}""",

@@ -45,8 +45,11 @@ Schema-free `ChatResponseFormat.Json`, typed prompt fallback
 (`useJsonSchemaResponseFormat: false`) and schemas ML Kit can't represent throw
 `NotSupportedException` before inference.
 
-Structured requests default to 512 output tokens when `MaxOutputTokens` is
-unset. If the limit cuts the JSON short, the request fails and says so.
+As with OpenAI, the generated text is returned as is: the client doesn't parse or
+validate it. `MaxOutputTokens` is passed through unchanged, so a response cut off
+at the limit is incomplete JSON with finish reason `Length`. When it is unset,
+Nano V3 (the default model) stops after about 40 tokens, so set it for anything
+larger than a few short fields. ML Kit's own typed API behaves the same way.
 
 ## How it works
 
@@ -61,17 +64,10 @@ three things. The client does the same from a JSON schema:
    sets this field for a Kotlin class, so the bridge uses its own copy of ML Kit's
    typed-output processor that sets it from the JSON schema.
 
-AICore returns text. The bridge parses it as strict JSON (RFC 8259) and checks
-it against the schema before the response completes. Output that doesn't match
-fails the request; it is never repaired.
-
 ## Streaming
 
 `GetStreamingResponseAsync` streams JSON text as AICore generates it, followed
-by the finish reason, model ID and usage. The complete text is validated at the
-end, so a stream can fail after partial JSON. The concatenated updates always
-equal the validated text. Non-object roots arrive as one update after
-validation.
+by the finish reason, model ID and usage.
 
 ## Thinking and tools
 
@@ -105,9 +101,8 @@ tools.
 
 ## Supported schemas
 
-The root can be any non-null type. AICore returns array, string, number,
-integer and boolean roots as `{"wrapper": value}`; the bridge checks the wrapper
-and returns the bare value. `GetResponseAsync<T>` already wraps non-object types
+The root must be a non-null object, as with OpenAI structured outputs. AICore
+only generates object roots. `GetResponseAsync<T>` already wraps non-object types
 (such as the `string[]` and `string[][]` used by Microsoft.Extensions.DataIngestion
 enrichers) in a required `data` property.
 
@@ -127,19 +122,16 @@ enums, and dictionaries (schema-valued `additionalProperties`). Other limits:
 
 - Schemas nest up to 64 levels, matching System.Text.Json's default maximum depth.
 - Local references are resolved; recursive and external references are rejected.
-- `minimum`/`maximum` must be exactly representable as a `double`, because ML Kit
-  stores bounds as doubles.
 
 AICore enforces types, `enum`, `required`, `minimum`/`maximum` and
-`minItems`/`maxItems` while decoding. It doesn't enforce `pattern`, so the bridge
-rejects output that doesn't match. `format` is sent to AICore but not validated.
+`minItems`/`maxItems` while decoding. `pattern` and `format` are sent to AICore,
+which doesn't enforce them.
 
 ## Native implementation
 
 The Kotlin code is in `src/AI/AndroidNative/EssentialsAI/src/main/kotlin/`:
 
-- `NativeResponseSchema` parses the JSON schema, builds ML Kit's schema object and
-  validates generated text.
+- `NativeResponseSchema` parses the JSON schema and builds ML Kit's schema object.
 - `NativeStructuredOutput` holds the processor, the schema prompt and the AICore
   request field. It is the only code that uses ML Kit internals.
 

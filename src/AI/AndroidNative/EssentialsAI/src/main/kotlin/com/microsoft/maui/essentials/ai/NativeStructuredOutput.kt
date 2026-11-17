@@ -80,15 +80,3 @@ internal fun checkToolTurnFinished(finishReason: Int) {
             if (truncated) " Increase MaxOutputTokens." else ""
     }
 }
-
-internal fun validateStructuredResponse(schema: NativeResponseSchema, response: NativeChatResponse): String {
-    try {
-        return schema.validate(response.text)
-    } catch (exception: IllegalArgumentException) {
-        val truncated = if (response.finishReason == Candidate.FinishReason.MAX_TOKENS) {
-            " Generation stopped at the output token limit; increase MaxOutputTokens."
-        } else ""
-        throw IllegalStateException(
-            "Gemini Nano structured output did not match the response schema: ${exception.message}$truncated", exception)
-    }
-}

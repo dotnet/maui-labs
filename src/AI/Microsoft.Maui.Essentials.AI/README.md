@@ -155,10 +155,10 @@ update when a provider emits no incremental progress. For trimmed/AOT apps,
 pass source-generated `JsonSerializerOptions`, as above, for every structured
 response type.
 
-Gemini Nano applies schemas through AICore's constrained decoding, for any root
-type and nesting up to 64 levels. Structured streaming emits JSON that is
-validated when the response ends, and works with tools and full thinking output.
-See the
+Gemini Nano applies schemas through AICore's constrained decoding. As with
+OpenAI, the schema root must be an object and the generated JSON is returned
+unchanged. Structured output works with streaming, tools and full thinking
+output. See the
 [Android structured-output guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-structured-output.md)
 for supported keywords.
 
