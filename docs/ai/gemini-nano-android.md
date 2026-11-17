@@ -27,9 +27,13 @@ Kotlin constructs the Google request:
 - Temperature, TopK, Seed, and MaxOutputTokens map to the native builder.
   C# checks known ranges and Seed's 32-bit representability; Google's builder
   also validates native numeric constraints.
+- MaxOutputTokens has no default. ML Kit sends 0 when it is unset, and Nano V3
+  (the default model) then stops after about 40 tokens, for text and structured
+  output alike; Nano V4 does not. Set MaxOutputTokens for longer responses.
 - `Reasoning.Output = ReasoningOutput.Full` enables thinking after checking
   `Feature.THINKING_MODE` in `getAvailableFeatures()`. Effort levels and summaries
-  have no native mapping.
+  have no native mapping. Reasoning in Assistant history (for example from
+  function invocation) is dropped; in other roles it is rejected.
 
 There is no client-held conversation state. Callers supply the conversation on
 each request. Custom content and unknown roles (including `developer`) are
@@ -99,8 +103,11 @@ var response = await chat.GetResponseAsync(
 
 The provider registers `AIFunction` names, descriptions, and parameter schemas.
 Kotlin maps supported schema fields directly to Google's `FunctionSchema`;
-unrepresentable constraints (including `$ref`, `const`, and `additionalProperties`)
-are rejected, not removed. Return schemas do not constrain generation.
+unrepresentable constraints (including `$ref`, `const`, and dictionary
+`additionalProperties` schemas) are rejected, not removed. The client first drops
+`$schema` and `additionalProperties: false`, which strict MEAI and
+`[AIToolSource]` tools put on every object: ML Kit can't express closed objects,
+and arguments bind by name. Return schemas do not constrain generation.
 Parameterless functions omit the native parameter schema: supplying an empty
 object schema caused AICore `countTokens` to fail with tokenization error 10003.
 The shared function suite covers parameterless invocation in both response modes.
@@ -207,6 +214,17 @@ Use the same ID with `GetModelStatusAsync(modelId, cancellationToken)`,
 Responses report the actual SDK model name, such as `nano-v4-fast`, rather than
 the selection alias. Preview support depends on the device and AICore enrollment.
 Status queries propagate errors if ML Kit cannot resolve the selected model.
+
+## Structured output
+
+JSON schemas become ML Kit's native response schema, which AICore enforces with
+constrained decoding. The selected model must advertise
+`ChatModelCapability.StructuredOutput`. The schema root must be an object, and
+the generated JSON is returned unchanged, as with OpenAI. Both response methods
+support schemas. Thinking and tools work with a schema; with tools, the model decides on calls
+without the schema and only its final answer is constrained. See
+[structured output](gemini-nano-structured-output.md) for supported keywords and
+how it works.
 
 ## Explicit download
 

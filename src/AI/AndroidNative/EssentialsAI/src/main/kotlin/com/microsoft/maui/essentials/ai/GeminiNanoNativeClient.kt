@@ -2,6 +2,7 @@
 
 package com.microsoft.maui.essentials.ai
 
+import com.google.android.gms.internal.mlkit_genai_prompt.zzip
 import com.google.mlkit.genai.common.GenAiException
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
@@ -67,6 +68,7 @@ fun checkStatus(
                     model.getBaseModelName(),
                 ).apply {
                     toolCallingAvailable = Feature.FUNCTION_CALLING in features
+                    structuredOutputAvailable = Feature.STRUCTURED_OUTPUT in features
                 }
             } finally {
                 model.close()
@@ -165,6 +167,7 @@ class GeminiNanoNativeClient {
         val job = operationScope.launch {
             var stream: NativeChatStream? = null
             val response = try {
+                val schema = request.options.responseSchema
                 val model = Generation.getClient(modelConfiguration(request.options.modelId))
                 val generatedResponse = try {
                     ensureActive()
@@ -172,9 +175,10 @@ class GeminiNanoNativeClient {
                     check(featureStatus == FeatureStatus.AVAILABLE) {
                         "Gemini Nano is not ready (ML Kit FeatureStatus $featureStatus). Download the model explicitly before retrying."
                     }
-                    val nativeRequest = request.toNative()
+                    val nativeSchema = schema?.native()
+                    val nativeRequest = request.toNative(nativeSchema)
                     val features = if (nativeRequest.systemInstruction != null ||
-                        nativeRequest.enableThinking || request.options.toolsJson != null) {
+                        nativeRequest.enableThinking || request.options.toolsJson != null || schema != null) {
                         model.getAvailableFeatures()
                     } else {
                         emptyList()
@@ -194,20 +198,53 @@ class GeminiNanoNativeClient {
                             "The selected Gemini Nano model does not support thinking mode (requires Nano V4 or later)."
                         }
                     }
-                    val modelName = model.getBaseModelName()
-                    val tokenCount = model.countTokens(nativeRequest).totalTokens
-                    val generated = if (streaming) {
-                        val nativeStream = NativeChatStream(this, callback, modelName,
-                            deferToolText = request.options.toolsJson != null)
-                        stream = nativeStream
-                        model.generateContent(nativeRequest, nativeStream)
-                    } else {
-                        model.generateContent(nativeRequest)
+                    if (schema != null) {
+                        check(Feature.STRUCTURED_OUTPUT in features) {
+                            "The selected Gemini Nano model does not support native structured output."
+                        }
                     }
-
-                    val response = generated.toNativeResponse(modelName, tokenCount)
-                    stream?.finish(response)
-                    response
+                    val modelName = model.getBaseModelName()
+                    val processor = nativeSchema?.let {
+                        NativeSchemaProcessor(modelConfiguration(request.options.modelId), it)
+                    }
+                    try {
+                        run generation@{
+                            val nativeStream = if (streaming) {
+                                NativeChatStream(this, callback, modelName,
+                                    deferToolText = request.options.toolsJson != null && schema == null).also { stream = it }
+                            } else null
+                            if (processor == null) {
+                                val tokenCount = model.countTokens(nativeRequest).totalTokens
+                                val generated = if (nativeStream != null) model.generateContent(nativeRequest, ThoughtHeaderFilter(nativeStream))
+                                    else model.generateContent(nativeRequest)
+                                val response = generated.toNativeResponse(modelName, tokenCount)
+                                nativeStream?.finish(response)
+                                return@generation response
+                            }
+                            var toolTurnTokens = 0
+                            if (request.options.toolsJson != null) {
+                                // AICore emits no function calls under a response schema, so the model decides on
+                                // tools without the schema and only its final answer is generated under it.
+                                val toolRequest = request.toNative()
+                                toolTurnTokens = model.countTokens(toolRequest).totalTokens
+                                val toolTurn = model.generateContent(toolRequest).toNativeResponse(modelName, toolTurnTokens)
+                                if (toolTurn.functionCalls.isNotEmpty()) {
+                                    val calls = NativeChatResponse("", toolTurn.thoughts, toolTurn.finishReason, modelName,
+                                        toolTurnTokens).apply { functionCalls = toolTurn.functionCalls }
+                                    nativeStream?.finish(calls)
+                                    return@generation calls
+                                }
+                                checkToolTurnFinished(toolTurn.finishReason)
+                            }
+                            val tokenCount = toolTurnTokens + countStructuredTokens(processor, nativeRequest)
+                            val response = generateStructuredContent(processor, nativeRequest, nativeStream)
+                                .toNativeResponse(modelName, tokenCount)
+                            nativeStream?.finish(response)
+                            response
+                        }
+                    } finally {
+                        processor?.close()
+                    }
                 } finally {
                     model.close()
                 }
@@ -256,7 +293,7 @@ class GeminiNanoNativeClient {
     }
 }
 
-internal fun NativeChatRequest.toNative(): GenerateContentRequest {
+internal fun NativeChatRequest.toNative(responseSchema: zzip? = null): GenerateContentRequest {
     val instructions = mutableListOf<String>()
     val contents = mutableListOf<Content>()
     val useNativeTools = options.toolsJson != null
@@ -319,6 +356,8 @@ internal fun NativeChatRequest.toNative(): GenerateContentRequest {
         "At least one user or assistant message is required."
     }
 
+    responseSchema?.let { appendSchemaPrompt(contents, it) }
+
     val builder = GenerateContentRequest.Builder(contents)
     if (instructions.isNotEmpty()) {
         builder.systemInstruction = SystemInstruction(instructions.joinToString("\n\n"))
@@ -331,4 +370,20 @@ internal fun NativeChatRequest.toNative(): GenerateContentRequest {
     builder.enableThinking = options.enableThinking
     options.toolsJson?.let { builder.setTools(nativeTools(it)) }
     return builder.build()
+}
+
+// Matches ML Kit's typed path: the schema prompt goes on the last text part, or a new user part.
+private fun appendSchemaPrompt(contents: MutableList<Content>, schema: zzip) {
+    val contentIndex = contents.indexOfLast { content -> content.parts.any { it is TextPart } }
+    if (contentIndex < 0) {
+        contents.add(Content.builder().setRole(Content.Role.USER).addPart(TextPart(schemaPrompt("", schema))).build())
+        return
+    }
+    val content = contents[contentIndex]
+    val partIndex = content.parts.indexOfLast { it is TextPart }
+    contents[contentIndex] = Content.builder().setRole(content.role).apply {
+        content.parts.forEachIndexed { index, part ->
+            addPart(if (index == partIndex) TextPart(schemaPrompt((part as TextPart).textString, schema)) else part)
+        }
+    }.build()
 }

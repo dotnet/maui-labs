@@ -116,7 +116,8 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   `Downloading`; unavailable maps to `Unavailable`; unrecognized values map to
   `Unknown`. Advertise
   Text, Streaming, ImageInput, and input TokenUsage; add Reasoning only after
-  the runtime thinking-capability check. `PrepareModelAsync` explicitly awaits
+  the runtime thinking-capability check and StructuredOutput only when the native
+  model advertises it. `PrepareModelAsync` explicitly awaits
   ML Kit download/status `Flow` completion and is never called by generation.
   `DownloadModelAsync` remains available when callers need native progress.
 
@@ -307,7 +308,8 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   Assistant content; reject images in System/Tool, URI media, non-image media,
   empty/undecodable images, misplaced tool content, and other recognized
   unsupported standard content. Replay function calls/results as ordered JSON
-  text history; omit unknown custom content.
+  text history; omit unknown custom content and the model's own reasoning in
+  Assistant history (ML Kit has no input part for prior thoughts).
 
 ## Request features
 
@@ -422,9 +424,15 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   disallowing additional properties as required by the native model. Reject
   schema-free JSON/prompt fallback before native work and malformed native JSON
   on completion.
-- **Android:** the reviewed ML Kit Prompt provider does not expose structured
-  output. Reject JSON, JSON-schema, and typed structured-output requests before
-  native inference; do not emulate them through prompts or parsing.
+- **Android:** build ML Kit's native response schema from the JSON schema and
+  set it through ML Kit internals (AICore constrained decoding). Require an
+  explicit object-root schema and the model's structured capability. Normalize
+  required and additional properties through MEAI, return the generated JSON
+  unchanged, and preserve caller history and input usage. Reject schema-free JSON
+  and unrepresentable constraints before inference. Thinking works with a
+  schema. AICore emits no function calls under a schema, so with tools each turn
+  first runs without the schema and only the final answer is regenerated under
+  it.
 
 ## Response behavior
 
@@ -484,7 +492,8 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - **Android:** serialize native callbacks through a per-request queue, preserve
   text/thought order, and reconcile the final candidate against accumulated
   additional-text deltas with the same equal/suffix/divergence contract. Finish
-  admitted callbacks before releasing the managed JNI callback.
+  admitted callbacks before releasing the managed JNI callback. Structured
+  requests stream JSON deltas.
 
 ### Token usage
 
@@ -514,7 +523,9 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - **Windows:** advertise no TokenUsage capability and report no usage metadata
   because the native API exposes no token counts.
 - **Android:** map native input tokens from `countTokens`; do not estimate output
-  or total counts. Emit streaming input usage once with the terminal update.
+  or total counts. For structured requests, count the request with its schema,
+  plus the schema-free tool-decision request when tools are active. Emit
+  streaming input usage once with the terminal update.
 
 ### Telemetry and timing
 
@@ -523,6 +534,11 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - Timing is measured by the optional MEAI OpenTelemetry wrapper, not stored in chat responses.
 - The wrapper measures total operation duration, time to the first emitted streaming update, and time between later emitted updates.
 - An emitted update is not necessarily a token; it may contain text, tools, metadata, or token usage metadata.
+- With the pinned M.E.AI 10.4.1, input/output tokens are span tags and
+  `gen_ai.client.token.usage` measurements, and cached input is the
+  `gen_ai.usage.cache_read.input_tokens` span tag. Total and reasoning counts are
+  only on `UsageDetails`. Response IDs and finish reasons are emitted only when
+  the provider supplies them.
 
 **Provider patterns**
 
@@ -664,6 +680,14 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - Bind deterministic chained-tool tests separately from basic Required support.
   Providers that cannot force a different tool on every round still run the
   single Required exactly-once, schema, cancellation, and Activity contracts.
+- Bind live structured-output and tool scenarios through model and capability
+  hooks (`StructuredOutputModelIds`, `ReasoningModelId`,
+  `SupportsReasoningOutput`, `SupportsStructuredOutputWithTools`,
+  `StructuredSchemaNestingDepth`) rather than provider-only copies. Observed
+  model behavior that is not part of the contract, such as optional reasoning
+  summaries or unneeded tool calls, gets its own hook
+  (`ReasoningContentIsGuaranteed`, `AvoidsUnneededToolCalls`) so the remaining
+  assertions still run.
 
 ### Model-free rejection and live inference
 

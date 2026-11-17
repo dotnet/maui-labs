@@ -28,6 +28,12 @@ public class AppleIntelligenceChatClientFunctionCallingTestsBase : ChatClientFun
 	protected override bool PreservesToolActivityContext => true;
 
 	protected override bool PreservesToolCancellation => true;
+
+	// Foundation Models runs native tools inside a session that can also generate a guided schema.
+	protected override bool SupportsStructuredOutputWithTools => true;
+	// The on-device model calls every available tool for a schema prompt that needs none
+	// (observed: lookup_secret("Alice") and get_weather("Oslo") for a person extraction).
+	protected override bool AvoidsUnneededToolCalls => false;
 }
 
 [Collection(nameof(AppleIntelligenceCollection))]
@@ -246,6 +252,14 @@ public class AppleIntelligenceChatClientUsageTests(ITestOutputHelper output)
 public class AppleIntelligenceChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<AppleIntelligenceChatClient>
 {
 	protected override bool? RequiresExplicitJsonSchema => true;
+	protected override bool StreamsStructuredOutputIncrementally => true;
+	// Foundation Models rejects schemas that allow null before OS 26.4.
+	protected override bool SupportsNullableSchemaTypes =>
+		OperatingSystem.IsIOSVersionAtLeast(26, 4) || OperatingSystem.IsMacCatalystVersionAtLeast(26, 4);
+
+	// Foundation Models reports usage starting in OS 27.
+	protected override bool IsUsageAvailable =>
+		OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27);
 }
 
 #endif
