@@ -211,7 +211,10 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 
 **Essentials.AI implementation**
 
-- **Apple:** prepend options and preserve System messages as ordered transcript instructions. Reject instructions-only input and any trailing non-User message before native generation; the current prompt must be User.
+- **Apple:** prepend options and preserve System messages as ordered transcript
+  instructions. Reject instructions-only input; the current prompt must be
+  User, except when trailing Tool results exactly answer the calls in the
+  preceding contiguous Assistant call messages, which resumes the existing turn.
 - **Windows:** combine nonblank options first and System messages in encounter
   order into the native API's single system string. Remove hoisted System
   messages from history and require at least one User or Assistant turn.

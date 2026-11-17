@@ -430,7 +430,7 @@ public class ChatClientNative: NSObject {
         return false
     }
 
-    /// True when the request ends in tool messages whose results cover every call of the preceding assistant message.
+    /// True when the request ends in tool messages whose results cover the preceding assistant calls.
     static func isToolResultResume(_ messages: [ChatMessageNative]) throws -> Bool {
         guard let last = messages.last, last.role == .tool else {
             return false
@@ -441,18 +441,30 @@ public class ChatClientNative: NSObject {
         while index >= 0, messages[index].role == .tool {
             for content in messages[index].contents {
                 if let result = content as? FunctionResultContentNative {
-                    resultIds.insert(result.callId)
+                    guard resultIds.insert(result.callId).inserted else {
+                        throw NSError.chatError(.invalidContent, description: "Tool results must not repeat a call ID.")
+                    }
                 }
             }
             index -= 1
         }
 
         guard index >= 0, messages[index].role == .assistant else {
-            throw NSError.chatError(.invalidRole, description: "Tool results must follow an assistant message with tool calls.")
+            throw NSError.chatError(.invalidRole, description: "Tool results must follow assistant messages with tool calls.")
         }
-        let callIds = Set(messages[index].contents.compactMap { ($0 as? FunctionCallContentNative)?.callId })
+        var callIds = Set<String>()
+        while index >= 0, messages[index].role == .assistant {
+            let calls = messages[index].contents.compactMap { $0 as? FunctionCallContentNative }
+            if calls.isEmpty { break }
+            for call in calls {
+                guard callIds.insert(call.callId).inserted else {
+                    throw NSError.chatError(.invalidContent, description: "Tool calls must not repeat a call ID.")
+                }
+            }
+            index -= 1
+        }
         guard !callIds.isEmpty, callIds == resultIds else {
-            throw NSError.chatError(.invalidContent, description: "Tool results must answer every tool call of the preceding assistant message.")
+            throw NSError.chatError(.invalidContent, description: "Tool results must answer every tool call of the preceding assistant messages.")
         }
         return true
     }

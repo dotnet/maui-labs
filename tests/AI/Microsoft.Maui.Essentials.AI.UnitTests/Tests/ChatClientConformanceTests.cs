@@ -51,6 +51,9 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 		var binding = new ToolBinding();
 		await binding.ApprovalRequiredTool_DecisionControlsInvocationAndNextTurnSucceeds(streaming, approve: true);
 		await binding.ApprovalRequiredTool_DecisionControlsInvocationAndNextTurnSucceeds(streaming, approve: false);
+		await binding.ApprovalRequiredTools_TwoRounds_InvokeEachOnce(streaming);
+		await binding.ApprovalRequiredTools_MixedBatch_OnlyInvokesApprovedCall(streaming, splitMessages: false);
+		await binding.ApprovalRequiredTools_MixedBatch_OnlyInvokesApprovedCall(streaming, splitMessages: true);
 		await binding.PlainTool_WithApprovalToolRegistered_InvokesOnceWithoutApproval(streaming);
 	}
 
@@ -570,6 +573,13 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 			cancellationToken.ThrowIfCancellationRequested();
 			AssertDeterministicSampling(options);
 			var results = messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>().ToArray();
+			if (options?.Tools?.Any(tool => tool.Name == "getTemperature") == true &&
+				results.Any(result => result.CallId == "control-call") &&
+				!results.Any(result => result.CallId == "control-temperature"))
+			{
+				return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
+					[new FunctionCallContent("control-temperature", "getTemperature", new Dictionary<string, object?> { ["city"] = "Paris" })])));
+			}
 			if (results.Length > 0)
 				return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
 					string.Join(" ", results.Select(result => result.Result?.ToString())))));
@@ -585,6 +595,7 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 				},
 				"capture_nullable" => new() { ["value"] = null, ["label"] = "OPTIONAL_LABEL" },
 				"GetWeather" => new() { ["location"] = "Seattle" },
+				"getForecast" => new() { ["city"] = "Paris" },
 				_ => []
 			};
 			return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,

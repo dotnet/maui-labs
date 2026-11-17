@@ -432,6 +432,143 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	[InlineData(false)]
 	[InlineData(true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ApprovalRequiredTools_TwoRounds_InvokeEachOnce(bool streaming)
+	{
+		if (!SupportsToolApproval)
+			return;
+
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+		var forecastCalls = 0;
+		var temperatureCalls = 0;
+		var forecast = new ApprovalRequiredAIFunction(AIFunctionFactory.Create((string city) =>
+		{
+			Interlocked.Increment(ref forecastCalls);
+			return "Now call getTemperature for Paris to obtain the temperature.";
+		}, name: "getForecast", description: "Gets the forecast instructions for a city."));
+		var temperature = new ApprovalRequiredAIFunction(AIFunctionFactory.Create((string city) =>
+		{
+			Interlocked.Increment(ref temperatureCalls);
+			return "Sunny, 22C";
+		}, name: "getTemperature", description: "Gets the temperature for a city."));
+		using var client = CreateApprovalClient();
+		var options = new ChatOptions
+		{
+			Tools = [forecast],
+			ToolMode = SupportsRequiredToolMode is true ? ChatToolMode.RequireSpecific(forecast.Name) : ChatToolMode.Auto,
+			AllowMultipleToolCalls = false,
+			MaxOutputTokens = 128
+		};
+		ConfigureBaselineSamplingOptions(options);
+		List<ChatMessage> messages =
+		[
+			new(ChatRole.User, "First call getForecast for Paris. Once you get its result, call getTemperature for Paris. " +
+				"Then answer with the temperature. Do not call either tool again.")
+		];
+
+		var first = await GetRequiredToolResponseAsync(client, [.. messages], options, streaming, timeout.Token);
+		var firstRequest = Assert.Single(first.Messages.SelectMany(message => message.Contents)
+			.OfType<ToolApprovalRequestContent>());
+		var firstCall = Assert.IsType<FunctionCallContent>(firstRequest.ToolCall);
+		Assert.Equal(forecast.Name, firstCall.Name);
+		Assert.Equal(0, forecastCalls);
+		Assert.Equal(0, temperatureCalls);
+
+		messages.AddRange(first.Messages);
+		messages.Add(new(ChatRole.User, [firstRequest.CreateResponse(approved: true)]));
+		options.Tools = [forecast, temperature];
+		options.ToolMode = ChatToolMode.Auto;
+		var second = await GetRequiredToolResponseAsync(client, [.. messages], options, streaming, timeout.Token);
+		var secondRequest = Assert.Single(second.Messages.SelectMany(message => message.Contents)
+			.OfType<ToolApprovalRequestContent>());
+		var secondCall = Assert.IsType<FunctionCallContent>(secondRequest.ToolCall);
+		Assert.Equal(temperature.Name, secondCall.Name);
+		Assert.NotEqual(firstCall.CallId, secondCall.CallId);
+		Assert.Equal(1, forecastCalls);
+		Assert.Equal(0, temperatureCalls);
+
+		messages.AddRange(second.Messages);
+		messages.Add(new(ChatRole.User, [secondRequest.CreateResponse(approved: true)]));
+		var final = await GetRequiredToolResponseAsync(client, [.. messages], options, streaming, timeout.Token);
+		Assert.DoesNotContain(final.Messages.SelectMany(message => message.Contents),
+			content => content is ToolApprovalRequestContent);
+		Assert.Equal(1, forecastCalls);
+		Assert.Equal(1, temperatureCalls);
+		Assert.Contains("22", final.Text, StringComparison.Ordinal);
+	}
+
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(false, true)]
+	[InlineData(true, false)]
+	[InlineData(true, true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ApprovalRequiredTools_MixedBatch_OnlyInvokesApprovedCall(bool streaming, bool splitMessages)
+	{
+		if (!SupportsToolApproval)
+			return;
+
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+		var approvedCalls = 0;
+		var rejectedCalls = 0;
+		var approvedTool = new ApprovalRequiredAIFunction(AIFunctionFactory.Create(() =>
+		{
+			Interlocked.Increment(ref approvedCalls);
+			return "APPROVED_VALUE_81";
+		}, name: "approved_lookup", description: "Looks up the approved value."));
+		var rejectedTool = new ApprovalRequiredAIFunction(AIFunctionFactory.Create(() =>
+		{
+			Interlocked.Increment(ref rejectedCalls);
+			return "REJECTED_VALUE_17";
+		}, name: "rejected_lookup", description: "Looks up the rejected value."));
+		var approvedRequest = new ToolApprovalRequestContent("approval-a",
+			new FunctionCallContent("call-a", approvedTool.Name));
+		var rejectedRequest = new ToolApprovalRequestContent("approval-b",
+			new FunctionCallContent("call-b", rejectedTool.Name));
+		List<ChatMessage> messages =
+		[
+			new(ChatRole.User, "Report the results of the requested lookups. Do not call any tools again.")
+		];
+		if (splitMessages)
+		{
+			messages.Add(new(ChatRole.Assistant, [approvedRequest]) { MessageId = "message-a" });
+			messages.Add(new(ChatRole.Assistant, [rejectedRequest]) { MessageId = "message-b" });
+		}
+		else
+		{
+			messages.Add(new(ChatRole.Assistant, [approvedRequest, rejectedRequest]));
+		}
+		messages.Add(new(ChatRole.User,
+			[approvedRequest.CreateResponse(approved: true), rejectedRequest.CreateResponse(approved: false)]));
+		using var client = CreateApprovalClient();
+		var options = new ChatOptions { Tools = [approvedTool, rejectedTool], MaxOutputTokens = 128 };
+		ConfigureBaselineSamplingOptions(options);
+
+		var response = await GetRequiredToolResponseAsync(client, [.. messages], options, streaming, timeout.Token);
+
+		Assert.Equal(1, approvedCalls);
+		Assert.Equal(0, rejectedCalls);
+		Assert.DoesNotContain(response.Messages.SelectMany(message => message.Contents),
+			content => content is ToolApprovalRequestContent);
+		var results = response.Messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>().ToArray();
+		Assert.Equal("APPROVED_VALUE_81", Assert.Single(results, result => result.CallId == "call-a").Result?.ToString());
+		Assert.Single(results, result => result.CallId == "call-b");
+		Assert.False(string.IsNullOrWhiteSpace(response.Text));
+
+		messages.AddRange(response.Messages);
+		messages.Add(new(ChatRole.User, "Reply with a short goodbye."));
+		var nextOptions = new ChatOptions { MaxOutputTokens = 64 };
+		ConfigureBaselineSamplingOptions(nextOptions);
+		var next = await GetRequiredToolResponseAsync(client, [.. messages], nextOptions, streaming, timeout.Token);
+
+		Assert.False(string.IsNullOrWhiteSpace(next.Text));
+		Assert.Equal(1, approvedCalls);
+		Assert.Equal(0, rejectedCalls);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task PlainTool_WithApprovalToolRegistered_InvokesOnceWithoutApproval(bool streaming)
 	{
 		if (!SupportsToolApproval)

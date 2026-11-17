@@ -145,8 +145,9 @@ behaves like a non-invoking MEAI client:
    requests, invokes approved and plain calls, and rejects the rest, exactly as
    for Azure/OpenAI.
 4. The next request ends in Tool results that cover the preceding assistant
-   calls; the client resumes the native session with `toolOutput` entries and an
-   empty prompt (resume turns use auto tool mode, even if `Required` was set).
+   calls, even when FICC splits the calls or results across messages; the client
+   resumes the native session with `toolOutput` entries and an empty prompt
+   (resume turns use auto tool mode, even if `Required` was set).
 
 Notes:
 

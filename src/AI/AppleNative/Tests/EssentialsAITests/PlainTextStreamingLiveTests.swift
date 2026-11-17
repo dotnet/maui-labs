@@ -108,6 +108,8 @@ final class PlainTextStreamingLiveTests: XCTestCase {
                     case .toolResult:
                         run.events.append("tool-result")
                         run.toolResults.append(update.toolCallResult ?? "")
+                    case .pendingToolCall:
+                        XCTFail("Approval mode is disabled in this test.")
                     @unknown default:
                         break
                     }

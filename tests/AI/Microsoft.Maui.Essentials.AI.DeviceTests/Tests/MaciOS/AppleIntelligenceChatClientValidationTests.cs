@@ -133,6 +133,37 @@ public class AppleIntelligenceChatClientValidationTests
 			Assert.Throws<ArgumentException>(() => AppleIntelligenceChatClient.ValidateCurrentPrompt(native));
 	}
 
+	// FICC groups approved calls by message ID and can split mixed-decision results into separate Tool messages.
+	[Theory]
+	[InlineData("complete", true)]
+	[InlineData("missing", false)]
+	[InlineData("duplicate-result", false)]
+	[InlineData("duplicate-call", false)]
+	[InlineData("interrupted", false)]
+	public void ValidateCurrentPrompt_SplitAssistantCalls_RequiresOneResultPerCall(string shape, bool accepted)
+	{
+		List<ChatMessage> messages =
+		[
+			new(ChatRole.User, "Do both"),
+			new(ChatRole.Assistant, [new FunctionCallContent("a", "one")])
+		];
+		if (shape == "interrupted")
+			messages.Add(new(ChatRole.User, "New turn"));
+		messages.Add(new(ChatRole.Assistant,
+			[new FunctionCallContent(shape == "duplicate-call" ? "a" : "b", "two")]));
+		messages.Add(new(ChatRole.Tool, [new FunctionResultContent("a", "1")]));
+		if (shape != "missing" && shape != "duplicate-call")
+			messages.Add(new(ChatRole.Tool, [new FunctionResultContent(shape == "duplicate-result" ? "a" : "b", "2")]));
+
+		var native = AppleIntelligenceChatClient.ToNative(messages, null);
+
+		Assert.Equal(accepted, AppleIntelligenceChatClient.IsToolResultResume(native));
+		if (accepted)
+			AppleIntelligenceChatClient.ValidateCurrentPrompt(native);
+		else
+			Assert.Throws<ArgumentException>(() => AppleIntelligenceChatClient.ValidateCurrentPrompt(native));
+	}
+
 	// Retained history from a completed FICC approval round must not block the next user turn (R3).
 	[Theory]
 	[InlineData(true)]

@@ -403,15 +403,15 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 		throw new ArgumentException(
 			"Apple Intelligence requires the current prompt to be the last User message, or the conversation to end " +
-			"with Tool results for every function call in the preceding Assistant message. " +
+			"with Tool results for every function call in the preceding Assistant messages. " +
 			"System/instructions-only input and other trailing non-User messages are not supported.",
 			nameof(messages));
 	}
 
 	/// <summary>
 	/// Returns <see langword="true"/> when the conversation ends with Tool messages that answer exactly the
-	/// function calls of the preceding Assistant message (the shape a <c>FunctionInvokingChatClient</c>
-	/// sends after it has invoked the calls). The Swift bridge applies the same rule.
+	/// function calls of the preceding Assistant messages (the shape a <c>FunctionInvokingChatClient</c>
+	/// sends after it has invoked the calls, potentially grouped by message ID). The Swift bridge applies the same rule.
 	/// </summary>
 	internal static bool IsToolResultResume(ChatMessageNative[] messages)
 	{
@@ -422,12 +422,25 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		if (start == messages.Length || start == 0 || messages[start - 1].Role != ChatRoleNative.Assistant)
 			return false;
 
-		var callIds = messages[start - 1].Contents.OfType<FunctionCallContentNative>().Select(c => c.CallId).ToList();
 		var resultIds = messages[start..].SelectMany(m => m.Contents).OfType<FunctionResultContentNative>().Select(r => r.CallId).ToList();
+		var uniqueResults = resultIds.ToHashSet(StringComparer.Ordinal);
+		if (resultIds.Count == 0 || uniqueResults.Count != resultIds.Count)
+			return false;
 
-		return callIds.Count > 0 &&
-			callIds.Count == resultIds.Count &&
-			callIds.ToHashSet(StringComparer.Ordinal).SetEquals(resultIds);
+		var callIds = new HashSet<string>(StringComparer.Ordinal);
+		for (var i = start - 1; i >= 0 && messages[i].Role == ChatRoleNative.Assistant; i--)
+		{
+			var calls = messages[i].Contents.OfType<FunctionCallContentNative>().ToArray();
+			if (calls.Length == 0)
+				break;
+			foreach (var call in calls)
+			{
+				if (!callIds.Add(call.CallId))
+					return false;
+			}
+		}
+
+		return callIds.Count > 0 && callIds.SetEquals(uniqueResults);
 	}
 
 	internal static ChatResponse FromNativeChatResponse(ChatResponseNative? response)

@@ -18,6 +18,16 @@ final class ApprovalModeTests: XCTestCase {
         XCTAssertTrue(try ChatClientNative.isToolResultResume([user, calls, resultA, resultB]))
         XCTAssertThrowsError(try ChatClientNative.isToolResultResume([user, calls, resultA]))
         XCTAssertThrowsError(try ChatClientNative.isToolResultResume([user, resultA]))
+
+        let callA = message(.assistant, FunctionCallContentNative(callId: "a", name: "tool", arguments: "{}"))
+        let callB = message(.assistant, FunctionCallContentNative(callId: "b", name: "tool", arguments: "{}"))
+        let resultC = message(.tool, FunctionResultContentNative(callId: "c", name: "tool", result: "3"))
+        XCTAssertTrue(try ChatClientNative.isToolResultResume([user, callA, callB, resultB, resultA]))
+        XCTAssertThrowsError(try ChatClientNative.isToolResultResume([user, callA, callB, resultA]))
+        XCTAssertThrowsError(try ChatClientNative.isToolResultResume([user, callA, callB, resultA, resultB, resultC]))
+        XCTAssertThrowsError(try ChatClientNative.isToolResultResume([user, callA, callB, resultA, resultA]))
+        XCTAssertThrowsError(try ChatClientNative.isToolResultResume([user, callA, callA, resultA]))
+        XCTAssertThrowsError(try ChatClientNative.isToolResultResume([user, callA, user, callB, resultA, resultB]))
     }
 
     func testApprovalModeNeedsToolsAndOS27() {
@@ -117,6 +127,102 @@ final class ApprovalModeTests: XCTestCase {
         XCTAssertNil(resumed.error)
         XCTAssertEqual(resumed.response?.hasPendingToolCalls, false, "A resumed turn must not be forced into another tool call.")
         XCTAssertFalse(resumed.finalText.isEmpty)
+    }
+
+    func testLiveSplitCallsWithInterleavedTextResumeAndReplayForBothAPIs() async throws {
+        guard #available(macOS 27.0, *) else {
+            throw XCTSkip("Approval mode needs OS 27.")
+        }
+        guard try LiveTests.requireModel() else { return }
+
+        for streaming in [false, true] {
+            let firstTool = StubTool(name: "firstLookup")
+            let secondTool = StubTool(name: "secondLookup")
+            let user = message(.user, TextContentNative(text: "Summarize the two lookup results without calling tools again."))
+            let firstCall = message(.assistant,
+                TextContentNative(text: "Checking the first result."),
+                FunctionCallContentNative(callId: "a", name: firstTool.name, arguments: #"{"city":"Paris"}"#))
+            let secondCall = message(.assistant,
+                TextContentNative(text: "Checking the second result."),
+                FunctionCallContentNative(callId: "b", name: secondTool.name, arguments: #"{"city":"Paris"}"#))
+            let firstResult = message(.tool, FunctionResultContentNative(callId: "a", name: firstTool.name, result: "Sunny"))
+            let secondResult = message(.tool, FunctionResultContentNative(callId: "b", name: secondTool.name, result: "22C"))
+            let history = [user, firstCall, secondCall, firstResult, secondResult]
+
+            let resumed = try await LiveTests.runClient(
+                prompt: nil, streaming: streaming, maxTokens: 128, tools: [firstTool, secondTool],
+                history: history, approvalMode: true, timeout: 60)
+            XCTAssertNil(resumed.error)
+            let response = try XCTUnwrap(resumed.response)
+            XCTAssertFalse(response.hasPendingToolCalls)
+            XCTAssertTrue(resumed.finalText.contains("22"), resumed.finalText)
+
+            let next = try await LiveTests.runClient(
+                prompt: "Reply with a short goodbye.", streaming: streaming, maxTokens: 64,
+                history: history + response.messages, timeout: 60)
+            XCTAssertNil(next.error)
+            XCTAssertFalse(next.finalText.isEmpty)
+            XCTAssertEqual(firstTool.callCount, 0)
+            XCTAssertEqual(secondTool.callCount, 0)
+        }
+    }
+
+    // Foundation Models must not return an earlier transcript's calls when a resumed turn is vetoed again.
+    func testLiveSecondApprovalReturnsOnlyNewCallsForBothAPIs() async throws {
+        guard #available(macOS 27.0, *) else {
+            throw XCTSkip("Approval mode needs OS 27.")
+        }
+        guard try LiveTests.requireModel() else { return }
+
+        for streaming in [false, true] {
+            let firstTool = StubTool(name: "getForecast")
+            let secondTool = StubTool(name: "getTemperature")
+            let user = message(.user, TextContentNative(text: """
+                First call getForecast for Paris. Once you get its result, call getTemperature for Paris.
+                Then answer with the temperature. Do not call either tool again.
+                """))
+            let first = try await LiveTests.runClient(
+                prompt: nil, streaming: streaming, maxTokens: 128, tools: [firstTool], toolCallingMode: .required,
+                history: [user], approvalMode: true, timeout: 60)
+            XCTAssertNil(first.error)
+            let firstResponse = try XCTUnwrap(first.response)
+            XCTAssertTrue(firstResponse.hasPendingToolCalls)
+            let firstCalls = firstResponse.messages.flatMap(\.contents).compactMap { $0 as? FunctionCallContentNative }
+            XCTAssertEqual(firstCalls.map(\.name), ["getForecast"])
+            let firstCall = try XCTUnwrap(firstCalls.first)
+            let firstResult = message(.tool, FunctionResultContentNative(
+                callId: firstCall.callId, name: firstCall.name,
+                result: "Now call getTemperature for Paris to obtain the temperature."))
+
+            let second = try await LiveTests.runClient(
+                prompt: nil, streaming: streaming, maxTokens: 128, tools: [firstTool, secondTool],
+                history: [user] + firstResponse.messages + [firstResult], approvalMode: true, timeout: 60)
+            XCTAssertNil(second.error)
+            let secondResponse = try XCTUnwrap(second.response)
+            XCTAssertTrue(secondResponse.hasPendingToolCalls)
+            let secondCalls = secondResponse.messages.flatMap(\.contents).compactMap { $0 as? FunctionCallContentNative }
+            XCTAssertEqual(secondCalls.map(\.name), ["getTemperature"])
+            XCTAssertFalse(secondResponse.messages.flatMap(\.contents).contains { $0 is FunctionResultContentNative })
+            let secondCall = try XCTUnwrap(secondCalls.first)
+            XCTAssertNotEqual(firstCall.callId, secondCall.callId)
+            if streaming {
+                XCTAssertEqual(second.pendingToolCalls.map(\.id), [secondCall.callId])
+                XCTAssertTrue(second.toolCalls.isEmpty)
+                XCTAssertTrue(second.toolResults.isEmpty)
+            }
+
+            let secondResult = message(.tool, FunctionResultContentNative(
+                callId: secondCall.callId, name: secondCall.name, result: "Sunny, 22C"))
+            let final = try await LiveTests.runClient(
+                prompt: nil, streaming: streaming, maxTokens: 128, tools: [firstTool, secondTool],
+                history: [user] + firstResponse.messages + [firstResult] + secondResponse.messages + [secondResult],
+                approvalMode: true, timeout: 60)
+            XCTAssertNil(final.error)
+            XCTAssertFalse(try XCTUnwrap(final.response).hasPendingToolCalls)
+            XCTAssertTrue(final.finalText.contains("22"), final.finalText)
+            XCTAssertEqual(firstTool.callCount, 0)
+            XCTAssertEqual(secondTool.callCount, 0)
+        }
     }
 
     private func message(_ role: ChatRoleNative, _ contents: AIContentNative...) -> ChatMessageNative {
