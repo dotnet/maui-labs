@@ -10,6 +10,7 @@
        {id} as a filename) instead of /inspector/{id}/devflow.css. -->
   <base href="./">
   <link rel="stylesheet" href="devflow.css">
+  <link rel="stylesheet" href="inspector-evidence.css">
 </head>
 <body>
   <!-- Inline SVG icon sprite (stroke = currentColor so every icon inherits the button's themed
@@ -75,6 +76,7 @@
         <button id="df-open-source" class="df-tool-btn" aria-disabled="true" title="Open the selected element's XAML source in your editor. Enabled when the selected element is defined in XAML with source mapping available."><svg class="df-ic"><use href="#i-source"/></svg><span class="df-btn-label">Source</span></button>
         <button id="df-send-copilot" class="df-tool-btn" aria-disabled="true" aria-haspopup="menu" aria-expanded="false" aria-controls="df-copilot-menu" title="Choose specific Inspector context to add to Copilot"><svg class="df-ic"><use href="#i-copilot"/></svg><span class="df-btn-label">Copilot</span><svg class="df-ic-xs df-menu-chevron"><use href="#i-chevron"/></svg></button>
         <button id="df-toggle-dock" class="df-tool-btn" title="Show app data: Logs, Network, Preferences, Device, Sensors, Files" aria-pressed="false"><svg class="df-ic"><use href="#i-data"/></svg><span class="df-btn-label">Data</span></button>
+        <button id="df-evidence" class="df-tool-btn" type="button" aria-haspopup="dialog" title="Preview and download a redacted evidence bundle (.mauitrace)"><svg class="df-ic" aria-hidden="true"><use href="#i-attach"/></svg><span class="df-btn-label">Evidence</span></button>
       </div>
       <button id="df-more" class="df-tool-btn df-more-btn df-hidden" title="More inspector actions" aria-haspopup="menu" aria-expanded="false" aria-controls="df-toolbar-overflow"><svg class="df-ic"><use href="#i-more"/></svg><span class="df-btn-label">More</span></button>
       <div id="df-toolbar-overflow" class="df-toolbar-overflow df-hidden" role="menu" aria-label="More inspector actions"></div>
