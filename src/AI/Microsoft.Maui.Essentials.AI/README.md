@@ -23,6 +23,8 @@ Requires .NET 10 and matching MAUI workloads.
 | Android API 26+ | Gemini Nano on a supported AICore device; tools on capable Nano V4 profiles | In-memory images | Not supported |
 
 Chat requires supported hardware with Apple Intelligence available and enabled.
+Apple response and tool schemas that permit explicit null values require OS 26.4 or
+later; earlier versions reject those schemas.
 Image input, token usage metadata, and explicit native tool-calling modes require
 OS 27+ and a bridge built with Xcode 27. Image input also requires a ready
 vision-capable model.
