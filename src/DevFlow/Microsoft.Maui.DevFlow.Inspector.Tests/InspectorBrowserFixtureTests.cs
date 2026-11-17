@@ -3803,21 +3803,67 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
 
     private async Task WaitForUiEventSocketAsync()
     {
-        var previousFrameId = await CurrentPreviewFrameIdAsync();
+        var marker = Guid.NewGuid().ToString("N");
         _supportsUiEvents = true;
-        await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
+        await Page.EvaluateAsync(
+            """
+            marker => {
+              const NativeWebSocket = window.WebSocket;
+              const ObservedWebSocket = new Proxy(NativeWebSocket, {
+                construct(target, argumentsList) {
+                  const socket = Reflect.construct(target, argumentsList);
+                  // Register after devflow's onopen so the marker proves its clear handler ran.
+                  queueMicrotask(() => {
+                    socket.addEventListener('open', () => {
+                      document.body.dataset.fixtureUiEventSocketOpen = marker;
+                      if (window.WebSocket === ObservedWebSocket)
+                        window.WebSocket = NativeWebSocket;
+                    }, { once: true });
+                  });
+                  return socket;
+                },
+              });
+              window.WebSocket = ObservedWebSocket;
+              window.dispatchEvent(new Event('online'));
+            }
+            """,
+            marker);
+        await Page.WaitForFunctionAsync(
+            "marker => document.body.dataset.fixtureUiEventSocketOpen === marker",
+            marker);
         for (var attempt = 0; attempt < 100; attempt++)
         {
             if (_eventSockets.Keys.Any(socket => socket.State == WebSocketState.Open))
             {
-                // The browser's socket-open handler queues an evidence refresh.
-                // Settle it before publishing events that correlate to the current frame.
-                await WaitForPreviewFrameChangeAsync(previousFrameId);
+                await WaitForPreviewRefreshesToSettleAsync();
                 return;
             }
             await Task.Delay(50);
         }
         throw new TimeoutException("Inspector did not connect to the fixture UI event stream.");
+    }
+
+    private async Task WaitForPreviewRefreshesToSettleAsync()
+    {
+        // Online and socket-open can each queue a refresh; correlate events only after both settle.
+        var previousFrameId = await CurrentPreviewFrameIdAsync();
+        var stableChecks = 0;
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            await Task.Delay(50);
+            var frameId = await CurrentPreviewFrameIdAsync();
+            if (_pendingRequests.IsEmpty && frameId == previousFrameId)
+            {
+                if (++stableChecks == 3)
+                    return;
+            }
+            else
+            {
+                stableChecks = 0;
+            }
+            previousFrameId = frameId;
+        }
+        throw new TimeoutException("Inspector preview did not settle after connecting to the fixture UI event stream.");
     }
 
     private async Task WaitForNoUiEventSocketsAsync()
