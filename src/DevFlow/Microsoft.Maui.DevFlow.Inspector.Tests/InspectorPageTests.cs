@@ -300,7 +300,6 @@ public partial class InspectorPageTests : IAsyncLifetime
     public async Task ClickSendsTapToAgent()
     {
         await _page.GotoAsync(BaseUrl);
-        await _page.Locator("#df-mode-interact").ClickAsync();
         var presence = _page.Locator("#df-presence");
         await Expect(presence).ToHaveTextAsync(
             new System.Text.RegularExpressions.Regex("Driving|Read-only"));
@@ -312,6 +311,9 @@ public partial class InspectorPageTests : IAsyncLifetime
                 .ClickAsync();
         }
         await Expect(presence).ToContainTextAsync("Driving");
+        var interact = _page.Locator("#df-mode-interact");
+        await Expect(interact).ToHaveAttributeAsync("aria-disabled", "false");
+        await interact.ClickAsync();
 
         var viewport = _page.Locator("#app-viewport");
         var initialScreenshot = await _page.Locator("#screenshot").GetAttributeAsync("src");
@@ -1377,6 +1379,7 @@ public partial class InspectorPageTests : IAsyncLifetime
         await _page.SetViewportSizeAsync(1000, 700);
         await _page.GotoAsync(BaseUrl);
         await Expect(_page.Locator("#df-toggle-fit")).ToHaveAttributeAsync("aria-pressed", "true");
+        await Expect(_page.Locator("body")).ToHaveAttributeAsync("data-host-layout", "compact");
 
         await _page.Locator("#df-mode-inspect").ClickAsync();
         var showModal = _page.Locator(".devflow-element[data-automationId='ShowModalButton']");
