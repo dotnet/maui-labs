@@ -93,6 +93,44 @@ test("INTERACT allows tap/scroll/gesture/back but not setProperty", async () => 
   assert.equal(!sp.ok && sp.error.kind, "permission-denied");
 });
 
+test("transport forwards optional frame correlation without interpreting it", async () => {
+  const { client, calls } = fakeClient();
+  const t = createTransport(client, { permissions: INTERACT });
+  const correlation = {
+    actionId: "action-1",
+    source: "inspector" as const,
+    streamId: "stream-1",
+    frameId: "frame-7",
+    frameRevision: 7,
+    coordinateSpace: "appLogical" as const,
+  };
+
+  const result = await t.request({ kind: "tap", x: 10, y: 20, correlation });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, [`tap:${JSON.stringify({ x: 10, y: 20, correlation })}`]);
+});
+
+test("transport rejects malformed frame correlation at the permission boundary", async () => {
+  const { client, calls } = fakeClient();
+  const t = createTransport(client, { permissions: INTERACT });
+
+  const result = await t.request({
+    kind: "tap",
+    x: 10,
+    y: 20,
+    correlation: {
+      actionId: "",
+      source: "inspector",
+      frameId: "frame-7",
+      coordinateSpace: "appLogical",
+    },
+  });
+
+  assert.equal(!result.ok && result.error.kind, "invalid-argument");
+  assert.deepEqual(calls, []);
+});
+
 test("tap requires elementId or finite coords", async () => {
   const { client } = fakeClient();
   const t = createTransport(client, { permissions: INTERACT });

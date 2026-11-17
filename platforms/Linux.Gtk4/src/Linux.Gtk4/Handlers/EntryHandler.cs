@@ -4,6 +4,8 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 
 public class EntryHandler : GtkViewHandler<IEntry, Gtk.Entry>
 {
+	bool _updatingText;
+
 	public static IPropertyMapper<IEntry, EntryHandler> Mapper =
 		new PropertyMapper<IEntry, EntryHandler>(ViewMapper)
 		{
@@ -49,14 +51,27 @@ public class EntryHandler : GtkViewHandler<IEntry, Gtk.Entry>
 
 	void OnTextChanged(Gtk.Editable sender, EventArgs args)
 	{
-		if (VirtualView != null)
+		if (!_updatingText && VirtualView != null)
 			VirtualView.Text = sender.GetText();
 	}
 
 	public static void MapText(EntryHandler handler, IEntry entry)
 	{
-		if (handler.PlatformView?.GetText() != entry.Text)
-			handler.PlatformView?.SetText(entry.Text ?? string.Empty);
+		var text = entry.Text ?? string.Empty;
+		if (handler.PlatformView == null || handler.PlatformView.GetText() == text)
+			return;
+
+		var wasUpdatingText = handler._updatingText;
+		handler._updatingText = true;
+		try
+		{
+			// GTK emits intermediate changes while replacing existing text.
+			handler.PlatformView.SetText(text);
+		}
+		finally
+		{
+			handler._updatingText = wasUpdatingText;
+		}
 	}
 
 	public static void MapPlaceholder(EntryHandler handler, IEntry entry)

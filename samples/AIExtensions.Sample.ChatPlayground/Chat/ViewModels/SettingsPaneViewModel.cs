@@ -31,6 +31,7 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     [ObservableProperty] private bool isBusy;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SupportsToolCalling))]
+    [NotifyPropertyChangedFor(nameof(SupportsStructuredOutput))]
     private ChatModelStatus? modelStatus;
 
     [ObservableProperty] private bool useStreaming = true;
@@ -76,6 +77,8 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     public string? RequestModelId => HasModels ? SelectedModelId : null;
     public bool SupportsToolCalling => SelectedDescriptor?.SupportsToolCalling == true &&
         (ModelStatus?.Capabilities is not { } capabilities || capabilities.Contains(ChatModelCapability.ToolCalling));
+    public bool SupportsStructuredOutput => SelectedDescriptor?.SupportsStructuredOutput == true &&
+        (ModelStatus?.Capabilities is not { } capabilities || capabilities.Contains(ChatModelCapability.StructuredOutput));
 
     public bool IsMultipleToolCallsDefault
     {
@@ -133,7 +136,11 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
                 Output = ReasoningOutput.Summary,
             };
         if (UseStructuredJson && SelectedDescriptor?.SupportsStructuredOutput == true)
+        {
+            if (!SupportsStructuredOutput)
+                throw new NotSupportedException("The selected model does not support structured output.");
             options.ResponseFormat = ChatResponseFormat.ForJsonSchema<PlaygroundResponse>(PlaygroundJsonContext.Default.Options);
+        }
         return options;
     }
 
@@ -191,6 +198,14 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         OnPropertyChanged(nameof(HasModels));
         OnPropertyChanged(nameof(RequestModelId));
         OnPropertyChanged(nameof(SupportsToolCalling));
+        OnPropertyChanged(nameof(SupportsStructuredOutput));
+    }
+
+    partial void OnModelStatusChanged(ChatModelStatus? value)
+    {
+        if (value?.Availability == ChatModelAvailability.Available &&
+            value.Capabilities is { } capabilities && !capabilities.Contains(ChatModelCapability.StructuredOutput))
+            UseStructuredJson = false;
     }
 
     partial void OnIsBusyChanged(bool value)

@@ -169,6 +169,20 @@ Do not call its native `Free()` method after passing it to `Gsk.Transform.Transl
 the handle still owns the allocation and will free it again during finalization.
 This applies to layout-position points as well as anchor points.
 
+### Screenshot and WebKit signal ownership
+
+Screenshot capture uses `Gtk.Snapshot.ToNode()` and disposes the snapshot on the
+GTK thread. Do not use `FreeToNode()` with a GirCore-owned snapshot: it consumes
+the native object while its managed handle still owns it, causing invalid
+toggle-ref removal or a native crash during subsequent collection.
+
+`GtkWebViewSignals` supplies disposable signal arguments for WebKit load and
+script-message notifications. Each connected callback must dispose its arguments
+before returning. GirCore 0.8.1 copies signal `GValue`s, including references to
+the sender and message; leaving those copies to finalization can destroy WebKit
+objects on the .NET finalizer thread. Disposing only the extracted `JSCValue`
+does not release the enclosing signal argument's reference.
+
 ### Essentials
 
 | Status | Services |
@@ -183,6 +197,10 @@ not command-line arguments, and this backend never falls back to plaintext files
 A missing `secret-tool` throws `FeatureNotSupportedException`; locked or unavailable
 providers return an explicit operation error. Install the distribution's libsecret
 tools package and configure a provider such as GNOME Keyring or KWallet.
+Without that provider, an explicit SecureStorage error is expected, not a
+successful in-memory fallback. The sample's **Clipboard & Storage** page has a
+read-only availability check that displays this error without interrupting the
+clipboard or preferences demos.
 
 Linux camera capture requires `gst-launch-1.0`, `gst-inspect-1.0`, and the
 GStreamer `v4l2src`, `videoconvert`, `jpegenc`, `vp8enc`, and `webmmux`
@@ -636,14 +654,14 @@ the JavaScript context (or after JavaScriptCore reused the pointer), crashing in
 inside WebKit's completion callback on the GTK thread instead. Use them in
 application code too.
 
-**Known issue (net11 DevFlow integration):** the `DevFlow Integration Tests / gtk (net11)` lane
-intermittently aborts the net11 GTK sample (glibc `stack smashing detected` under a GirCore
-main-loop callback, `GLib.Internal.SourceFuncAsyncHandler`, sometimes preceded by
-`g_object_remove_toggle_ref: assertion 'G_IS_OBJECT (object)' failed`). The JavaScript evaluation
-crash above is fixed (the repeated evaluate/screenshot/navigate native stress test passes on net10
-and net11), and Blazor script-message `JSCValue`s are released on the GTK thread, but this remaining
-lifetime path is not yet identified. The net10 lane is blocking; the net11 lane runs on every PR,
-uploads results and crash backtraces, and raises a warning instead of failing the check.
+Sample validation identified two additional concrete ownership defects:
+consuming a GirCore-owned screenshot snapshot, and finalizer-thread release of
+copied WebKit signal `GValue`s. Both now have native regression coverage with
+forced finalization. Native snapshot and repeated evaluation/navigation tests
+pass on .NET 10 and .NET 11. The complete shared integration suite also passed
+against the .NET 11 GTK sample (226 tests). Both GTK integration lanes are
+blocking, including SecureStorage's explicit unavailable-provider contract;
+crash reports and backtraces remain uploaded on failure.
 
 The transform regression creates a real GTK window and repeatedly scales and
 rotates a button at origin, off-origin, translated, and translation-cancelled

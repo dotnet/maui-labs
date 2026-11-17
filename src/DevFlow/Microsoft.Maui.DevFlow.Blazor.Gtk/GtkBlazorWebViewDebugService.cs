@@ -163,7 +163,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
             _captureScreenshot = captureScreenshot;
             _lifetimeToken = _lifetimeCts.Token;
             if (_webView != null)
-                _webView.OnLoadChanged += OnLoadChanged;
+                GtkWebViewSignals.LoadChanged.Connect(_webView, OnLoadChanged);
         }
 
         internal async Task InitializeAsync()
@@ -200,8 +200,9 @@ public class GtkBlazorWebViewDebugService : IDisposable
             }
         }
 
-        private void OnLoadChanged(global::WebKit.WebView sender, global::WebKit.WebView.LoadChangedSignalArgs args)
+        private void OnLoadChanged(global::WebKit.WebView sender, GtkWebViewSignals.LoadChangedArgs args)
         {
+            using var signalArgs = args;
             if (_disposed)
                 return;
             if (args.LoadEvent == global::WebKit.LoadEvent.Started)
@@ -545,7 +546,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
                 if (_disposed) return;
                 _disposed = true;
                 if (_webView != null)
-                    _webView.OnLoadChanged -= OnLoadChanged;
+                    GtkWebViewSignals.LoadChanged.Disconnect(_webView, OnLoadChanged);
                 _lifetimeCts.Cancel();
                 _lifetimeCts.Dispose();
                 _drainCts?.Cancel();

@@ -49,7 +49,7 @@ public class LinuxScreenshot : IScreenshot
 		var renderer = widget.GetNative()?.GetRenderer()
 			?? throw new InvalidOperationException("Cannot capture a GTK widget that is not attached to a native renderer.");
 
-		var snapshot = Gtk.Snapshot.New();
+		using var snapshot = Gtk.Snapshot.New();
 		if (widget is Gtk.Window window)
 		{
 			var child = window.GetChild()
@@ -65,7 +65,8 @@ public class LinuxScreenshot : IScreenshot
 			throw new InvalidOperationException("Cannot capture a GTK widget that is not attached to a parent.");
 		}
 
-		var node = snapshot.FreeToNode()
+		// FreeToNode consumes the native snapshot that GirCore's handle still owns.
+		var node = snapshot.ToNode()
 			?? throw new InvalidOperationException("GTK did not produce a render node for the requested screenshot.");
 		using var texture = renderer.RenderTexture(node, null);
 		using var png = texture.SaveToPngBytes()
