@@ -7,7 +7,7 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 /// </summary>
 public sealed class WpfFixture : AppFixtureBase
 {
-    const string TargetFramework = "net10.0-windows10.0.17763.0";
+    static readonly string TargetFramework = TestDotNet.Select("net10.0-windows10.0.17763.0", "net11.0-windows10.0.17763.0");
 
     Process? _appProcess;
 
