@@ -183,6 +183,10 @@ not command-line arguments, and this backend never falls back to plaintext files
 A missing `secret-tool` throws `FeatureNotSupportedException`; locked or unavailable
 providers return an explicit operation error. Install the distribution's libsecret
 tools package and configure a provider such as GNOME Keyring or KWallet.
+Without that provider, an explicit SecureStorage error is expected, not a
+successful in-memory fallback. The sample's **Clipboard & Storage** page has a
+read-only availability check that displays this error without interrupting the
+clipboard or preferences demos.
 
 Linux camera capture requires `gst-launch-1.0`, `gst-inspect-1.0`, and the
 GStreamer `v4l2src`, `videoconvert`, `jpegenc`, `vp8enc`, and `webmmux`

@@ -133,14 +133,56 @@ public class SecureStorageTests
 		Assert.True(removed);
 	}
 
-	[Fact]
-	public async Task MissingSecretTool_IsExplicitlyUnsupported()
+	[Theory]
+	[InlineData("get")]
+	[InlineData("set")]
+	[InlineData("remove")]
+	[InlineData("clear")]
+	public async Task MissingSecretTool_IsExplicitlyUnsupported(string operation)
 	{
-		var backend = new SecretToolBackend(
+		var storage = new LinuxSecureStorage(new SecretToolBackend(
 			$"missing-secret-tool-{Guid.NewGuid():N}",
-			"secure-storage-tests");
+			"secure-storage-tests"));
 
-		await Assert.ThrowsAsync<FeatureNotSupportedException>(() => backend.GetAsync("token"));
+		var error = await Assert.ThrowsAsync<FeatureNotSupportedException>(
+			() => PerformOperationAsync(storage, operation));
+		Assert.Contains("Secure storage requires", error.Message);
+	}
+
+	[Theory]
+	[InlineData("get")]
+	[InlineData("set")]
+	[InlineData("remove")]
+	[InlineData("clear")]
+	public async Task MissingSecretService_ReportsErrorInsteadOfSuccess(string operation)
+	{
+		var storage = new LinuxSecureStorage(CreateBackend(
+			new SecretToolProcessResult(1, "", "The name org.freedesktop.secrets was not provided")));
+
+		var error = await Assert.ThrowsAsync<InvalidOperationException>(
+			() => PerformOperationAsync(storage, operation));
+		Assert.Contains("org.freedesktop.secrets", error.Message);
+	}
+
+	static async Task PerformOperationAsync(LinuxSecureStorage storage, string operation)
+	{
+		switch (operation)
+		{
+			case "get":
+				await storage.GetAsync("token");
+				break;
+			case "set":
+				await storage.SetAsync("token", "test-value");
+				break;
+			case "remove":
+				storage.Remove("token");
+				break;
+			case "clear":
+				storage.RemoveAll();
+				break;
+			default:
+				throw new ArgumentOutOfRangeException(nameof(operation));
+		}
 	}
 
 	static SecretToolBackend CreateBackend(params SecretToolProcessResult[] results) =>
