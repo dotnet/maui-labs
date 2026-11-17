@@ -215,7 +215,7 @@ class GeminiNanoNativeClient {
                             } else null
                             if (processor == null) {
                                 val tokenCount = model.countTokens(nativeRequest).totalTokens
-                                val generated = if (nativeStream != null) model.generateContent(nativeRequest, nativeStream)
+                                val generated = if (nativeStream != null) model.generateContent(nativeRequest, ThoughtHeaderFilter(nativeStream))
                                     else model.generateContent(nativeRequest)
                                 val response = generated.toNativeResponse(modelName, tokenCount)
                                 nativeStream?.finish(response)

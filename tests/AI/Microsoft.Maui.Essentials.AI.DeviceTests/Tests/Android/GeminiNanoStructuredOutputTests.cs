@@ -272,6 +272,47 @@ public sealed class GeminiNanoStructuredOutputTests(ITestOutputHelper output)
 		Assert.Equal(0, calls);
 	}
 
+	// Function invocation replays the first turn's reasoning as history on the second round.
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	[InlineData(true, true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ThinkingAndTools_ReplayReasoningAcrossRounds(bool streaming, bool schema)
+	{
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+		using var client = new GeminiNanoChatClient();
+		using var invoking = client.AsBuilder().UseFunctionInvocation().Build();
+		var calls = 0;
+		var options = new ChatOptions
+		{
+			ModelId = "gemini-nano-preview-fast",
+			Temperature = 0,
+			MaxOutputTokens = 2048,
+			Reasoning = new() { Output = ReasoningOutput.Full },
+			Tools = [AIFunctionFactory.Create((string key) =>
+			{
+				Interlocked.Increment(ref calls);
+				return "ORCHARD_SECRET_7291";
+			}, "lookup_secret", "Reads a secret from the local database by key.")],
+		};
+		if (schema)
+			options.ResponseFormat = ChatResponseFormat.ForJsonSchema<SecretReport>(JsonSerializerOptions.Web);
+		ChatMessage[] messages = [new(ChatRole.User, "Use lookup_secret with key orchard and report the secret.")];
+		var response = streaming
+			? await invoking.GetStreamingResponseAsync(messages, options, timeout.Token).ToChatResponseAsync(timeout.Token)
+			: await invoking.GetResponseAsync(messages, options, timeout.Token);
+		var thoughts = response.Messages.SelectMany(message => message.Contents).OfType<TextReasoningContent>().Count();
+		output.WriteLine($"REPLAY streaming={streaming} schema={schema} calls={calls} thoughts={thoughts}: {response.Text}");
+		Assert.Equal(1, calls);
+		Assert.True(thoughts > 0);
+		if (schema)
+			Assert.Equal("ORCHARD_SECRET_7291", JsonSerializer.Deserialize<SecretReport>(response.Text, JsonSerializerOptions.Web)!.Secret);
+		else
+			Assert.Contains("ORCHARD_SECRET_7291", response.Text, StringComparison.Ordinal);
+	}
+
 	[Theory]
 	[InlineData("gemini-nano-preview-fast", false)]
 	[InlineData("gemini-nano-preview-fast", true)]

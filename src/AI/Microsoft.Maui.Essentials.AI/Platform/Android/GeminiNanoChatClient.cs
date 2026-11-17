@@ -417,6 +417,11 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 			case FunctionResultContent result:
 				return ToNativeFunctionResult(result, role, useNativeTools);
 
+			// The model's own thoughts come back in replayed history (for example from function invocation);
+			// ML Kit has no input part for them, so they are dropped. Reasoning in other roles is rejected.
+			case TextReasoningContent when role == ChatRole.Assistant:
+				return null;
+
 			default:
 				if (content.GetType().Assembly == typeof(AIContent).Assembly)
 					throw new NotSupportedException($"Content type '{content.GetType().Name}' is not supported by Gemini Nano.");

@@ -17,7 +17,6 @@ import com.google.android.gms.internal.mlkit_genai_prompt.zzip
 import com.google.android.gms.internal.mlkit_genai_prompt.zziq
 import com.google.android.gms.internal.mlkit_genai_prompt.zziw
 import com.google.android.gms.internal.mlkit_genai_prompt.zziz
-import com.google.mlkit.genai.common.FunctionCall
 import com.google.mlkit.genai.common.StreamingCallback
 import com.google.mlkit.genai.prompt.Candidate
 import com.google.mlkit.genai.prompt.GenerateContentRequest
@@ -46,33 +45,6 @@ internal suspend fun generateStructuredContent(
     callback: StreamingCallback?,
 ): GenerateContentResponse =
     processor.zzN(zzacq(request, null, false), callback?.let(::ThoughtHeaderFilter)) as GenerateContentResponse
-
-/**
- * The structured-output feature streams thoughts with AICore's raw "thought\n" channel header,
- * which the final candidate omits; drop it so streamed thoughts match the final candidate.
- */
-internal class ThoughtHeaderFilter(private val inner: StreamingCallback) : StreamingCallback {
-    private val pending = StringBuilder()
-    private var started = false
-
-    override fun onNewText(additionalText: String) = inner.onNewText(additionalText)
-
-    override fun onNewFunctionCall(functionCall: FunctionCall) = inner.onNewFunctionCall(functionCall)
-
-    @Synchronized
-    override fun onNewThought(additionalThought: String) {
-        if (started) return inner.onNewThought(additionalThought)
-        pending.append(additionalThought)
-        if (pending.length < HEADER.length && HEADER.startsWith(pending)) return
-        started = true
-        val thought = if (pending.startsWith(HEADER)) pending.substring(HEADER.length) else pending.toString()
-        if (thought.isNotEmpty()) inner.onNewThought(thought)
-    }
-
-    private companion object {
-        const val HEADER = "thought\n"
-    }
-}
 
 /** Mirrors the SDK's typed-output processor, adding the schema to each AICore request it builds. */
 internal class NativeSchemaProcessor(config: GenerationConfig, private val schema: zzip) :

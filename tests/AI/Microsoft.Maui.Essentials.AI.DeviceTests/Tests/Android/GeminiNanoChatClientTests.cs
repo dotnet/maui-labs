@@ -48,7 +48,9 @@ public class GeminiNanoChatClientMessagesTests : ChatClientMessagesTestsBase<Gem
 	protected override bool RejectsUnsupportedMedia => true;
 	protected override bool SupportsBinaryMedia(string mediaType) =>
 		string.Equals(mediaType, "image/png", StringComparison.OrdinalIgnoreCase);
-	protected override bool RejectsUnsupportedStandardContent(string kind, ChatRole role) => true;
+	// The model's own reasoning is dropped from Assistant history so function invocation can replay it.
+	protected override bool RejectsUnsupportedStandardContent(string kind, ChatRole role) =>
+		kind != "reasoning" || role != ChatRole.Assistant;
 	protected override bool RejectsMisplacedFunctionContent(ChatRole role, bool isCall) => true;
 	protected override bool SupportsTrailingSystemInstruction => true;
 }
@@ -153,6 +155,26 @@ public class GeminiNanoChatClientInteropTests
 		Assert.Null(none.Options.ToolsJson);
 		Assert.Equal(0, none.GetMessages()[1].GetParts()[0].Kind);
 		Assert.Same(function, Assert.Single(options.Tools));
+	}
+
+	// Function invocation replays the model's own reasoning; only Assistant reasoning is dropped.
+	[Fact]
+	public void ToNative_DropsAssistantReasoningButRejectsItElsewhere()
+	{
+		using var request = GeminiNanoChatClient.ToNative(
+		[
+			new(ChatRole.User, "hello"),
+			new(ChatRole.Assistant, [new TextReasoningContent("thinking"), new TextContent("hi")]),
+			new(ChatRole.Assistant, [new TextReasoningContent("only thinking")]),
+			new(ChatRole.User, "again"),
+		], null);
+		var messages = request.GetMessages();
+		Assert.Equal(4, messages.Length);
+		Assert.Equal("hi", Assert.Single(messages[1].GetParts()).Text);
+		Assert.Empty(messages[2].GetParts());
+
+		Assert.Throws<NotSupportedException>(() => GeminiNanoChatClient.ToNative(
+			[new(ChatRole.User, [new TextContent("hello"), new TextReasoningContent("thinking")])], null));
 	}
 
 	[Fact]

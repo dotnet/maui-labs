@@ -308,7 +308,8 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   Assistant content; reject images in System/Tool, URI media, non-image media,
   empty/undecodable images, misplaced tool content, and other recognized
   unsupported standard content. Replay function calls/results as ordered JSON
-  text history; omit unknown custom content.
+  text history; omit unknown custom content and the model's own reasoning in
+  Assistant history (ML Kit has no input part for prior thoughts).
 
 ## Request features
 

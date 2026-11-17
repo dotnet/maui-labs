@@ -29,7 +29,8 @@ Kotlin constructs the Google request:
   also validates native numeric constraints.
 - `Reasoning.Output = ReasoningOutput.Full` enables thinking after checking
   `Feature.THINKING_MODE` in `getAvailableFeatures()`. Effort levels and summaries
-  have no native mapping.
+  have no native mapping. Reasoning content in replayed Assistant history (for
+  example from function invocation) is dropped; elsewhere it is rejected.
 
 There is no client-held conversation state. Callers supply the conversation on
 each request. Custom content and unknown roles (including `developer`) are
