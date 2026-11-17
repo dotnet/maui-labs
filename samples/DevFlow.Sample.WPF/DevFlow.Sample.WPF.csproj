@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <TargetFrameworks>net10.0-windows10.0.17763.0;net11.0-windows10.0.17763.0</TargetFrameworks>
     <WindowsSdkPackageVersion>$(MicrosoftWindowsSdkNetRefVersion)</WindowsSdkPackageVersion>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
@@ -94,5 +94,7 @@
 
   <Import Project="..\..\platforms\Windows.WPF\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets"
           Condition="Exists('..\..\platforms\Windows.WPF\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets')" />
+
+  <Import Project="..\DevFlow.Sample.Net11.props" />
 
 </Project>

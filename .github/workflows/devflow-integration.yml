@@ -727,11 +727,19 @@ jobs:
   wpf:
     needs: plan
     if: needs.plan.outputs.run-wpf == 'true' && contains(needs.plan.outputs.frameworks, 'maui')
+    strategy:
+      fail-fast: false
+      matrix:
+        # The WPF backend ships net10.0 (MAUI 10) and net11.0 (MAUI 11 contracts) assets;
+        # drive the DevFlow sample built for each.
+        dotnet: ['10', '11']
+    name: wpf (net${{ matrix.dotnet }})
     runs-on: windows-latest
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: wpf
       DEVFLOW_TEST_FRAMEWORK: maui
+      DEVFLOW_TEST_DOTNET: ${{ matrix.dotnet }}
     steps:
       - uses: actions/checkout@v6
 
@@ -749,7 +757,7 @@ jobs:
           dotnet test $env:TEST_PROJECT
           -c Debug
           --filter "Category!=WebView&Category!=Device&Category!=Sensors&Category!=SecureStorage"
-          --logger "trx;LogFileName=devflow-integration-wpf-maui.trx"
+          --logger "trx;LogFileName=devflow-integration-wpf-maui-net${{ matrix.dotnet }}.trx"
           --logger "console;verbosity=normal"
           --results-directory .\artifacts\TestResults\devflow-integration\wpf
 
@@ -757,6 +765,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-wpf-maui-results
+          name: devflow-integration-wpf-maui-net${{ matrix.dotnet }}-results
           path: .\artifacts\TestResults\devflow-integration\wpf\
           retention-days: 30
