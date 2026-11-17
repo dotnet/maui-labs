@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">
+  <rect width="1600" height="1200" fill="white"/>
+  <g fill="#111111" font-family="Helvetica, Arial, sans-serif">
+    <text x="100" y="95" font-size="58" font-weight="700">EVENT REGISTRATION SUMMARY</text>
+    <text x="100" y="180" font-size="38">Details: https://example.com/register</text>
+  </g>
+
+  <g fill="none" stroke="#111111" stroke-width="3">
+    <rect x="100" y="250" width="900" height="400"/>
+    <line x1="560" y1="250" x2="560" y2="650"/>
+    <line x1="100" y1="380" x2="1000" y2="380"/>
+    <line x1="100" y1="515" x2="1000" y2="515"/>
+  </g>
+
+  <g fill="#111111" font-family="Helvetica, Arial, sans-serif" font-size="38">
+    <text x="140" y="335" font-weight="700">Session</text>
+    <text x="605" y="335" font-weight="700">Time</text>
+    <text x="140" y="465">Workshop</text>
+    <text x="605" y="465">9:00 AM</text>
+    <text x="140" y="600">Discussion</text>
+    <text x="605" y="600">1:30 PM</text>
+
+    <text x="1080" y="290" font-size="44" font-weight="700">REMINDERS</text>
+    <text x="1090" y="395">&#x2022; Bring identification</text>
+    <text x="1090" y="485">&#x2022; Arrive early</text>
+    <text x="1090" y="575">&#x2022; Keep the receipt</text>
+
+    <text x="100" y="780" font-size="44" font-weight="700">NOTES</text>
+    <text x="100" y="875">Registration closes at 5:00 PM on August 28, 2026.</text>
+    <text x="100" y="955">Questions: events@example.com</text>
+  </g>
+</svg>
