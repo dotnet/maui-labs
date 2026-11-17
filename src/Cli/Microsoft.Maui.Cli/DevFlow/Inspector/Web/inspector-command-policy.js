@@ -1,7 +1,5 @@
 // Pure capability and availability policy for the shared Inspector commands.
 
-const UNSUPPORTED = 'unsupported';
-
 const REQUIREMENT_REASONS = Object.freeze({
   selected: Object.freeze({ code: 'selection-required', text: 'Select an element first.' }),
   source: Object.freeze({ code: 'source-required', text: 'Select an element with XAML source mapping.' }),

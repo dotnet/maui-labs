@@ -29,8 +29,9 @@ cached Layout → Logs → Layout Data attachment, and sizing-only `diagnosticIn
 invalidation/Live rescanning with unchanged geometry, two queued Live cancellation checks,
 three property/Network synchronization checks, and three connection recovery checks covering
 Retry feedback/reduced motion, hung state-request cancellation, and recovery with a live event
-socket (including after a webview visibility change), plus three capability-policy checks covering
-legacy fallback, unsupported-command focus preservation, and distinct unavailable reasons.
+socket (including after a webview visibility change), plus four capability-policy checks covering
+legacy fallback, unsupported-command focus preservation, revoked-input cancellation, and distinct
+unavailable reasons.
 Disabling Live cancels queued automatic rescans while preserving an explicit refresh requested
 during an active scan; it does not abort the in-flight scan.
 
