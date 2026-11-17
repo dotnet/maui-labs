@@ -194,17 +194,8 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // Convert browser client coordinates to the captured root's app-logical coordinate space. The
   // server resolves the correlated frame and adds its root/window offset exactly once.
-  function toAppCoords(
-    clientX,
-    clientY,
-    frame = committedFrame,
-    renderedViewport = viewport.getBoundingClientRect(),
-  ) {
-    return clientToAppLogical(
-      clientX,
-      clientY,
-      renderedViewport,
-      frame);
+  function toAppCoords(clientX, clientY, frame = committedFrame, renderedViewport = viewport.getBoundingClientRect()) {
+    return clientToAppLogical(clientX, clientY, renderedViewport, frame);
   }
 
   function getElementCaptureMetadata(el) {

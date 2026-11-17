@@ -1131,7 +1131,7 @@ public sealed class InspectorServer : IDisposable
         // an unavailable agent.
         var frame = await CreateFrameAsync();
         var hasPublishedFrame = frame.FrameRevision > 0 && frame.Png.Length > 0;
-        var html = HtmlRenderer.RenderWithViewport(
+        var html = HtmlRenderer.Render(
             frame.Tree,
             hasPublishedFrame,
             frame.LogicalWidth,
@@ -2190,6 +2190,9 @@ public sealed class InspectorServer : IDisposable
             ? value.GetString()
             : null;
 
+    private (int, string, byte[])? ValidateElementCorrelation(JsonElement request)
+        => ValidateActionCorrelation(request, hasCoordinates: false, out _, out _);
+
     private (int, string, byte[])? ValidateActionCorrelation(
         JsonElement request,
         bool hasCoordinates,
@@ -2440,13 +2443,8 @@ public sealed class InspectorServer : IDisposable
         // geometric candidate when that exact target rejects the tap.
         if (!string.IsNullOrEmpty(requestedElementId))
         {
-            var correlationError = ValidateActionCorrelation(
-                root,
-                hasCoordinates: false,
-                out _,
-                out _);
-            if (correlationError.HasValue)
-                return correlationError.Value;
+            if (ValidateElementCorrelation(root) is { } correlationError)
+                return correlationError;
 
             if (!TryGetActionCaptureMetadata(
                 root,
@@ -2865,13 +2863,8 @@ public sealed class InspectorServer : IDisposable
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
-        var correlationError = ValidateActionCorrelation(
-            root,
-            hasCoordinates: false,
-            out _,
-            out _);
-        if (correlationError.HasValue)
-            return correlationError.Value;
+        if (ValidateElementCorrelation(root) is { } correlationError)
+            return correlationError;
 
         var elementId = root.TryGetProperty("elementId", out var idProp) ? idProp.GetString() : null;
         var text = root.TryGetProperty("text", out var textProp) ? textProp.GetString() : null;
@@ -2905,13 +2898,8 @@ public sealed class InspectorServer : IDisposable
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
-        var correlationError = ValidateActionCorrelation(
-            root,
-            hasCoordinates: false,
-            out _,
-            out _);
-        if (correlationError.HasValue)
-            return correlationError.Value;
+        if (ValidateElementCorrelation(root) is { } correlationError)
+            return correlationError;
 
         var key = root.TryGetProperty("key", out var keyProp) ? keyProp.GetString() : null;
         var elementId = root.TryGetProperty("elementId", out var idProp) ? idProp.GetString() : null;
@@ -2948,13 +2936,8 @@ public sealed class InspectorServer : IDisposable
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
-        var correlationError = ValidateActionCorrelation(
-            root,
-            hasCoordinates: false,
-            out _,
-            out _);
-        if (correlationError.HasValue)
-            return correlationError.Value;
+        if (ValidateElementCorrelation(root) is { } correlationError)
+            return correlationError;
 
         var elementId = root.TryGetProperty("elementId", out var idProp) ? idProp.GetString() : null;
         var name = root.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;
@@ -3001,13 +2984,8 @@ public sealed class InspectorServer : IDisposable
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
-        var correlationError = ValidateActionCorrelation(
-            root,
-            hasCoordinates: false,
-            out _,
-            out _);
-        if (correlationError.HasValue)
-            return correlationError.Value;
+        if (ValidateElementCorrelation(root) is { } correlationError)
+            return correlationError;
 
         var elementId = root.TryGetProperty("elementId", out var idProp) ? idProp.GetString() : null;
         var name = root.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;

@@ -80,8 +80,8 @@ export function normalizeFrameDescriptor(state, fallback = {}) {
   const hasIdentity = hasExplicitFrameIdentity(stateObject);
   const sameFrame = explicitFrameId !== null && explicitFrameId === fallbackFrameId;
   const canInheritGeometry = !hasIdentity || sameFrame;
-  const currentOrFallback = (key, inherit = canInheritGeometry) =>
-    pick(key) ?? (inherit ? pickFallback(key) : null);
+  const geometryValue = key => pick(key) ?? (canInheritGeometry ? pickFallback(key) : null);
+  const identityValue = key => pick(key) ?? (sameFrame ? pickFallback(key) : null);
   const currentLogicalWidth = positiveNumber(pick('logicalWidth'), pick('viewportWidth'));
   const currentLogicalHeight = positiveNumber(pick('logicalHeight'), pick('viewportHeight'));
   const fallbackLogicalWidth = canInheritGeometry
@@ -121,43 +121,22 @@ export function normalizeFrameDescriptor(state, fallback = {}) {
   ) || 1;
 
   return deepFreeze({
-    streamId: optionalString(
-      pick('streamId') ?? (sameFrame ? pickFallback('streamId') : null),
-    ),
+    streamId: optionalString(identityValue('streamId')),
     frameId: explicitFrameId,
-    frameRevision: safeInteger(
-      pick('frameRevision') ?? (sameFrame ? pickFallback('frameRevision') : null),
-      0,
-    ) ?? 0,
-    captureEpoch: safeInteger(
-      pick('captureEpoch') ?? (sameFrame ? pickFallback('captureEpoch') : null),
-      1,
-    ),
-    registryGeneration: safeInteger(
-      pick('registryGeneration') ?? (sameFrame ? pickFallback('registryGeneration') : null),
-      0,
-    ),
-    windowId: safeInteger(
-      pick('windowId') ?? (sameFrame ? pickFallback('windowId') : null),
-      0,
-    ),
-    treeRevision: optionalString(
-      pick('treeRevision') ?? (sameFrame ? pickFallback('treeRevision') : null),
-    ) ?? '',
-    diagnosticInputsRevision: optionalString(
-      pick('diagnosticInputsRevision')
-        ?? (sameFrame ? pickFallback('diagnosticInputsRevision') : null),
-    ),
+    frameRevision: safeInteger(identityValue('frameRevision'), 0) ?? 0,
+    captureEpoch: safeInteger(identityValue('captureEpoch'), 1),
+    registryGeneration: safeInteger(identityValue('registryGeneration'), 0),
+    windowId: safeInteger(identityValue('windowId'), 0),
+    treeRevision: optionalString(identityValue('treeRevision')) ?? '',
+    diagnosticInputsRevision: optionalString(identityValue('diagnosticInputsRevision')),
     logicalWidth,
     logicalHeight,
     pixelWidth,
     pixelHeight,
-    rootOffsetX: finiteNumber(currentOrFallback('rootOffsetX')),
-    rootOffsetY: finiteNumber(currentOrFallback('rootOffsetY')),
+    rootOffsetX: finiteNumber(geometryValue('rootOffsetX')),
+    rootOffsetY: finiteNumber(geometryValue('rootOffsetY')),
     captureScale,
-    createdAt: optionalString(
-      pick('createdAt') ?? (sameFrame ? pickFallback('createdAt') : null),
-    ),
+    createdAt: optionalString(identityValue('createdAt')),
   });
 }
 
@@ -210,36 +189,22 @@ export function screenshotPixelToAppLogical(point, frame) {
   };
 }
 
-export function inspectorCssToAppLogical(point) {
-  return { x: Number(point.x), y: Number(point.y) };
-}
-
-export function appLogicalToInspectorCss(point) {
-  return { x: Number(point.x), y: Number(point.y) };
+function viewportTransform(transform) {
+  return {
+    scale: positiveNumber(transform?.scale) || 1,
+    x: finiteNumber(transform?.originX) + finiteNumber(transform?.translateX),
+    y: finiteNumber(transform?.originY) + finiteNumber(transform?.translateY),
+  };
 }
 
 export function transformedViewportToInspectorCss(point, transform) {
-  const scale = positiveNumber(transform?.scale) || 1;
-  const originX = finiteNumber(transform?.originX);
-  const originY = finiteNumber(transform?.originY);
-  const translateX = finiteNumber(transform?.translateX);
-  const translateY = finiteNumber(transform?.translateY);
-  return {
-    x: (Number(point.x) - originX - translateX) / scale,
-    y: (Number(point.y) - originY - translateY) / scale,
-  };
+  const { scale, x, y } = viewportTransform(transform);
+  return { x: (Number(point.x) - x) / scale, y: (Number(point.y) - y) / scale };
 }
 
 export function inspectorCssToTransformedViewport(point, transform) {
-  const scale = positiveNumber(transform?.scale) || 1;
-  const originX = finiteNumber(transform?.originX);
-  const originY = finiteNumber(transform?.originY);
-  const translateX = finiteNumber(transform?.translateX);
-  const translateY = finiteNumber(transform?.translateY);
-  return {
-    x: originX + translateX + Number(point.x) * scale,
-    y: originY + translateY + Number(point.y) * scale,
-  };
+  const { scale, x, y } = viewportTransform(transform);
+  return { x: x + Number(point.x) * scale, y: y + Number(point.y) * scale };
 }
 
 export function clientToAppLogical(clientX, clientY, renderedViewport, frame) {

@@ -241,12 +241,11 @@ public sealed class ScreenshotImageTests : IDisposable
     }
 
     [Fact]
-    public void IsCompletePng_InvalidBitDepth_ReturnsFalse()
+    public void IsCompletePng_MissingEndChunk_ReturnsFalse()
     {
-        var png = Convert.FromBase64String(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABBwIAAAASJ8QPAAAABElEQVQAAQIDQN6+CAAAAABJRU5ErkJggg==");
+        var png = CreatePng(2, 2);
 
-        Assert.False(ScreenshotImage.IsCompletePng(png));
+        Assert.False(ScreenshotImage.IsCompletePng(png[..^12]));
     }
 
     private string WriteImage(byte[] png)

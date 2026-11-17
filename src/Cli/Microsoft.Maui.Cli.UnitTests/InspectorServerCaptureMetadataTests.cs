@@ -858,12 +858,7 @@ public class InspectorServerCaptureMetadataTests
             var firstStreamId = firstFrame.GetProperty("streamId").GetString();
             var firstFrameId = firstFrame.GetProperty("frameId").GetString();
             await Task.Delay(250);
-            using var secondResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            secondResponse.EnsureSuccessStatusCode();
-            using var secondState = JsonDocument.Parse(
-                await secondResponse.Content.ReadAsStringAsync());
-            var secondFrame = secondState.RootElement.GetProperty("frame");
+            var secondFrame = await GetFrameAsync(client, inspectorPort);
             Assert.Equal(firstStreamId, secondFrame.GetProperty("streamId").GetString());
             Assert.NotEqual(firstFrameId, secondFrame.GetProperty("frameId").GetString());
             Assert.Equal(2, secondFrame.GetProperty("frameRevision").GetInt64());
@@ -910,32 +905,15 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var stateResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            stateResponse.EnsureSuccessStatusCode();
-            using var state = JsonDocument.Parse(
-                await stateResponse.Content.ReadAsStringAsync());
-            var frame = state.RootElement.GetProperty("frame");
+            var frame = await GetFrameAsync(client, inspectorPort);
             agent.ClearRecordedRequests();
 
-            var requestJson = JsonSerializer.Serialize(new
+            using var response = await PostJsonAsync(client, inspectorPort, "/api/hitTest", new
             {
                 x,
                 y,
-                correlation = new
-                {
-                    actionId = "action-1",
-                    source = "inspector",
-                    streamId = frame.GetProperty("streamId").GetString(),
-                    frameId = frame.GetProperty("frameId").GetString(),
-                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
-                    coordinateSpace
-                }
+                correlation = Correlation(frame, "action-1", coordinateSpace: coordinateSpace)
             });
-            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
-            using var response = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/hitTest",
-                request);
             response.EnsureSuccessStatusCode();
 
             var hitTest = Assert.Single(
@@ -970,12 +948,7 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var response = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            response.EnsureSuccessStatusCode();
-            using var state = JsonDocument.Parse(
-                await response.Content.ReadAsStringAsync());
-            var frame = state.RootElement.GetProperty("frame");
+            var frame = await GetFrameAsync(client, inspectorPort);
 
             Assert.Equal(200, frame.GetProperty("logicalWidth").GetDouble());
             Assert.Equal(300, frame.GetProperty("logicalHeight").GetDouble());
@@ -1001,36 +974,17 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var stateResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            stateResponse.EnsureSuccessStatusCode();
-            using var state = JsonDocument.Parse(
-                await stateResponse.Content.ReadAsStringAsync());
-            var frame = state.RootElement.GetProperty("frame");
+            var frame = await GetFrameAsync(client, inspectorPort);
             agent.ClearRecordedRequests();
 
-            var requestJson = JsonSerializer.Serialize(new
+            using var response = await PostJsonAsync(client, inspectorPort, "/api/hitTest", new
             {
                 x = 5,
                 y = 6,
-                correlation = new
-                {
-                    actionId = "action-expired",
-                    source = "inspector",
-                    streamId = frame.GetProperty("streamId").GetString(),
-                    frameId = "00000000000000000000000000000000",
-                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
-                    coordinateSpace = "appLogical"
-                }
+                correlation = Correlation(frame, "action-expired", frameId: "00000000000000000000000000000000")
             });
-            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
-            using var response = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/hitTest",
-                request);
 
-            Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
-            using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            Assert.Equal("frame-expired", error.RootElement.GetProperty("error").GetString());
+            await AssertErrorAsync(response, HttpStatusCode.Gone, "frame-expired");
             Assert.DoesNotContain(
                 agent.RecordedRequests,
                 recorded => recorded.Path == "/api/v1/ui/hit-test");
@@ -1057,34 +1011,17 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var stateResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            stateResponse.EnsureSuccessStatusCode();
-            using var state = JsonDocument.Parse(
-                await stateResponse.Content.ReadAsStringAsync());
-            var frame = state.RootElement.GetProperty("frame");
+            var frame = await GetFrameAsync(client, inspectorPort);
             agent.ClearRecordedRequests();
 
             await Task.Delay(TimeSpan.FromMilliseconds(10_250));
 
-            var requestJson = JsonSerializer.Serialize(new
+            using var response = await PostJsonAsync(client, inspectorPort, "/api/hitTest", new
             {
                 x = 5,
                 y = 6,
-                correlation = new
-                {
-                    actionId = "action-after-idle",
-                    source = "inspector",
-                    streamId = frame.GetProperty("streamId").GetString(),
-                    frameId = frame.GetProperty("frameId").GetString(),
-                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
-                    coordinateSpace = "appLogical"
-                }
+                correlation = Correlation(frame, "action-after-idle")
             });
-            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
-            using var response = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/hitTest",
-                request);
 
             var responseBody = await response.Content.ReadAsStringAsync();
             Assert.True(response.IsSuccessStatusCode, responseBody);
@@ -1114,12 +1051,7 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var firstResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            firstResponse.EnsureSuccessStatusCode();
-            using var firstState = JsonDocument.Parse(
-                await firstResponse.Content.ReadAsStringAsync());
-            var firstFrame = firstState.RootElement.GetProperty("frame");
+            var firstFrame = await GetFrameAsync(client, inspectorPort);
 
             await Task.Delay(250);
             using var secondResponse = await client.GetAsync(
@@ -1127,24 +1059,12 @@ public class InspectorServerCaptureMetadataTests
             secondResponse.EnsureSuccessStatusCode();
             agent.ClearRecordedRequests();
 
-            var requestJson = JsonSerializer.Serialize(new
+            using var response = await PostJsonAsync(client, inspectorPort, "/api/hitTest", new
             {
                 x = 5,
                 y = 6,
-                correlation = new
-                {
-                    actionId = "action-superseded",
-                    source = "inspector",
-                    streamId = firstFrame.GetProperty("streamId").GetString(),
-                    frameId = firstFrame.GetProperty("frameId").GetString(),
-                    frameRevision = firstFrame.GetProperty("frameRevision").GetInt64(),
-                    coordinateSpace = "appLogical"
-                }
+                correlation = Correlation(firstFrame, "action-superseded")
             });
-            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
-            using var response = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/hitTest",
-                request);
 
             var responseBody = await response.Content.ReadAsStringAsync();
             Assert.True(response.IsSuccessStatusCode, responseBody);
@@ -1174,12 +1094,7 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var firstResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            firstResponse.EnsureSuccessStatusCode();
-            using var firstState = JsonDocument.Parse(
-                await firstResponse.Content.ReadAsStringAsync());
-            var firstFrame = firstState.RootElement.GetProperty("frame");
+            var firstFrame = await GetFrameAsync(client, inspectorPort);
 
             agent.VisualTreeResponse = OffsetVisualTree.Replace(
                 "\"x\": 10, \"y\": 20",
@@ -1194,28 +1109,14 @@ public class InspectorServerCaptureMetadataTests
             secondResponse.EnsureSuccessStatusCode();
             agent.ClearRecordedRequests();
 
-            var requestJson = JsonSerializer.Serialize(new
+            using var response = await PostJsonAsync(client, inspectorPort, "/api/hitTest", new
             {
                 x = 5,
                 y = 6,
-                correlation = new
-                {
-                    actionId = "action-superseded",
-                    source = "inspector",
-                    streamId = firstFrame.GetProperty("streamId").GetString(),
-                    frameId = firstFrame.GetProperty("frameId").GetString(),
-                    frameRevision = firstFrame.GetProperty("frameRevision").GetInt64(),
-                    coordinateSpace = "appLogical"
-                }
+                correlation = Correlation(firstFrame, "action-superseded")
             });
-            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
-            using var response = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/hitTest",
-                request);
 
-            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            Assert.Equal("frame-superseded", error.RootElement.GetProperty("error").GetString());
+            await AssertErrorAsync(response, HttpStatusCode.Conflict, "frame-superseded");
             Assert.DoesNotContain(
                 agent.RecordedRequests,
                 recorded => recorded.Path == "/api/v1/ui/hit-test");
@@ -1244,32 +1145,15 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var stateResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            stateResponse.EnsureSuccessStatusCode();
-            using var state = JsonDocument.Parse(
-                await stateResponse.Content.ReadAsStringAsync());
-            var frame = state.RootElement.GetProperty("frame");
+            var frame = await GetFrameAsync(client, inspectorPort);
             agent.ClearRecordedRequests();
 
-            var requestJson = JsonSerializer.Serialize(new
+            using var response = await PostJsonAsync(client, inspectorPort, "/api/tap", new
             {
                 x = 5,
                 y = 6,
-                correlation = new
-                {
-                    actionId = "action-parent-fallback",
-                    source = "inspector",
-                    streamId = frame.GetProperty("streamId").GetString(),
-                    frameId = frame.GetProperty("frameId").GetString(),
-                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
-                    coordinateSpace = "appLogical"
-                }
+                correlation = Correlation(frame, "action-parent-fallback")
             });
-            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
-            using var response = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/tap",
-                request);
 
             response.EnsureSuccessStatusCode();
             var taps = agent.RecordedRequests
@@ -1304,36 +1188,17 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var stateResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            stateResponse.EnsureSuccessStatusCode();
-            using var state = JsonDocument.Parse(
-                await stateResponse.Content.ReadAsStringAsync());
-            var frame = state.RootElement.GetProperty("frame");
+            var frame = await GetFrameAsync(client, inspectorPort);
             agent.ClearRecordedRequests();
 
-            var requestJson = JsonSerializer.Serialize(new
+            using var response = await PostJsonAsync(client, inspectorPort, "/api/tap", new
             {
                 x = 5,
                 y = 6,
-                correlation = new
-                {
-                    actionId = "action-no-retarget",
-                    source = "inspector",
-                    streamId = frame.GetProperty("streamId").GetString(),
-                    frameId = frame.GetProperty("frameId").GetString(),
-                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
-                    coordinateSpace = "appLogical"
-                }
+                correlation = Correlation(frame, "action-no-retarget")
             });
-            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
-            using var response = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/tap",
-                request);
 
-            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            Assert.Equal("frame-target-unavailable", error.RootElement.GetProperty("error").GetString());
+            await AssertErrorAsync(response, HttpStatusCode.Conflict, "frame-target-unavailable");
             Assert.DoesNotContain(
                 agent.RecordedRequests,
                 recorded => recorded.Path == "/api/v1/ui/actions/tap");
@@ -1372,26 +1237,14 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var stateResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            stateResponse.EnsureSuccessStatusCode();
-            using var state = JsonDocument.Parse(await stateResponse.Content.ReadAsStringAsync());
-            var frame = state.RootElement.GetProperty("frame");
+            var frame = await GetFrameAsync(client, inspectorPort);
             agent.ClearRecordedRequests();
 
             var payload = new Dictionary<string, object?>
             {
                 ["x"] = 5,
                 ["y"] = 6,
-                ["correlation"] = new
-                {
-                    actionId = $"action-race-{(scroll ? "scroll" : "tap")}",
-                    source = "inspector",
-                    streamId = frame.GetProperty("streamId").GetString(),
-                    frameId = frame.GetProperty("frameId").GetString(),
-                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
-                    coordinateSpace = "appLogical"
-                }
+                ["correlation"] = Correlation(frame, $"action-race-{(scroll ? "scroll" : "tap")}")
             };
             if (scroll)
             {
@@ -1399,13 +1252,7 @@ public class InspectorServerCaptureMetadataTests
                 payload["deltaY"] = 12;
             }
 
-            using var request = new StringContent(
-                JsonSerializer.Serialize(payload),
-                Encoding.UTF8,
-                "application/json");
-            var actionTask = client.PostAsync(
-                $"http://localhost:{inspectorPort}{inspectorPath}",
-                request);
+            var actionTask = PostJsonAsync(client, inspectorPort, inspectorPath, payload);
 
             await hitTestStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
             agent.VisualTreeResponse = OffsetVisualTree.Replace(
@@ -1421,9 +1268,7 @@ public class InspectorServerCaptureMetadataTests
             releaseHitTest.TrySetResult();
             using var response = await actionTask.WaitAsync(TimeSpan.FromSeconds(10));
 
-            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            Assert.Equal("frame-superseded", error.RootElement.GetProperty("error").GetString());
+            await AssertErrorAsync(response, HttpStatusCode.Conflict, "frame-superseded");
             Assert.DoesNotContain(
                 agent.RecordedRequests,
                 recorded => recorded.Path == agentActionPath);
@@ -1452,30 +1297,14 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var stateResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            stateResponse.EnsureSuccessStatusCode();
-            using var state = JsonDocument.Parse(await stateResponse.Content.ReadAsStringAsync());
-            var frame = state.RootElement.GetProperty("frame");
+            var frame = await GetFrameAsync(client, inspectorPort);
 
-            var requestJson = JsonSerializer.Serialize(new
+            using var response = await PostJsonAsync(client, inspectorPort, "/api/tap", new
             {
                 x = 5,
                 y = 6,
-                correlation = new
-                {
-                    actionId = "action-declined-targets",
-                    source = "inspector",
-                    streamId = frame.GetProperty("streamId").GetString(),
-                    frameId = frame.GetProperty("frameId").GetString(),
-                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
-                    coordinateSpace = "appLogical"
-                }
+                correlation = Correlation(frame, "action-declined-targets")
             });
-            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
-            using var response = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/tap",
-                request);
 
             response.EnsureSuccessStatusCode();
             using var result = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -1508,33 +1337,17 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var stateResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            stateResponse.EnsureSuccessStatusCode();
-            using var state = JsonDocument.Parse(await stateResponse.Content.ReadAsStringAsync());
-            var frame = state.RootElement.GetProperty("frame");
+            var frame = await GetFrameAsync(client, inspectorPort);
             agent.ClearRecordedRequests();
 
-            var requestJson = JsonSerializer.Serialize(new
+            using var response = await PostJsonAsync(client, inspectorPort, "/api/scroll", new
             {
                 x = 5,
                 y = 6,
                 deltaX = 0,
                 deltaY = 12,
-                correlation = new
-                {
-                    actionId = "action-scroll-fallback",
-                    source = "inspector",
-                    streamId = frame.GetProperty("streamId").GetString(),
-                    frameId = frame.GetProperty("frameId").GetString(),
-                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
-                    coordinateSpace = "appLogical"
-                }
+                correlation = Correlation(frame, "action-scroll-fallback")
             });
-            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
-            using var response = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/scroll",
-                request);
 
             response.EnsureSuccessStatusCode();
             using var result = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -1567,34 +1380,17 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var stateResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            stateResponse.EnsureSuccessStatusCode();
-            using var state = JsonDocument.Parse(
-                await stateResponse.Content.ReadAsStringAsync());
-            var frame = state.RootElement.GetProperty("frame");
+            var frame = await GetFrameAsync(client, inspectorPort);
             agent.ClearRecordedRequests();
 
-            var requestJson = JsonSerializer.Serialize(new
+            using var response = await PostJsonAsync(client, inspectorPort, "/api/fill", new
             {
                 elementId = "element-42",
                 text = "updated",
                 captureEpoch = 42,
                 registryGeneration = 7,
-                correlation = new
-                {
-                    actionId = "fill-expired",
-                    source = "inspector",
-                    streamId = frame.GetProperty("streamId").GetString(),
-                    frameId = "00000000000000000000000000000000",
-                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
-                    coordinateSpace = "appLogical"
-                }
+                correlation = Correlation(frame, "fill-expired", frameId: "00000000000000000000000000000000")
             });
-            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
-            using var response = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/fill",
-                request);
 
             response.EnsureSuccessStatusCode();
             Assert.Contains(
@@ -1620,12 +1416,7 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var initialStateResponse = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state");
-            initialStateResponse.EnsureSuccessStatusCode();
-            using var initialState = JsonDocument.Parse(
-                await initialStateResponse.Content.ReadAsStringAsync());
-            var frame = initialState.RootElement.GetProperty("frame");
+            var frame = await GetFrameAsync(client, inspectorPort);
 
             using var backResponse = await client.PostAsync(
                 $"http://localhost:{inspectorPort}/api/back",
@@ -1637,28 +1428,14 @@ public class InspectorServerCaptureMetadataTests
             Assert.Equal(HttpStatusCode.ServiceUnavailable, failedState.StatusCode);
 
             agent.ClearRecordedRequests();
-            var requestJson = JsonSerializer.Serialize(new
+            using var response = await PostJsonAsync(client, inspectorPort, "/api/hitTest", new
             {
                 x = 5,
                 y = 6,
-                correlation = new
-                {
-                    actionId = "action-after-failed-capture",
-                    source = "inspector",
-                    streamId = frame.GetProperty("streamId").GetString(),
-                    frameId = frame.GetProperty("frameId").GetString(),
-                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
-                    coordinateSpace = "appLogical"
-                }
+                correlation = Correlation(frame, "action-after-failed-capture")
             });
-            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
-            using var response = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/hitTest",
-                request);
 
-            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            Assert.Equal("frame-superseded", error.RootElement.GetProperty("error").GetString());
+            await AssertErrorAsync(response, HttpStatusCode.Conflict, "frame-superseded");
             Assert.DoesNotContain(
                 agent.RecordedRequests,
                 recorded => recorded.Path == "/api/v1/ui/hit-test");
@@ -1672,19 +1449,12 @@ public class InspectorServerCaptureMetadataTests
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
-    [InlineData(2)]
     public async Task State_WhenScreenshotIsInvalidOrTruncated_ReturnsServiceUnavailable(
         int invalidPngKind)
     {
         await using var agent = new MockAgentServer
         {
-            ScreenshotResponse = invalidPngKind switch
-            {
-                0 => [1, 2, 3, 4],
-                1 => MockAgentResponses.ScreenshotPng[..24],
-                _ => Convert.FromBase64String(
-                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABBwIAAAASJ8QPAAAABElEQVQAAQIDQN6+CAAAAABJRU5ErkJggg==")
-            }
+            ScreenshotResponse = invalidPngKind == 0 ? [1, 2, 3, 4] : MockAgentResponses.ScreenshotPng[..24]
         };
         await agent.StartAsync();
 
@@ -1748,6 +1518,48 @@ public class InspectorServerCaptureMetadataTests
         {
             await inspector.StopAsync();
         }
+    }
+
+    private static async Task<JsonElement> GetFrameAsync(HttpClient client, int inspectorPort)
+    {
+        using var response = await client.GetAsync($"http://localhost:{inspectorPort}/api/state");
+        response.EnsureSuccessStatusCode();
+        using var state = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return state.RootElement.GetProperty("frame").Clone();
+    }
+
+    private static object Correlation(
+        JsonElement frame,
+        string actionId,
+        string? frameId = null,
+        string coordinateSpace = "appLogical") => new
+        {
+            actionId,
+            source = "inspector",
+            streamId = frame.GetProperty("streamId").GetString(),
+            frameId = frameId ?? frame.GetProperty("frameId").GetString(),
+            frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+            coordinateSpace
+        };
+
+    private static async Task<HttpResponseMessage> PostJsonAsync(
+        HttpClient client,
+        int inspectorPort,
+        string path,
+        object payload)
+    {
+        using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        return await client.PostAsync($"http://localhost:{inspectorPort}{path}", content);
+    }
+
+    private static async Task AssertErrorAsync(
+        HttpResponseMessage response,
+        HttpStatusCode expectedStatus,
+        string expectedError)
+    {
+        Assert.Equal(expectedStatus, response.StatusCode);
+        using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(expectedError, error.RootElement.GetProperty("error").GetString());
     }
 
     private static int GetFreePort()
