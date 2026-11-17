@@ -57,30 +57,9 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public static void MapOpenWindow(ApplicationHandler handler, IApplication application, object? args)
 		{
-			// Multi-window support: create a new WPF Window for the MAUI Window
-			if (args is IWindow mauiWindow && handler.MauiContext != null)
-			{
-				try
-				{
-					var newWindow = new System.Windows.Window
-					{
-						Title = mauiWindow.Title ?? "Window",
-						Width = double.IsNaN(mauiWindow.Width) || mauiWindow.Width < 0 ? 800 : mauiWindow.Width,
-						Height = double.IsNaN(mauiWindow.Height) || mauiWindow.Height < 0 ? 600 : mauiWindow.Height,
-						Content = new WindowRootViewContainer(),
-					};
-
-					if (mauiWindow.Content != null)
-					{
-						var platformContent = Microsoft.Maui.Platform.ElementExtensions.ToPlatform((IElement)mauiWindow.Content, handler.MauiContext);
-						if (newWindow.Content is WindowRootViewContainer container)
-							container.AddPage((System.Windows.FrameworkElement)platformContent);
-					}
-
-					newWindow.Show();
-				}
-				catch { }
-			}
+			// Application.OpenWindow queues the Window and passes an OpenWindowRequest;
+			// CreateWindow hands the queued Window back (same flow as WinUI).
+			handler.PlatformView?.CreatePlatformWindow(application, args as OpenWindowRequest);
 		}
 
 		public static void MapCloseWindow(ApplicationHandler handler, IApplication application, object? args)
