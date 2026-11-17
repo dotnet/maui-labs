@@ -163,6 +163,9 @@ public class AppleIntelligenceChatClientValidationTests
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithNullableSchema_ReturnsParsableResponse()
 	{
+		if (!OperatingSystem.IsIOSVersionAtLeast(26, 4) && !OperatingSystem.IsMacCatalystVersionAtLeast(26, 4))
+			return;
+
 		var client = new AppleIntelligenceChatClient();
 		var options = new ChatOptions
 		{
