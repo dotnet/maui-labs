@@ -578,9 +578,11 @@ export function createActionOverlayController({
     }
     let entry = id ? activeActions.get(id) : null;
     if (data.success === false) {
+      const preserveCurrentPlacement = entry?.placementRequired === true
+        && currentFrameStatus({ ...entry.data, ...data }) === 'current';
       const timer = setTimeout(() => {
         pendingFailures.delete(id);
-        renderFailedCompletion(data, entry);
+        renderFailedCompletion(data, entry, preserveCurrentPlacement);
       }, FAILURE_GRACE_MS);
       if (id) pendingFailures.set(id, timer);
       return;
@@ -600,7 +602,7 @@ export function createActionOverlayController({
     scheduleCleanup(entry);
   }
 
-  function renderFailedCompletion(data, existingEntry) {
+  function renderFailedCompletion(data, existingEntry, preserveCurrentPlacement) {
     const id = correlationOf(data).actionId || actionId();
     const entry = existingEntry && activeActions.get(id) === existingEntry
       ? existingEntry
@@ -631,13 +633,18 @@ export function createActionOverlayController({
       return;
     }
 
-    markTerminalEntry(entry, data, true);
+    markTerminalEntry(entry, data, true, preserveCurrentPlacement);
   }
 
-  function markTerminalEntry(entry, data, announceFailure) {
+  function markTerminalEntry(
+    entry,
+    data,
+    announceFailure,
+    preserveCurrentPlacement = false) {
     entry.data = { ...entry.data, ...data };
     entry.startedAt = Date.now();
-    refreshTerminalPlacement(entry, false);
+    if (!preserveCurrentPlacement)
+      refreshTerminalPlacement(entry, false);
     const outcome = data.outcome === 'cancelled' ? 'cancelled' : 'failed';
     const outcomeClass = outcome === 'cancelled'
       ? 'df-action-cancelled'
