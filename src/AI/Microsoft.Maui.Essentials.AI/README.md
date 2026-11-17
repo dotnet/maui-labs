@@ -5,7 +5,8 @@ On-device chat and text embeddings through
 backed by Apple Intelligence, Apple NaturalLanguage, Windows AI, and Gemini Nano.
 Chat capabilities vary by platform; Apple supports native tool execution and
 eligible image input, Windows supports structured JSON, and Android supports
-in-memory image input, structured responses, and tool calling on supported Nano V4 models.
+in-memory image input and structured JSON, plus tool calling on supported Nano V4
+models.
 No cloud service is used.
 
 > **Experimental:** this package ships as a preview. APIs may change.
@@ -80,6 +81,8 @@ local tool execution; the default Nano V3 model does not support native tools.
 Tool-enabled streams without a schema buffer text until each model turn
 completes to suppress native control tokens. See the [Android tool-calling guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md#native-tool-calling)
 for setup, model selection, schema restrictions, and validation boundaries.
+Set `MaxOutputTokens` for longer responses: when it is unset, the default Nano V3
+model stops after about 40 tokens.
 `PrepareModelAsync`
 waits for the explicit download to finish. Use `DownloadModelAsync` when the app
 needs to display ML Kit's native progress, and query model status afterward
@@ -155,10 +158,9 @@ update when a provider emits no incremental progress. For trimmed/AOT apps,
 pass source-generated `JsonSerializerOptions`, as above, for every structured
 response type.
 
-Gemini Nano applies schemas through AICore's constrained decoding. As with
-OpenAI, the schema root must be an object and the generated JSON is returned
-unchanged. Structured output works with streaming, tools and full thinking
-output. See the
+Gemini Nano constrains generation to the schema natively. As with OpenAI, the
+schema root must be an object and the generated JSON is returned unchanged.
+Structured output works with streaming, tools and full thinking output. See the
 [Android structured-output guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-structured-output.md)
 for supported keywords.
 
@@ -285,6 +287,7 @@ The corresponding model asset must be installed.
 - [Apple Foundation Models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models.md) — Apple toolchain, images, availability, bridge mechanics, and validation.
 - [Windows AI language models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-language-models.md) — Windows packaging, readiness, dependencies, and validation.
 - [Gemini Nano Android](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md) — Android binding, AICore readiness, download, and validation.
+- [Gemini Nano structured output](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-structured-output.md) — supported schemas, streaming, tools, and thinking.
 - [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
 - [Source and contributor build instructions](https://github.com/dotnet/maui-labs/tree/main/src/AI)

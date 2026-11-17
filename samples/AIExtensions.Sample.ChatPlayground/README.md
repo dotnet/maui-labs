@@ -100,9 +100,10 @@ Gemini Nano. It supports text/image chat and native tool calling when the select
 model advertises that capability. Select **Preview fast** for the verified Nano V4
 tool path; the default stable/full Nano V3 model has no native tool calling.
 Tool controls follow the selected model's status. Auto and None are available;
-Require any is unsupported. **Structured JSON** uses the native schema API and
-works together with tools: tool calls run first, then the final answer is
-generated under the schema. With Streaming enabled, JSON arrives incrementally.
+Require any is unsupported. **Structured JSON** constrains the answer to the
+playground's response schema natively and works together with tools: tool calls
+run first, then the final answer is generated under the schema. With Streaming
+enabled, JSON arrives incrementally.
 Without Structured JSON, tool-enabled text arrives at the end of each model turn
 so ML Kit's raw function tokens never appear in chat.
 Use **Download** in the readiness banner to prepare the model. Chat requests never
