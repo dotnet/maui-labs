@@ -103,6 +103,63 @@ public class GtkWebViewSnapshotRuntimeTests
     }
 
     [GtkSnapshotFact]
+    public void Bridge_RepeatedEvaluationSnapshotAndNavigation_StaysResponsiveAcrossDocuments()
+    {
+        global::Gtk.Module.Initialize();
+        global::Gtk.Functions.Init();
+        GtkBlazorWebView.InitializeWebKit();
+        using var window = global::Gtk.Window.New();
+        using var view = WebKit.WebView.New();
+        using var service = new GtkBlazorWebViewDebugService();
+        var previousContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new GtkRuntimeSynchronizationContext());
+        try
+        {
+            window.SetDefaultSize(320, 240);
+            window.SetChild(view);
+            window.Present();
+            var bridge = new GtkBlazorWebViewDebugService.GtkWebViewBridge(service, view, "lifetime");
+            service.AddBridge(bridge);
+
+            for (var document = 0; document < 4; document++)
+            {
+                view.LoadHtml(
+                    $"<html><title>Document {document}</title><body>JSC lifetime {document}</body></html>",
+                    null);
+                PumpUntil(() => bridge.IsReady);
+
+                for (var evaluation = 0; evaluation < 40; evaluation++)
+                {
+                    var result = bridge.EvaluateJavaScriptAsync(
+                        $"'document-{document}-value-{evaluation}'");
+                    PumpUntil(() => result.IsCompleted);
+                    Assert.Equal(
+                        $"document-{document}-value-{evaluation}",
+                        result.GetAwaiter().GetResult());
+                }
+
+                var capture = bridge.SendCdpCommandAsync(
+                    """{"id":93,"method":"Page.captureScreenshot","params":{"format":"png"}}""");
+                PumpUntil(() => capture.IsCompleted);
+                using var response = System.Text.Json.JsonDocument.Parse(capture.GetAwaiter().GetResult());
+                Assert.False(string.IsNullOrEmpty(
+                    response.RootElement.GetProperty("result").GetProperty("data").GetString()));
+
+                DrainPendingMainContextCallbacks();
+            }
+
+            service.RemoveBridge(bridge);
+        }
+        finally
+        {
+            service.Dispose();
+            window.SetChild(null);
+            window.Destroy();
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+    }
+
+    [GtkSnapshotFact]
     public void NativeSnapshot_CanceledDuringViewTeardown_CompletesWithoutAnImage()
     {
         global::Gtk.Module.Initialize();
@@ -268,6 +325,13 @@ public class GtkWebViewSnapshotRuntimeTests
             if (!timedOut)
                 GLib.Functions.SourceRemove(timeout);
         }
+    }
+
+    static void DrainPendingMainContextCallbacks()
+    {
+        var context = GLib.MainContext.Default();
+        for (var iteration = 0; iteration < 100 && context.Pending(); iteration++)
+            context.Iteration(false);
     }
 }
 

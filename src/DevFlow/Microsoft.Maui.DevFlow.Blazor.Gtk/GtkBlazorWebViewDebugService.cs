@@ -1,3 +1,4 @@
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Components.WebView.Maui;
@@ -225,8 +226,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
                 var evaluation = _evaluateJavaScript != null ? _evaluateJavaScript(script) : DispatchOnUiAsync(async () =>
                 {
                     if (_webView == null) return null;
-                    var value = await _webView.EvaluateJavascriptAsync(script);
-                    return value?.ToString();
+                    return await _webView.EvaluateJavaScriptToStringAsync(script);
                 });
                 return await evaluation.WaitAsync(_lifetimeToken);
             }

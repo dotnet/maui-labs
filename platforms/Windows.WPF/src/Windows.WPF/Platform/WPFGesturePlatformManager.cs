@@ -2,6 +2,7 @@
 #nullable enable
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Internals;
@@ -278,17 +279,24 @@ sealed class WPFGesturePlatformManager : IGesturePlatformManager
 
 	Func<IElement?, MauiPoint?> GetPosition(WpfPoint point)
 	{
-		var screen = _platformView!.PointToScreen(point);
+		// Mouse-leave and similar events can arrive after navigation has removed the view from its
+		// window; screen conversion then throws, so report an unknown relative position instead.
+		WpfPoint? screen = IsConnected(_platformView!) ? _platformView!.PointToScreen(point) : null;
 		return relativeTo =>
 		{
 			if (relativeTo?.Handler?.PlatformView is FrameworkElement relativePlatformView)
 			{
-				var translated = relativePlatformView.PointFromScreen(screen);
+				if (screen is null || !IsConnected(relativePlatformView))
+					return null;
+
+				var translated = relativePlatformView.PointFromScreen(screen.Value);
 				return new MauiPoint(translated.X, translated.Y);
 			}
 			return new MauiPoint(point.X, point.Y);
 		};
 	}
+
+	static bool IsConnected(Visual visual) => PresentationSource.FromVisual(visual) is not null;
 
 	void CancelLongPress()
 	{

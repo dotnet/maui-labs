@@ -178,7 +178,10 @@ public sealed class GtkBlazorWebView : IDisposable
 		UserContentManager ucm,
 		UserContentManager.ScriptMessageReceivedSignalArgs args)
 	{
-		var result = args.Value;
+		// The message JSCValue is only valid while its JavaScript context lives. Release GirCore's
+		// wrapper here, on the GTK thread, instead of leaving it to a finalizer whose queued
+		// toggle-ref removal can run after navigation has destroyed that context.
+		using var result = args.Value;
 		_webViewManager?.MessageReceivedInternal(AppOriginUri, result.ToString());
 	}
 
