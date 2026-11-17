@@ -68,6 +68,7 @@ on:
       - 'samples/DevFlow.Sample.MacOS/**'
       - 'samples/DevFlow.Sample.Native/**'
       - 'samples/DevFlow.Sample.WPF/**'
+      - 'samples/DevFlow.Sample.Net11.props'
       # Backend dependencies: prefer extra runs over missing a relevant change.
       - 'platforms/Linux.Gtk4/**'
       - 'platforms/MacOS/**'
@@ -520,11 +521,19 @@ jobs:
   gtk:
     needs: plan
     if: needs.plan.outputs.run-gtk == 'true' && contains(needs.plan.outputs.frameworks, 'maui')
+    strategy:
+      fail-fast: false
+      matrix:
+        # The GTK backend ships net10.0 (MAUI 10) and net11.0 (MAUI 11 contracts) assets;
+        # drive the DevFlow sample built for each.
+        dotnet: ['10', '11']
+    name: gtk (net${{ matrix.dotnet }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: gtk
       DEVFLOW_TEST_FRAMEWORK: maui
+      DEVFLOW_TEST_DOTNET: ${{ matrix.dotnet }}
       GDK_BACKEND: x11
     steps:
       - uses: actions/checkout@v6
@@ -559,7 +568,7 @@ jobs:
           dotnet test $TEST_PROJECT
           -c Debug
           --filter "Category!=Device&Category!=Sensors&Category!=SecureStorage"
-          --logger "trx;LogFileName=devflow-integration-gtk-maui.trx"
+          --logger "trx;LogFileName=devflow-integration-gtk-maui-net${{ matrix.dotnet }}.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/gtk
 
@@ -599,7 +608,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-gtk-maui-results
+          name: devflow-integration-gtk-maui-net${{ matrix.dotnet }}-results
           path: ./artifacts/TestResults/devflow-integration/gtk/
           retention-days: 30
 

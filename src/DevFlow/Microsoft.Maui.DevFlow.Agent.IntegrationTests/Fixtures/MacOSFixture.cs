@@ -8,7 +8,7 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 /// </summary>
 public sealed class MacOSFixture : AppFixtureBase
 {
-    const string TargetFramework = "net10.0-macos";
+    static readonly string TargetFramework = TestDotNet.Select("net10.0-macos", "net11.0-macos");
 
     Process? _appProcess;
 
@@ -16,6 +16,12 @@ public sealed class MacOSFixture : AppFixtureBase
 
     protected override async Task InitializePlatformAsync()
     {
+        if (TestFramework.IsNative && TestDotNet.IsEleven)
+        {
+            throw new InvalidOperationException(
+                "DEVFLOW_TEST_DOTNET=11 targets the MAUI-on-AppKit sample; the native AppKit sample is net10.0 only.");
+        }
+
         await WithBuildLockAsync(async () =>
         {
             await BuildSampleAsync(GetSampleProjectPath("macos"), TargetFramework);

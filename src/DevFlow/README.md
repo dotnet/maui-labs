@@ -876,6 +876,20 @@ DEVFLOW_TEST_FRAMEWORK=native DEVFLOW_TEST_PLATFORM=maccatalyst \
 `native` is supported for `android`, `ios`, `maccatalyst`, and `macos`. There are no
 plain-.NET Windows, GTK, or WPF integration heads.
 
+#### Running the suite against the .NET 11 community backends
+
+The GTK, WPF, and macOS AppKit backends ship `net10.0` assets (MAUI 10 compatibility) and
+`net11.0` assets (MAUI 11 extensibility contracts). Their DevFlow samples multi-target both, and
+`DEVFLOW_TEST_DOTNET` selects which build the fixture launches: `10` (default) or `11`.
+CI runs the `gtk`, `wpf`, and `macos (maui)` lanes once per version.
+
+```bash
+DEVFLOW_TEST_PLATFORM=gtk DEVFLOW_TEST_DOTNET=11 \
+  dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/
+```
+
+`DEVFLOW_TEST_DOTNET=11` applies to the MAUI samples only; the native samples remain `net10.0`.
+
 There is also a manual GitHub Actions workflow at `.github/workflows/devflow-integration.yml` for running the same suite in CI.
 
 ## Version
