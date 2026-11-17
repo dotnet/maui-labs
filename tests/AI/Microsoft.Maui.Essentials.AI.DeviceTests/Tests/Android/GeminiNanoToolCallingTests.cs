@@ -7,13 +7,13 @@ using Xunit.Abstractions;
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
 // Native function availability varies by the selected AICore model, not just Android version.
+// Tool round trips on the tool-capable profile run in GeminiNanoNativeFunctionCallingTests through the shared base.
 [Collection(nameof(GeminiNanoCollection))]
 public sealed class GeminiNanoToolCallingTests(ITestOutputHelper output)
 {
+	// The default profile (Nano V3) may not advertise native tools; the request must then fail before any call.
 	[Theory]
 	[InlineData("gemini-nano", false)]
-	[InlineData("gemini-nano-preview-fast", false)]
-	[InlineData("gemini-nano-preview-fast", true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task Generate_NativeToolCall_ExecutesAndUsesRealResult(string modelId, bool streaming)
 	{
@@ -52,6 +52,18 @@ public sealed class GeminiNanoToolCallingTests(ITestOutputHelper output)
 		output.WriteLine(JsonSerializer.Serialize(new { RequestedModel = modelId, response.ModelId, response.Text, response.FinishReason, Calls = calls }));
 		Assert.Equal(1, calls);
 		Assert.Contains("ORCHARD_SECRET_7291", response.Text, StringComparison.Ordinal);
+	}
+
+	// The shared tool round trips assume the configured profile advertises native tool calling.
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ToolProfile_AdvertisesNativeToolCalling()
+	{
+		const string modelId = GeminiNanoNativeFunctionCallingTests.ToolModelId;
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+		var status = await GeminiNanoChatClient.GetModelStatusAsync(modelId, timeout.Token);
+		Assert.True(status.Capabilities?.Contains(ChatModelCapability.ToolCalling) == true,
+			$"{modelId} must be downloaded and advertise native tool calling: {status.Availability}.");
 	}
 
 	private async IAsyncEnumerable<ChatResponseUpdate> CaptureStream(IAsyncEnumerable<ChatResponseUpdate> updates)

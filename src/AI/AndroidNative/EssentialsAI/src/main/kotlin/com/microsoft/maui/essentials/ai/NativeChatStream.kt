@@ -1,5 +1,6 @@
 package com.microsoft.maui.essentials.ai
 
+import com.google.mlkit.genai.common.FunctionCall
 import com.google.mlkit.genai.common.StreamingCallback
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
@@ -82,5 +83,32 @@ internal class NativeChatStream(
             events.trySend(Event(buffer.thought, final.substring(buffer.emittedLength)))
             buffer.emittedLength = final.length
         }
+    }
+}
+
+/**
+ * AICore can stream thoughts with its raw "thought\n" channel header (seen with tools and with a response
+ * schema), which the final candidate omits; drop it so streamed thoughts match the final candidate.
+ */
+internal class ThoughtHeaderFilter(private val inner: StreamingCallback) : StreamingCallback {
+    private val pending = StringBuilder()
+    private var started = false
+
+    override fun onNewText(additionalText: String) = inner.onNewText(additionalText)
+
+    override fun onNewFunctionCall(functionCall: FunctionCall) = inner.onNewFunctionCall(functionCall)
+
+    @Synchronized
+    override fun onNewThought(additionalThought: String) {
+        if (started) return inner.onNewThought(additionalThought)
+        pending.append(additionalThought)
+        if (pending.length < HEADER.length && HEADER.startsWith(pending)) return
+        started = true
+        val thought = if (pending.startsWith(HEADER)) pending.substring(HEADER.length) else pending.toString()
+        if (thought.isNotEmpty()) inner.onNewThought(thought)
+    }
+
+    private companion object {
+        const val HEADER = "thought\n"
     }
 }

@@ -1,11 +1,8 @@
 # Microsoft.Maui.Essentials.AI
 
-On-device chat and text embeddings through
+On-device chat and text embeddings for .NET MAUI through
 [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions),
 backed by Apple Intelligence, Apple NaturalLanguage, Windows AI, and Gemini Nano.
-Chat capabilities vary by platform; Apple supports native tool execution and
-eligible image input, Windows supports structured JSON, and Android supports
-in-memory image input and native tool calling on supported Nano V4 models.
 No cloud service is used.
 
 > **Experimental:** this package ships as a preview. APIs may change.
@@ -16,31 +13,28 @@ Requires .NET 11 and matching MAUI workloads.
 
 | Platform | Chat (`IChatClient`) | Image input | Embeddings (`IEmbeddingGenerator`) |
 |----------|---------------------|-------------|-----------------------------------|
-| iOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | NaturalLanguage, OS 13+ |
-| Mac Catalyst 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | NaturalLanguage, OS 13.1+ |
-| macOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | NaturalLanguage, OS 10.15+ |
-| Windows 11 24H2+ | Windows AI on supported Copilot+ hardware, including structured responses | Not supported | Not supported |
-| Android API 26+ | Gemini Nano on a supported AICore device; tools on capable Nano V4 profiles | In-memory images | Not supported |
-
-Chat requires supported hardware with Apple Intelligence available and enabled.
-Image input, token usage metadata, and explicit native tool-calling modes require
-OS 27+ and a bridge built with Xcode 27. Image input also requires a ready
-vision-capable model.
-
-Windows chat requires an MSIX-packaged app declaring `systemAIModels`, a
-compatible Windows App SDK, and the applicable model-access configuration.
+| iOS 26+ | Apple Intelligence, with tools and structured responses | OS 27+ | NaturalLanguage, iOS 13+ |
+| Mac Catalyst 26+ | Apple Intelligence, with tools and structured responses | OS 27+ | NaturalLanguage, Mac Catalyst 13.1+ |
+| macOS 26+ | Apple Intelligence, with tools and structured responses | OS 27+ | NaturalLanguage, macOS 10.15+ |
+| Windows 11 24H2+ | Windows AI on Copilot+ hardware, with structured responses | Not supported | Not supported |
+| Android API 26+ | Gemini Nano on supported AICore hardware, with structured responses; tools on capable models | In-memory images | Not supported |
 
 ## Install
-
-| Package | Purpose |
-|---------|---------|
-| `Microsoft.Maui.Essentials.AI` | Apple, Windows, and Android on-device chat, plus Apple text embeddings |
 
 ```bash
 dotnet add package Microsoft.Maui.Essentials.AI --prerelease
 ```
 
-Register the appropriate client on a supported platform:
+## Set up a chat client
+
+Register the client for the current platform, and check that its model is ready
+before offering chat. Generation never downloads a model.
+
+### Apple
+
+Apple Intelligence must be available and enabled. Image input, token usage and
+explicit tool modes need OS 27+ and a native bridge built with Xcode 27+. Response
+and tool schemas that allow `null` values need OS 26.4+.
 
 ```csharp
 using Microsoft.Extensions.AI;
@@ -53,39 +47,8 @@ if (OperatingSystem.IsIOSVersionAtLeast(26) ||
 {
     builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 }
-#elif ANDROID
-builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
 #endif
 ```
-
-On Android, start and monitor a model download only after an explicit app or
-user decision:
-
-```csharp
-var status = await GeminiNanoChatClient.GetModelStatusAsync(cancellationToken);
-if (status.Availability == ChatModelAvailability.NotReady)
-{
-    await GeminiNanoChatClient.PrepareModelAsync(cancellationToken);
-}
-```
-
-Gemini Nano supports text, in-memory images, streaming, and input-token usage.
-It rejects structured output and required tool invocation. Auto registers
-`AIFunction` tools through ML Kit's native API when the selected model advertises
-`ChatModelCapability.ToolCalling`; use `.AsBuilder().UseFunctionInvocation().Build()`
-to execute returned calls. `gemini-nano-preview-fast` was validated with real
-local tool execution; the default Nano V3 model does not support native tools.
-Tool-enabled streams buffer text until each model turn completes to suppress
-native control tokens. See the [Android tool-calling guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md#native-tool-calling)
-for setup, model selection, schema restrictions, and validation boundaries.
-`PrepareModelAsync`
-waits for the explicit download to finish. Use `DownloadModelAsync` when the app
-needs to display ML Kit's native progress, and query model status afterward
-before enabling generation.
-
-## Quick start
-
-Check availability with the concrete client before offering chat:
 
 ```csharp
 var status = await AppleIntelligenceChatClient.GetModelStatusAsync();
@@ -93,7 +56,10 @@ if (status.Availability != ChatModelAvailability.Available)
     Console.WriteLine(status.Availability);
 ```
 
-Register and explicitly prepare Windows AI in a supported packaged app:
+### Windows
+
+The app must be MSIX-packaged, declare the `systemAIModels` capability, and use a
+compatible Windows App SDK with the applicable model-access configuration.
 
 ```csharp
 #if WINDOWS
@@ -110,9 +76,35 @@ if (status.Availability == ChatModelAvailability.NotReady)
     await WindowsAIChatClient.EnsureReadyAsync(cancellationToken);
 ```
 
-Ordinary generation never initiates Windows model setup or download.
+### Android
 
-Use the injected `IChatClient` (`chat`) for requests:
+```csharp
+#if ANDROID
+if (OperatingSystem.IsAndroidVersionAtLeast(26))
+{
+    builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
+}
+#endif
+```
+
+Download the model only after an explicit app or user decision.
+`PrepareModelAsync` waits for the download to finish; use `DownloadModelAsync`
+to show ML Kit's progress, then query the status again.
+
+```csharp
+var status = await GeminiNanoChatClient.GetModelStatusAsync(cancellationToken);
+if (status.Availability == ChatModelAvailability.NotReady)
+    await GeminiNanoChatClient.PrepareModelAsync(cancellationToken);
+```
+
+The status lists the model's capabilities, such as
+`ChatModelCapability.StructuredOutput` and `ChatModelCapability.ToolCalling`.
+Set `MaxOutputTokens` for longer responses: when it is unset, the default Nano V3
+model stops after about 40 tokens.
+
+## Chat
+
+Use the injected `IChatClient`:
 
 ```csharp
 var response = await chat.GetResponseAsync("Plan a day trip to Tokyo");
@@ -122,12 +114,10 @@ await foreach (var update in chat.GetStreamingResponseAsync("Suggest a walking r
     Console.Write(update.Text);
 ```
 
-Structured responses stream only when the native provider emits partial
-updates; otherwise a completed response can arrive as one update.
+## Structured responses
 
-### Structured responses
-
-Use `GetResponseAsync<T>` to generate a schema and deserialize a typed response:
+Use `GetResponseAsync<T>` to generate a schema and deserialize a typed response.
+For trimmed and AOT apps, pass source-generated `JsonSerializerOptions`:
 
 ```csharp
 using System.ComponentModel;
@@ -148,15 +138,21 @@ public sealed record TripSuggestion(
 internal partial class AppJsonContext : JsonSerializerContext;
 ```
 
-Native schema constraints apply. Structured responses may arrive as one final
-update when a provider emits no incremental progress. For trimmed/AOT apps,
-pass source-generated `JsonSerializerOptions`, as above, for every structured
-response type.
+Each platform supports its own subset of JSON Schema; see the platform guides.
+Streamed structured responses can arrive as one update when the platform doesn't
+report partial output.
 
-### Apple tools
+On Android, the selected model must report structured output support. As with
+OpenAI, the schema root must be an object and the JSON is returned unchanged.
+Schema-free JSON is not supported. Structured output works with streaming, tools
+and thinking; see the
+[structured output guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-structured-output.md)
+for supported keywords.
 
-Supply `AIFunction` tools through standard `ChatOptions`. The native client
-invokes them and returns their results to the model:
+## Tools
+
+Supply `AIFunction` tools through `ChatOptions`. Set `ChatOptions.ToolMode` to
+`ChatToolMode.None` to disable them for a request.
 
 ```csharp
 using System.ComponentModel;
@@ -173,13 +169,18 @@ static string GetWeather(
     [Description("The city to check.")] string city) => $"{city}: sunny.";
 ```
 
-Apple executes registered `AIFunction` tools natively. See the shared guide for
-tool-mode, schema, sampling, history, and cancellation policies.
-Set `ChatOptions.ToolMode` to `ChatToolMode.None` to disable tools for a request.
+- **Apple** runs the tools itself and returns their results to the model.
+- **Android** returns the model's tool calls, so wrap the client to run them:
+  `chat.AsBuilder().UseFunctionInvocation().Build()`. Tools need a model that
+  reports `ChatModelCapability.ToolCalling`, such as `gemini-nano-preview-fast`;
+  the default Nano V3 model has no tool support. `ChatToolMode.RequireAny` is
+  not supported. See the
+  [tool-calling guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md#native-tool-calling).
+- **Windows** doesn't support tools.
 
-### Apple image input
+## Image input
 
-Image input requires Apple OS 27 and a ready vision-capable model:
+Add images as `DataContent` parts:
 
 ```csharp
 var message = new ChatMessage(ChatRole.User,
@@ -190,33 +191,32 @@ var message = new ChatMessage(ChatRole.User,
 var response = await chat.GetResponseAsync([message]);
 ```
 
-For native images, set `RawRepresentation` on the `DataContent` to a `CGImage`,
-`UIImage` (iOS/Mac Catalyst), or `NSImage` (macOS), while retaining valid encoded
-bytes for recording and cross-platform use. Local `file://` image `UriContent`
-is supported; remote URLs are rejected rather than fetched silently.
-On Apple OS 26, the client is text-only and image requests throw an explicit error.
+- **Apple** needs OS 27+ and a ready vision-capable model; on OS 26 image
+  requests throw. `RawRepresentation` can carry a `CGImage`, `UIImage` or
+  `NSImage`, and local `file://` image `UriContent` is supported. Remote URLs are
+  rejected rather than fetched.
+- **Android** accepts in-memory images.
 
-### Token usage
-
-Apple token usage requires OS 27 and a native bridge built with Xcode 27+:
+## Token usage
 
 ```csharp
 var response = await chat.GetResponseAsync("Summarize this text.");
 Console.WriteLine($"Input: {response.Usage?.InputTokenCount}");
 Console.WriteLine($"Output: {response.Usage?.OutputTokenCount}");
-Console.WriteLine($"Cached input: {response.Usage?.CachedInputTokenCount}");
-Console.WriteLine($"Reasoning: {response.Usage?.ReasoningTokenCount}");
-Console.WriteLine($"Total: {response.Usage?.TotalTokenCount}");
 ```
 
-Streaming includes a final `UsageContent` update. Use `ToChatResponseAsync()`
-to aggregate the stream and read `ChatResponse.Usage`. Usage is per request;
-accumulate it with `UsageDetails.Add` for conversation totals. Counts come
-from Foundation Models, not estimates, and usage is `null` on Apple OS 26.
+Usage is per request; add it up with `UsageDetails.Add`. Streams end with a
+`UsageContent` update, and `ToChatResponseAsync()` collects it into
+`ChatResponse.Usage`.
 
-## Diagnostics
+- **Apple** reports input, output, cached-input, reasoning and total counts on
+  OS 27+, and none on OS 26.
+- **Android** reports input tokens.
+- **Windows** doesn't report usage.
 
-Reference `Microsoft.Extensions.AI` to use its telemetry middleware:
+## Telemetry
+
+Wrap any client with the `Microsoft.Extensions.AI` OpenTelemetry middleware:
 
 ```csharp
 var instrumentedChat = chat.AsBuilder()
@@ -226,38 +226,13 @@ var instrumentedChat = chat.AsBuilder()
     .Build();
 ```
 
-Use the wrapped client for requests, or return it from the provider factory.
-The same middleware works with every `IChatClient`; provider-specific timing,
-metadata, usage, and error behavior is documented in the
-[local chat provider contract](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider.md).
+Configure listeners or exporters for the `MyApp.AI` activity source and meter.
+The middleware records request timing, time to first chunk and between chunks,
+model metadata and token usage. Fully enumerate streams to capture final usage.
+With `EnableSensitiveData = false`, prompts and responses are excluded.
 
-To construct and instrument the Apple client directly:
-
-```csharp
-using var client = new AppleIntelligenceChatClient().AsBuilder()
-    .UseOpenTelemetry(
-        sourceName: "MyApp.AI",
-        configure: telemetry => telemetry.EnableSensitiveData = false)
-    .Build();
-```
-
-Configure your application's listeners or exporters for the `MyApp.AI` activity
-source and meter. Middleware records request timings, model metadata, and usage
-when supplied by the provider. Fully enumerate streams to capture final usage.
-Streaming also produces time-to-first-chunk and time-per-output-chunk metrics.
-The explicit sensitive-data setting above excludes prompt and response content.
-
-With the repository's pinned M.E.AI 10.4.1, input/output tokens are span tags
-and `gen_ai.client.token.usage` measurements; cached input is also a span tag
-(`gen_ai.usage.cache_read.input_tokens`). Total and reasoning counts remain
-available on `UsageDetails`, without separate built-in span tags or metrics.
-On OS 26, timing and model metadata remain available without token usage.
-Response IDs and finish reasons are emitted only when supplied by the provider.
-
-For Apple tool diagnostics, supply an `ILoggerFactory` to the client.
-Lifecycle logs use Debug; arguments and results require Trace. Native callbacks
-preserve the originating .NET execution context, including an active chat
-trace/span and async tool code. No correlation is invented when no span exists.
+For Apple tool diagnostics, pass an `ILoggerFactory` to the client: lifecycle
+logs use Debug, and tool arguments and results use Trace.
 
 ## Embeddings
 
@@ -266,16 +241,16 @@ using var generator = new NLEmbeddingGenerator();
 var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking"]);
 ```
 
-The default generator uses English sentence embeddings. Select another supported
-language with the `NLLanguage` constructor or wrap an existing `NLEmbedding`.
-The corresponding model asset must be installed.
+The default generator uses English sentence embeddings. Pass an `NLLanguage` to
+the constructor for another supported language, or wrap an existing
+`NLEmbedding`. The language's model asset must be installed.
 
 ## Guides and samples
 
-- [Chat provider implementation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider.md) — shared behavior and provider policy.
-- [Apple Foundation Models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models.md) — Apple toolchain, images, availability, bridge mechanics, and validation.
-- [Windows AI language models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-language-models.md) — Windows packaging, readiness, dependencies, and validation.
-- [Gemini Nano Android](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md) — Android binding, AICore readiness, download, and validation.
-- [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
-- [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
-- [Source and contributor build instructions](https://github.com/dotnet/maui-labs/tree/main/src/AI)
+- [Apple Foundation Models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models.md) — availability, images, tools, and native bridge.
+- [Windows AI language models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-language-models.md) — packaging, readiness, and dependencies.
+- [Gemini Nano Android](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md) — AICore readiness, download, models, and tools.
+- [Gemini Nano structured output](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-structured-output.md) — supported schemas, streaming, tools, and thinking.
+- [Chat provider contract](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider.md) — shared behavior across providers.
+- [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground) and [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
+- [Source and build instructions](https://github.com/dotnet/maui-labs/tree/main/src/AI)

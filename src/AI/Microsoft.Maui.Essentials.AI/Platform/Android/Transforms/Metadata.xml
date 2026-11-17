@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <metadata>
-  <attr path="/api/package[@name='com.microsoft.maui.essentials.ai']/*" name="visibility">internal</attr>
+  <!-- Kotlin internal declarations are already private here and are not bound. -->
+  <!-- Kotlin file classes whose members are all internal would bind as empty types. -->
+  <remove-node path="/api/package[@name='com.microsoft.maui.essentials.ai']/class[@visibility='public'][not(*[@visibility='public' or @visibility='protected'])]" />
+  <attr path="/api/package[@name='com.microsoft.maui.essentials.ai']/*[@visibility='public']" name="visibility">internal</attr>
   <remove-node path="/api/package[@name='com.microsoft.maui.essentials.ai']/class[@name='NativeChatStream']/implements[@name='com.google.mlkit.genai.common.StreamingCallback']" />
 </metadata>

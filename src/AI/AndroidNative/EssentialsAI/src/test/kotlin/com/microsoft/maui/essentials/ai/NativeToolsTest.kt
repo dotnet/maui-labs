@@ -41,6 +41,8 @@ class NativeToolsTest {
     fun rejectsUnrepresentableSchemaRatherThanDroppingConstraints() {
         for (schema in listOf(
             """{"type":"object","additionalProperties":{"type":"string"}}""",
+            // GeminiNanoChatClient strips closed-object markers before the bridge sees them.
+            """{"type":"object","properties":{"a":{"type":"string"}},"additionalProperties":false}""",
             """{"type":"string","const":"fixed"}""",
             """{"type":["string","integer"]}""",
             """{"${"$"}ref":"#/${"$"}defs/item"}""",

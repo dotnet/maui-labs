@@ -15,6 +15,29 @@ import java.util.concurrent.TimeUnit
 
 class NativeChatStreamTest {
     @Test
+    fun structuredThoughtHeaderIsDroppedAcrossSplitCallbacks() {
+        val received = mutableListOf<String>()
+        val filter = ThoughtHeaderFilter(object : com.google.mlkit.genai.common.StreamingCallback {
+            override fun onNewText(additionalText: String) { received += "text:$additionalText" }
+            override fun onNewThought(additionalThought: String) { received += additionalThought }
+        })
+        filter.onNewThought("thou")
+        filter.onNewThought("ght\nPlan")
+        filter.onNewThought(" more thought\n")
+        filter.onNewText("{}")
+        assertEquals(listOf("Plan", " more thought\n", "text:{}"), received)
+
+        received.clear()
+        val plain = ThoughtHeaderFilter(object : com.google.mlkit.genai.common.StreamingCallback {
+            override fun onNewText(additionalText: String) = Unit
+            override fun onNewThought(additionalThought: String) { received += additionalThought }
+        })
+        plain.onNewThought("th")
+        plain.onNewThought("inking")
+        assertEquals(listOf("thinking"), received)
+    }
+
+    @Test
     fun toolStreamsSuppressRawControlTokensAndUseOnlyFinalDisplayText() = runBlocking {
         val callback = Callback()
         val stream = NativeChatStream(this, callback, "native-model", deferToolText = true)
