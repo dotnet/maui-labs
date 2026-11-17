@@ -22,6 +22,18 @@ public class DevFlowCliCommandTests
         return (server, cli);
     }
 
+    [Fact]
+    public async Task Commands_AdvertisesOfflineQualificationAsNonMutating()
+    {
+        var result = await new CliTestHarness(1).InvokeRawAsync("devflow", "commands", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var entry = Assert.Single(result.ParseJsonOutput().EnumerateArray(),
+            command => command.GetProperty("command").GetString() == "qualification assess");
+        Assert.False(entry.GetProperty("mutating").GetBoolean());
+        Assert.Contains("never certifies", entry.GetProperty("description").GetString());
+    }
+
     // ========== extensions ==========
 
     [Fact]

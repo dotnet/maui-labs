@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - '.claude/skills/**'
+      - 'plugins/dotnet-maui-tooling/skills/**'
+      - 'tests/DevFlow/Goal4Foundation/**'
       - 'src/Cli/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Client/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Driver/**'
@@ -19,7 +20,8 @@ on:
     types: [opened, synchronize, reopened, edited]
     branches: [main]
     paths:
-      - '.claude/skills/**'
+      - 'plugins/dotnet-maui-tooling/skills/**'
+      - 'tests/DevFlow/Goal4Foundation/**'
       - 'src/Cli/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Client/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Driver/**'

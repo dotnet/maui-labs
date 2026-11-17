@@ -6,6 +6,7 @@ namespace Microsoft.Maui.Cli.DevFlow.Flows;
 public sealed class FlowAssertResult
 {
     public string Kind { get; set; } = "";
+    public string? AutomationId { get; set; }
     /// <summary>true = passed, false = failed, null = not evaluated (report-only or skipped).</summary>
     public bool? Ok { get; set; }
     public bool Skipped { get; set; }
@@ -70,7 +71,7 @@ public sealed class FlowReplayer
                 res.Ok = false;
                 res.Error = driveError;
                 foreach (var a in step.Asserts ?? Enumerable.Empty<FlowAssert>())
-                    res.Asserts.Add(new FlowAssertResult { Kind = a.Kind, Skipped = true, Name = a.Name, Expected = a.Expected });
+                    res.Asserts.Add(new FlowAssertResult { Kind = a.Kind, AutomationId = a.Selector?.AutomationId, Skipped = true, Name = a.Name, Expected = a.Expected });
             }
             else
             {
@@ -79,7 +80,7 @@ public sealed class FlowReplayer
                 {
                     if (!a.Verify)
                     {
-                        res.Asserts.Add(new FlowAssertResult { Kind = a.Kind, Skipped = true, Name = a.Name, Expected = a.Expected });
+                        res.Asserts.Add(new FlowAssertResult { Kind = a.Kind, AutomationId = a.Selector?.AutomationId, Skipped = true, Name = a.Name, Expected = a.Expected });
                         continue;
                     }
                     var ar = await VerifyAsync(a, ct);
@@ -177,7 +178,7 @@ public sealed class FlowReplayer
 
     private async Task<FlowAssertResult> VerifyAsync(FlowAssert a, CancellationToken ct)
     {
-        var r = new FlowAssertResult { Kind = a.Kind, Name = a.Name, Expected = a.Expected };
+        var r = new FlowAssertResult { Kind = a.Kind, AutomationId = a.Selector?.AutomationId, Name = a.Name, Expected = a.Expected };
         for (var attempt = 0; attempt < _pollTries; attempt++)
         {
             ct.ThrowIfCancellationRequested();
