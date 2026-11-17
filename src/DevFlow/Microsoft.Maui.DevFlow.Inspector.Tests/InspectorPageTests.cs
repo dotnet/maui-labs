@@ -1471,7 +1471,7 @@ public partial class InspectorPageTests : IAsyncLifetime
         await Expect(_page.Locator("#df-view-pane")).ToHaveAttributeAsync("role", "main");
         await Expect(_page.Locator("#df-tree-pane")).ToHaveAttributeAsync("aria-label", "Visual tree");
         await Expect(_page.Locator("#df-props-pane")).ToHaveAttributeAsync("aria-label", "Properties");
-        await Expect(_page.Locator("#df-presence")).ToHaveAttributeAsync("role", "status");
+        await Expect(_page.Locator("#df-health-live")).ToHaveAttributeAsync("role", "status");
         await Expect(_page.Locator("#df-pane-scrim")).ToHaveAttributeAsync("tabindex", "-1");
         await Expect(_page.Locator(".df-modes")).ToHaveAttributeAsync("role", "radiogroup");
         await Expect(_page.Locator("#df-mode-interact")).ToHaveAttributeAsync("role", "radio");
