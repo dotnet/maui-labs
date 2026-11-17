@@ -148,8 +148,9 @@ systems.
 - **Windows AI:** Windows 11 24H2+ on supported Copilot+ hardware supports text,
   streaming, and structured JSON.
 - **Embeddings:** Apple NaturalLanguage generates text vectors on supported systems.
-- **Android:** Gemini Nano text/image chat, streaming, and input-token usage on
-  supported AICore devices, plus native tools on capable Nano V4 profiles.
+- **Android:** Gemini Nano text/image chat, streaming, structured responses, and
+  input-token usage on supported AICore devices, plus native tools on capable
+  Nano V4 profiles.
   Model download is explicit and observable.
 
 See [Essentials.AI](src/AI/README.md) for documentation and samples.

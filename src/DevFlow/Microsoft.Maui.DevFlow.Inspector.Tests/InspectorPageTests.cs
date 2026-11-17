@@ -1368,15 +1368,11 @@ public partial class InspectorPageTests : IAsyncLifetime
     }
 
     [LiveInspectorFact]
-    public async Task FitMode_SelectionDetailsDoNotResizeOrOscillateScreenshot()
+    public async Task FitMode_SelectionDetailsKeepScreenshotFittedWithoutOscillation()
     {
         await _page.SetViewportSizeAsync(1000, 700);
         await _page.GotoAsync(BaseUrl);
         await Expect(_page.Locator("#df-toggle-fit")).ToHaveAttributeAsync("aria-pressed", "true");
-
-        var stage = _page.Locator("#df-stage");
-        var before = await stage.BoundingBoxAsync();
-        Assert.NotNull(before);
 
         await _page.Locator("#df-mode-inspect").ClickAsync();
         var showModal = _page.Locator(".devflow-element[data-automationId='ShowModalButton']");
@@ -1393,14 +1389,20 @@ public partial class InspectorPageTests : IAsyncLifetime
 
         await showModal.ClickAsync(new() { Force = true });
         await Expect(_page.Locator("#df-hit-candidates")).ToBeVisibleAsync();
+        // Compact layout docks Properties beside the preview, so Fit re-fits once around it.
+        await Expect(_page.Locator("#df-props-pane")).ToBeVisibleAsync();
         await _page.WaitForTimeoutAsync(250);
 
-        var after = await stage.BoundingBoxAsync();
-        Assert.NotNull(after);
-        Assert.True(Math.Abs(before.Width - after.Width) <= 1,
-            $"Selection details changed fitted stage width from {before.Width} to {after.Width}.");
-        Assert.True(Math.Abs(before.Height - after.Height) <= 1,
-            $"Selection details changed fitted stage height from {before.Height} to {after.Height}.");
+        var fit = await _page.EvaluateAsync<double[]>(
+            """
+            () => {
+                const stage = document.getElementById('df-stage').getBoundingClientRect();
+                const wrap = document.getElementById('df-viewport-wrap');
+                return [stage.width, stage.height, wrap.clientWidth, wrap.clientHeight];
+            }
+            """);
+        Assert.True(fit[0] <= fit[2] + 1 && fit[1] <= fit[3] + 1,
+            $"Fitted stage {fit[0]}x{fit[1]} overflowed its {fit[2]}x{fit[3]} viewport after selection.");
 
         Assert.Equal(
             "absolute",

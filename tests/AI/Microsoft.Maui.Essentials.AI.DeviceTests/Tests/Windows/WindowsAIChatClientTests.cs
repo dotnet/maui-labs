@@ -157,6 +157,8 @@ public class WindowsAIChatClientUsageTests(ITestOutputHelper output) : ChatClien
 public class WindowsAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<WindowsAIChatClient>
 {
 	protected override bool? RequiresExplicitJsonSchema => true;
+	// LanguageModel has no token usage report.
+	protected override bool IsUsageAvailable => false;
 
 	// Windows LanguageModel constraints require recursive strictification; this inspects the native schema, not public JSON output.
 	[Fact]
