@@ -115,12 +115,21 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
 
     companion object {
         private const val WRAPPER = "wrapper"
+        /** System.Text.Json's default maximum depth. */
+        const val MAX_DEPTH = 64
         private val annotations = setOf("description", "title", "\$schema", "\$defs", "definitions", "\$comment")
 
         fun parse(json: String): NativeResponseSchema {
             try {
+                // The strict reader bounds raw nesting before org.json recurses, and sees each bound's exact lexeme.
+                val lexemes = try {
+                    StrictJson.parse(json)
+                } catch (exception: IllegalArgumentException) {
+                    throw IllegalArgumentException("Invalid or unsupported JSON response schema: ${exception.message}", exception)
+                }
+                requireExactBounds(lexemes, "$")
                 val document = JSONObject(json)
-                val root = parseNode(document, document, "$", emptySet())
+                val root = parseNode(document, document, "$", emptySet(), 0)
                 require(!root.nullable) { "The response schema root must not be nullable." }
                 return NativeResponseSchema(root)
             } catch (exception: JSONException) {
@@ -128,7 +137,26 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
             }
         }
 
-        private fun parseNode(source: JSONObject, document: JSONObject, path: String, references: Set<String>): Node {
+        // org.json reads fractional numbers as Double; reject bounds that a Double cannot hold exactly,
+        // so validation never compares against a rounded value.
+        private fun requireExactBounds(value: Any?, path: String) {
+            when (value) {
+                is Map<*, *> -> value.forEach { (key, item) ->
+                    if ((key == "minimum" || key == "maximum") && item is BigDecimal) {
+                        val integral = item.stripTrailingZeros().scale() <= 0 &&
+                            item >= BigDecimal(Long.MIN_VALUE) && item <= BigDecimal(Long.MAX_VALUE)
+                        require(integral || BigDecimal(item.toDouble().toString()).compareTo(item) == 0) {
+                            "$path.$key: cannot preserve the exact numeric bound $item; use a bound representable without rounding."
+                        }
+                    }
+                    requireExactBounds(item, "$path.$key")
+                }
+                is List<*> -> value.forEachIndexed { index, item -> requireExactBounds(item, "$path[$index]") }
+            }
+        }
+
+        private fun parseNode(source: JSONObject, document: JSONObject, path: String, references: Set<String>, depth: Int): Node {
+            require(depth < MAX_DEPTH) { "$path: schemas support at most $MAX_DEPTH nested levels." }
             if (source.has("\$ref")) {
                 val reference = source.getString("\$ref")
                 require(reference == "#" || reference.startsWith("#/")) {
@@ -146,7 +174,7 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
                 require(target is JSONObject) { "$path: reference must identify a schema object." }
                 val resolved = JSONObject((target as JSONObject).toString())
                 if (source.has("description")) resolved.put("description", source.getString("description"))
-                return parseNode(resolved, document, path, references + reference)
+                return parseNode(resolved, document, path, references + reference, depth)
             }
             val types = when (val raw = source.opt("type")) {
                 is String -> listOf(raw)
@@ -209,7 +237,7 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
                     }
                     val nodes = linkedMapOf<String, Node>()
                     properties.keys().forEach { name ->
-                        nodes[name] = parseNode(properties.getJSONObject(name), document, "$path.$name", references)
+                        nodes[name] = parseNode(properties.getJSONObject(name), document, "$path.$name", references, depth + 1)
                     }
                     Node(type, nullable, description, nodes, required, closed)
                 }
@@ -219,7 +247,7 @@ internal class NativeResponseSchema private constructor(private val root: Node) 
                     val minimum = count("minItems")
                     val maximum = count("maxItems")
                     require(minimum == null || maximum == null || minimum <= maximum) { "$path: invalid array bounds." }
-                    Node(type, nullable, description, items = parseNode(items, document, "$path[]", references),
+                    Node(type, nullable, description, items = parseNode(items, document, "$path[]", references, depth + 1),
                         minItems = minimum, maxItems = maximum)
                 }
                 "integer", "number" -> {
@@ -314,7 +342,7 @@ internal object StrictJson {
         var index = 0
 
         fun fail(message: String): Nothing =
-            throw IllegalArgumentException("Generated output is not valid JSON: $message at offset $index.")
+            throw IllegalArgumentException("Not valid JSON: $message at offset $index.")
 
         fun require(condition: Boolean, message: String) {
             if (!condition) fail(message)

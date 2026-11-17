@@ -167,7 +167,7 @@ class GeminiNanoNativeClient {
         val job = operationScope.launch {
             var stream: NativeChatStream? = null
             val response = try {
-                val schema = request.options.responseSchemaJson?.let { NativeResponseSchema.parse(it) }
+                val schema = request.options.responseSchema
                 val model = Generation.getClient(modelConfiguration(request.options.modelId))
                 val generatedResponse = try {
                     ensureActive()
@@ -223,10 +223,8 @@ class GeminiNanoNativeClient {
                             }
                             var toolTurnTokens = 0
                             if (request.options.toolsJson != null) {
-                                // ML Kit beta5: AICore emits no function calls while a response schema constrains
-                                // decoding, and the typed API cannot return calls. The model chooses tools without the
-                                // schema; only its final answer is generated under the schema. Remove when ML Kit
-                                // supports both in one request.
+                                // AICore emits no function calls under a response schema, so the model decides on
+                                // tools without the schema and only its final answer is generated under it.
                                 val toolRequest = request.toNative()
                                 toolTurnTokens = model.countTokens(toolRequest).totalTokens
                                 val toolTurn = model.generateContent(toolRequest).toNativeResponse(modelName, toolTurnTokens)

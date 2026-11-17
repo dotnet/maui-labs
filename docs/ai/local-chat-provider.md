@@ -424,14 +424,13 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   schema-free JSON/prompt fallback before native work and malformed native JSON
   on completion.
 - **Android:** build ML Kit's native response schema from the JSON schema and
-  apply it through ML Kit internals (AICore constrained decoding); no fixed
-  classes or shape limits. Require an explicit schema (AICore wraps non-object
-  roots, which the bridge unwraps) and check the model's structured capability.
-  Normalize required/additional properties through MEAI, validate the complete JSON against the schema, and preserve
-  caller history and native input usage. Reject schema-free JSON or
-  unrepresentable constraints before inference. Structured streaming emits text
-  deltas validated at completion. Thinking works with a schema. AICore emits no
-  calls under a schema, so with active tools each turn first runs without the
+  set it through ML Kit internals (AICore constrained decoding). Require an
+  explicit schema and the model's structured capability. Normalize required and
+  additional properties through MEAI, validate the complete JSON against the
+  schema, and preserve caller history and input usage. Reject schema-free JSON
+  and unrepresentable constraints before inference. AICore wraps non-object
+  roots, which the bridge unwraps. Thinking works with a schema. AICore emits no
+  function calls under a schema, so with tools each turn first runs without the
   schema and only the final answer is regenerated under it.
 
 ## Response behavior
@@ -525,7 +524,8 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   because the native API exposes no token counts.
 - **Android:** map native input tokens from `countTokens`; do not estimate output
   or total counts. For structured requests, count the request with its schema,
-  plus the schema-free tool-decision request when tools are active. Emit streaming input usage once with the terminal update.
+  plus the schema-free tool-decision request when tools are active. Emit
+  streaming input usage once with the terminal update.
 
 ### Telemetry and timing
 

@@ -153,7 +153,9 @@ class NativeResponseSchemaTest {
             """{"type":"object","properties":{"v":{"type":"array","items":{"type":"string"},"maxItems":-1}}}""",
             "not json",
         ).forEach { json ->
-            assertThrows(json, IllegalArgumentException::class.java) { validateSchema(json) }
+            assertThrows(json, IllegalArgumentException::class.java) {
+                NativeChatOptions(null, null, null, null, false, null).responseSchemaJson = json
+            }
         }
     }
 
@@ -229,6 +231,38 @@ class NativeResponseSchemaTest {
         val long = """{"type":"object","properties":{"n":{"type":"integer","maximum":9223372036854775807}},"required":["n"]}"""
         NativeResponseSchema.parse(long).validate("""{"n":9223372036854775807}""")
         assertRejected(long, """{"n":9223372036854775808}""")
+    }
+
+    @Test
+    fun boundsThatADoubleCannotHoldExactlyAreRejected() {
+        val rounded = """{"type":"object","properties":{"n":{"type":"number","minimum":0.10000000000000001}},"required":["n"]}"""
+        assertTrue(assertThrows(IllegalArgumentException::class.java) { NativeResponseSchema.parse(rounded) }
+            .message!!.contains("exact numeric bound"))
+        // A property named "minimum" is not a bound.
+        NativeResponseSchema.parse("""{"type":"object","properties":{"minimum":{"type":"number","maximum":1e2}},"required":["minimum"]}""")
+    }
+
+    @Test
+    fun nestingIsBoundedBeforeRecursion() {
+        fun nested(levels: Int): String {
+            var json = """{"type":"string"}"""
+            repeat(levels) { json = """{"type":"object","properties":{"v":$json},"required":["v"]}""" }
+            return json
+        }
+        NativeResponseSchema.parse(nested(NativeResponseSchema.MAX_DEPTH - 1))
+        assertThrows(IllegalArgumentException::class.java) { NativeResponseSchema.parse(nested(NativeResponseSchema.MAX_DEPTH)) }
+        // Far deeper than the stack could recurse through org.json.
+        assertThrows(IllegalArgumentException::class.java) { NativeResponseSchema.parse("[".repeat(100_000)) }
+    }
+
+    @Test
+    fun responseSchemaSetterValidatesAndKeepsTheParsedSchema() {
+        val options = NativeChatOptions(null, null, null, null, false, null)
+        options.responseSchemaJson = schema
+        assertNotNull(options.responseSchema)
+        options.responseSchemaJson = null
+        assertNull(options.responseSchema)
+        assertThrows(IllegalArgumentException::class.java) { options.responseSchemaJson = """{"type":"object"}""" }
     }
 
     @Test

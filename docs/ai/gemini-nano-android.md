@@ -29,8 +29,8 @@ Kotlin constructs the Google request:
   also validates native numeric constraints.
 - `Reasoning.Output = ReasoningOutput.Full` enables thinking after checking
   `Feature.THINKING_MODE` in `getAvailableFeatures()`. Effort levels and summaries
-  have no native mapping. Reasoning content in replayed Assistant history (for
-  example from function invocation) is dropped; elsewhere it is rejected.
+  have no native mapping. Reasoning in Assistant history (for example from
+  function invocation) is dropped; in other roles it is rejected.
 
 There is no client-held conversation state. Callers supply the conversation on
 each request. Custom content and unknown roles (including `developer`) are
@@ -101,10 +101,10 @@ var response = await chat.GetResponseAsync(
 The provider registers `AIFunction` names, descriptions, and parameter schemas.
 Kotlin maps supported schema fields directly to Google's `FunctionSchema`;
 unrepresentable constraints (including `$ref`, `const`, and dictionary
-`additionalProperties` schemas) are rejected, not removed. Before that, the
-client's MEAI schema transform drops `$schema` and `additionalProperties: false`,
-which strict MEAI and `[AIToolSource]` tools emit on every object. ML Kit cannot
-express closed objects, and arguments bind by name. Return schemas do not constrain generation.
+`additionalProperties` schemas) are rejected, not removed. The client first drops
+`$schema` and `additionalProperties: false`, which strict MEAI and
+`[AIToolSource]` tools put on every object: ML Kit can't express closed objects,
+and arguments bind by name. Return schemas do not constrain generation.
 Parameterless functions omit the native parameter schema: supplying an empty
 object schema caused AICore `countTokens` to fail with tokenization error 10003.
 The shared function suite covers parameterless invocation in both response modes.
@@ -214,15 +214,14 @@ Status queries propagate errors if ML Kit cannot resolve the selected model.
 
 ## Structured output
 
-Explicit MEAI JSON schemas are applied as ML Kit's native response schema
-(AICore constrained decoding) through ML Kit SDK internals, so this path is
-experimental. The selected model must advertise
-`ChatModelCapability.StructuredOutput`. Both response methods support the
-schema path, and streaming delivers JSON text deltas validated at completion.
-Full thinking output and active tools work with a schema; with tools, the model
-decides on calls without the schema and only its final answer is constrained.
-See [structured output](gemini-nano-structured-output.md) for supported
-keywords, examples, and implementation details.
+JSON schemas become ML Kit's native response schema, which AICore enforces with
+constrained decoding. The selected model must advertise
+`ChatModelCapability.StructuredOutput`. Both response methods support schemas,
+and streaming delivers JSON text that is validated when the response ends.
+Thinking and tools work with a schema; with tools, the model decides on calls
+without the schema and only its final answer is constrained. See
+[structured output](gemini-nano-structured-output.md) for supported keywords and
+how it works.
 
 ## Explicit download
 

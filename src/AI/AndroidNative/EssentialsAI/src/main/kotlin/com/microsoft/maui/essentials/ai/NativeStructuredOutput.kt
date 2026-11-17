@@ -23,15 +23,11 @@ import com.google.mlkit.genai.prompt.GenerateContentRequest
 import com.google.mlkit.genai.prompt.GenerateContentResponse
 import com.google.mlkit.genai.prompt.GenerationConfig
 
-// ML Kit beta5 has no public runtime-schema API. Its typed API derives an internal
-// response schema from a Kotlin class, places it in the AICore request (where AICore
-// applies constrained decoding), and appends a schema prompt to the last text part.
-// This file does the same from a JSON schema. Internal names are pinned to the
-// bundled genai-prompt 1.0.0-beta5 runtime and are re-verified on every SDK update.
-
-fun validateSchema(json: String) {
-    NativeResponseSchema.parse(json)
-}
+// ML Kit has no public runtime-schema API. Its typed API derives an internal response
+// schema from a Kotlin class, sets it on the AICore request (where AICore applies
+// constrained decoding) and appends a schema prompt to the last text part. This file
+// does the same from a JSON schema. The internal names match the bundled
+// genai-prompt 1.0.0-beta5 runtime; recheck them when updating the SDK.
 
 /** ML Kit's own schema prompt suffix (the typed API's includeSchemaInPrompt default). */
 internal fun schemaPrompt(text: String, schema: zzip): String = zzaap.zze(text, schema)

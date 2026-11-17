@@ -5,7 +5,7 @@ On-device chat and text embeddings through
 backed by Apple Intelligence, Apple NaturalLanguage, Windows AI, and Gemini Nano.
 Chat capabilities vary by platform; Apple supports native tool execution and
 eligible image input, Windows supports structured JSON, and Android supports
-in-memory image input, native structured responses, and tool calling on supported Nano V4 models.
+in-memory image input, structured responses, and tool calling on supported Nano V4 models.
 No cloud service is used.
 
 > **Experimental:** this package ships as a preview. APIs may change.
@@ -70,14 +70,15 @@ if (status.Availability == ChatModelAvailability.NotReady)
 ```
 
 Gemini Nano supports text, in-memory images, streaming, and input-token usage.
-It supports explicit JSON schemas when the model advertises
-`ChatModelCapability.StructuredOutput`, but rejects schema-free JSON and required tool invocation. Auto registers
+It supports JSON schemas when the model advertises
+`ChatModelCapability.StructuredOutput`, and rejects schema-free JSON and required
+tool invocation. Auto registers
 `AIFunction` tools through ML Kit's native API when the selected model advertises
 `ChatModelCapability.ToolCalling`; use `.AsBuilder().UseFunctionInvocation().Build()`
 to execute returned calls. `gemini-nano-preview-fast` was validated with real
 local tool execution; the default Nano V3 model does not support native tools.
-Tool-enabled streams buffer text until each model turn completes to suppress
-native control tokens. See the [Android tool-calling guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md#native-tool-calling)
+Tool-enabled streams without a schema buffer text until each model turn
+completes to suppress native control tokens. See the [Android tool-calling guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md#native-tool-calling)
 for setup, model selection, schema restrictions, and validation boundaries.
 `PrepareModelAsync`
 waits for the explicit download to finish. Use `DownloadModelAsync` when the app
@@ -154,11 +155,10 @@ update when a provider emits no incremental progress. For trimmed/AOT apps,
 pass source-generated `JsonSerializerOptions`, as above, for every structured
 response type.
 
-Gemini Nano structured output is experimental: runtime schemas reach AICore's
-constrained decoding through ML Kit internals. Schemas of any depth and root
-type are supported, including nested and nullable collections. Structured
-streaming emits JSON deltas validated at completion, and works with tools and
-full thinking output. See the
+Gemini Nano applies schemas through AICore's constrained decoding, for any root
+type and nesting up to 64 levels. Structured streaming emits JSON that is
+validated when the response ends, and works with tools and full thinking output.
+See the
 [Android structured-output guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-structured-output.md)
 for supported keywords.
 

@@ -18,15 +18,11 @@ namespace Microsoft.Maui.Essentials.AI;
 /// included in the prompt by the Kotlin bridge, with in-memory images and native
 /// system instructions. Native tool calling requires ML Kit model support;
 /// use Microsoft.Extensions.AI function invocation middleware to execute returned calls.
-/// Structured output requires an explicit JSON schema. The schema is applied as ML Kit's native
-/// response schema (constrained decoding) through ML Kit SDK internals, so it is experimental.
-/// Structured streaming emits JSON text deltas; the complete text is validated against the schema
-/// before the response completes, so a stream can end with an error after partial JSON updates.
-/// Non-object roots are emitted once, after validation. Structured output works with tools and
-/// full thinking output: AICore does not emit function calls under a schema, so with tools the
-/// model first decides on calls without the schema (returning them with no text) and only its final
-/// answer is generated under the schema.
-/// Structured requests default to 512 output tokens when MaxOutputTokens is unspecified.
+/// Structured output requires a JSON schema, which AICore enforces with constrained decoding.
+/// Structured streams emit JSON text that is validated when the response ends, so a stream can fail
+/// after partial JSON. Structured output works with tools and full thinking output; with tools, the
+/// model decides on calls without the schema and only its final answer is generated under it.
+/// Structured requests default to 512 output tokens when MaxOutputTokens is unset.
 /// Model download is explicit and observable; generation never downloads or falls back to a cloud provider.
 /// ChatOptions.ModelId accepts gemini-nano, gemini-nano-fast, gemini-nano-full,
 /// gemini-nano-preview-fast, or gemini-nano-preview-full. The default is stable/full.
@@ -296,8 +292,9 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 		return new(nativeMessages.ToArray(), nativeOptions);
 	}
 
-	private static AndroidNative.NativeChatOptions ToNativeOptions(ChatOptions? options) =>
-		new(
+	private static AndroidNative.NativeChatOptions ToNativeOptions(ChatOptions? options)
+	{
+		var nativeOptions = new AndroidNative.NativeChatOptions(
 			options?.Temperature is { } temperature ? Java.Lang.Float.ValueOf(temperature) : null,
 			options?.TopK is { } topK ? Java.Lang.Integer.ValueOf(topK) : null,
 			options?.Seed is { } seed ? Java.Lang.Integer.ValueOf(checked((int)seed)) : null,
@@ -306,8 +303,19 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 			modelId: options?.ModelId)
 		{
 			ToolsJson = SerializeTools(options),
-			ResponseSchemaJson = GetConstraintSchema(options),
 		};
+		try
+		{
+			// The native setter rejects schemas ML Kit cannot represent, before any inference.
+			nativeOptions.ResponseSchemaJson = GetConstraintSchema(options);
+		}
+		catch (Java.Lang.IllegalArgumentException exception)
+		{
+			nativeOptions.Dispose();
+			throw new NotSupportedException($"Gemini Nano cannot represent this JSON schema: {exception.Message}", exception);
+		}
+		return nativeOptions;
+	}
 
 	internal static string? GetConstraintSchema(ChatOptions? options)
 	{
@@ -316,17 +324,8 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 		if (format.Schema is null)
 			throw new NotSupportedException("Gemini Nano structured output requires an explicit JSON schema; schema-free JSON and typed prompt fallback are not supported.");
 
-		var schema = SchemaTransformCache.GetOrCreateTransformedSchema(format)?.GetRawText()
+		return SchemaTransformCache.GetOrCreateTransformedSchema(format)?.GetRawText()
 			?? throw new InvalidOperationException("Failed to transform JSON schema for Gemini Nano structured output.");
-		try
-		{
-			AndroidNative.NativeStructuredOutput.ValidateSchema(schema);
-		}
-		catch (Java.Lang.IllegalArgumentException exception)
-		{
-			throw new NotSupportedException($"Gemini Nano cannot represent this JSON schema: {exception.Message}", exception);
-		}
-		return schema;
 	}
 
 	private static string? SerializeTools(ChatOptions? options)

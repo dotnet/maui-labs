@@ -14,7 +14,7 @@ Chat, Embeddings, and Images have separate providers and capabilities.
 |----------|------|-------------|-------|-----------------|
 | Apple Intelligence | iOS / Mac Catalyst 26+ on supported hardware | OS 27+ with a ready vision model | Supported | Supported |
 | Windows AI | Windows 11 24H2+ on supported Copilot+ hardware | Not supported | Not supported | Supported |
-| Gemini Nano | Android API 26+ on supported AICore hardware | In-memory images | Native Auto on capable Nano V4 profiles | Experimental, when the model advertises it |
+| Gemini Nano | Android API 26+ on supported AICore hardware | In-memory images | Native Auto on capable Nano V4 profiles | When the model advertises it |
 | Azure OpenAI | Configured Responses API deployment | Supported by compatible deployments | Supported by compatible deployments | Supported by compatible deployments |
 | Replay | Recorded responses | No new image input | Recorded activity, no execution | Recorded responses |
 
