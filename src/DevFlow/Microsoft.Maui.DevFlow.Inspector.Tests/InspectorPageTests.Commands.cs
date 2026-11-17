@@ -224,6 +224,7 @@ public partial class InspectorLayoutWorkspaceTests
         await _page.RunAndWaitForResponseAsync(
             () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
             response => response.Url.EndsWith("/api/capabilities", StringComparison.Ordinal));
+        await Expect(_page.Locator("#df-mode-interact")).ToBeHiddenAsync();
         await _page.Clock.RunForAsync(150);
         await editor.PressAsync("Enter");
 
