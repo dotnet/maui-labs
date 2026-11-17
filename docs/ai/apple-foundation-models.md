@@ -20,6 +20,11 @@ streaming, and error behavior is defined in the
   tools, and images on guided-generation, tool-calling, and vision flags.
   Token usage requires OS 27; reasoning is not advertised until MEAI options map.
 - The provider never silently switches to a cloud model.
+- The native bridge (`EssentialsAI.framework`) deploys to iOS / Mac Catalyst 15.0 and
+  macOS 12.0, with its Foundation Models code marked `@available(… 26.0, *)` and
+  `FoundationModels` (and Swift's StringProcessing) weak-linked. Apps that support older OS
+  versions can embed the package and launch there; only construct or call
+  `AppleIntelligenceChatClient` after an OS 26+ check (it's `[SupportedOSPlatform]`-annotated).
 
 ## Toolchain and build
 
@@ -187,8 +192,10 @@ OS 26 native fallback.
 ## Native schema mapping
 
 Response and tool-parameter schemas preserve nullable values independently of parent
-`required` properties. Native guides carry string constants/enums, a scalar ASCII
-regex subset, numeric bounds, and array/item bounds. Unrepresentable constraints,
+`required` properties. Explicit null schemas require iOS, Mac Catalyst, or macOS
+26.4 or later; earlier versions reject them with a schema error. Native guides
+carry string constants/enums, a scalar ASCII regex subset, numeric bounds, and
+array/item bounds. Unrepresentable constraints,
 references, dictionaries, and compound enum/const-plus-pattern intersections fail
 with schema/property context rather than being dropped. The current system model
 can reject regex guides with `unsupportedGenerationGuide`; that error is propagated

@@ -47,9 +47,12 @@ internal sealed class StreamingResponseHandler
 	/// <summary>
 	/// Processes a tool call update.
 	/// </summary>
+	/// <param name="toolCallId">The provider's identifier for the tool call.</param>
+	/// <param name="toolCallName">The name of the tool to invoke.</param>
+	/// <param name="toolCallArguments">The serialized arguments for the tool call.</param>
 	/// <param name="informationalOnly">
 	/// <see langword="true"/> when the provider already ran the tool; <see langword="false"/> when the
-	/// caller (for example <see cref="FunctionInvokingChatClient"/>) must invoke it.
+	/// caller (for example <c>FunctionInvokingChatClient</c>) must invoke it.
 	/// </param>
 	public void ProcessToolCall(string? toolCallId, string? toolCallName, string? toolCallArguments, bool informationalOnly = true)
 	{

@@ -57,6 +57,7 @@ public enum ChatClientError: Int {
     case cancelled = 4
 }
 
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
 @objc(ChatClientNative)
 public class ChatClientNative: NSObject {
 
@@ -927,6 +928,7 @@ extension NSError {
     }
 }
 
+@available(iOS 26.0, macOS 26.0, visionOS 26.0, *)
 extension Error {
 
     func toNSError(isCancelled: Bool = false) -> NSError {

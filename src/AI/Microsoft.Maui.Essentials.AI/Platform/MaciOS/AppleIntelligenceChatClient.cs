@@ -119,8 +119,8 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			RequireAllProperties = true,
 			TransformSchemaNode = (ctx, node) =>
 			{
-				// Handle objects
-				if (node is JsonObject obj && obj.TryGetPropertyValue("type", out var typeNode) && typeNode?.GetValue<string>() == "object")
+				// Handle objects, including nullable ones ("type": ["object", "null"])
+				if (node is JsonObject obj && obj.TryGetPropertyValue("type", out var typeNode) && AllowsType(typeNode, "object"))
 				{
 					// All objects need a title
 					if (!obj.ContainsKey("title"))
@@ -132,6 +132,17 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				return node;
 			},
 		});
+
+	/// <summary>
+	/// Whether a JSON Schema <c>type</c> keyword allows <paramref name="type"/>. The keyword is a string
+	/// (<c>"object"</c>) or, for nullable CLR members, an array (<c>["object", "null"]</c>).
+	/// </summary>
+	internal static bool AllowsType(JsonNode? typeNode, string type) => typeNode switch
+	{
+		JsonValue value => value.TryGetValue<string>(out var name) && name == type,
+		JsonArray array => array.Any(item => item is JsonValue value && value.TryGetValue<string>(out var name) && name == type),
+		_ => false,
+	};
 
 	/// <inheritdoc />
 	public Task<ChatResponse> GetResponseAsync(
@@ -399,7 +410,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 	/// <summary>
 	/// Returns <see langword="true"/> when the conversation ends with Tool messages that answer exactly the
-	/// function calls of the preceding Assistant message (the shape a <see cref="FunctionInvokingChatClient"/>
+	/// function calls of the preceding Assistant message (the shape a <c>FunctionInvokingChatClient</c>
 	/// sends after it has invoked the calls). The Swift bridge applies the same rule.
 	/// </summary>
 	internal static bool IsToolResultResume(ChatMessageNative[] messages)
