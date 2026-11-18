@@ -2026,7 +2026,8 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
 #endif
 
     /// <summary>
-    /// Composites all visible UIWindows in the active UIWindowScene into a single PNG.
+    /// Composites all visible UIWindows in the active UIWindowScene (or, without one, the
+    /// application's windows) into a single PNG.
     /// This captures native overlays such as UIAlertController dialogs that live in
     /// their own UIWindow at an elevated WindowLevel, which VisualDiagnostics misses.
     /// </summary>
@@ -2057,16 +2058,18 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
             }
         }
 
-        if (windowScene == null)
-            return null;
-
-        var screen = windowScene.Screen;
+        // Legacy AppDelegate apps (such as tvOS backends without scene support) have no window
+        // scene; their windows hang off the application on the main screen.
+#pragma warning disable CA1422 // Legacy AppDelegate apps can have no UIWindowScene on current iOS versions.
+        var screen = windowScene?.Screen ?? UIKit.UIScreen.MainScreen;
+        var sceneWindows = windowScene?.Windows ?? UIKit.UIApplication.SharedApplication.Windows;
+#pragma warning restore CA1422
         var screenBounds = screen.Bounds;
 
         // Collect all visible windows sorted by WindowLevel ascending (back → front)
         // so that alert/dialog windows (WindowLevel ~2000) are drawn on top of the app window (level 0)
         var windows = new System.Collections.Generic.List<UIKit.UIWindow>();
-        foreach (var w in windowScene.Windows)
+        foreach (var w in sceneWindows)
         {
             if (!w.Hidden && w.Alpha > 0f)
                 windows.Add(w);

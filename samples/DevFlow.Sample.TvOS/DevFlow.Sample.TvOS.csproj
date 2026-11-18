@@ -2,9 +2,11 @@
 
   <!--
     tvOS sample for the DevFlow agent. MAUI has no tvOS backend of its own, so this sample runs on
-    the community Platform.Maui.TvOS backend (https://github.com/shinyorg/mauiplatforms), restored
-    from nuget.org through the NuGet.config next to this project. It is not part of the repo's
-    solution filters or CI builds.
+    the community Platform.Maui.TvOS backend (https://github.com/shinyorg/mauiplatforms). The
+    backend package is published to nuget.org only, which is not one of the repo's feeds, so name
+    it when restoring: -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json
+    (or build the backend from a checkout, below). It is not part of the repo's solution filters
+    or CI builds.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0-tvos</TargetFramework>

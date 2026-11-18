@@ -47,7 +47,8 @@ public sealed class TvOSSimulatorFixture : AppFixtureBase
                 TargetFramework,
                 CreateBuildArguments(
                     GetSimulatorRuntimeIdentifier(),
-                    Environment.GetEnvironmentVariable("DEVFLOW_TEST_TVOS_BACKEND_PROJECT")));
+                    Environment.GetEnvironmentVariable("DEVFLOW_TEST_TVOS_BACKEND_PROJECT"),
+                    Environment.GetEnvironmentVariable("DEVFLOW_TEST_TVOS_BACKEND_SOURCE")));
 
             var appBundle = FindSimulatorAppBundle();
             _appBundleId = await ReadBundleIdAsync(appBundle);
@@ -90,11 +91,16 @@ public sealed class TvOSSimulatorFixture : AppFixtureBase
         }
     }
 
-    internal static string CreateBuildArguments(string runtimeIdentifier, string? backendProject)
+    internal static string CreateBuildArguments(string runtimeIdentifier, string? backendProject, string? backendSource = null)
     {
         var arguments = $"-p:RuntimeIdentifier={runtimeIdentifier}";
         if (string.IsNullOrWhiteSpace(backendProject))
-            return arguments;
+        {
+            // The backend package is not on the repo's feeds; the caller names a source that has it.
+            return string.IsNullOrWhiteSpace(backendSource)
+                ? arguments
+                : arguments + $" \"-p:RestoreAdditionalProjectSources={backendSource}\"";
+        }
 
         // The backend checkout defaults to its own (newer) .NET; build it for .NET 10 with the
         // matching MAUI. These must be global properties: restore ignores per-reference ones.

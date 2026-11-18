@@ -361,7 +361,7 @@ internal sealed class AppleDisplayLinkFrameStatsProvider : INativeFrameStatsProv
             return;
 
         _lastTimestampSeconds = 0d;
-        MainThread.BeginInvokeOnMainThread(() =>
+        CoreFoundation.DispatchQueue.MainQueue.DispatchAsync(() =>
         {
             try
             {
@@ -378,7 +378,7 @@ internal sealed class AppleDisplayLinkFrameStatsProvider : INativeFrameStatsProv
     public void Stop()
     {
         _running = false;
-        MainThread.BeginInvokeOnMainThread(() =>
+        CoreFoundation.DispatchQueue.MainQueue.DispatchAsync(() =>
         {
             _displayLink?.Invalidate();
             _displayLink?.Dispose();
@@ -422,7 +422,12 @@ internal sealed class AppleDisplayLinkFrameStatsProvider : INativeFrameStatsProv
     {
         try
         {
+#if TVOS
+            // tvOS uses platform-neutral Essentials, whose DeviceDisplay is not implemented.
+            double refreshRate = UIKit.UIScreen.MainScreen.MaximumFramesPerSecond;
+#else
             var refreshRate = DeviceDisplay.Current.MainDisplayInfo.RefreshRate;
+#endif
             if (refreshRate > 1d && !double.IsInfinity(refreshRate) && !double.IsNaN(refreshRate))
                 return 1000d / refreshRate;
         }
