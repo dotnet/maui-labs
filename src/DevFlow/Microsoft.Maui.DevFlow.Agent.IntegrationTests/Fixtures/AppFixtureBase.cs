@@ -273,6 +273,7 @@ public abstract class AppFixtureBase : IAppFixture
                 "macos" => "DevFlow.Sample.MacOS",
                 "gtk" => "DevFlow.Sample.Linux",
                 "wpf" => "DevFlow.Sample.WPF",
+                "tvos" => "DevFlow.Sample.TvOS",
                 _ => "DevFlow.Sample",
             };
             var mauiPath = Path.Combine(
@@ -325,6 +326,7 @@ public abstract class AppFixtureBase : IAppFixture
                 "macos" => "DevFlow.Sample.MacOS",
                 "gtk" => "DevFlow.Sample.Linux",
                 "wpf" => "DevFlow.Sample.WPF",
+                "tvos" => "DevFlow.Sample.TvOS",
                 _ => "DevFlow.Sample",
             };
             var mauiRepoRoot = FindRepoRoot();

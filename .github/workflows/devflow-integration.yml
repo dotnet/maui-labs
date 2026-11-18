@@ -324,7 +324,7 @@ jobs:
         # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
         # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
         # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Install Apple simulator automation tool
         if: matrix.framework == 'maui'
@@ -410,7 +410,7 @@ jobs:
         # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
         # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
         # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Run DevFlow integration tests (maccatalyst)
         run: >
@@ -485,7 +485,7 @@ jobs:
         # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
         # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
         # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Run DevFlow integration tests (macos)
         run: >
@@ -610,7 +610,7 @@ jobs:
         # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
         # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
         # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Run DevFlow integration tests (windows)
         shell: pwsh
