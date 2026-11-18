@@ -165,6 +165,17 @@ public class DoctorServiceParseCommandTests
 
 public class JdkManagerValidateInstallPathTests
 {
+	[Theory]
+	[InlineData("openjdk version \"21.0.2\" 2024-01-16", 21)]
+	[InlineData("java version \"1.8.0_512\"", 8)]
+	[InlineData("openjdk version \"21.0.13.0.2\"", 21)]
+	[InlineData("openjdk version \"25\"", 25)]
+	[InlineData("openjdk version \"26-ea\"", 26)]
+	public void ParseJdkMajorVersion_RecognizedOutput_ReturnsMajorVersion(string output, int expected)
+	{
+		Assert.Equal(expected, JdkManager.ParseJdkMajorVersion(output));
+	}
+
 	[Fact]
 	public void ValidateInstallPath_HomeDirectory_Throws()
 	{

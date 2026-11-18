@@ -306,7 +306,9 @@ public record AndroidEnvironmentInfo
 	public string? JdkVersion { get; init; }
 	public bool? LicensesAccepted { get; init; }
 	public bool RequiresElevation { get; init; }
-	public List<ApiLevelInfo> InstalledApiLevels { get; init; } = new();
+	public IReadOnlyList<ApiLevelInfo>? InstalledApiLevels { get; init; }
+	public IReadOnlyList<string>? BuildTools { get; init; }
+	public IReadOnlyList<string> Warnings { get; init; } = [];
 	public ToolPaths? Tools { get; init; }
 }
 
@@ -315,8 +317,7 @@ public record AndroidEnvironmentInfo
 /// </summary>
 public record ApiLevelInfo
 {
-	public int Api { get; init; }
+	public required string Api { get; init; }
 	public bool Platform { get; init; }
-	public string? BuildTools { get; init; }
-	public List<string> SystemImages { get; init; } = new();
+	public IReadOnlyList<string> SystemImages { get; init; } = [];
 }

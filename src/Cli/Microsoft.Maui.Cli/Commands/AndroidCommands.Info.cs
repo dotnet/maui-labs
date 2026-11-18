@@ -15,18 +15,22 @@ public static partial class AndroidCommands
 		var command = new Command("info", "Display Android development environment summary");
 		command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
 		{
-			var androidProvider = Program.AndroidProvider;
-			var jdkManager = Program.JdkManager;
-
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			var formatter = Program.GetFormatter(parseResult);
 
 			try
 			{
+				var androidProvider = GetAndroidProvider(parseResult);
+				var jdkManager = Program.JdkManager;
+				var warnings = new List<string>();
 				var sdkPath = androidProvider.SdkPath;
-				var sdkPathSource = androidProvider.GetSdkPathSource();
+				var sdkPathSource = !string.IsNullOrWhiteSpace(parseResult.GetValue(SdkOption))
+					? "command-line"
+					: androidProvider.GetSdkPathSource();
 				var jdkPath = androidProvider.JdkPath;
-				var jdkVersion = jdkManager.DetectedJdkVersion;
+				var jdkVersion = PathsEqual(jdkPath, jdkManager.DetectedJdkPath)
+					? jdkManager.DetectedJdkVersion
+					: JdkManager.GetJdkVersion(jdkPath);
 				var requiresElevation = androidProvider.SdkPathRequiresElevation;
 
 				// Gather license status
@@ -37,24 +41,28 @@ public static partial class AndroidCommands
 					{
 						licensesAccepted = await androidProvider.AreLicensesAcceptedAsync(cancellationToken);
 					}
-					catch
+					catch (Exception ex) when (ex is not OperationCanceledException)
 					{
-						// License check may fail if sdkmanager is not available
+						System.Diagnostics.Trace.WriteLine($"Android license check failed: {ex.Message}");
+						warnings.Add($"Could not determine Android SDK license status: {FirstLine(ex.Message)}");
 					}
 				}
 
-				// Gather installed packages and group by API level
-				var installedApiLevels = new List<ApiLevelInfo>();
+				IReadOnlyList<ApiLevelInfo>? installedApiLevels = [];
+				IReadOnlyList<string>? buildTools = [];
 				if (androidProvider.IsSdkInstalled)
 				{
 					try
 					{
-						var packages = await androidProvider.GetInstalledPackagesAsync(cancellationToken);
-						installedApiLevels = GroupPackagesByApiLevel(packages);
+						var packages = ReadInstalledPackagesFromDisk(sdkPath!, cancellationToken);
+						(installedApiLevels, buildTools) = GroupInstalledPackages(packages);
 					}
-					catch
+					catch (Exception ex) when (ex is not OperationCanceledException)
 					{
-						// Package listing may fail if sdkmanager is not available
+						System.Diagnostics.Trace.WriteLine($"Android SDK directory inventory failed: {ex.Message}");
+						warnings.Add($"Could not inspect installed Android packages: {FirstLine(ex.Message)}");
+						installedApiLevels = null;
+						buildTools = null;
 					}
 				}
 
@@ -70,6 +78,8 @@ public static partial class AndroidCommands
 					LicensesAccepted = licensesAccepted,
 					RequiresElevation = requiresElevation,
 					InstalledApiLevels = installedApiLevels,
+					BuildTools = buildTools,
+					Warnings = warnings,
 					Tools = toolPaths
 				};
 
@@ -92,40 +102,51 @@ public static partial class AndroidCommands
 		return command;
 	}
 
-	static List<ApiLevelInfo> GroupPackagesByApiLevel(List<SdkPackage> packages)
+	static string FirstLine(string value)
+		=> value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? value;
+
+	static bool PathsEqual(string? left, string? right)
 	{
-		// Collect raw data per API level using mutable containers
-		var platformApis = new HashSet<int>();
-		var buildToolsByApi = new Dictionary<int, string>();
-		var systemImagesByApi = new Dictionary<int, List<string>>();
+		if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+			return false;
+
+		var comparison = OperatingSystem.IsWindows()
+			? StringComparison.OrdinalIgnoreCase
+			: StringComparison.Ordinal;
+		return string.Equals(
+			Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
+			Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)),
+			comparison);
+	}
+
+	internal static (IReadOnlyList<ApiLevelInfo> ApiLevels, IReadOnlyList<string> BuildTools) GroupInstalledPackages(
+		IEnumerable<SdkPackage> packages)
+	{
+		var platformApis = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		var buildTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		var systemImagesByApi = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
 		foreach (var pkg in packages)
 		{
-			// Match platforms;android-XX
 			if (pkg.Path.StartsWith("platforms;android-", StringComparison.Ordinal))
 			{
-				var apiStr = pkg.Path["platforms;android-".Length..];
-				if (int.TryParse(apiStr, out var api))
+				var api = pkg.Path["platforms;android-".Length..];
+				if (api.Length > 0)
 					platformApis.Add(api);
 			}
-			// Match build-tools;XX.Y.Z
 			else if (pkg.Path.StartsWith("build-tools;", StringComparison.Ordinal))
 			{
-				var versionStr = pkg.Path["build-tools;".Length..];
-				// Extract major version as API level approximation
-				var dotIndex = versionStr.IndexOf('.');
-				var majorStr = dotIndex > 0 ? versionStr[..dotIndex] : versionStr;
-				if (int.TryParse(majorStr, out var api))
-					buildToolsByApi[api] = versionStr;
+				var version = pkg.Path["build-tools;".Length..];
+				if (version.Length > 0)
+					buildTools.Add(version);
 			}
-			// Match system-images;android-XX;variant;arch
 			else if (pkg.Path.StartsWith("system-images;android-", StringComparison.Ordinal))
 			{
 				var parts = pkg.Path.Split(';');
 				if (parts.Length >= 4)
 				{
-					var apiStr = parts[1]["android-".Length..];
-					if (int.TryParse(apiStr, out var api))
+					var api = parts[1]["android-".Length..];
+					if (api.Length > 0)
 					{
 						if (!systemImagesByApi.TryGetValue(api, out var images))
 						{
@@ -138,21 +159,92 @@ public static partial class AndroidCommands
 			}
 		}
 
-		// Merge all discovered API levels
-		var allApis = new HashSet<int>(platformApis);
-		foreach (var api in buildToolsByApi.Keys) allApis.Add(api);
+		var allApis = new HashSet<string>(platformApis, StringComparer.OrdinalIgnoreCase);
 		foreach (var api in systemImagesByApi.Keys) allApis.Add(api);
 
-		return allApis
-			.OrderByDescending(api => api)
+		var apiLevels = allApis
+			.OrderByDescending(api => ParseVersion(api))
+			.ThenBy(api => api.Contains('-', StringComparison.Ordinal))
+			.ThenByDescending(api => api, StringComparer.OrdinalIgnoreCase)
 			.Select(api => new ApiLevelInfo
 			{
 				Api = api,
 				Platform = platformApis.Contains(api),
-				BuildTools = buildToolsByApi.GetValueOrDefault(api),
-				SystemImages = systemImagesByApi.GetValueOrDefault(api, new List<string>())
+				SystemImages = systemImagesByApi.GetValueOrDefault(api, [])
+					.OrderBy(image => image, StringComparer.OrdinalIgnoreCase)
+					.ToArray()
 			})
-			.ToList();
+			.ToArray();
+
+		var buildToolVersions = buildTools
+			.OrderByDescending(version => ParseVersion(version))
+			.ThenBy(version => version.Contains('-', StringComparison.Ordinal))
+			.ThenByDescending(version => version, StringComparer.OrdinalIgnoreCase)
+			.ToArray();
+
+		return (apiLevels, buildToolVersions);
+	}
+
+	static Version ParseVersion(string value)
+	{
+		var numericPart = value.Split('-', 2)[0];
+		if (Version.TryParse(numericPart, out var version))
+			return version;
+		return int.TryParse(numericPart, out var major) ? new Version(major, 0) : new Version(0, 0);
+	}
+
+	static List<SdkPackage> ReadInstalledPackagesFromDisk(string sdkPath, CancellationToken cancellationToken)
+	{
+		var packages = new List<SdkPackage>();
+		AddDirectoryPackages("platforms", "platforms");
+		AddDirectoryPackages("build-tools", "build-tools");
+
+		var systemImagesRoot = Path.Combine(sdkPath, "system-images");
+		if (Directory.Exists(systemImagesRoot))
+		{
+			foreach (var apiDirectory in Directory.EnumerateDirectories(systemImagesRoot))
+			{
+				foreach (var tagDirectory in Directory.EnumerateDirectories(apiDirectory))
+				{
+					foreach (var abiDirectory in Directory.EnumerateDirectories(tagDirectory))
+					{
+						cancellationToken.ThrowIfCancellationRequested();
+						if (!IsInstalledPackageDirectory(abiDirectory))
+							continue;
+						packages.Add(new SdkPackage
+						{
+							Path = $"system-images;{Path.GetFileName(apiDirectory)};{Path.GetFileName(tagDirectory)};{Path.GetFileName(abiDirectory)}",
+							IsInstalled = true
+						});
+					}
+				}
+			}
+		}
+
+		return packages;
+
+		void AddDirectoryPackages(string directoryName, string packagePrefix)
+		{
+			var root = Path.Combine(sdkPath, directoryName);
+			if (!Directory.Exists(root))
+				return;
+
+			foreach (var directory in Directory.EnumerateDirectories(root))
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+				if (!IsInstalledPackageDirectory(directory))
+					continue;
+				packages.Add(new SdkPackage
+				{
+					Path = $"{packagePrefix};{Path.GetFileName(directory)}",
+					IsInstalled = true
+				});
+			}
+		}
+
+		static bool IsInstalledPackageDirectory(string directory)
+			=> File.Exists(Path.Combine(directory, "package.xml")) ||
+				File.Exists(Path.Combine(directory, "source.properties"));
 	}
 
 	static void WriteHumanReadableInfo(IOutputFormatter formatter, AndroidEnvironmentInfo info)
@@ -166,7 +258,7 @@ public static partial class AndroidCommands
 
 		// JDK Path
 		var jdkDisplay = info.JdkPath ?? "(not found)";
-		var jdkVersionDisplay = info.JdkVersion != null ? $" (OpenJDK {info.JdkVersion})" : "";
+		var jdkVersionDisplay = info.JdkVersion != null ? $" (JDK {info.JdkVersion})" : "";
 		formatter.WriteProgress($"  JDK Path:        {jdkDisplay}{jdkVersionDisplay}");
 
 		// License Status
@@ -181,8 +273,12 @@ public static partial class AndroidCommands
 		if (info.RequiresElevation)
 			formatter.WriteWarning("  SDK location requires administrator access.");
 
-		// Installed API Levels
-		if (info.InstalledApiLevels.Count > 0)
+		if (info.InstalledApiLevels is null)
+		{
+			formatter.WriteProgress("");
+			formatter.WriteProgress("  Installed API Levels: unknown");
+		}
+		else if (info.InstalledApiLevels.Count > 0)
 		{
 			formatter.WriteProgress("");
 			formatter.WriteProgress("  Installed API Levels:");
@@ -191,14 +287,23 @@ public static partial class AndroidCommands
 				var parts = new List<string>();
 				if (api.Platform)
 					parts.Add("platform");
-				if (!string.IsNullOrEmpty(api.BuildTools))
-					parts.Add($"build-tools {api.BuildTools}");
 				if (api.SystemImages.Count > 0)
 					parts.Add($"system-image ({string.Join(", ", api.SystemImages)})");
 
 				var detail = parts.Count > 0 ? $" \u2014 {string.Join(" + ", parts)}" : "";
-				formatter.WriteProgress($"    Android {api.Api} (API {api.Api}){detail}");
+				formatter.WriteProgress($"    API {api.Api}{detail}");
 			}
+		}
+
+		if (info.BuildTools is null)
+		{
+			formatter.WriteProgress("");
+			formatter.WriteProgress("  Build Tools:      unknown");
+		}
+		else if (info.BuildTools.Count > 0)
+		{
+			formatter.WriteProgress("");
+			formatter.WriteProgress($"  Build Tools:      {string.Join(", ", info.BuildTools)}");
 		}
 
 		// Tools
@@ -216,5 +321,8 @@ public static partial class AndroidCommands
 			if (info.Tools.Emulator != null)
 				formatter.WriteProgress($"    emulator:    {info.Tools.Emulator}");
 		}
+
+		foreach (var warning in info.Warnings)
+			formatter.WriteWarning($"  Warning: {warning}");
 	}
 }

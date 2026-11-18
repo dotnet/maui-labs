@@ -78,8 +78,11 @@ public class JdkManager : IJdkManager
 		catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"JDK auto-detection failed: {ex.Message}"); }
 	}
 
-	static int? GetJdkVersion(string jdkPath)
+	internal static int? GetJdkVersion(string? jdkPath)
 	{
+		if (string.IsNullOrWhiteSpace(jdkPath))
+			return null;
+
 		var javaBin = Path.Combine(jdkPath, "bin", "java");
 		if (PlatformDetector.IsWindows)
 			javaBin += ".exe";
@@ -93,16 +96,25 @@ public class JdkManager : IJdkManager
 			// Java version output is on stderr
 			var output = result.StandardError + result.StandardOutput;
 
-			// Parse version from output like: openjdk version "17.0.1" or java version "1.8.0_292"
-			var match = System.Text.RegularExpressions.Regex.Match(output, @"version ""(\d+)");
-			if (match.Success && int.TryParse(match.Groups[1].Value, out var version))
-			{
-				return version;
-			}
+			return ParseJdkMajorVersion(output);
 		}
 		catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"JDK version detection failed for '{jdkPath}': {ex.Message}"); }
 
 		return null;
+	}
+
+	internal static int? ParseJdkMajorVersion(string output)
+	{
+		var match = System.Text.RegularExpressions.Regex.Match(
+			output,
+			@"version ""(?<major>\d+)(?:\.(?<minor>\d+))?");
+		if (!match.Success || !int.TryParse(match.Groups["major"].Value, out var major))
+			return null;
+
+		return major == 1 &&
+			int.TryParse(match.Groups["minor"].Value, out var legacyMajor)
+				? legacyMajor
+				: major;
 	}
 
 	public async Task<HealthCheck> CheckHealthAsync(CancellationToken cancellationToken = default)

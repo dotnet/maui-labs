@@ -37,6 +37,7 @@ public class FakeAndroidProvider : IAndroidProvider
 	public List<SdkPackage> AvailablePackages { get; set; } = new();
 	public string? MostRecentSystemImage { get; set; }
 	public bool LicensesAccepted { get; set; }
+	public Exception? LicensesException { get; set; }
 	public (string Command, string Arguments)? LicenseAcceptanceCommand { get; set; }
 
 	/// <summary>
@@ -232,7 +233,9 @@ public class FakeAndroidProvider : IAndroidProvider
 	}
 
 	public Task<bool> AreLicensesAcceptedAsync(CancellationToken cancellationToken = default)
-		=> Task.FromResult(LicensesAccepted);
+		=> LicensesException is null
+			? Task.FromResult(LicensesAccepted)
+			: Task.FromException<bool>(LicensesException);
 
 	public (string Command, string Arguments)? GetLicenseAcceptanceCommand()
 		=> LicenseAcceptanceCommand;
