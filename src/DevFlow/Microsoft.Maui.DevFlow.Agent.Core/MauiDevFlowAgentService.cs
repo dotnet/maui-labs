@@ -1330,7 +1330,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             currentRegistryGeneration);
     }
 
-    private (HttpResponse? Error, UiCaptureContext Capture) ReserveUiCapture(CaptureBoundRequest request)
+    private (HttpResponse? Error, UiCaptureContext Capture) ReserveUiCapture(
+        CaptureBoundRequest request,
+        bool consume = true)
     {
         if (request.CaptureEpoch is null && request.RegistryGeneration is null)
             return (null, default);
@@ -1365,10 +1367,13 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 && (request.RegistryGeneration is null || request.RegistryGeneration == currentRegistryGeneration);
             if (isCurrent)
             {
-                _captureLeases.Remove(captureToValidate.Epoch);
-                _latestCapture = _captureLeases.Count > 0
-                    ? _captureLeases.Values.Last()
-                    : default;
+                if (consume)
+                {
+                    _captureLeases.Remove(captureToValidate.Epoch);
+                    _latestCapture = _captureLeases.Count > 0
+                        ? _captureLeases.Values.Last()
+                        : default;
+                }
                 return (null, captureToValidate);
             }
         }

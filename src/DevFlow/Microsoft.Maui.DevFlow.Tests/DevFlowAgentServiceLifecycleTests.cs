@@ -493,6 +493,152 @@ public class DevFlowAgentServiceLifecycleTests
         Assert.Equal(2, invocationCount);
     }
 
+    [Fact]
+    public async Task PointerStart_PreCommitRejectionPreservesCaptureForFallback()
+    {
+        var port = GetFreePort();
+        using var service = new RejectingPointerAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invocationCount = 0;
+        var button = new Button
+        {
+            AutomationId = "PointerFallbackCaptureButton",
+            Text = "Invoke"
+        };
+        button.Clicked += (_, _) => invocationCount++;
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = button });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var capture = Assert.Single(
+            Flatten(await client.GetTreeAsync()),
+            element => element.AutomationId == "PointerFallbackCaptureButton");
+        var start = await client.StartPointerSessionAsync(new PointerSessionStartRequest
+        {
+            SessionId = "precommit-rejection",
+            PointerId = 1,
+            PointerType = "touch",
+            CoordinateSpace = "windowLogical",
+            X = 1,
+            Y = 1,
+            ElapsedMs = 0,
+            CaptureEpoch = capture.CaptureEpoch,
+            RegistryGeneration = capture.RegistryGeneration
+        });
+
+        Assert.False(start.Success);
+        Assert.Equal("pointer-target-unsupported", start.Reason);
+
+        var fallback = await client.TapResultAsync(
+            capture.Id,
+            capture.CaptureEpoch,
+            capture.RegistryGeneration);
+        Assert.True(fallback.Success, $"Fallback tap failed: {fallback.Error}; reason={fallback.Reason}");
+        Assert.Equal(1, invocationCount);
+    }
+
+    [Fact]
+    public async Task PointerCancel_InvalidatesCaptureTakenDuringActiveSession()
+    {
+        var port = GetFreePort();
+        using var service = new CapturePointerAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var button = new Button
+        {
+            AutomationId = "PointerCancelCaptureButton",
+            Text = "Invoke"
+        };
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = button });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+        Assert.True((await client.StartPointerSessionAsync(new PointerSessionStartRequest
+        {
+            SessionId = "capture-during-pointer",
+            PointerId = 1,
+            PointerType = "touch",
+            CoordinateSpace = "windowLogical",
+            X = 1,
+            Y = 1,
+            ElapsedMs = 0
+        })).Success);
+
+        var capture = Assert.Single(
+            Flatten(await client.GetTreeAsync()),
+            element => element.AutomationId == "PointerCancelCaptureButton");
+        Assert.True((await client.CancelPointerSessionAsync(
+            "capture-during-pointer",
+            "pointercancel")).Success);
+
+        var stale = await client.TapResultAsync(
+            capture.Id,
+            capture.CaptureEpoch,
+            capture.RegistryGeneration);
+        Assert.False(stale.Success);
+        Assert.Equal("stale-capture-epoch", stale.Reason);
+    }
+
+    [Fact]
+    public async Task PointerStart_DefaultsWindowIdFromCapture()
+    {
+        var port = GetFreePort();
+        using var service = new CapturePointerAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var app = new Application();
+        var addWindow = typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        addWindow.Invoke(app,
+        [
+            new Window(new ContentPage
+            {
+                Content = new Label { AutomationId = "FirstPointerWindow" }
+            })
+        ]);
+        addWindow.Invoke(app,
+        [
+            new Window(new ContentPage
+            {
+                Content = new Label { AutomationId = "SecondPointerWindow" }
+            })
+        ]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+        var capture = Assert.Single(
+            Flatten(await client.GetTreeAsync(window: 1)),
+            element => element.AutomationId == "SecondPointerWindow");
+        Assert.Equal(1, capture.WindowId);
+
+        var start = await client.StartPointerSessionAsync(new PointerSessionStartRequest
+        {
+            SessionId = "captured-window",
+            PointerId = 1,
+            PointerType = "touch",
+            CoordinateSpace = "windowLogical",
+            X = 1,
+            Y = 1,
+            ElapsedMs = 0,
+            CaptureEpoch = capture.CaptureEpoch,
+            RegistryGeneration = capture.RegistryGeneration
+        });
+
+        Assert.True(start.Success);
+        Assert.Equal(1, service.StartedWindowId);
+        await client.CancelPointerSessionAsync("captured-window", "test-complete");
+    }
+
     [Theory]
     [InlineData("Entry", true)]
     [InlineData("Entry", false)]
@@ -1736,6 +1882,53 @@ public class DevFlowAgentServiceLifecycleTests
     private sealed class SyntheticTouchAgentService(AgentOptions options) : MauiDevFlowAgentService(options)
     {
         protected override bool IsSyntheticTouchSupported => true;
+    }
+
+    private sealed class RejectingPointerAgentService(AgentOptions options)
+        : MauiDevFlowAgentService(options)
+    {
+        protected override PointerStreamSupport GetPointerStreamSupport()
+            => new(
+                Supported: true,
+                Fidelity: "test",
+                RequiresOptIn: false,
+                Reason: null);
+
+        protected override Task<PointerSessionBackendStartResult> StartPointerSessionBackendAsync(
+            PointerSessionStartRequest request,
+            CancellationToken cancellationToken)
+            => Task.FromResult(PointerSessionBackendStartResult.Failed(
+                "The target cannot safely accept a persistent pointer.",
+                422,
+                "pointer-target-unsupported"));
+    }
+
+    private sealed class CapturePointerAgentService(AgentOptions options)
+        : MauiDevFlowAgentService(options)
+    {
+        public int? StartedWindowId { get; private set; }
+
+        protected override PointerStreamSupport GetPointerStreamSupport()
+            => new(
+                Supported: true,
+                Fidelity: "test",
+                RequiresOptIn: false,
+                Reason: null);
+
+        protected override Task<PointerSessionBackendStartResult> StartPointerSessionBackendAsync(
+            PointerSessionStartRequest request,
+            CancellationToken cancellationToken)
+        {
+            StartedWindowId = request.WindowId;
+            return Task.FromResult(PointerSessionBackendStartResult.Started(
+                new object(),
+                "test start"));
+        }
+
+        protected override Task<PointerSessionBackendResult> CancelPointerSessionBackendAsync(
+            object state,
+            string reason)
+            => Task.FromResult(PointerSessionBackendResult.Applied());
     }
 
     private static DriverElementInfo ReadCapturedElement(HttpResponse response, string id)

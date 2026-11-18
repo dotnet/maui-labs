@@ -34,6 +34,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             _options.MutationLeaseTimeoutMs);
         _server = new AgentHttpServer(_options.Port);
         _server.MutationLeaseValidator = ValidateMutationLeaseAsync;
+        _server.MutationAdmissionValidator = RejectMutationDuringPointerSession;
         _server.MutationObserver = ObserveMutationAsync;
         NetworkStore = new NetworkRequestStore(_options.MaxNetworkBufferSize);
         _profilerCollector = CreateProfilerCollector();
@@ -253,6 +254,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     ["theme"] = IsThemeSupported,
                     ["mutationLease"] = _options.RequireMutationLease,
                     ["syntheticTouch"] = IsSyntheticTouchSupported,
+                    ["pointerStream"] = IsPointerStreamSupported,
                 },
                 ["running"] = IsAppBound,
                 // Current navigation route (null for backends without a router). Powers the
@@ -328,6 +330,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             ["css-selector", "type", "text", "accessibility-id"], reason);
         capabilities["ui.actions"] = Capability(1, IsUiSupported,
             ["tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties"], reason);
+        capabilities["ui.pointerStream"] = BuildPointerStreamCapability();
         capabilities["ui.screenshot"] = Capability(1, IsScreenshotSupported,
             ["element", "fullscreen", "selector"], reason);
         capabilities["ui.events"] = Capability(1, true, ["stream", "subscribe"], null);

@@ -12,7 +12,7 @@ namespace Microsoft.Maui.DevFlow.Agent.Native;
 /// invoke/actions, WebView CDP registry) is inherited from <see cref="DevFlowAgentService"/>.
 /// This type only implements the UI seam.
 /// </remarks>
-public class NativeDevFlowAgentService : DevFlowAgentService
+public partial class NativeDevFlowAgentService : DevFlowAgentService
 {
     private readonly NativeElementRegistry _registry = new();
     private volatile bool _bound;
