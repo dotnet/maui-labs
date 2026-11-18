@@ -40,7 +40,7 @@ public static class AgentServiceExtensions
 
         if (options.EnableFileLogging)
         {
-            var logDir = Path.Combine(AgentFileSystem.GetCacheDirectory(builder.Services), "mauidevflow-logs");
+            var logDir = Path.Combine(GetCacheDirectory(builder.Services), "mauidevflow-logs");
             var logProvider = new FileLogProvider(logDir, options.MaxLogFileSize, options.MaxLogFiles);
             service.SetLogProvider(logProvider);
 
@@ -162,6 +162,15 @@ public static class AgentServiceExtensions
 #endif
         });
 
+#if TVOS
+        // MAUI has no tvOS lifecycle events; the backend that hosts MAUI on tvOS defines its own.
+        // Start from MAUI's initialization hook instead. It runs inside the backend's
+        // FinishedLaunching, before the application and dispatcher exist, so queue the start
+        // behind it on the main thread.
+        builder.Services.AddSingleton<IMauiInitializeService>(new StartupInitializeService(() =>
+            CoreFoundation.DispatchQueue.MainQueue.DispatchAsync(() => EnsureAgentStarted())));
+#endif
+
         return builder;
     }
 
@@ -213,6 +222,24 @@ public static class AgentServiceExtensions
         Console.WriteLine("[Microsoft.Maui.DevFlow] Application.Current was still null after late-bind retries; continuing in app-less mode");
     }
 
+#if TVOS
+    private sealed class StartupInitializeService(Action start) : IMauiInitializeService
+    {
+        public void Initialize(IServiceProvider services) => start();
+    }
+#endif
+
+    private static string GetCacheDirectory(IServiceCollection services)
+    {
+#if TVOS
+        // MAUI Essentials has no tvOS implementation, so FileSystem.CacheDirectory throws there.
+        // InternetCache is Library/Caches on Apple platforms, the same folder Essentials uses on iOS.
+        return Environment.GetFolderPath(Environment.SpecialFolder.InternetCache);
+#else
+        return AgentFileSystem.GetCacheDirectory(services);
+#endif
+    }
+
     private static Application? ResolveCurrentApplication()
     {
         if (Application.Current is { } current)
@@ -240,6 +267,7 @@ public static class AgentServiceExtensions
             var platform = OperatingSystem.IsAndroid() ? "Android"
                 : OperatingSystem.IsIOS() ? "iOS"
                 : OperatingSystem.IsMacCatalyst() ? "MacCatalyst"
+                : OperatingSystem.IsTvOS() ? "tvOS"
                 : OperatingSystem.IsMacOS() ? "macOS"
                 : OperatingSystem.IsWindows() ? "Windows"
                 : "Unknown";

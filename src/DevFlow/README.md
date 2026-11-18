@@ -234,6 +234,31 @@ Optional bridge diagnostics use `GtkBlazorWebViewDebugService.LogCallback`;
 JavaScript console entries are available through the DevFlow log API when log
 capture is enabled.
 
+### tvOS apps
+
+MAUI has no tvOS backend of its own. Apps that run MAUI on tvOS through a community backend
+such as [Platform.Maui.TvOS](https://github.com/shinyorg/mauiplatforms) use the standard
+`Microsoft.Maui.DevFlow.Agent` package, which has a `net10.0-tvos` target. Register it the same
+way, in the backend's `CreateMauiApp`:
+
+```csharp
+using Microsoft.Maui.DevFlow.Agent;
+
+#if DEBUG
+builder.AddMauiDevFlowAgent();
+#endif
+```
+
+The agent starts once the backend has created the MAUI application. The visual tree, element
+and window screenshots, tap (sent as `PrimaryActionTriggered`, the Siri Remote select press),
+fill, navigation, logs and preference key listing work. Point gestures and synthetic touch
+are not available because tvOS has no touchscreen. MAUI Essentials ships no tvOS
+implementation, so the agent reads the platform and app identity from UIKit and the app bundle;
+the other Essentials endpoints (preference values, secure storage, device info and sensors)
+return an error unless the app registers an Essentials backend. tvOS 27 only launches apps that adopt the scene lifecycle, so declare
+`UIApplicationSceneManifest` in `Info.plist` and use a backend version that supports scenes.
+See `samples/DevFlow.Sample.TvOS`.
+
 ### 2b. Or, in a plain .NET app (no MAUI)
 
 The same agent, CLI and MCP tools work against apps that never reference MAUI. Reference
@@ -387,7 +412,7 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Dialog Handling** — detect and dismiss alerts/action sheets programmatically; `maui_native_dialog_detect` / `maui_native_dialog_respond` require an exact, user-confirmed choice and a one-time prompt token
 - **Batch Operations** — execute command sequences from stdin for scripting
 - **Agent Extensions** — expose app-specific diagnostic tools under `/api/v1/ext/{namespace}/...` with self-describing metadata for CLI and MCP discovery
-- **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK
+- **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK, tvOS (through a community MAUI backend)
 
 Android driver commands and screen recording use `System.Diagnostics.Process` through the
 driver's internal `HostProcess` helper, not `Xamarin.Android.Tools.ProcessUtils`. Output and
@@ -828,7 +853,7 @@ for Linux-only releases.
 
 The simulator/emulator-driven suite is separate from the fast host tests and runs
 automatically in integration CI as described above. For local runs, set
-`DEVFLOW_TEST_PLATFORM` to `maccatalyst` (or `mac`/`catalyst`), `ios`, `android`,
+`DEVFLOW_TEST_PLATFORM` to `maccatalyst` (or `mac`/`catalyst`), `ios`, `tvos`, `android`,
 `windows`, `macos`, `gtk`, or `wpf`. It defaults to `maccatalyst` on macOS and
 `windows` on Windows.
 
@@ -844,6 +869,19 @@ DEVFLOW_TEST_PLATFORM=android DEVFLOW_TEST_ANDROID_API=35 DEVFLOW_TEST_ANDROID_A
 
 # Windows (run on a Windows machine)
 DEVFLOW_TEST_PLATFORM=windows dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/
+```
+
+tvOS drives the smaller `samples/DevFlow.Sample.TvOS` on an Apple TV simulator (a booted
+one is preferred), so only its own tests apply; run them with `--filter Category=TvOS`. The
+sample uses the community Platform.Maui.TvOS backend. On tvOS 27, point
+`DEVFLOW_TEST_TVOS_BACKEND_PROJECT` at a mauiplatforms checkout's
+`src/Platform.Maui.TvOS/Platform.Maui.TvOS.csproj` to build against a backend version with
+scene lifecycle support:
+
+```bash
+DEVFLOW_TEST_PLATFORM=tvos \
+DEVFLOW_TEST_TVOS_BACKEND_PROJECT=../mauiplatforms/src/Platform.Maui.TvOS/Platform.Maui.TvOS.csproj \
+dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter Category=TvOS
 ```
 
 For local reliability, prefer running one platform suite at a time from a given repo worktree. Android fixture selection can be pinned with `DEVFLOW_TEST_ANDROID_AVD` and `DEVFLOW_TEST_ANDROID_SERIAL` when you want the harness to use a known emulator instance.

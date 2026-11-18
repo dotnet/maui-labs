@@ -131,7 +131,7 @@ jobs:
           - scenario: menu-localization
             packages: true
           - scenario: bundle-resources
-            workloads: 'macos maui maui-tizen'
+            workloads: 'macos tvos maui maui-tizen'
             packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages

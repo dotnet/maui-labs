@@ -8,7 +8,7 @@ using global::Android.OS;
 using global::Android.Views;
 using Microsoft.Maui.Devices;
 #endif
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
 using CoreAnimation;
 using Foundation;
 using Microsoft.Maui.Devices;
@@ -29,7 +29,7 @@ internal static class NativeFrameStatsProviderFactory
         return AndroidFrameMetricsStatsProvider.IsApiSupported
             ? new AndroidFrameMetricsStatsProvider()
             : new AndroidChoreographerFrameStatsProvider();
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
         return new AppleDisplayLinkFrameStatsProvider();
 #elif WINDOWS
         return new WindowsCompositionFrameStatsProvider();
@@ -337,7 +337,7 @@ internal sealed class AndroidChoreographerFrameStatsProvider : Java.Lang.Object,
 }
 #endif
 
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
 internal sealed class AppleDisplayLinkFrameStatsProvider : INativeFrameStatsProvider
 {
     private readonly FrameStatsAccumulator _accumulator;
