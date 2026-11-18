@@ -2,9 +2,11 @@
 
   <!--
     Web (WebAssembly) sample for the DevFlow agent. MAUI has no browser backend of its own, so this
-    sample runs on the community Platform.Maui.Web backend (https://github.com/shinyorg/mauiplatforms),
-    restored from nuget.org through the NuGet.config next to this project. It is not part of the
-    repo's solution filters or CI builds. To build against a mauiplatforms checkout instead:
+    sample runs on the community Platform.Maui.Web backend (https://github.com/shinyorg/mauiplatforms).
+    It is not part of the repo's solution filters or CI builds. The repo's feeds do not carry the
+    backend package, so name a source that does when restoring it:
+      -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json
+    Or build against a mauiplatforms checkout instead:
       -p:PlatformMauiWebProject=<mauiplatforms>/src/Platform.Maui.Web/Platform.Maui.Web.csproj
       -p:BaseTargetFramework=net10.0 -p:MauiVersion=10.0.120
   -->

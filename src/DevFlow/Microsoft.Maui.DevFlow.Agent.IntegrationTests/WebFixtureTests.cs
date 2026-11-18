@@ -25,6 +25,22 @@ public class WebFixtureTests
         => Assert.Equal("", WebFixture.CreateBuildArguments(backendProject: null));
 
     [Fact]
+    public void CreateBuildArguments_AddsBackendSourceForPackageBackend()
+        => Assert.Equal(
+            "\"-p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json\"",
+            WebFixture.CreateBuildArguments(backendProject: null, backendSource: "https://api.nuget.org/v3/index.json"));
+
+    [Fact]
+    public void CreateBuildArguments_IgnoresBackendSourceForLocalBackend()
+    {
+        var project = Path.Combine(Path.GetTempPath(), "mauiplatforms", "Platform.Maui.Web.csproj");
+
+        var arguments = WebFixture.CreateBuildArguments(project, backendSource: "https://api.nuget.org/v3/index.json");
+
+        Assert.DoesNotContain("RestoreAdditionalProjectSources", arguments);
+    }
+
+    [Fact]
     public void CreateBuildArguments_BuildsLocalBackendForNet10()
     {
         var project = Path.Combine(Path.GetTempPath(), "mauiplatforms", "Platform.Maui.Web.csproj");

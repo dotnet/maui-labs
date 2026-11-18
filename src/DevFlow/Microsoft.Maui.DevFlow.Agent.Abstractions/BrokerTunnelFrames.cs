@@ -11,6 +11,12 @@ internal sealed class BrokerTunnelRequest
 {
     public const string FrameType = "http-request";
 
+    /// <summary>
+    /// Sent by the broker, with the <see cref="Id"/> of a request in flight, when that request's
+    /// client disconnects or the broker stops waiting for it. The agent cancels the request.
+    /// </summary>
+    public const string CancelFrameType = "http-cancel";
+
     [JsonPropertyName("type")]
     public string Type { get; set; } = FrameType;
 

@@ -23,6 +23,7 @@ internal sealed class AgentTunnel : IDisposable
 {
     internal const string RequestFrameType = "http-request";
     internal const string ResponseFrameType = "http-response";
+    internal const string CancelFrameType = "http-cancel";
     private const int MaxRequestBodyBytes = 1_048_576;
     private const int MaxHeaderBytes = 64 * 1024;
 
@@ -145,7 +146,9 @@ internal sealed class AgentTunnel : IDisposable
                     return;
                 }
 
-                var response = await SendAsync(request);
+                // The request is fully read, so the client sends nothing more until it hangs up.
+                var clientGone = WatchForDisconnectAsync(stream);
+                var response = await SendAsync(request, clientGone);
                 await WriteResponseAsync(stream, response);
             }
             catch (TimeoutException)
@@ -168,7 +171,7 @@ internal sealed class AgentTunnel : IDisposable
         }
     }
 
-    private async Task<JsonElement> SendAsync(TunnelRequest request)
+    private async Task<JsonElement> SendAsync(TunnelRequest request, Task clientGone)
     {
         var requestId = Interlocked.Increment(ref _nextRequestId).ToString(System.Globalization.CultureInfo.InvariantCulture);
         var headers = new JsonObject();
@@ -189,22 +192,75 @@ internal sealed class AgentTunnel : IDisposable
         _pending[requestId] = completion;
         try
         {
-            var bytes = Encoding.UTF8.GetBytes(CliJson.SerializeUntyped(frame, indented: false));
-            await _sendGate.WaitAsync(_cts.Token);
+            await SendFrameAsync(frame);
+
+            Task finished;
             try
             {
-                await _socket.SendAsync(bytes, WebSocketMessageType.Text, true, _cts.Token);
+                finished = await Task.WhenAny(completion.Task, clientGone).WaitAsync(RequestTimeout, _cts.Token);
             }
-            finally
+            catch (TimeoutException)
             {
-                _sendGate.Release();
+                await CancelAgentRequestAsync(requestId);
+                throw;
             }
 
-            return await completion.Task.WaitAsync(RequestTimeout, _cts.Token);
+            if (finished != completion.Task)
+            {
+                // Stop the agent working on an answer nobody will read, such as a queued mutation.
+                await CancelAgentRequestAsync(requestId);
+                throw new IOException("The client disconnected before the agent answered.");
+            }
+            return await completion.Task;
         }
         finally
         {
             _pending.TryRemove(requestId, out _);
+        }
+    }
+
+    private async Task CancelAgentRequestAsync(string requestId)
+    {
+        try
+        {
+            await SendFrameAsync(new JsonObject { ["type"] = CancelFrameType, ["id"] = requestId });
+        }
+        catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or ObjectDisposedException)
+        {
+            // The agent left; it has nothing left to cancel.
+        }
+    }
+
+    private async Task SendFrameAsync(JsonObject frame)
+    {
+        var bytes = Encoding.UTF8.GetBytes(CliJson.SerializeUntyped(frame, indented: false));
+        await _sendGate.WaitAsync(_cts.Token);
+        try
+        {
+            await _socket.SendAsync(bytes, WebSocketMessageType.Text, true, _cts.Token);
+        }
+        finally
+        {
+            _sendGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Completes when the client closes its connection, or when the relay disposes it after
+    /// writing the response. Callers only look at it while the agent has yet to answer.
+    /// </summary>
+    private static async Task WatchForDisconnectAsync(NetworkStream stream)
+    {
+        var probe = new byte[1];
+        try
+        {
+            while (await stream.ReadAsync(probe) > 0)
+            {
+                // Bytes after the request (a pipelined request) are ignored; one request per connection.
+            }
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or SocketException)
+        {
         }
     }
 

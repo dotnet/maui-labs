@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
@@ -44,6 +45,7 @@ public class BrokerRegistration : IDisposable
     });
     private const int MaxTunnelMessageBytes = 16 * 1_048_576;
     private readonly SemaphoreSlim _sendGate = new(1, 1);
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> _tunnelRequests = new(StringComparer.Ordinal);
     private static readonly JsonSerializerOptions _leaseJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -236,7 +238,21 @@ public class BrokerRegistration : IDisposable
         {
             return;
         }
-        if (frame is not { Type: BrokerTunnelRequest.FrameType } || string.IsNullOrEmpty(frame.Id))
+        if (frame is null || string.IsNullOrEmpty(frame.Id))
+            return;
+
+        if (frame.Type == BrokerTunnelRequest.CancelFrameType)
+        {
+            if (_tunnelRequests.TryGetValue(frame.Id, out var cancelled))
+                cancelled.Cancel();
+            return;
+        }
+        if (frame.Type != BrokerTunnelRequest.FrameType)
+            return;
+
+        // Each request can be cancelled by the broker on its own, and with the registration.
+        using var requestCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        if (!_tunnelRequests.TryAdd(frame.Id, requestCts))
             return;
 
         HttpResponse response;
@@ -247,11 +263,20 @@ public class BrokerRegistration : IDisposable
                 ? HttpResponse.Error("The agent is not serving requests yet.", 503)
                 : await handler(
                     AgentHttpServer.CreateRequest(frame.Method, frame.Target, frame.Headers ?? [], frame.Body),
-                    ct);
+                    requestCts.Token);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException) when (requestCts.IsCancellationRequested)
+        {
+            // Nobody is waiting for the answer any more.
+            return;
+        }
+        catch (Exception ex)
         {
             response = HttpResponse.Error(ex.Message, 500);
+        }
+        finally
+        {
+            _tunnelRequests.TryRemove(frame.Id, out _);
         }
 
         var body = response.BodyBytes ?? (response.Body is null ? null : Encoding.UTF8.GetBytes(response.Body));

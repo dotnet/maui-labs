@@ -126,6 +126,97 @@ public sealed class BrokerTunnelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Tunnel_CancelsAgentRequest_WhenClientDisconnects()
+    {
+        using var agent = await ConnectAgentAsync(origin: null, tunnel: true);
+        var port = await RegisterAsync(agent);
+
+        using (var client = new TcpClient())
+        {
+            await client.ConnectAsync(IPAddress.Loopback, port);
+            await client.GetStream().WriteAsync(Encoding.ASCII.GetBytes(
+                $"POST /api/v1/ui/tap HTTP/1.1\r\nHost: localhost:{port}\r\nContent-Length: 0\r\n\r\n"));
+
+            using var request = await ReceiveFrameAsync(agent);
+            Assert.Equal("http-request", request.RootElement.GetProperty("type").GetString());
+            var requestId = request.RootElement.GetProperty("id").GetString();
+
+            client.Close();
+
+            using var cancel = await ReceiveFrameAsync(agent);
+            Assert.Equal("http-cancel", cancel.RootElement.GetProperty("type").GetString());
+            Assert.Equal(requestId, cancel.RootElement.GetProperty("id").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task Tunnel_CancelsAgentRequest_AndAnswers504_WhenAgentIsTooSlow()
+    {
+        var brokerPort = FindFreePort();
+        using var cts = new CancellationTokenSource();
+        using var broker = new BrokerServer(brokerPort, idleTimeout: TimeSpan.FromMinutes(5))
+        {
+            PublishesState = false,
+            TunnelRequestTimeout = TimeSpan.FromMilliseconds(500)
+        };
+        var brokerTask = broker.RunAsync(cts.Token);
+        for (var attempt = 0; attempt < 100 && !broker.IsRunning; attempt++)
+            await Task.Delay(50);
+
+        try
+        {
+            using var agent = await ConnectAgentAsync(origin: null, tunnel: true, brokerPort);
+            var port = await RegisterAsync(agent);
+
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            var pending = http.GetAsync($"http://127.0.0.1:{port}/api/v1/agent/status");
+            using var request = await ReceiveFrameAsync(agent);
+            using var cancel = await ReceiveFrameAsync(agent);
+            using var response = await pending;
+
+            Assert.Equal("http-cancel", cancel.RootElement.GetProperty("type").GetString());
+            Assert.Equal(request.RootElement.GetProperty("id").GetString(), cancel.RootElement.GetProperty("id").GetString());
+            Assert.Equal(HttpStatusCode.GatewayTimeout, response.StatusCode);
+        }
+        finally
+        {
+            cts.Cancel();
+            try { await brokerTask.WaitAsync(TimeSpan.FromSeconds(10)); } catch (OperationCanceledException) { }
+        }
+    }
+
+    [Fact]
+    public async Task TunneledAgent_CancelsRequest_WhenBrokerSendsCancelFrame()
+    {
+        using var registration = new BrokerRegistration(
+            "TunnelApp.csproj", "net10.0", "Browser", "TunnelApp", sessionId: null, brokerPort: _brokerPort)
+        {
+            UseTunnel = true
+        };
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        registration.TunnelRequestHandler = async (_, ct) =>
+        {
+            using var registrationOnCancel = ct.Register(() => cancelled.TrySetResult());
+            started.TrySetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            return HttpResponse.Error("unreachable", 500);
+        };
+        var assignedPort = await registration.TryRegisterAsync(TimeSpan.FromSeconds(5));
+        Assert.NotNull(assignedPort);
+
+        using (var client = new TcpClient())
+        {
+            await client.ConnectAsync(IPAddress.Loopback, assignedPort.Value);
+            await client.GetStream().WriteAsync(Encoding.ASCII.GetBytes(
+                $"GET /api/v1/agent/status HTTP/1.1\r\nHost: localhost:{assignedPort}\r\n\r\n"));
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
     public async Task BrowserOrigin_MayOnlyRegisterTunneledAgents()
     {
         using var direct = await ConnectAgentAsync(origin: "http://localhost:5123", tunnel: false);
@@ -173,12 +264,12 @@ public sealed class BrokerTunnelTests : IAsyncLifetime
         Assert.False(listening, $"The tunnel kept listening on port {port} after its agent left.");
     }
 
-    private async Task<ClientWebSocket> ConnectAgentAsync(string? origin, bool tunnel)
+    private async Task<ClientWebSocket> ConnectAgentAsync(string? origin, bool tunnel, int? brokerPort = null)
     {
         var socket = new ClientWebSocket();
         if (origin is not null)
             socket.Options.SetRequestHeader("Origin", origin);
-        await socket.ConnectAsync(new Uri($"ws://localhost:{_brokerPort}/ws/agent"), CancellationToken.None);
+        await socket.ConnectAsync(new Uri($"ws://localhost:{brokerPort ?? _brokerPort}/ws/agent"), CancellationToken.None);
 
         var registration = JsonSerializer.Serialize(new Dictionary<string, object?>
         {
@@ -203,21 +294,26 @@ public sealed class BrokerTunnelTests : IAsyncLifetime
         return response.RootElement.GetProperty("port").GetInt32();
     }
 
-    private static async Task AnswerOneRequestAsync(
-        ClientWebSocket agent,
-        Func<JsonElement, Dictionary<string, object?>> answer)
+    private static async Task<JsonDocument> ReceiveFrameAsync(ClientWebSocket agent)
     {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         using var message = new MemoryStream();
         var buffer = new byte[8192];
         WebSocketReceiveResult result;
         do
         {
-            result = await agent.ReceiveAsync(buffer, CancellationToken.None);
+            result = await agent.ReceiveAsync(buffer, timeout.Token);
             message.Write(buffer, 0, result.Count);
         }
         while (!result.EndOfMessage);
+        return JsonDocument.Parse(message.ToArray());
+    }
 
-        using var request = JsonDocument.Parse(message.ToArray());
+    private static async Task AnswerOneRequestAsync(
+        ClientWebSocket agent,
+        Func<JsonElement, Dictionary<string, object?>> answer)
+    {
+        using var request = await ReceiveFrameAsync(agent);
         Assert.Equal("http-request", request.RootElement.GetProperty("type").GetString());
         var reply = answer(request.RootElement);
         reply["type"] = "http-response";

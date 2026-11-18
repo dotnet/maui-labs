@@ -12,9 +12,10 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 /// </summary>
 /// <remarks>
 /// Set <c>DEVFLOW_TEST_BROWSER</c> to a Chrome, Edge or Chromium executable to choose the browser.
-/// The sample uses the community Platform.Maui.Web backend; set <c>DEVFLOW_TEST_WEB_BACKEND_PROJECT</c>
-/// to a mauiplatforms checkout's <c>src/Platform.Maui.Web/Platform.Maui.Web.csproj</c> to build
-/// against it instead of the nuget.org package.
+/// The sample uses the community Platform.Maui.Web backend, which the repo's feeds do not carry:
+/// set <c>DEVFLOW_TEST_WEB_BACKEND_SOURCE</c> to a package source that has it (such as nuget.org),
+/// or <c>DEVFLOW_TEST_WEB_BACKEND_PROJECT</c> to a mauiplatforms checkout's
+/// <c>src/Platform.Maui.Web/Platform.Maui.Web.csproj</c> to build against it instead of the package.
 /// </remarks>
 public sealed partial class WebFixture : AppFixtureBase
 {
@@ -47,7 +48,9 @@ public sealed partial class WebFixture : AppFixtureBase
         await WithBuildLockAsync(() => BuildSampleAsync(
             projectPath,
             TargetFramework,
-            CreateBuildArguments(Environment.GetEnvironmentVariable("DEVFLOW_TEST_WEB_BACKEND_PROJECT"))));
+            CreateBuildArguments(
+                Environment.GetEnvironmentVariable("DEVFLOW_TEST_WEB_BACKEND_PROJECT"),
+                Environment.GetEnvironmentVariable("DEVFLOW_TEST_WEB_BACKEND_SOURCE"))));
 
         var appUrl = await StartServerAsync(projectPath);
         _browserProfile = Directory.CreateTempSubdirectory("devflow-web-").FullName;
@@ -101,9 +104,9 @@ public sealed partial class WebFixture : AppFixtureBase
         }
     }
 
-    internal static string CreateBuildArguments(string? backendProject)
+    internal static string CreateBuildArguments(string? backendProject, string? backendSource = null)
         => string.IsNullOrWhiteSpace(backendProject)
-            ? ""
+            ? (string.IsNullOrWhiteSpace(backendSource) ? "" : $"\"-p:RestoreAdditionalProjectSources={backendSource}\"")
             // The backend checkout defaults to its own (newer) .NET; build it for .NET 10 with the
             // matching MAUI. These must be global properties: restore ignores per-reference ones.
             : $"\"-p:PlatformMauiWebProject={Path.GetFullPath(backendProject)}\" -p:BaseTargetFramework=net10.0 -p:MauiVersion=10.0.120";

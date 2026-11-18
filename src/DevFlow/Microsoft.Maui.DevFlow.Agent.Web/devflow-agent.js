@@ -102,8 +102,9 @@ async function cloneElement(element, context) {
             // A tainted canvas cannot be read; leave it blank.
         }
     } else {
+        // IDs are kept: the clone only lives inside the isolated capture image, and SVG <use>,
+        // gradients, masks and clip paths resolve against them.
         clone = element.cloneNode(false);
-        clone.removeAttribute("id");
     }
 
     clone.setAttribute("style", inlineStyle(element, style, context));
@@ -120,7 +121,8 @@ async function cloneElement(element, context) {
     copyPseudoElement(element, clone, "::after", context);
 
     const scrolled = element.scrollLeft !== 0 || element.scrollTop !== 0;
-    if (!(element instanceof HTMLCanvasElement)) {
+    // A textarea's live value was copied by copyFormState; its children hold the initial text.
+    if (!(element instanceof HTMLCanvasElement) && !(element instanceof HTMLTextAreaElement)) {
         for (const child of element.childNodes) {
             if (child.nodeType === Node.TEXT_NODE) {
                 clone.appendChild(document.createTextNode(child.textContent));
@@ -196,10 +198,11 @@ async function copyFormState(element, clone) {
         }
     } else if (element instanceof HTMLTextAreaElement) {
         clone.textContent = element.value;
-    } else if (element instanceof HTMLSelectElement) {
-        clone.setAttribute("data-devflow-selected", String(element.selectedIndex));
-    } else if (element instanceof HTMLOptionElement && element.selected) {
-        clone.setAttribute("selected", "");
+    } else if (element instanceof HTMLOptionElement) {
+        if (element.selected)
+            clone.setAttribute("selected", "");
+        else
+            clone.removeAttribute("selected");
     }
 }
 

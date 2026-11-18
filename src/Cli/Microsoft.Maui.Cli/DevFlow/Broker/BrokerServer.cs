@@ -51,6 +51,9 @@ public class BrokerServer : IDisposable
     /// </summary>
     internal bool PublishesState { get; init; } = true;
 
+    /// <summary>How long a tunneled request waits for its agent; null keeps the tunnel's default.</summary>
+    internal TimeSpan? TunnelRequestTimeout { get; init; }
+
     public BrokerServer(int port = DefaultPort, TimeSpan? idleTimeout = null, Action<string>? log = null,
         string? workspaceStartPath = null)
     {
@@ -379,7 +382,7 @@ public class BrokerServer : IDisposable
                 {
                     try
                     {
-                        connection.Tunnel = AgentTunnel.Start(assignedPort, ws, Log);
+                        connection.Tunnel = AgentTunnel.Start(assignedPort, ws, Log, TunnelRequestTimeout);
                     }
                     catch (SocketException ex)
                     {

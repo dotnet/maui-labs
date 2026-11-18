@@ -265,7 +265,9 @@ browsers offer no screenshot API without a permission prompt; text in fonts load
 the `FontFace` API renders in a fallback font, and cross-origin images without CORS render
 blank. WebSocket streams (log and sensor streaming) are not relayed through the tunnel, and
 a tunneled agent is its own mutation lease authority, as when no broker is running. See
-`samples/DevFlow.Sample.Web`.
+`samples/DevFlow.Sample.Web`; the repo's package feeds do not carry Platform.Maui.Web, so
+restore the sample with `-p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json`
+or build it against a mauiplatforms checkout (see the project file).
 
 ### 2b. Or, in a plain .NET app (no MAUI)
 
@@ -880,11 +882,13 @@ The web platform drives the smaller `samples/DevFlow.Sample.Web` in a headless C
 browser (Chrome, Edge or Chromium; set `DEVFLOW_TEST_BROWSER` to choose one), so only its own
 tests apply; run them with `--filter Category=Web`. The fixture uses the running broker, or
 hosts one in-process when none is running. The sample uses the community Platform.Maui.Web
-backend from nuget.org; set `DEVFLOW_TEST_WEB_BACKEND_PROJECT` to a mauiplatforms checkout's
+backend, which the repo's feeds do not carry: set `DEVFLOW_TEST_WEB_BACKEND_SOURCE` to a
+package source that has it, or `DEVFLOW_TEST_WEB_BACKEND_PROJECT` to a mauiplatforms checkout's
 `src/Platform.Maui.Web/Platform.Maui.Web.csproj` to build against that instead:
 
 ```bash
-DEVFLOW_TEST_PLATFORM=web dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter Category=Web
+DEVFLOW_TEST_PLATFORM=web DEVFLOW_TEST_WEB_BACKEND_SOURCE=https://api.nuget.org/v3/index.json \
+  dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter Category=Web
 ```
 
 For local reliability, prefer running one platform suite at a time from a given repo worktree. Android fixture selection can be pinned with `DEVFLOW_TEST_ANDROID_AVD` and `DEVFLOW_TEST_ANDROID_SERIAL` when you want the harness to use a known emulator instance.
