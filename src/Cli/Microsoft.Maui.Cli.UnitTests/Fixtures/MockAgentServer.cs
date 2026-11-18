@@ -118,6 +118,7 @@ public sealed class MockAgentServer : IAsyncDisposable
     public string? AgentStatusResponse { get; set; }
     public string? VisualTreeResponse { get; set; }
     public byte[]? ScreenshotResponse { get; set; }
+    public Dictionary<string, string> ScreenshotHeaders { get; } = [];
     public Func<Task>? BeforeHitTestResponseAsync { get; set; }
     public bool RejectHitTestCandidateTaps { get; set; }
     public bool RejectElementScrolls { get; set; }
@@ -455,7 +456,7 @@ public sealed class MockAgentServer : IAsyncDisposable
                 await BeforeHitTestResponseAsync();
             return Results.Content(response, "application/json");
         });
-        app.MapGet("/api/v1/ui/screenshot", () =>
+        app.MapGet("/api/v1/ui/screenshot", (HttpContext context) =>
         {
             if (_failScreenshotsAfterFirst
                 && Interlocked.Increment(ref _screenshotCount) > 1)
@@ -470,6 +471,8 @@ public sealed class MockAgentServer : IAsyncDisposable
                     statusCode: StatusCodes.Status409Conflict);
             }
 
+            foreach (var header in ScreenshotHeaders)
+                context.Response.Headers[header.Key] = header.Value;
             return Results.File(ScreenshotResponse ?? MockAgentResponses.ScreenshotPng, "image/png");
         });
 

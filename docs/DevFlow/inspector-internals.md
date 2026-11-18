@@ -75,6 +75,59 @@ Host bridges also supply their color palette, font metadata, contrast mode, and 
 preference. VS Code placement is configurable with
 `mauiDevflow.openLocation` (`auto`, `beside`, or `active`).
 
+## Capability-driven command policy
+
+The browser, VS Code, and Copilot Canvas hosts share one pure command policy from
+`inspector-command-policy.js`. It combines the agent capability document with the Inspector's
+normalized Preview/control access, selection, workflow, and Data state to derive each toolbar
+command's `visible`, `enabled`, `availability`, and disabled reason.
+
+- Explicitly unsupported commands are hidden. Missing capability metadata from legacy agents stays
+  unknown and preserves the existing usable toolbar. Layout diagnostics is opt-in, so a known
+  capability document that omits `ui.layoutDiagnostics` hides that command and tab.
+- Temporarily unavailable, read-only, and disconnected commands remain visible and focusable with
+  distinct `aria-disabled`, tooltip, and screen-reader reasons.
+- Starting a recording requires a current writable Preview; stopping or discarding an active
+  recording requires control but remains available while the Preview capture is delayed.
+- The same button element moves between the inline toolbar and **More**, so state never diverges.
+  Hidden commands do not consume overflow space, empty groups collapse, and focus moves to the next
+  visible command when a capability refresh removes the focused action.
+- Capability presentation is not enforcement. The Inspector server and agent mutation lease remain
+  authoritative for every operation.
+
+## Viewport navigation
+
+The Preview has one Inspector-owned viewport transform containing a CSS scale and translation.
+Fit remains the default and never upscales past 100%. The preset control exposes Fit, 50%, 100%,
+and 200%; the adjacent buttons step through additional useful scales between 25% and 400%.
+The Fit control and `0` shortcut recenter the app.
+
+Zoom and pan change only browser presentation. They do not bypass the shared screenshot-resolution
+scheduler, acquire the mutation lease, add recording steps, or define another frame identity.
+The shared `inspector-frame.js` conversions map the transformed Preview back to app-logical
+coordinates so taps, hit testing, hover, selection, and app gestures target the committed frame.
+
+| Input | Owner |
+|---|---|
+| Click or ordinary drag | App tap or gesture |
+| Ordinary wheel | App scroll |
+| Ctrl/Cmd+wheel, including trackpad pinch represented as modified wheel | Inspector cursor-centered zoom |
+| Space+drag or middle-button drag | Inspector pan |
+| Direct touch gestures and pinch pointers | App interaction |
+
+The viewport region is keyboard focusable. Unmodified `+`/`-` change zoom, `0` returns to Fit,
+`1` selects 100%, and the arrow keys pan enlarged content (Shift uses a larger step). Browser and
+host Ctrl/Cmd keyboard shortcuts remain untouched. Space only arms pan while the Preview owns
+focus and no editable control owns the key. Pointer cancel, lost capture, window blur, and document
+hiding end Inspector pan without sending an app gesture. A dedicated polite announcement reports
+zoom changes without overwriting the Inspector's shared status line.
+
+Custom zoom preserves its visible app point across frame commits and host/pane resize. The wrapper
+does not maintain a native scroll offset; reveal and keyboard operations update the tracked
+transform instead. Translations are clamped so some or all of the app remains reachable, and Fit
+always recovers a centered view. Fit recomputes after app resize or rotation; custom zoom is
+preserved and clamped to the new logical dimensions.
+
 ## Coordinated frames and coordinates
 
 Each Inspector refresh creates one immutable frame containing the visual tree, exact screenshot
@@ -91,7 +144,10 @@ canonical descriptor under `frame`; the existing flat fields remain compatibilit
 | `logicalWidth`, `logicalHeight` | Captured app-root size in device-independent units. |
 | `pixelWidth`, `pixelHeight` | PNG dimensions from its IHDR chunk. |
 | `rootOffsetX`, `rootOffsetY` | Captured root origin in window-logical coordinates. |
-| `captureScale` | Nominal PNG pixels per logical unit; exact conversion uses the per-axis dimension ratios. |
+| `captureScale` | Nominal PNG pixels per logical unit. Exact conversions use the per-axis dimension ratios. |
+| `nativeScale` | Backend native pixels per logical unit before negotiated downsampling, when known. |
+| `requestedCaptureScale` | Stable scale bucket requested for the frame; part of cache reuse, not a new identity. |
+| `resolutionClamped` | Whether backend/native limits or pixel budgets bounded the request. |
 | `createdAt` | UTC time when the complete tree and screenshot frame was created. |
 
 `frameId` remains the only cache lookup key. `frameRevision` provides ordering, and an internal
@@ -131,6 +187,50 @@ Inspector actions send `appLogical` coordinates plus optional correlation contai
 `source`, `streamId`, `frameId`, `frameRevision`, and `coordinateSpace`. Older callers may omit
 correlation and retain window-logical behavior. The Inspector proxy validates and converts
 correlated coordinates; direct `/api/v1` agent coordinate calls must already use `windowLogical`.
+
+Fit, presets, cursor zoom, and pan are transform values, not separate coordinate contracts. The
+viewport controller supplies its scale and translation to the same helpers without changing frame
+identity or action payloads.
+
+Resolution-only replacement frames remain coordinate-equivalent when the recursive element
+geometry, logical viewport, root offset, and window identity are unchanged; PNG pixel dimensions
+do not create a second coordinate contract.
+For pointer sessions, frame and action identity remain correlated through the Inspector proxy.
+The Inspector converts validated `appLogical` samples once to `windowLogical`, rewrites the
+correlation to declare `windowLogical`, and forwards the samples with the window, capture-epoch,
+and registry-generation guards. The agent publishes lifecycle geometry in that same coordinate
+space.
+
+### Continuous pointer sessions
+
+Interact-mode pointer input uses the `ui.pointerStream` capability when the connected backend can
+keep a native press active across requests. The browser sends the existing Inspector frame
+correlation plus `appLogical` (captured-root-local) samples. `InspectorServer` validates that
+cached frame and converts the samples once to agent `windowLogical` coordinates by adding the
+frame's root offset. It does not create another frame ID or screenshot cache.
+
+The browser keeps at most one move request in flight. DOM coalesced events are retained in a
+bounded queue, sent in batches of at most the agent-advertised limit, and the final `end` waits for
+that queue to drain. `pointercancel`, lost capture, a hidden/page-unloaded Inspector, an
+incompatible frame mapping (window, root offset, or logical size), lease loss, idle timeout, and
+agent shutdown all cancel the native pointer. Compatible refreshes may update the preview without
+interrupting the press. A response lost
+after a successful start is treated as ambiguous and cancelled; the path is never replayed as a
+legacy gesture because that could apply the interaction twice.
+
+Backend support is intentionally conservative:
+
+- MAUI Android and the plain .NET Android agent dispatch real `MotionEvent` down/move/up/cancel
+  sequences through the window.
+- MAUI iOS and Mac Catalyst support opt-in synthetic `UITouch` sessions for accepted raw-touch or
+  recognizer-backed views. UIKit controls, scroll views, and targets whose arbitration cannot be
+  reproduced safely are rejected before the press.
+- Windows/WinUI, WPF, GTK, macOS AppKit, and the plain .NET UIKit/AppKit agents report
+  `supported: false` with a reason.
+
+When the capability is absent/false, or start rejects the request before committing a press
+(`400`, `404`, `422`, or `501`), the Inspector keeps the existing first-to-last named swipe
+fallback. Transport failures and post-start failures are cancelled and never replayed.
 
 Elements the Agent reports as displayed can still lie wholly outside the frame (a closed Shell
 flyout is realized left of the window). The renderer marks those overlays `data-offscreen="true"`

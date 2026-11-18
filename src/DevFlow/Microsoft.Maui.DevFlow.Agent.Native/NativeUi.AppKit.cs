@@ -29,6 +29,25 @@ internal static partial class NativeUi
     public static double DisplayDensity
         => NSScreen.MainScreen?.BackingScaleFactor ?? 1.0;
 
+    public static double GetCaptureDensity(object? viewObject)
+        => viewObject switch
+        {
+            NSWindow window => window.BackingScaleFactor,
+            NSView view => view.Window?.BackingScaleFactor ?? DisplayDensity,
+            _ => DisplayDensity
+        };
+
+    public static double ScreenCaptureDensity
+        => ResolveScreenCaptureWindow()?.BackingScaleFactor ?? DisplayDensity;
+
+    public static (double Width, double Height) GetCaptureLogicalSize(object? viewObject)
+        => viewObject switch
+        {
+            NSWindow window => (window.Frame.Width, window.Frame.Height),
+            NSView view => (view.Bounds.Width, view.Bounds.Height),
+            _ => (0, 0)
+        };
+
     public static IReadOnlyList<object> GetRoots()
     {
         var roots = new List<object>();
@@ -333,15 +352,10 @@ internal static partial class NativeUi
 
     public static async Task<byte[]?> CaptureScreen()
     {
-        var window = GetWindows().FirstOrDefault(candidate =>
-                candidate.IsVisible && candidate.WindowNumber > 0)
-            ?? NSApplication.SharedApplication.KeyWindow;
+        var window = ResolveScreenCaptureWindow();
 
         if (window != null)
         {
-            if (window is { IsSheet: true, SheetParent: { } parent })
-                window = parent;
-
             var sheet = window.AttachedSheet ?? window.Sheets.LastOrDefault();
             var capturedWindow = window;
             var image = await AppKitScreenshotCapture.CaptureAsync(
@@ -363,6 +377,16 @@ internal static partial class NativeUi
         }
 
         return GetRoots().FirstOrDefault() is { } root ? CaptureView(root) : null;
+    }
+
+    private static NSWindow? ResolveScreenCaptureWindow()
+    {
+        var window = GetWindows().FirstOrDefault(candidate =>
+                candidate.IsVisible && candidate.WindowNumber > 0)
+            ?? NSApplication.SharedApplication.KeyWindow;
+        return window is { IsSheet: true, SheetParent: { } parent }
+            ? parent
+            : window;
     }
 
     private static byte[]? CaptureViewViaCacheDisplay(NSView view)

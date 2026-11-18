@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
@@ -46,6 +47,7 @@ public sealed class InspectorServer : IDisposable
     // 0 = idle, 1 = a flow replay is driving the app. Guards against interleaving a replay with
     // user mutations / recording (a replay can be triggered from any embedding host or tab).
     private int _replayInProgress;
+    private int _stopping;
     private readonly SemaphoreSlim _flowAdmissionGate = new(1, 1);
     private readonly SemaphoreSlim _frameCreationGate = new(1, 1);
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> PersistTransactionGates =
@@ -60,10 +62,11 @@ public sealed class InspectorServer : IDisposable
     // Lifetime cancellation source; cancelled in Dispose() so broker-mode WS proxies
     // (which never call Start() to create _cts) still see shutdown.
     private readonly CancellationTokenSource _lifetimeCts = new();
-    private byte[]? _cachedScreenshot;
+    private InspectorScreenshot? _cachedScreenshot;
     private string? _cachedScreenshotElementId;
     private long? _cachedScreenshotCaptureEpoch;
     private bool _cachedScreenshotFullscreen;
+    private ScreenshotResolutionKey _cachedScreenshotResolution;
     private DateTime _screenshotCacheTime;
     private InspectorFrame? _latestFrame;
     private long _cacheGeneration;
@@ -76,14 +79,26 @@ public sealed class InspectorServer : IDisposable
     // for the coordinates, offsets and epochs a browser tab acted against — it supersedes the
     // standalone screenshot-frame + root-offset fields diagnostics originally hung off.
     private long? _captureEpoch;
-    private Task<bool?>? _requiresCaptureEpochTask;
+    private Task<JsonElement?>? _capabilitiesTask;
     private readonly TimeSpan _frameReuseDuration;
+    private readonly object _pointerProxyGate = new();
+    private readonly Dictionary<string, PointerProxySession> _pointerProxySessions =
+        new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, long> _localInspectorActionIds =
+        new(StringComparer.Ordinal);
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan DefaultFrameReuseDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan FrameCacheDuration = TimeSpan.FromSeconds(10);
     private const int MaxCachedFrames = 32;
+    private const int MaxLocalInspectorActionIds = 256;
+    private const int LocalInspectorActionLifetimeMs = 30_000;
+    private const string RepeatedFrameChangeError =
+        "Inspector state changed repeatedly while capturing a frame.";
     private const int MaxScreenshotBytes = 64 * 1024 * 1024;
     private const long MaxCachedFrameBytes = 64L * 1024 * 1024;
+    private const long InspectorScreenshotPixelBudget = 8_388_608;
+    private const int InspectorScreenshotMaxDimension = 16_384;
+    private static readonly double[] ScreenshotScaleBuckets = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
     private static readonly TimeSpan LayoutDiagnosticsCacheDuration =
         TimeSpan.FromMilliseconds(250);
     // How long a diagnostics-bearing state request keeps pushed deltas alive. Comfortably longer
@@ -473,44 +488,31 @@ public sealed class InspectorServer : IDisposable
 
     private async Task<bool> RequiresCaptureEpochAsync()
     {
-        Task<bool?> detectionTask;
-        lock (_cacheLock)
-            detectionTask = _requiresCaptureEpochTask ??= DetectCaptureEpochRequirementAsync();
-
-        try
-        {
-            var detected = await detectionTask;
-            if (detected.HasValue)
-                return detected.Value;
-        }
-        catch
-        {
-        }
-
-        // A transport failure or non-capabilities JSON response must not permanently downgrade
-        // this connection. Share one in-flight request, then let the next interaction retry.
-        lock (_cacheLock)
-        {
-            if (ReferenceEquals(_requiresCaptureEpochTask, detectionTask))
-                _requiresCaptureEpochTask = null;
-
-            return _captureEpoch.HasValue;
-        }
+        var detected = await DetectCapabilityFeatureAsync(
+            "ui.actions",
+            "stale-capture-rejection");
+        return detected ?? _captureEpoch.HasValue;
     }
 
-    private async Task<bool?> DetectCaptureEpochRequirementAsync()
+    private async Task<bool> SupportsScreenshotResolutionAsync()
     {
-        var response = await _client.GetCapabilitiesAsync();
-        if (response.ValueKind != JsonValueKind.Object
-            || !response.TryGetProperty("capabilities", out var capabilities)
-            || capabilities.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
+        var detected = await DetectCapabilityFeatureAsync(
+            "ui.screenshot",
+            "resolution-hints");
+        return detected ?? false;
+    }
 
-        if (!capabilities.TryGetProperty("ui.actions", out var uiActions)
-            || uiActions.ValueKind != JsonValueKind.Object
-            || !uiActions.TryGetProperty("features", out var features))
+    private async Task<bool?> DetectCapabilityFeatureAsync(
+        string capabilityName,
+        string featureName)
+    {
+        var capabilities = await GetAgentCapabilitiesAsync();
+        if (!capabilities.HasValue)
+            return null;
+
+        if (!capabilities.Value.TryGetProperty(capabilityName, out var capability)
+            || capability.ValueKind != JsonValueKind.Object
+            || !capability.TryGetProperty("features", out var features))
         {
             return false;
         }
@@ -520,7 +522,52 @@ public sealed class InspectorServer : IDisposable
 
         return features.EnumerateArray().Any(feature =>
             feature.ValueKind == JsonValueKind.String
-            && feature.GetString() == "stale-capture-rejection");
+            && feature.GetString() == featureName);
+    }
+
+    private async Task<JsonElement?> GetAgentCapabilitiesAsync()
+    {
+        Task<JsonElement?> capabilitiesTask;
+        lock (_cacheLock)
+            capabilitiesTask = _capabilitiesTask ??= FetchAgentCapabilitiesAsync();
+
+        try
+        {
+            var capabilities = await capabilitiesTask;
+            if (capabilities.HasValue)
+                return capabilities;
+        }
+        catch
+        {
+        }
+
+        // A transport failure or non-capabilities JSON response must not permanently downgrade
+        // this connection. Share one in-flight request, then let the next interaction retry.
+        lock (_cacheLock)
+        {
+            if (ReferenceEquals(_capabilitiesTask, capabilitiesTask))
+                _capabilitiesTask = null;
+        }
+        return null;
+    }
+
+    private async Task<JsonElement?> FetchAgentCapabilitiesAsync()
+    {
+        var response = await _client.GetCapabilitiesAsync();
+        if (response.ValueKind != JsonValueKind.Object
+            || !response.TryGetProperty("capabilities", out var capabilities)
+            || capabilities.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return capabilities.Clone();
+    }
+
+    private void CacheAgentCapabilities(JsonElement capabilities)
+    {
+        lock (_cacheLock)
+            _capabilitiesTask = Task.FromResult<JsonElement?>(capabilities.Clone());
     }
 
     /// <summary>
@@ -797,6 +844,7 @@ public sealed class InspectorServer : IDisposable
         using var assembled = new MemoryStream();
         var assembledMessageType =
             System.Net.WebSockets.WebSocketMessageType.Text;
+        var relayState = new UiEventRelayState();
         using var sendGate = new SemaphoreSlim(1, 1);
         await using var diagnosticsDebouncer = new DiagnosticsDeltaDebouncer(
             CaptureLayoutDiagnosticsDeltaAsync,
@@ -833,6 +881,11 @@ public sealed class InspectorServer : IDisposable
                     continue;
                 var payload = assembled.ToArray();
                 assembled.SetLength(0);
+                if (assembledMessageType
+                    == System.Net.WebSockets.WebSocketMessageType.Text)
+                {
+                    payload = ProcessUiEventPayload(payload, relayState);
+                }
                 await SendWebSocketMessageAsync(
                     destination,
                     sendGate,
@@ -886,6 +939,8 @@ public sealed class InspectorServer : IDisposable
 
     public async Task StopAsync()
     {
+        Interlocked.Exchange(ref _stopping, 1);
+        await CancelProxyPointerSessionsAsync("inspector-stopped");
         _cts?.Cancel();
         _listener?.Stop();
         if (_listenTask != null)
@@ -902,7 +957,9 @@ public sealed class InspectorServer : IDisposable
         // direct CLI shutdown. A guard is cheaper than try/catching every
         // member.
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        Interlocked.Exchange(ref _stopping, 1);
 
+        try { CancelProxyPointerSessionsAsync("inspector-disposed").Wait(TimeSpan.FromSeconds(1)); } catch { }
         try { _lifetimeCts.Cancel(); } catch { }
         try { _cts?.Cancel(); } catch { }
         try { _listener?.Stop(); } catch { }
@@ -996,6 +1053,22 @@ public sealed class InspectorServer : IDisposable
                 ? hl
                 : "DevFlow Web Inspector";
             using var leaseScope = _client.UseMutationLease(leaseId, holderKind, holderLabel);
+            var inspectorAction = CreateInspectorActionContext(request);
+            using var actionScope = inspectorAction is null
+                ? null
+                : _client.UseActionContext(
+                    source: "inspector",
+                    actionId: inspectorAction.ActionId,
+                    streamId: inspectorAction.StreamId,
+                    frameId: inspectorAction.FrameId,
+                    frameRevision: inspectorAction.FrameRevision,
+                    coordinateSpace: inspectorAction.CoordinateSpace,
+                    x: inspectorAction.X,
+                    y: inspectorAction.Y,
+                    toX: inspectorAction.ToX,
+                    toY: inspectorAction.ToY,
+                    deltaX: inspectorAction.DeltaX,
+                    deltaY: inspectorAction.DeltaY);
 
             // While a replay is driving the app, reject concurrent user mutations + record steps so
             // the replay isn't interleaved (a replay may be triggered from any embedding host/tab).
@@ -1043,16 +1116,23 @@ public sealed class InspectorServer : IDisposable
                 {
                     "/" or "" => await HandleRootAsync(),
                     "/api/state" => await HandleStateAsync(request),
+                    "/api/capabilities" => await HandleCapabilitiesAsync(),
                     "/api/eventSupport" => await HandleEventSupportAsync(),
                     "/screenshot.png" => await HandleScreenshotAsync(request.Query.GetValueOrDefault("frame")),
                     "/devflow.js" => HandleEmbeddedFile("devflow.js", "application/javascript"),
                     "/inspector-frame.js" => HandleEmbeddedFile("inspector-frame.js", "application/javascript"),
                     "/inspector-api.js" => HandleEmbeddedFile("inspector-api.js", "application/javascript"),
+                    "/inspector-command-policy.js" => HandleEmbeddedFile("inspector-command-policy.js", "application/javascript"),
                     "/inspector-dialog.js" => HandleEmbeddedFile("inspector-dialog.js", "application/javascript"),
+                    "/inspector-actions.js" => HandleEmbeddedFile("inspector-actions.js", "application/javascript"),
                     "/inspector-data-context.js" => HandleEmbeddedFile("inspector-data-context.js", "application/javascript"),
+                    "/inspector-presentation.js" => HandleEmbeddedFile("inspector-presentation.js", "application/javascript"),
                     "/inspector-properties.js" => HandleEmbeddedFile("inspector-properties.js", "application/javascript"),
                     "/inspector-layout.js" => HandleEmbeddedFile("inspector-layout.js", "application/javascript"),
+                    "/inspector-resolution.js" => HandleEmbeddedFile("inspector-resolution.js", "application/javascript"),
                     "/inspector-tree.js" => HandleEmbeddedFile("inspector-tree.js", "application/javascript"),
+                    "/inspector-viewport.js" => HandleEmbeddedFile("inspector-viewport.js", "application/javascript"),
+                    "/inspector-viewport-controller.js" => HandleEmbeddedFile("inspector-viewport-controller.js", "application/javascript"),
                     "/devflow.css" => HandleEmbeddedFile("devflow.css", "text/css"),
                     _ => (404, "text/plain", Encoding.UTF8.GetBytes("Not Found"))
                 },
@@ -1061,6 +1141,19 @@ public sealed class InspectorServer : IDisposable
                     "/api/tap" => await HandleProxyTapAsync(request.Body),
                     "/api/scroll" => await HandleProxyScrollAsync(request.Body),
                     "/api/gesture" => await HandleProxyGestureAsync(request.Body),
+                    "/api/pointer/start" => await HandleProxyPointerStartAsync(
+                        request.Body,
+                        leaseId,
+                        holderKind,
+                        holderLabel),
+                    "/api/pointer/move" => await HandleProxyPointerMoveAsync(request.Body),
+                    "/api/pointer/end" => await HandleProxyPointerEndAsync(request.Body),
+                    "/api/pointer/cancel" => await HandleProxyPointerCancelAsync(request.Body),
+                    "/api/pointer/cancel-and-release" => await HandleProxyPointerCancelAndReleaseAsync(
+                        request.Body,
+                        leaseId,
+                        holderKind,
+                        holderLabel),
                     "/api/back" => await HandleProxyBackAsync(),
                     "/api/fill" => await HandleProxyFillAsync(request.Body),
                     "/api/key" => await HandleProxyKeyAsync(request.Body),
@@ -1107,7 +1200,7 @@ public sealed class InspectorServer : IDisposable
         catch (Exception ex) when (IsAgentUnavailableException(ex))
         {
             return (503, "application/json", Encoding.UTF8.GetBytes(
-                "{\"ok\":false,\"error\":\"The DevFlow agent is unavailable.\"}"));
+                "{\"ok\":false,\"reason\":\"agent-unavailable\",\"error\":\"The DevFlow agent is unavailable.\"}"));
         }
         catch (Exception ex)
         {
@@ -1124,14 +1217,187 @@ public sealed class InspectorServer : IDisposable
         => exception is HttpRequestException or SocketException or IOException or TaskCanceledException
             || (exception.InnerException is not null && IsAgentUnavailableException(exception.InnerException));
 
+    private InspectorActionContext? CreateInspectorActionContext(HttpRequestInfo request)
+    {
+        if (request.Method != "POST" || !IsMutation(request.Path))
+            return null;
+
+        string? actionId = null;
+        string? streamId = null;
+        string? frameId = null;
+        long? frameRevision = null;
+        string? coordinateSpace = null;
+        double? x = null;
+        double? y = null;
+        double? toX = null;
+        double? toY = null;
+        double? deltaX = null;
+        double? deltaY = null;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(request.Body))
+            {
+                using var document = JsonDocument.Parse(request.Body);
+                var body = document.RootElement;
+                if (body.ValueKind == JsonValueKind.Object)
+                {
+                    if (body.TryGetProperty("correlation", out var correlation)
+                        && correlation.ValueKind == JsonValueKind.Object)
+                    {
+                        actionId = ReadSafeCorrelationToken(
+                            ReadOptionalString(correlation, "actionId"));
+                        streamId = ReadSafeCorrelationToken(
+                            ReadOptionalString(correlation, "streamId"));
+                        var requestedFrameId = ReadSafeCorrelationToken(
+                            ReadOptionalString(correlation, "frameId"));
+                        frameId = requestedFrameId;
+                        coordinateSpace = ReadOptionalString(
+                            correlation,
+                            "coordinateSpace") switch
+                        {
+                            "appLogical" => "appLogical",
+                            "windowLogical" => "windowLogical",
+                            "screenshotPixel" => "screenshotPixel",
+                            "inspectorCss" => "inspectorCss",
+                            "transformedViewport" => "transformedViewport",
+                            _ => null
+                        };
+                        if (correlation.TryGetProperty("frameRevision", out var revision)
+                            && revision.ValueKind == JsonValueKind.Number
+                            && revision.TryGetInt64(out var parsedRevision)
+                            && parsedRevision > 0)
+                        {
+                            frameRevision = parsedRevision;
+                        }
+                    }
+
+                    if (request.Path is "/api/tap" or "/api/scroll")
+                    {
+                        x = ReadBoundedInspectorCoordinate(body, "x");
+                        y = ReadBoundedInspectorCoordinate(body, "y");
+                    }
+
+                    if (request.Path == "/api/scroll")
+                    {
+                        deltaX = ReadBoundedInspectorCoordinate(body, "deltaX");
+                        deltaY = ReadBoundedInspectorCoordinate(body, "deltaY");
+                    }
+                    else if (request.Path == "/api/gesture"
+                        && body.TryGetProperty("points", out var points)
+                        && points.ValueKind == JsonValueKind.Array
+                        && points.GetArrayLength() >= 2)
+                    {
+                        var first = points[0];
+                        var last = points[points.GetArrayLength() - 1];
+                        x = ReadBoundedInspectorCoordinate(first, "x");
+                        y = ReadBoundedInspectorCoordinate(first, "y");
+                        toX = ReadBoundedInspectorCoordinate(last, "x");
+                        toY = ReadBoundedInspectorCoordinate(last, "y");
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        if (actionId is null)
+            return null;
+        RememberLocalInspectorAction(actionId);
+
+        return new InspectorActionContext(
+            actionId,
+            streamId,
+            frameId,
+            frameRevision,
+            coordinateSpace,
+            x,
+            y,
+            toX,
+            toY,
+            deltaX,
+            deltaY);
+    }
+
+    private static string? ReadSafeCorrelationToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        var trimmed = value.Trim();
+        if (trimmed.Length > 128)
+            return null;
+        foreach (var character in trimmed)
+        {
+            if (!char.IsAsciiLetterOrDigit(character)
+                && character is not '-' and not '_' and not '.' and not ':')
+            {
+                return null;
+            }
+        }
+        return trimmed;
+    }
+
+    private void RememberLocalInspectorAction(string actionId)
+    {
+        var now = Environment.TickCount64;
+        _localInspectorActionIds[actionId] = now + LocalInspectorActionLifetimeMs;
+        foreach (var pair in _localInspectorActionIds)
+        {
+            if (pair.Value <= now)
+                _localInspectorActionIds.TryRemove(pair.Key, out _);
+        }
+        if (_localInspectorActionIds.Count <= MaxLocalInspectorActionIds)
+            return;
+        foreach (var pair in _localInspectorActionIds
+            .OrderBy(static pair => pair.Value)
+            .Take(_localInspectorActionIds.Count - MaxLocalInspectorActionIds))
+        {
+            _localInspectorActionIds.TryRemove(pair.Key, out _);
+        }
+    }
+
+    private bool IsLocalInspectorAction(JsonObject? data)
+    {
+        if (data?["correlation"] is not JsonObject correlation
+            || correlation["actionId"] is not JsonValue actionValue
+            || !actionValue.TryGetValue<string>(out var actionId)
+            || string.IsNullOrWhiteSpace(actionId)
+            || !_localInspectorActionIds.TryGetValue(actionId, out var expiresAt))
+        {
+            return false;
+        }
+
+        if (expiresAt > Environment.TickCount64)
+            return true;
+        _localInspectorActionIds.TryRemove(actionId, out _);
+        return false;
+    }
+
+    private static double? ReadBoundedInspectorCoordinate(
+        JsonElement element,
+        string propertyName)
+        => element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(propertyName, out var property)
+            && property.ValueKind == JsonValueKind.Number
+            && property.TryGetDouble(out var value)
+            && double.IsFinite(value)
+            && Math.Abs(value) <= 100_000
+                ? value
+                : null;
+
     private async Task<(int, string, byte[])> HandleRootAsync()
     {
         // The shell is served even when the agent is unreachable: devflow.js renders the
         // "disconnected" overlay and keeps polling /api/state, which is the endpoint that reports
         // an unavailable agent.
-        var frame = await CreateFrameAsync();
+        var screenshotResolutionSupported = await SupportsScreenshotResolutionAsync();
+        var frame = await CreateFrameAsync(
+            screenshotResolutionSupported
+                ? ScreenshotResolutionKey.SupportedDefault
+                : ScreenshotResolutionKey.Legacy);
         var hasPublishedFrame = frame.FrameRevision > 0 && frame.Png.Length > 0;
-        var html = HtmlRenderer.Render(
+        var pointerStream = await GetPointerStreamCapabilityAsync(refreshUnsupported: true);
+        var html = HtmlRenderer.RenderWithViewport(
             frame.Tree,
             hasPublishedFrame,
             frame.LogicalWidth,
@@ -1151,6 +1417,8 @@ public sealed class InspectorServer : IDisposable
             .Append(hasPublishedFrame
                 ? BuildMeta("devflow-frame", JsonSerializer.Serialize(CreateFrameDescriptor(frame)))
                 : string.Empty)
+            .Append(BuildMeta("devflow-screenshot-resolution", screenshotResolutionSupported ? "true" : "false"))
+            .Append(BuildMeta("devflow-pointer-stream", pointerStream?.Supported == true ? "true" : "false"))
             .ToString();
         var title = string.IsNullOrWhiteSpace(_appName)
             ? "MAUI DevFlow Inspector"
@@ -1203,7 +1471,46 @@ public sealed class InspectorServer : IDisposable
                 _diagnosticsInterestUtc = DateTime.UtcNow;
         }
         var requiresFreshFrame = IsTruthy(request.Query.GetValueOrDefault("fresh"));
-        var frame = await CreateFrameAsync(requiresFreshFrame);
+        var screenshotResolutionSupported = await SupportsScreenshotResolutionAsync();
+        if (!TryParseScreenshotResolution(
+                request.Query.GetValueOrDefault("targetScale"),
+                screenshotResolutionSupported,
+                out var resolution,
+                out var resolutionError))
+        {
+            return (
+                400,
+                "application/json",
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    ok = false,
+                    error = resolutionError,
+                    reason = "invalid-screenshot-hint"
+                }));
+        }
+
+        InspectorFrame frame;
+        try
+        {
+            frame = await CreateFrameAsync(resolution, requiresFreshFrame);
+        }
+        catch (InvalidOperationException exception)
+            when (string.Equals(
+                exception.Message,
+                RepeatedFrameChangeError,
+                StringComparison.Ordinal))
+        {
+            return (
+                503,
+                "application/json",
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    ok = false,
+                    reason = "capture-failed",
+                    error = "The app changed repeatedly while the Inspector captured its Preview.",
+                    retryable = true
+                }));
+        }
         if (frame.Tree.Count == 0)
         {
             return (
@@ -1212,6 +1519,7 @@ public sealed class InspectorServer : IDisposable
                 JsonSerializer.SerializeToUtf8Bytes(new
                 {
                     ok = false,
+                    reason = "agent-unavailable",
                     error = "The DevFlow agent is unavailable.",
                     retryable = true
                 }));
@@ -1225,11 +1533,13 @@ public sealed class InspectorServer : IDisposable
                 JsonSerializer.SerializeToUtf8Bytes(new
                 {
                     ok = false,
+                    reason = "capture-failed",
                     error = "Unable to capture the current app state.",
                     retryable = true
                 }));
         }
 
+        var pointerStream = await GetPointerStreamCapabilityAsync();
         var json = JsonSerializer.Serialize(new
         {
             frame = CreateFrameDescriptor(frame),
@@ -1240,6 +1550,7 @@ public sealed class InspectorServer : IDisposable
             elements = frame.ElementsHtml,
             viewportWidth = frame.LogicalWidth,
             viewportHeight = frame.LogicalHeight,
+            screenshotResolutionSupported,
             rootOffsetX = frame.RootOffsetX,
             rootOffsetY = frame.RootOffsetY,
             diagnostics = wantsDiagnostics
@@ -1247,7 +1558,10 @@ public sealed class InspectorServer : IDisposable
                 : null,
             captureEpoch = frame.CaptureEpoch,
             registryGeneration = frame.RegistryGeneration,
-            windowId = frame.WindowId
+            windowId = frame.WindowId,
+            pointerStream = pointerStream is null
+                ? null
+                : new { supported = pointerStream.Supported, reason = pointerStream.Reason }
         });
 
         return (200, "application/json", Encoding.UTF8.GetBytes(json));
@@ -1270,8 +1584,35 @@ public sealed class InspectorServer : IDisposable
         rootOffsetX = frame.RootOffsetX,
         rootOffsetY = frame.RootOffsetY,
         captureScale = frame.CaptureScale,
+        nativeScale = frame.NativeScale,
+        requestedCaptureScale = frame.Resolution.TargetScale,
+        resolutionClamped = frame.ResolutionClamped,
         createdAt = frame.CreatedUtc
     };
+
+    private async Task<(int, string, byte[])> HandleCapabilitiesAsync()
+    {
+        var document = await _client.GetCapabilitiesAsync();
+        if (document.ValueKind != JsonValueKind.Object
+            || !document.TryGetProperty("capabilities", out var capabilitiesValue)
+            || capabilitiesValue.ValueKind != JsonValueKind.Object)
+        {
+            return (503, "application/json", Encoding.UTF8.GetBytes(
+                "{\"ok\":false,\"error\":\"Agent capabilities are unavailable.\"}"));
+        }
+
+        JsonElement? agent = document.TryGetProperty("agent", out var agentValue)
+            ? agentValue.Clone()
+            : null;
+        var capabilities = capabilitiesValue.Clone();
+        CacheAgentCapabilities(capabilities);
+
+        return Ok(JsonSerializer.Serialize(new
+        {
+            agent,
+            capabilities
+        }, CamelCase));
+    }
 
     private async Task<(int, string, byte[])> HandleEventSupportAsync()
     {
@@ -1553,7 +1894,9 @@ public sealed class InspectorServer : IDisposable
         if (request.PolicyFilePath is not null && !string.Equals(request.PolicyFilePath,
             LayoutDiagnosticsPolicyLoader.ResolveProjectConfigPath(_policyStartPath),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
-            return JsonResponse(409, new
+            return JsonResponse(
+                Volatile.Read(ref _stopping) != 0 ? 503 : 409,
+                new
             {
                 success = false,
                 message = "The Layout policy location changed. Rescan and confirm the current path before saving."
@@ -1833,6 +2176,40 @@ public sealed class InspectorServer : IDisposable
             root.WindowId);
     }
 
+    private static bool TryParseScreenshotResolution(
+        string? value,
+        bool supported,
+        out ScreenshotResolutionKey resolution,
+        out string? error)
+    {
+        resolution = supported
+            ? ScreenshotResolutionKey.SupportedDefault
+            : ScreenshotResolutionKey.Legacy;
+        error = null;
+        if (!supported || string.IsNullOrWhiteSpace(value))
+            return true;
+
+        if (!double.TryParse(
+                value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var parsed)
+            || double.IsNaN(parsed)
+            || double.IsInfinity(parsed)
+            || parsed <= 0)
+        {
+            error = "targetScale must be a positive finite number.";
+            return false;
+        }
+
+        var bounded = Math.Min(
+            ScreenshotScaleBuckets[^1],
+            Math.Max(ScreenshotScaleBuckets[0], parsed));
+        var normalized = ScreenshotScaleBuckets.MinBy(bucket => Math.Abs(bucket - bounded));
+        resolution = new ScreenshotResolutionKey(Enabled: true, TargetScale: normalized);
+        return true;
+    }
+
     private async Task<(int, string, byte[])> HandleScreenshotAsync(string? frameId)
     {
         byte[]? png = null;
@@ -1848,20 +2225,25 @@ public sealed class InspectorServer : IDisposable
 
         if (png is null && !string.IsNullOrWhiteSpace(frameId))
             return (404, "text/plain", Encoding.UTF8.GetBytes("Inspector frame expired"));
-        png ??= (await CreateFrameAsync()).Png;
+        png ??= (await CreateFrameAsync(ScreenshotResolutionKey.Legacy)).Png;
         if (png == null || png.Length == 0)
             return (404, "text/plain", Encoding.UTF8.GetBytes("No screenshot available"));
         return (200, "image/png", png);
     }
 
-    private async Task<InspectorFrame> CreateFrameAsync(bool force = false)
+    private async Task<InspectorFrame> CreateFrameAsync(
+        ScreenshotResolutionKey resolution,
+        bool force = false)
     {
         lock (_cacheLock)
         {
             if (!force
                 && _latestFrame is not null
+                && _latestFrame.Resolution == resolution
                 && DateTime.UtcNow - _latestFrame.CreatedUtc < _frameReuseDuration)
+            {
                 return _latestFrame;
+            }
         }
 
         await _frameCreationGate.WaitAsync(_lifetimeCts.Token);
@@ -1874,8 +2256,11 @@ public sealed class InspectorServer : IDisposable
                 {
                     if (!force
                         && _latestFrame is not null
+                        && _latestFrame.Resolution == resolution
                         && DateTime.UtcNow - _latestFrame.CreatedUtc < _frameReuseDuration)
+                    {
                         return _latestFrame;
+                    }
                     generation = _cacheGeneration;
                 }
 
@@ -1889,32 +2274,50 @@ public sealed class InspectorServer : IDisposable
                     : GetRootPageOffset(tree, rootPageId);
                 var (captureEpoch, registryGeneration, windowId) = GetCaptureMetadata(tree);
                 var frameTree = fullscreen ? tree : SelectFrameTree(tree, rootPageId);
+                var (treeLogicalWidth, treeLogicalHeight) = GetFrameLogicalSize(
+                    tree,
+                    rootPageId,
+                    fullscreen,
+                    pixelWidth: 0,
+                    pixelHeight: 0);
                 var screenshot = await GetCachedScreenshotAsync(
                     fullscreen ? null : rootPageId,
                     captureEpoch,
                     registryGeneration,
                     fullscreen,
-                    force) ?? Array.Empty<byte>();
-                var hasCompleteScreenshot = screenshot.Length > 0;
-                var (width, height) = hasCompleteScreenshot
-                    ? ScreenshotImage.GetPngDimensions(screenshot)
-                    : (0, 0);
-                if (width <= 0 || height <= 0)
+                    resolution,
+                    treeLogicalWidth,
+                    treeLogicalHeight,
+                    force);
+                var png = screenshot?.Data ?? Array.Empty<byte>();
+                var hasScreenshot = png.Length > 0;
+                var pixelWidth = screenshot?.PixelWidth ?? 0;
+                var pixelHeight = screenshot?.PixelHeight ?? 0;
+                if (pixelWidth <= 0 || pixelHeight <= 0)
+                    (pixelWidth, pixelHeight) = hasScreenshot
+                        ? ScreenshotImage.GetPngDimensions(png)
+                        : (0, 0);
+                var hasCompleteScreenshot = hasScreenshot && pixelWidth > 0 && pixelHeight > 0;
+                if (pixelWidth <= 0 || pixelHeight <= 0)
                 {
-                    width = 800;
-                    height = 600;
+                    pixelWidth = 800;
+                    pixelHeight = 600;
                 }
-                var (logicalWidth, logicalHeight) = GetFrameLogicalSize(
+                var (contractLogicalWidth, contractLogicalHeight) = GetFrameLogicalSize(
                     tree,
                     rootPageId,
                     fullscreen,
-                    width,
-                    height);
-                var captureScale = GetCaptureScale(
-                    logicalWidth,
-                    logicalHeight,
-                    width,
-                    height);
+                    pixelWidth,
+                    pixelHeight);
+                var logicalWidth = contractLogicalWidth;
+                var logicalHeight = contractLogicalHeight;
+                var captureScale = screenshot?.CaptureScale is > 0
+                    ? screenshot.CaptureScale.Value
+                    : GetCaptureScale(
+                        logicalWidth,
+                        logicalHeight,
+                        pixelWidth,
+                        pixelHeight);
 
                 var frame = new InspectorFrame(
                     Guid.NewGuid().ToString("N"),
@@ -1922,12 +2325,15 @@ public sealed class InspectorServer : IDisposable
                     0,
                     generation,
                     frameTree,
-                    screenshot,
-                    width,
-                    height,
+                    png,
+                    pixelWidth,
+                    pixelHeight,
                     logicalWidth,
                     logicalHeight,
                     captureScale,
+                    screenshot?.NativeScale,
+                    screenshot?.ResolutionClamped,
+                    resolution,
                     rootOffsetX,
                     rootOffsetY,
                     HtmlRenderer.RenderElements(
@@ -1947,7 +2353,7 @@ public sealed class InspectorServer : IDisposable
                     if (generation != _cacheGeneration)
                     {
                         if (attempt == 0) continue;
-                        throw new InvalidOperationException("Inspector state changed repeatedly while capturing a frame.");
+                        throw new InvalidOperationException(RepeatedFrameChangeError);
                     }
 
                     if (frame.Tree.Count == 0 || !hasCompleteScreenshot)
@@ -2048,12 +2454,15 @@ public sealed class InspectorServer : IDisposable
         return (200, contentType, ms.ToArray());
     }
 
-    private async Task<byte[]?> GetCachedScreenshotAsync(
-        string? elementId = null,
-        long? captureEpoch = null,
-        long? registryGeneration = null,
-        bool fullscreen = false,
-        bool force = false)
+    private async Task<InspectorScreenshot?> GetCachedScreenshotAsync(
+        string? elementId,
+        long? captureEpoch,
+        long? registryGeneration,
+        bool fullscreen,
+        ScreenshotResolutionKey resolution,
+        double logicalWidth,
+        double logicalHeight,
+        bool force)
     {
         long generation;
         lock (_cacheLock)
@@ -2067,50 +2476,97 @@ public sealed class InspectorServer : IDisposable
                 && string.Equals(_cachedScreenshotElementId, elementId, StringComparison.Ordinal)
                 && _cachedScreenshotCaptureEpoch == captureEpoch
                 && _cachedScreenshotFullscreen == fullscreen
+                && _cachedScreenshotResolution == resolution
                 && DateTime.UtcNow - _screenshotCacheTime < ScreenshotCacheDuration)
                 return _cachedScreenshot;
             generation = _cacheGeneration;
         }
 
+        var resolutionOptions = new ScreenshotResolutionOptions
+        {
+            TargetScale = resolution.Enabled ? resolution.TargetScale : null,
+            MaxPixelWidth = resolution.Enabled
+                ? GetBoundedPixelDimension(logicalWidth, resolution.TargetScale)
+                : null,
+            MaxPixelHeight = resolution.Enabled
+                ? GetBoundedPixelDimension(logicalHeight, resolution.TargetScale)
+                : null,
+            MaxPixels = resolution.Enabled ? InspectorScreenshotPixelBudget : null,
+            MaxEncodedBytes = MaxScreenshotBytes
+        };
+
         var fresh = fullscreen
-            ? await _client.FullscreenScreenshotAsync(
+            ? await _client.FullscreenScreenshotResultAsync(
                 window: null,
                 maxWidth: null,
                 scale: null,
                 captureEpoch: captureEpoch,
-                registryGeneration: registryGeneration)
-            : await _client.ScreenshotAsync(
+                registryGeneration: registryGeneration,
+                resolution: resolutionOptions)
+            : await _client.ScreenshotResultAsync(
                 window: null,
                 elementId: elementId,
                 selector: null,
                 maxWidth: null,
                 scale: null,
                 captureEpoch: captureEpoch,
-                registryGeneration: registryGeneration);
-        if (fresh is { Length: > MaxScreenshotBytes })
+                registryGeneration: registryGeneration,
+                resolution: resolutionOptions);
+        if (!fresh.Success || fresh.Data is null)
+            return null;
+        if (fresh.Data.Length > MaxScreenshotBytes)
         {
             Console.Error.WriteLine($"[inspector] screenshot exceeded {MaxScreenshotBytes} bytes");
             return null;
         }
-        if (fresh is not { Length: > 0 })
+        if (fresh.Data is not { Length: > 0 })
             return null;
-        if (!ScreenshotImage.IsCompletePng(fresh))
+        if (!ScreenshotImage.IsCompletePng(fresh.Data))
         {
             Console.Error.WriteLine("[inspector] screenshot was not a complete PNG");
             return null;
         }
+
+        var pixelWidth = fresh.PixelWidth ?? 0;
+        var pixelHeight = fresh.PixelHeight ?? 0;
+        if (pixelWidth <= 0 || pixelHeight <= 0)
+            (pixelWidth, pixelHeight) = ScreenshotImage.GetPngDimensions(fresh.Data);
+        var screenshot = new InspectorScreenshot(
+            fresh.Data,
+            pixelWidth,
+            pixelHeight,
+            fresh.LogicalWidth,
+            fresh.LogicalHeight,
+            fresh.CaptureScale,
+            fresh.NativeScale,
+            fresh.ResolutionClamped);
         lock (_cacheLock)
         {
             if (generation == _cacheGeneration)
             {
-                _cachedScreenshot = fresh;
+                _cachedScreenshot = screenshot;
                 _cachedScreenshotElementId = elementId;
                 _cachedScreenshotCaptureEpoch = captureEpoch;
                 _cachedScreenshotFullscreen = fullscreen;
+                _cachedScreenshotResolution = resolution;
                 _screenshotCacheTime = DateTime.UtcNow;
             }
         }
-        return fresh;
+        return screenshot;
+    }
+
+    private static int? GetBoundedPixelDimension(double logicalSize, double targetScale)
+    {
+        if (!double.IsFinite(logicalSize) || logicalSize <= 0
+            || !double.IsFinite(targetScale) || targetScale <= 0)
+        {
+            return null;
+        }
+
+        var requested = Math.Ceiling(logicalSize * targetScale);
+        return (int)Math.Min(
+            InspectorScreenshotMaxDimension,
+            Math.Max(1d, requested));
     }
 
     // ── Proxy handlers ──
@@ -2288,8 +2744,6 @@ public sealed class InspectorServer : IDisposable
         if (frame.WindowId != latest.WindowId ||
             !NearlyEqual(frame.LogicalWidth, latest.LogicalWidth) ||
             !NearlyEqual(frame.LogicalHeight, latest.LogicalHeight) ||
-            frame.PixelWidth != latest.PixelWidth ||
-            frame.PixelHeight != latest.PixelHeight ||
             !NearlyEqual(frame.RootOffsetX, latest.RootOffsetX) ||
             !NearlyEqual(frame.RootOffsetY, latest.RootOffsetY))
         {
@@ -2391,7 +2845,6 @@ public sealed class InspectorServer : IDisposable
 
     private static bool NearlyEqual(double left, double right)
         => Math.Abs(left - right) <= 0.0001;
-
     private static (int, string, byte[]) ActionCorrelationError(
         int statusCode,
         string error,
@@ -2826,6 +3279,554 @@ public sealed class InspectorServer : IDisposable
         return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"points array required\"}"));
     }
 
+    private async Task<(int, string, byte[])> HandleProxyPointerStartAsync(
+        string? body,
+        string leaseId,
+        string holderKind,
+        string holderLabel)
+    {
+        if (Volatile.Read(ref _stopping) != 0)
+        {
+            return JsonResponse(503, new
+            {
+                ok = false,
+                fallback = false,
+                reason = "inspector-stopping",
+                error = "The Inspector is shutting down."
+            });
+        }
+
+        if (!TryReadPointerBody(body, out InspectorPointerStartRequest? start, out var error))
+            return JsonResponse(400, new { ok = false, error });
+        if (start is null || string.IsNullOrWhiteSpace(start.SessionId))
+            return JsonResponse(400, new { ok = false, error = "sessionId is required" });
+
+        using var document = JsonDocument.Parse(body!);
+        var correlationError = ValidateActionCorrelation(
+            document.RootElement,
+            hasCoordinates: true,
+            out var frame,
+            out var coordinateSpace);
+        if (correlationError.HasValue)
+            return correlationError.Value;
+        if (frame is null || !string.Equals(coordinateSpace, "appLogical", StringComparison.Ordinal))
+        {
+            return ActionCorrelationError(
+                400,
+                "unsupported-coordinate-space",
+                "Inspector pointer sessions require appLogical coordinates.");
+        }
+
+        var capability = await GetPointerStreamCapabilityAsync();
+        if (capability is not { Supported: true })
+        {
+            return JsonResponse(200, new
+            {
+                ok = false,
+                fallback = true,
+                reason = capability?.Reason ?? "pointer stream capability is unavailable"
+            });
+        }
+
+        var windowPoint = ToWindowLogicalCoordinates(
+            start.X,
+            start.Y,
+            coordinateSpace,
+            frame);
+        var correlation = RewritePointerCorrelationForAgent(
+            document.RootElement.GetProperty("correlation"));
+        var result = await _client.StartPointerSessionAsync(new PointerSessionStartRequest
+        {
+            SessionId = start.SessionId,
+            PointerId = start.PointerId,
+            PointerType = "touch",
+            CoordinateSpace = "windowLogical",
+            X = windowPoint.x,
+            Y = windowPoint.y,
+            ElapsedMs = start.ElapsedMs,
+            WindowId = frame.WindowId,
+            CaptureEpoch = frame.CaptureEpoch,
+            RegistryGeneration = frame.RegistryGeneration,
+            Correlation = correlation
+        });
+
+        var fallback = CanFallbackPointerStart(result);
+        if (result.Success)
+        {
+            if (Volatile.Read(ref _replayInProgress) == 1
+                || Volatile.Read(ref _stopping) != 0)
+            {
+                try
+                {
+                    using var replayLease = _client.UseMutationLease(
+                        leaseId,
+                        holderKind,
+                        holderLabel);
+                    await _client.CancelPointerSessionAsync(
+                        start.SessionId,
+                        Volatile.Read(ref _stopping) != 0
+                            ? "inspector-stopped"
+                            : "replay-started");
+                }
+                catch { }
+                InvalidateScreenshotCache();
+                return JsonResponse(409, new
+                {
+                    ok = false,
+                    fallback = false,
+                    reason = Volatile.Read(ref _stopping) != 0
+                        ? "inspector-stopping"
+                        : "replay-in-progress",
+                    error = Volatile.Read(ref _stopping) != 0
+                        ? "The Inspector stopped while the pointer session was being admitted."
+                        : "A replay started while the pointer session was being admitted."
+                });
+            }
+
+            PointerProxySession[] staleSessions;
+            lock (_pointerProxyGate)
+            {
+                PrunePointerProxySessionsNoLock();
+                staleSessions = _pointerProxySessions.Values
+                    .Where(session => !session.Terminal
+                        && !string.Equals(
+                            session.SessionId,
+                            start.SessionId,
+                            StringComparison.Ordinal))
+                    .ToArray();
+                foreach (var staleSession in staleSessions)
+                    _pointerProxySessions.Remove(staleSession.SessionId);
+                _pointerProxySessions[start.SessionId] = new PointerProxySession(
+                    start.SessionId,
+                    frame.Id,
+                    frame.WindowId,
+                    frame.RootOffsetX,
+                    frame.RootOffsetY,
+                    frame.LogicalWidth,
+                    frame.LogicalHeight,
+                    leaseId,
+                    holderKind,
+                    holderLabel,
+                    DateTime.UtcNow.AddMilliseconds(
+                        Math.Clamp(result.MaxDurationMs > 0 ? result.MaxDurationMs : 60_000, 500, 300_000)
+                        + 5_000),
+                    Terminal: false);
+            }
+            foreach (var staleSession in staleSessions)
+            {
+                try
+                {
+                    using var staleLease = _client.UseMutationLease(
+                        staleSession.LeaseId,
+                        staleSession.HolderKind,
+                        staleSession.HolderLabel);
+                    await _client.CancelPointerSessionAsync(staleSession.SessionId, "superseded");
+                }
+                catch { }
+            }
+        }
+
+        return JsonResponse(
+            result.Success ? 200 : result.StatusCode ?? 502,
+            new
+            {
+                ok = result.Success,
+                fallback,
+                result.SessionId,
+                result.State,
+                result.LastSequence,
+                result.IdleTimeoutMs,
+                result.MaxDurationMs,
+                result.MaxSamplesPerMove,
+                result.MaxRequestBytes,
+                result.Detail,
+                result.Reason,
+                result.Error,
+                result.TransportFailure
+            });
+    }
+
+    private static JsonElement RewritePointerCorrelationForAgent(JsonElement correlation)
+    {
+        var rewritten = JsonNode.Parse(correlation.GetRawText())!.AsObject();
+        rewritten["coordinateSpace"] = "windowLogical";
+        return JsonSerializer.SerializeToElement(rewritten);
+    }
+
+    internal static bool CanFallbackPointerStart(PointerSessionResult result)
+        => CanFallbackPointerStart(
+            result.TransportFailure,
+            result.Unsupported,
+            result.Reason);
+
+    internal static bool CanFallbackPointerStart(
+        bool transportFailure,
+        bool unsupported,
+        string? reason)
+        => !transportFailure
+            && (unsupported
+                || reason is "pointer-target-unsupported" or "pointer-not-handled");
+
+    private async Task<(int, string, byte[])> HandleProxyPointerMoveAsync(string? body)
+    {
+        if (!TryReadPointerBody(body, out InspectorPointerMoveRequest? move, out var error))
+            return JsonResponse(400, new { ok = false, error });
+        if (move is null || string.IsNullOrWhiteSpace(move.SessionId))
+            return JsonResponse(400, new { ok = false, error = "sessionId is required" });
+        if (move.Samples is null || move.Samples.Any(static sample => sample is null))
+        {
+            return JsonResponse(
+                400,
+                new
+                {
+                    ok = false,
+                    reason = "invalid-request",
+                    error = "Pointer move samples must be a non-null array of samples."
+                });
+        }
+        if (move.Samples.Count > 64)
+            return JsonResponse(413, new { ok = false, error = "A move may contain at most 64 samples." });
+        if (!TryGetPointerProxySession(move.SessionId, out var proxy))
+            return JsonResponse(410, new { ok = false, reason = "session-gone", error = "Pointer session not found." });
+        if (!IsPointerProxyFrameCompatible(proxy))
+            return await CancelSupersededPointerProxyAsync(move.SessionId);
+
+        var samples = move.Samples.Select(sample =>
+        {
+            var validSample = sample!;
+            return new PointerSessionSample
+            {
+                X = validSample.X + proxy.RootOffsetX,
+                Y = validSample.Y + proxy.RootOffsetY,
+                ElapsedMs = validSample.ElapsedMs
+            };
+        }).ToArray();
+        var result = await _client.MovePointerSessionAsync(move.SessionId, move.Sequence, samples);
+        if (!result.Success && !result.TransportFailure && result.State is "cancelled" or "gone")
+        {
+            RetainTerminalPointerProxySession(move.SessionId);
+            InvalidateScreenshotCache();
+        }
+        return PointerProxyResult(result);
+    }
+
+    private async Task<(int, string, byte[])> HandleProxyPointerEndAsync(string? body)
+    {
+        if (!TryReadPointerBody(body, out InspectorPointerEndRequest? end, out var error))
+            return JsonResponse(400, new { ok = false, error });
+        if (end?.Sample is null || string.IsNullOrWhiteSpace(end.SessionId))
+            return JsonResponse(400, new { ok = false, error = "sessionId and final sample are required" });
+        if (!TryGetPointerProxySession(end.SessionId, out var proxy))
+            return JsonResponse(410, new { ok = false, reason = "session-gone", error = "Pointer session not found." });
+        if (!IsPointerProxyFrameCompatible(proxy))
+            return await CancelSupersededPointerProxyAsync(end.SessionId);
+
+        var result = await _client.EndPointerSessionAsync(
+            end.SessionId,
+            end.Sequence,
+            new PointerSessionSample
+            {
+                X = end.Sample.X + proxy.RootOffsetX,
+                Y = end.Sample.Y + proxy.RootOffsetY,
+                ElapsedMs = end.Sample.ElapsedMs
+            });
+        var terminal = result.Success
+            || (!result.TransportFailure
+                && result.State is "ended" or "cancelled" or "gone");
+        if (terminal)
+        {
+            RetainTerminalPointerProxySession(end.SessionId);
+            InvalidateScreenshotCache();
+        }
+        return PointerProxyResult(result);
+    }
+
+    private async Task<(int, string, byte[])> HandleProxyPointerCancelAsync(string? body)
+    {
+        if (!TryReadPointerBody(body, out InspectorPointerCancelRequest? cancel, out var error))
+            return JsonResponse(400, new { ok = false, error });
+        if (cancel is null || string.IsNullOrWhiteSpace(cancel.SessionId))
+            return JsonResponse(400, new { ok = false, error = "sessionId is required" });
+
+        var result = await _client.CancelPointerSessionAsync(cancel.SessionId, cancel.Reason);
+        RemovePointerProxySession(cancel.SessionId);
+        InvalidateScreenshotCache();
+        return PointerProxyResult(result);
+    }
+
+    private async Task<(int, string, byte[])> HandleProxyPointerCancelAndReleaseAsync(
+        string? body,
+        string leaseId,
+        string holderKind,
+        string holderLabel)
+    {
+        if (!TryReadPointerBody(body, out InspectorPointerCancelRequest? cancel, out var error))
+            return JsonResponse(400, new { ok = false, error });
+
+        PointerSessionResult? result = null;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(cancel?.SessionId))
+            {
+                result = await _client.CancelPointerSessionAsync(cancel.SessionId, cancel.Reason);
+                RemovePointerProxySession(cancel.SessionId);
+                InvalidateScreenshotCache();
+            }
+        }
+        finally
+        {
+            try
+            {
+                await _client.ControlMutationLeaseAsync(
+                    "release",
+                    force: false,
+                    leaseId,
+                    holderKind,
+                    holderLabel);
+            }
+            catch { }
+        }
+
+        return result is null
+            ? JsonResponse(200, new { ok = true, state = "released" })
+            : PointerProxyResult(result);
+    }
+
+    private async Task<PointerStreamProxyCapability?> GetPointerStreamCapabilityAsync(
+        bool refreshUnsupported = false)
+    {
+        var capabilities = await GetAgentCapabilitiesAsync();
+        var capability = ParsePointerStreamCapability(capabilities);
+        if (capability is { Supported: true } || !refreshUnsupported)
+            return capability;
+
+        JsonElement? refreshed = null;
+        try
+        {
+            refreshed = await FetchAgentCapabilitiesAsync();
+        }
+        catch
+        {
+        }
+        if (refreshed.HasValue)
+        {
+            CacheAgentCapabilities(refreshed.Value);
+            return ParsePointerStreamCapability(refreshed) ?? capability;
+        }
+
+        return capability;
+    }
+
+    private static PointerStreamProxyCapability? ParsePointerStreamCapability(
+        JsonElement? capabilities)
+    {
+        if (!capabilities.HasValue)
+            return null;
+        if (!capabilities.Value.TryGetProperty("ui.pointerStream", out var pointer)
+            || pointer.ValueKind != JsonValueKind.Object)
+        {
+            return new PointerStreamProxyCapability(
+                false,
+                "The connected agent predates pointer streaming.");
+        }
+        var supported = pointer.TryGetProperty("supported", out var supportedProperty)
+            && supportedProperty.ValueKind == JsonValueKind.True;
+        var reason = pointer.TryGetProperty("reason", out var reasonProperty)
+            && reasonProperty.ValueKind == JsonValueKind.String
+                ? reasonProperty.GetString()
+                : null;
+        return new PointerStreamProxyCapability(supported, reason);
+    }
+
+    private bool TryGetPointerProxySession(string sessionId, out PointerProxySession session)
+    {
+        lock (_pointerProxyGate)
+        {
+            PrunePointerProxySessionsNoLock();
+            return _pointerProxySessions.TryGetValue(sessionId, out session!);
+        }
+    }
+
+    private bool IsPointerProxyFrameCompatible(PointerProxySession session)
+    {
+        if (session.Terminal)
+            return true;
+
+        lock (_cacheLock)
+        {
+            var latest = _latestCompleteFrameId is { } newest
+                && _frames.TryGetValue(newest, out var cached)
+                    ? cached
+                    : _latestFrame;
+            if (latest is null)
+                return true;
+            if (string.Equals(session.FrameId, latest.Id, StringComparison.Ordinal))
+                return true;
+            return session.WindowId == latest.WindowId
+                && Math.Abs(session.RootOffsetX - latest.RootOffsetX) < 0.001
+                && Math.Abs(session.RootOffsetY - latest.RootOffsetY) < 0.001
+                && Math.Abs(session.LogicalWidth - latest.LogicalWidth) < 0.001
+                && Math.Abs(session.LogicalHeight - latest.LogicalHeight) < 0.001;
+        }
+    }
+
+    private void PrunePointerProxySessionsNoLock()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var id in _pointerProxySessions
+            .Where(pair => pair.Value.ExpiresUtc <= now)
+            .Select(static pair => pair.Key)
+            .ToArray())
+        {
+            _pointerProxySessions.Remove(id);
+        }
+    }
+
+    private async Task<(int, string, byte[])> CancelSupersededPointerProxyAsync(string sessionId)
+    {
+        try { await _client.CancelPointerSessionAsync(sessionId, "frame-superseded"); }
+        catch { }
+        RemovePointerProxySession(sessionId);
+        return ActionCorrelationError(
+            409,
+            "frame-superseded",
+            "The pointer session frame has been superseded.");
+    }
+
+    private void RemovePointerProxySession(string sessionId)
+    {
+        lock (_pointerProxyGate)
+            _pointerProxySessions.Remove(sessionId);
+    }
+
+    private void RetainTerminalPointerProxySession(string sessionId)
+    {
+        lock (_pointerProxyGate)
+        {
+            if (_pointerProxySessions.TryGetValue(sessionId, out var session))
+            {
+                _pointerProxySessions[sessionId] = session with
+                {
+                    Terminal = true,
+                    ExpiresUtc = DateTime.UtcNow.AddSeconds(30)
+                };
+            }
+        }
+    }
+
+    private async Task CancelProxyPointerSessionsAsync(string reason)
+    {
+        PointerProxySession[] sessions;
+        lock (_pointerProxyGate)
+        {
+            sessions = _pointerProxySessions.Values.ToArray();
+            _pointerProxySessions.Clear();
+        }
+        foreach (var session in sessions.Where(static session => !session.Terminal))
+        {
+            try
+            {
+                using var lease = _client.UseMutationLease(
+                    session.LeaseId,
+                    session.HolderKind,
+                    session.HolderLabel);
+                await _client.CancelPointerSessionAsync(session.SessionId, reason);
+            }
+            catch { }
+        }
+    }
+
+    private static bool TryReadPointerBody<T>(string? body, out T? value, out string error)
+        where T : class
+    {
+        value = null;
+        error = "";
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            error = "Body required";
+            return false;
+        }
+        if (Encoding.UTF8.GetByteCount(body) > 16 * 1024)
+        {
+            error = "Pointer payload exceeds 16 KB.";
+            return false;
+        }
+        try
+        {
+            value = JsonSerializer.Deserialize<T>(body, CamelCase);
+            return value is not null;
+        }
+        catch (JsonException)
+        {
+            error = "Invalid pointer payload.";
+            return false;
+        }
+    }
+
+    private static (int, string, byte[]) PointerProxyResult(PointerSessionResult result)
+        => JsonResponse(
+            result.Success ? 200 : result.StatusCode ?? 502,
+            new
+            {
+                ok = result.Success,
+                result.SessionId,
+                result.State,
+                result.LastSequence,
+                result.IdleTimeoutMs,
+                result.MaxDurationMs,
+                result.MaxSamplesPerMove,
+                result.MaxRequestBytes,
+                result.Detail,
+                result.Reason,
+                result.Error,
+                result.TransportFailure
+            });
+
+    private sealed record PointerStreamProxyCapability(bool Supported, string? Reason);
+
+    private sealed record PointerProxySession(
+        string SessionId,
+        string FrameId,
+        int? WindowId,
+        double RootOffsetX,
+        double RootOffsetY,
+        double LogicalWidth,
+        double LogicalHeight,
+        string LeaseId,
+        string HolderKind,
+        string HolderLabel,
+        DateTime ExpiresUtc,
+        bool Terminal);
+
+    private sealed class InspectorPointerStartRequest
+    {
+        public string? SessionId { get; set; }
+        public long PointerId { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double ElapsedMs { get; set; }
+    }
+
+    private sealed class InspectorPointerMoveRequest
+    {
+        public string? SessionId { get; set; }
+        public int Sequence { get; set; }
+        public List<PointerSessionSample?> Samples { get; set; } = [];
+    }
+
+    private sealed class InspectorPointerEndRequest
+    {
+        public string? SessionId { get; set; }
+        public int Sequence { get; set; }
+        public PointerSessionSample? Sample { get; set; }
+    }
+
+    private sealed class InspectorPointerCancelRequest
+    {
+        public string? SessionId { get; set; }
+        public string? Reason { get; set; }
+    }
+
     private sealed record InspectorFrame(
         string Id,
         DateTime CreatedUtc,
@@ -2838,6 +3839,9 @@ public sealed class InspectorServer : IDisposable
         double LogicalWidth,
         double LogicalHeight,
         double CaptureScale,
+        double? NativeScale,
+        bool? ResolutionClamped,
+        ScreenshotResolutionKey Resolution,
         double RootOffsetX,
         double RootOffsetY,
         string ElementsHtml,
@@ -2846,6 +3850,35 @@ public sealed class InspectorServer : IDisposable
         int? WindowId,
         string TreeRevision = "",
         string? DiagnosticInputsRevision = null);
+
+    private sealed record InspectorScreenshot(
+        byte[] Data,
+        int PixelWidth,
+        int PixelHeight,
+        double? LogicalWidth,
+        double? LogicalHeight,
+        double? CaptureScale,
+        double? NativeScale,
+        bool? ResolutionClamped);
+
+    private readonly record struct ScreenshotResolutionKey(bool Enabled, double TargetScale)
+    {
+        public static ScreenshotResolutionKey Legacy { get; } = new(false, 1);
+        public static ScreenshotResolutionKey SupportedDefault { get; } = new(true, 1);
+    }
+
+    private sealed record InspectorActionContext(
+        string? ActionId,
+        string? StreamId,
+        string? FrameId,
+        long? FrameRevision,
+        string? CoordinateSpace,
+        double? X,
+        double? Y,
+        double? ToX,
+        double? ToY,
+        double? DeltaX,
+        double? DeltaY);
 
     private async Task<(int, string, byte[])> HandleProxyBackAsync()
     {
@@ -3621,7 +4654,9 @@ public sealed class InspectorServer : IDisposable
 
         try
         {
+            await CancelProxyPointerSessionsAsync("replay-started");
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            using var actionContext = _client.UseActionContext(source: "replay");
             var replayer = new Flows.FlowReplayer(_client);
             var report = await replayer.ReplayAsync(parsed.Flow, null, cts.Token);
             return (200, "application/json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(report, CamelCase)));
@@ -3644,6 +4679,7 @@ public sealed class InspectorServer : IDisposable
     internal static bool IsBlockedDuringReplay(string path) => path switch
     {
         "/api/tap" or "/api/scroll" or "/api/gesture" or "/api/back" or "/api/fill" or "/api/key"
+            or "/api/pointer/start" or "/api/pointer/move" or "/api/pointer/end"
             or "/api/setProperty" or "/api/persistProperty" or "/api/navigate" or "/api/cdp/eval"
             or "/api/alerts/dismiss" or "/api/flows/record/start" or "/api/flows/record/step" => true,
         _ => false,
@@ -3992,6 +5028,7 @@ public sealed class InspectorServer : IDisposable
     internal static bool IsMutation(string path) => path switch
     {
         "/api/tap" or "/api/scroll" or "/api/gesture" or "/api/back" or "/api/fill" or "/api/key"
+            or "/api/pointer/start" or "/api/pointer/move" or "/api/pointer/end" or "/api/pointer/cancel"
             or "/api/setProperty" or "/api/persistProperty" or "/api/navigate" or "/api/cdp/eval"
             or "/api/alerts/dismiss"
             or "/api/flows/record/start" or "/api/flows/record/step" or "/api/flows/replay" => true,
@@ -4106,6 +5143,7 @@ public sealed class InspectorServer : IDisposable
             const int MaxAssembledMessageBytes = 4 * 1024 * 1024; // 4 MB
             var buffer = new byte[8192];
             using var assembled = new MemoryStream();
+            var relayState = new UiEventRelayState();
             using var sendGate = new SemaphoreSlim(1, 1);
             await using var diagnosticsDebouncer = new DiagnosticsDeltaDebouncer(
                 CaptureLayoutDiagnosticsDeltaAsync,
@@ -4139,7 +5177,9 @@ public sealed class InspectorServer : IDisposable
                     }
                     if (result.EndOfMessage)
                     {
-                        var payload = assembled.ToArray();
+                        var payload = ProcessUiEventPayload(
+                            assembled.ToArray(),
+                            relayState);
                         assembled.SetLength(0);
                         await SendWebSocketFrameAsync(
                             clientStream,
@@ -4156,6 +5196,177 @@ public sealed class InspectorServer : IDisposable
         {
             try { browserClosedCts.Cancel(); } catch { }
         }
+    }
+
+    // State-changing events invalidate the current capture before the browser refreshes. Initial
+    // lifecycle/navigation snapshots and originating Inspector echoes describe state this server
+    // already knows, so they must not supersede a frame another request is still using. Action
+    // events also gain the matching cached Inspector frame when the agent only knew its capture.
+    internal byte[] ProcessUiEventPayload(
+        byte[] payload,
+        UiEventRelayState? relayState = null)
+    {
+        JsonNode? message;
+        try
+        {
+            message = JsonNode.Parse(payload);
+        }
+        catch (JsonException)
+        {
+            return payload;
+        }
+
+        if (message is not JsonObject root
+            || root["type"] is not JsonValue typeValue
+            || !typeValue.TryGetValue<string>(out var type))
+        {
+            return payload;
+        }
+
+        var eventData = root["data"] as JsonObject;
+        var initialSnapshot = relayState?.IsInitialSnapshot(root, type) == true;
+        var completedAction = type == "ui-action-completed";
+        var localCompletedAction = completedAction && IsLocalInspectorAction(eventData);
+        if (!initialSnapshot
+            && (type is "navigation" or "treeChange" or "lifecycle"
+                || (completedAction && !localCompletedAction)))
+        {
+            InvalidateScreenshotCache();
+        }
+
+        if (type is not ("ui-action-started" or "ui-action-updated" or "ui-action-completed")
+            || eventData is not JsonObject data)
+        {
+            return payload;
+        }
+
+        var correlation = data["correlation"] as JsonObject;
+        var existingFrameId = correlation?["frameId"] is JsonValue frameValue
+            && frameValue.TryGetValue<string>(out var parsedFrameId)
+            && !string.IsNullOrWhiteSpace(parsedFrameId)
+                ? parsedFrameId
+                : null;
+        var captureEpoch = TryGetInt64(data["captureEpoch"]);
+        var registryGeneration = TryGetInt64(data["registryGeneration"]);
+        var windowId = TryGetInt32(data["windowId"]);
+        var diagnosticInputsRevision = TryGetBoundedString(
+            data["diagnosticInputsRevision"],
+            128);
+
+        InspectorFrame? matchedFrame = null;
+        lock (_cacheLock)
+        {
+            PruneFramesLocked();
+            if (existingFrameId is not null)
+            {
+                _frames.TryGetValue(existingFrameId, out matchedFrame);
+            }
+            else if (diagnosticInputsRevision is not null)
+            {
+                matchedFrame = _frames.Values
+                    .Where(frame => string.Equals(
+                            frame.DiagnosticInputsRevision,
+                            diagnosticInputsRevision,
+                            StringComparison.Ordinal)
+                        && ActionWindowMatches(frame.WindowId, windowId))
+                    .MaxBy(static frame => frame.CreatedUtc);
+            }
+            else if (captureEpoch is not null)
+            {
+                matchedFrame = _frames.Values
+                    .Where(frame => frame.CaptureEpoch == captureEpoch
+                        && (registryGeneration is null
+                            || frame.RegistryGeneration == registryGeneration)
+                        && ActionWindowMatches(frame.WindowId, windowId))
+                    .MaxBy(static frame => frame.CreatedUtc);
+            }
+        }
+
+        if (matchedFrame is null)
+            return payload;
+
+        correlation ??= new JsonObject();
+        correlation["frameId"] = matchedFrame.Id;
+        if (existingFrameId is null)
+        {
+            correlation["streamId"] = _frameStreamId;
+            correlation["frameRevision"] = matchedFrame.FrameRevision;
+        }
+        else
+        {
+            correlation["streamId"] ??= _frameStreamId;
+            correlation["frameRevision"] ??= matchedFrame.FrameRevision;
+        }
+        data["correlation"] = correlation;
+        return Encoding.UTF8.GetBytes(root.ToJsonString());
+    }
+
+    internal sealed class UiEventRelayState
+    {
+        private bool _firstMessage = true;
+        private string? _initialSnapshotTimestamp;
+
+        internal bool IsInitialSnapshot(JsonObject root, string type)
+        {
+            var timestamp = root["timestamp"] is JsonValue timestampValue
+                && timestampValue.TryGetValue<string>(out var parsedTimestamp)
+                    ? parsedTimestamp
+                    : null;
+
+            if (_firstMessage)
+            {
+                _firstMessage = false;
+                if (type == "lifecycle")
+                {
+                    _initialSnapshotTimestamp = timestamp;
+                    return true;
+                }
+                return false;
+            }
+
+            if (type != "navigation"
+                || _initialSnapshotTimestamp is null)
+                return false;
+
+            var matches = string.Equals(
+                    timestamp,
+                    _initialSnapshotTimestamp,
+                    StringComparison.Ordinal)
+                && root["data"] is JsonObject data
+                && data["from"] is null;
+            _initialSnapshotTimestamp = null;
+            return matches;
+        }
+    }
+
+    private static long? TryGetInt64(JsonNode? node)
+        => node is JsonValue value && value.TryGetValue<long>(out var number)
+            ? number
+            : null;
+
+    private static int? TryGetInt32(JsonNode? node)
+        => node is JsonValue value && value.TryGetValue<int>(out var number)
+            ? number
+            : null;
+
+    private static bool ActionWindowMatches(
+        int? frameWindowId,
+        int? actionWindowId)
+        => (frameWindowId ?? 0) == (actionWindowId ?? 0);
+
+    private static string? TryGetBoundedString(JsonNode? node, int maxLength)
+    {
+        if (node is not JsonValue value
+            || !value.TryGetValue<string>(out var text)
+            || string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var trimmed = text.Trim();
+        if (trimmed.Length > maxLength || trimmed.Any(char.IsControl))
+            return null;
+        return trimmed;
     }
 
     internal static string ComputeWebSocketAcceptKey(string webSocketKey)
