@@ -18,8 +18,8 @@ internal static class StandardResourcesScenario
         var imageSource = Path.Combine(root, "Resources", "Images", "dotnet_bot.svg");
         var font = Path.Combine(root, "Resources", "Fonts", "OpenSans-Regular.ttf");
         var asset = Path.Combine(root, "Pipeline", "payload.txt");
-        var icon = Path.Combine(root, "Resources", "AppIcon", "appicon_modern.png");
-        var iconSource = Path.Combine(root, "Resources", "AppIcon", "appicon_modern.svg");
+        var icon = Path.Combine(root, "Resources", "AppIcon", "appicon.png");
+        var iconSource = Path.Combine(root, "Resources", "AppIcon", "appicon.svg");
         var splash = Path.Combine(root, "Resources", "Splash", "dotnet_bot.svg");
 
         var failures = new List<string>();

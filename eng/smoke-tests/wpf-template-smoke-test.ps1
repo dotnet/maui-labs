@@ -176,7 +176,7 @@ if ($FontScenarios) {
     foreach ($resource in @(
         'Resources\Fonts\OpenSans-Regular.ttf',
         'Resources\Images\dotnet_bot.svg',
-        'Resources\AppIcon\appicon_modern.svg',
+        'Resources\AppIcon\appicon.svg',
         'Resources\Raw\Pipeline\payload.txt'
     )) {
         $destination = Join-Path $appDirectory $resource
@@ -201,7 +201,7 @@ if ($FontScenarios) {
     $asset.SetAttribute('LogicalName', 'Pipeline/payload.txt')
     [void] $items.AppendChild($asset)
     $icon = $projectXml.CreateElement('MauiIcon')
-    $icon.SetAttribute('Include', 'Resources\AppIcon\appicon_modern.svg')
+    $icon.SetAttribute('Include', 'Resources\AppIcon\appicon.svg')
     [void] $items.AppendChild($icon)
     $splash = $projectXml.CreateElement('MauiSplashScreen')
     $splash.SetAttribute('Include', 'Resources\Images\dotnet_bot.svg')
@@ -289,7 +289,7 @@ if ($FontScenarios) {
     }
     foreach ($targetPath in @(
         'Resources\Images\dotnet_bot.png',
-        'Resources\AppIcon\appicon_modern.png',
+        'Resources\AppIcon\appicon.png',
         'Resources\Splash\dotnet_bot.svg',
         'Pipeline/payload.txt'
     )) {

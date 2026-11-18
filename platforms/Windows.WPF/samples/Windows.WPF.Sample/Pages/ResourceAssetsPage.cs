@@ -112,7 +112,7 @@ public class ResourceAssetsPage : ContentPage
 		var fontPath = Path.Combine(baseDirectory, "Resources", "Fonts", "OpenSans-Regular.ttf");
 		var appIconDirectory = Path.Combine(baseDirectory, "Resources", "AppIcon");
 		var appIconFilePath = Directory.Exists(appIconDirectory)
-			? Directory.EnumerateFiles(appIconDirectory, "appicon_modern.*").FirstOrDefault()
+			? Directory.EnumerateFiles(appIconDirectory, "appicon.*").FirstOrDefault()
 			: null;
 		var appIconName = appIconFilePath == null ? "<none>" : Path.GetFileName(appIconFilePath);
 		var assetPath = Path.Combine(baseDirectory, "Pipeline", "payload.txt");

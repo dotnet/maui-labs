@@ -55,7 +55,7 @@
     <MauiImage Include="Resources\Images\*" />
     <MauiFont Include="Resources\Fonts\*" />
     <MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
-    <MauiSplashScreen Include="Resources\Splash\splash.png" />
+    <MauiSplashScreen Include="Resources\Splash\splash.png" Color="#512BD4" />
   </ItemGroup>
 
 </Project>

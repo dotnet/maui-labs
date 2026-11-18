@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
-    <MauiIcon Include="Resources\AppIcon\appicon_modern.svg" />
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" />
   </ItemGroup>
 
   <ItemGroup>
