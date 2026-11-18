@@ -71,6 +71,11 @@ jobs:
           sudo xcode-select -s "$developer_dir"
           echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
 
+      - name: Use a file-based .NET SDK on Windows
+        if: inputs.install-workloads && runner.os == 'Windows'
+        shell: pwsh
+        run: '"DOTNET_INSTALL_DIR=$(Join-Path $env:RUNNER_TEMP ''maui-labs-dotnet'')" >> $env:GITHUB_ENV'
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         env:

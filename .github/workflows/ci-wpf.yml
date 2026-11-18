@@ -437,6 +437,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Use a file-based .NET SDK
+        shell: pwsh
+        run: '"DOTNET_INSTALL_DIR=$(Join-Path $env:RUNNER_TEMP ''maui-labs-dotnet'')" >> $env:GITHUB_ENV'
       - uses: actions/setup-dotnet@v5
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/maui-ci-dotnet
