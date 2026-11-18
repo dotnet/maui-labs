@@ -606,8 +606,11 @@ the hidden content becomes visible, without navigation or window resizing, then
 expands the collection viewport to check both realized cards.
 
 The Picker regression checks item replacement, no selection, collection
-mutations, managed selection mapping, native selection notifications, and
-disconnect/reconnect behavior.
+mutations, managed selection mapping, native selection notifications, the
+`Title` placeholder row, and disconnect/reconnect behavior. GTK 4.16+ cannot
+leave a non-empty `GtkDropDown` unselected, so while `SelectedIndex` is `-1`
+the handler shows `Title` (or a blank row) at position 0 and removes it once
+an item is picked.
 
 The synchronization-context regression starts a real `GtkMauiApplication`,
 invokes an async MAUI button handler from the GTK main loop, and checks thread

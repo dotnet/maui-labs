@@ -25,6 +25,7 @@ public class PickerSelectionTests(ITestOutputHelper output)
 		CheckItemsMutations(context);
 		CheckItemsSourceMutations(context);
 		CheckSelectionMappingAndNativeChanges(context);
+		CheckTitlePlaceholder(context);
 		CheckDisconnectAndReconnect(context);
 	}
 
@@ -75,7 +76,7 @@ public class PickerSelectionTests(ITestOutputHelper output)
 			try
 			{
 				Assert.Equal(index, picker.SelectedIndex);
-				Assert.Equal(index < 0 ? uint.MaxValue : (uint)index, native.GetSelected());
+				AssertNativeSelection(picker, native);
 				Assert.Empty(seen);
 			}
 			finally
@@ -157,8 +158,7 @@ public class PickerSelectionTests(ITestOutputHelper output)
 			Assert.Equal(expected.SelectedIndex, actual.SelectedIndex);
 			Assert.Equal(expected.SelectedItem, actual.SelectedItem);
 			Assert.Equal(expectedEvents, actualEvents);
-			Assert.Equal(expected.SelectedIndex < 0 ? uint.MaxValue : (uint)expected.SelectedIndex,
-				native.GetSelected());
+			AssertNativeSelection(actual, native);
 		}
 	}
 
@@ -175,7 +175,7 @@ public class PickerSelectionTests(ITestOutputHelper output)
 			foreach (var index in new[] { 8, 0, -1, 3 })
 			{
 				picker.SelectedIndex = index;
-				Assert.Equal(index < 0 ? uint.MaxValue : (uint)index, native.GetSelected());
+				AssertNativeSelection(picker, native);
 			}
 			Assert.Equal(new[] { 8, 0, -1, 3 }, seen);
 			Assert.Equal(0, picker.NativeSelectionWrites);
@@ -184,17 +184,70 @@ public class PickerSelectionTests(ITestOutputHelper output)
 			native.SetSelected(0);
 			native.SetSelected(0);
 			native.SetSelected(8);
-			native.SetSelected(uint.MaxValue);
-			Assert.Equal(new[] { 0, 8, -1 }, seen);
-			Assert.Equal(3, picker.NativeSelectionWrites);
+			Assert.Equal(new[] { 0, 8 }, seen);
+			Assert.Equal(2, picker.NativeSelectionWrites);
+
+			picker.SelectedIndex = -1;
+			AssertNativeSelection(picker, native);
+			native.SetSelected(0);
 			Assert.Equal(-1, picker.SelectedIndex);
 			Assert.Null(picker.SelectedItem);
+			native.SetSelected(5);
+			Assert.Equal(new[] { 0, 8, -1, 4 }, seen);
+			Assert.Equal(3, picker.NativeSelectionWrites);
+			Assert.Equal("May", picker.SelectedItem);
+			AssertNativeSelection(picker, native);
 		}
 		finally
 		{
 			picker.Handler?.DisconnectHandler();
 		}
-		output.WriteLine("Managed selection maps without writeback; native changes report 0, 8, -1 exactly once.");
+		output.WriteLine("Managed selection maps without writeback; native changes report each index once and picking past the placeholder offsets by one.");
+	}
+
+	void CheckTitlePlaceholder(GtkMauiContext context)
+	{
+		var picker = new Picker { Title = "Choose a month" };
+		foreach (var month in Months())
+			picker.Items.Add(month);
+		using var native = (Gtk.DropDown)picker.ToPlatform(context);
+		try
+		{
+			AssertNativeSelection(picker, native);
+			picker.Title = "Pick one";
+			AssertNativeSelection(picker, native);
+			Assert.Equal(-1, picker.SelectedIndex);
+
+			picker.SelectedIndex = 2;
+			picker.Title = "Ignored while selected";
+			AssertNativeSelection(picker, native);
+			picker.SelectedIndex = -1;
+			AssertNativeSelection(picker, native);
+		}
+		finally
+		{
+			picker.Handler?.DisconnectHandler();
+		}
+		output.WriteLine("Unselected pickers show the Title placeholder, which follows Title changes and is removed on selection.");
+	}
+
+	// GTK 4.16+ cannot leave a non-empty GtkDropDown unselected, so the handler shows a Title placeholder at 0.
+	static void AssertNativeSelection(Picker picker, Gtk.DropDown native)
+	{
+		var itemCount = (uint)picker.Items.Count;
+		var model = native.GetModel()!;
+		if (picker.SelectedIndex < 0 && itemCount > 0)
+		{
+			Assert.Equal(itemCount + 1, model.GetNItems());
+			Assert.Equal(0u, native.GetSelected());
+			Assert.Equal(picker.Title ?? string.Empty, ((Gtk.StringObject)native.GetSelectedItem()!).GetString());
+			return;
+		}
+
+		Assert.Equal(itemCount, model.GetNItems());
+		Assert.Equal(picker.SelectedIndex < 0 ? uint.MaxValue : (uint)picker.SelectedIndex, native.GetSelected());
+		if (picker.SelectedIndex >= 0)
+			Assert.Equal(picker.Items[picker.SelectedIndex], ((Gtk.StringObject)native.GetSelectedItem()!).GetString());
 	}
 
 	void CheckDisconnectAndReconnect(GtkMauiContext context)

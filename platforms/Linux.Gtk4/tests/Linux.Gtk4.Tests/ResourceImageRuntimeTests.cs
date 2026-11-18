@@ -1,3 +1,4 @@
+#if NET11_0_OR_GREATER
 using System.Runtime.InteropServices;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
@@ -42,3 +43,4 @@ public sealed class ResourceImageRuntimeTests
 	[DllImport("libgtk-4.so.1")]
 	static extern void gdk_texture_download(IntPtr texture, [Out] byte[] data, nuint stride);
 }
+#endif
