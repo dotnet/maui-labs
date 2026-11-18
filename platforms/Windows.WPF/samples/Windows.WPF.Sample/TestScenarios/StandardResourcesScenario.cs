@@ -23,12 +23,16 @@ internal static class StandardResourcesScenario
         var splash = Path.Combine(root, "Resources", "Splash", "dotnet_bot.svg");
 
         var failures = new List<string>();
-        Check(File.Exists(image), $"processed MauiImage missing: {image}");
+        Check(File.Exists(image), $"bitmap MauiImage missing: {image}");
+#if NET10_0
+        Check(File.Exists(imageSource), $"legacy MauiImage source missing: {imageSource}");
+#else
         Check(!File.Exists(imageSource), $"raw MauiImage SVG was deployed beside the processed bitmap: {imageSource}");
-        Check(File.Exists(font), $"MauiFont missing: {font}");
-        Check(File.Exists(asset), $"MauiAsset missing: {asset}");
         Check(File.Exists(icon), $"processed MauiIcon missing: {icon}");
         Check(!File.Exists(iconSource), $"raw MauiIcon SVG was deployed instead of its processed bitmap: {iconSource}");
+#endif
+        Check(File.Exists(font), $"MauiFont missing: {font}");
+        Check(File.Exists(asset), $"MauiAsset missing: {asset}");
         Check(File.Exists(splash), $"MauiSplashScreen source missing: {splash}");
 
         if (File.Exists(image))
@@ -41,6 +45,7 @@ internal static class StandardResourcesScenario
             Console.WriteLine($"MauiImage: {frame.PixelWidth}x{frame.PixelHeight}, SHA256={Hash(image)}");
         }
 
+#if NET11_0_OR_GREATER
         if (File.Exists(icon))
         {
             using var stream = File.OpenRead(icon);
@@ -50,13 +55,20 @@ internal static class StandardResourcesScenario
                 $"processed MauiIcon has invalid dimensions: {frame.PixelWidth}x{frame.PixelHeight}");
             Console.WriteLine($"MauiIcon: {frame.PixelWidth}x{frame.PixelHeight}, SHA256={Hash(icon)}");
         }
+#endif
 
         if (File.Exists(asset))
             Check(File.ReadAllText(asset).Trim() == AssetContents, "MauiAsset contents changed.");
 
         foreach (var failure in failures)
             Console.Error.WriteLine($"FAIL: {failure}");
-        Console.WriteLine($"Standard MAUI resource cases: 5; failures: {failures.Count}; root: {root}");
+#if NET10_0
+        Console.WriteLine("MAUI 10 legacy resources: source images are copied; processed icons require MAUI 11.");
+        const int resourceCases = 4;
+#else
+        const int resourceCases = 5;
+#endif
+        Console.WriteLine($"Standard MAUI resource cases: {resourceCases}; failures: {failures.Count}; root: {root}");
         return failures.Count == 0 ? 0 : 1;
 
         void Check(bool condition, string message)

@@ -9,6 +9,8 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- Native UI Automation clients share the desktop across target frameworks. -->
+    <TestTfmsInParallel>false</TestTfmsInParallel>
     <NoWarn>$(NoWarn);NETSDK1023</NoWarn>
   </PropertyGroup>
 

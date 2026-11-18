@@ -120,7 +120,11 @@ public class ResourceAssetsPage : ContentPage
 
 		_imageStatus.Text = $"dotnet_bot.png exists: {File.Exists(imagePath)}";
 		_fontStatus.Text = $"OpenSans-Regular.ttf exists: {File.Exists(fontPath)}. Compare alias/font-file labels plus Entry/Editor previews above.";
+#if NET10_0
+		_appIconStatus.Text = "Processed MauiIcon output requires the .NET 11 resource pipeline.";
+#else
 		_appIconStatus.Text = $"Processed MauiIcon ({appIconName}) exists in Resources/AppIcon: {(!string.IsNullOrWhiteSpace(appIconFilePath) && File.Exists(appIconFilePath))}";
+#endif
 		_assetStatus.Text = $"MauiAsset Pipeline/payload.txt exists: {File.Exists(assetPath)}";
 		_splashStatus.Text = $"MauiSplashScreen source exists in Resources/Splash: {File.Exists(splashPath)}";
 	}

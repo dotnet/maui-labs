@@ -29,6 +29,25 @@ Shell creates only the selected page through its content controller. Template pa
 remain cached and attached to the MAUI tree, so DevFlow can inspect their labels and
 buttons without creating inactive pages.
 
+WPF's DevFlow agent does not currently register a Blazor/CDP bridge. Native UI
+inspection is supported, but WebView DOM/CDP automation is not. To run the native
+integration suite, including device, sensor, and secure-storage checks, select
+each app framework in turn:
+
+```powershell
+$env:DEVFLOW_TEST_PLATFORM = 'wpf'
+$env:DEVFLOW_TEST_FRAMEWORK = 'maui'
+foreach ($version in @('10', '11')) {
+    $env:DEVFLOW_TEST_DOTNET = $version
+    dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Agent.IntegrationTests --filter 'Category!=WebView'
+    if ($LASTEXITCODE -ne 0) { throw "WPF .NET $version integration tests failed." }
+}
+```
+
+The handler test project runs its two target frameworks sequentially because its
+native UI Automation clients share the desktop. Run other interactive suites
+separately as well.
+
 To check this in the sample, open **Shell Navigation**, select **Launch Shell App**,
 then use the sample agent's port:
 
@@ -195,6 +214,40 @@ matching preview, not the latest.
 For template development, run `eng\smoke-tests\wpf-template-smoke-test.ps1` on Windows.
 It packs, generates, restores, builds, and launches the template using an isolated
 template hive. See [validation details](docs/getting-started.md#validating-template-changes).
+
+The source gallery defaults to .NET 11. To run its .NET 10 compatibility path:
+
+```powershell
+dotnet run --project platforms\Windows.WPF\samples\Windows.WPF.Sample -p:WpfSampleTargetFramework=net10.0-windows10.0.17763.0
+```
+
+Run `eng\smoke-tests\wpf-assets-smoke-test.ps1 -RuntimeIdentifier win-x64`
+to check resource build/publish output and native scenarios. Add
+`-TargetFramework net10.0-windows10.0.17763.0` to check the compatibility path.
+That path retains source images instead of .NET 11's processed bitmaps and icons;
+images, fonts, raw assets, and splash sources are checked in both build and publish output.
+
+### Legacy ControlGallery UI tests
+
+`tests\UITests` drives the external ControlGallery, not `Windows.WPF.Sample`.
+Provision and build that gallery against the WPF packages being tested, with
+matching MAUI and CommunityToolkit versions for its target framework. Register
+both `UseMauiAppWPF<App>()` and `UseWPFEssentials()` so desktop idiom resources
+resolve correctly, and set `Window.Title` explicitly.
+
+Point the suite at the built app to test either its .NET 10 or .NET 11 build:
+
+```powershell
+$env:MAUI_WPF_UITESTS_GALLERY_EXE = 'C:\gallery\bin\Debug\net10.0-windows10.0.17763.0\ControlGallery.exe'
+$env:MAUI_WPF_UITESTS_SCREENSHOT_DIR = 'C:\test-results\wpf-net10'
+dotnet test platforms\Windows.WPF\tests\UITests\UITests.csproj
+```
+
+The test runner uses .NET 11; the gallery's executable selects the app runtime.
+Alternatively, set `MAUI_WPF_UITESTS_GALLERY_PROJECT` to build and run a gallery
+project with its default framework. The executable override takes precedence.
+Run gallery UI suites sequentially, with no other ControlGallery instance open
+and an unlocked desktop for screenshot and mouse-fallback tests.
 
 ## Registered fonts
 

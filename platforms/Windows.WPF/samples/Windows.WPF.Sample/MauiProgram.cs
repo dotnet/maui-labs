@@ -29,9 +29,12 @@ public static class MauiProgram
 		builder.ConfigureFonts(SampleFontRegistration.Configure);
 
 		// Blazor hybrid
-		builder.Services
-			.AddMauiBlazorWebView()
+#if NET11_0_OR_GREATER
+		builder.Services.AddMauiBlazorWebView()
 			.UsePlatformHandler<Microsoft.AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler>();
+#else
+		builder.Services.AddMauiBlazorWebView();
+#endif
 
 		return builder.Build();
 	}
