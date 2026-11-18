@@ -15,7 +15,10 @@ public class WpfHybridPackagingTests
             "platforms", "Windows.WPF", "samples", "Windows.WPF.Sample", "Windows.WPF.Sample.csproj"));
 
         var framework = Assert.Single(project.Descendants("TargetFramework")).Value;
-        Assert.StartsWith("net11.0-windows10.0.", framework);
+        Assert.Equal("$(WpfSampleTargetFramework)", framework);
+        var defaultFramework = Assert.Single(project.Descendants("WpfSampleTargetFramework"));
+        Assert.Equal("'$(WpfSampleTargetFramework)' == ''", (string?)defaultFramework.Attribute("Condition"));
+        Assert.StartsWith("net11.0-windows10.0.", defaultFramework.Value);
         var content = Assert.Single(project.Descendants("Content"),
             element => (string?)element.Attribute("Update") == @"wwwroot\**");
         Assert.Equal("PreserveNewest", (string?)content.Element("CopyToOutputDirectory"));
