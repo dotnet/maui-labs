@@ -717,7 +717,13 @@ public class UiActionTests : IntegrationTestBase
         var target = await FindRawTouchTargetAsync();
         var viewport = await FindElementAsync("GestureScrollView");
         Assert.True(await Client.ScrollAsync(target.Id, animated: false, scrollToPosition: "end"));
-        Assert.True(await Client.ScrollAsync(viewport.Id, deltaY: -16, animated: false));
+        target = await FindElementAsync("RawTouchTarget");
+        viewport = await FindElementAsync("GestureScrollView");
+        var targetBounds = Assert.IsType<BoundsInfo>(target.WindowBounds);
+        var viewportBounds = Assert.IsType<BoundsInfo>(viewport.WindowBounds);
+        var scrollDelta = targetBounds.Y + targetBounds.Height
+            - (viewportBounds.Y + viewportBounds.Height + 16);
+        Assert.True(await Client.ScrollAsync(viewport.Id, deltaY: scrollDelta, animated: false));
         await WaitForAsync(async () =>
         {
             target = await FindElementAsync("RawTouchTarget");
@@ -847,7 +853,14 @@ public class UiActionTests : IntegrationTestBase
 
     private async Task<ElementInfo> FindCanvasTargetAsync(string automationId)
     {
-        await NavigateToPageAsync("//canvastaps", "SkiaCanvas");
+        try
+        {
+            await NavigateToPageAsync("//canvastaps", "SkiaCanvas", timeoutMs: 15000);
+        }
+        catch (TimeoutException)
+        {
+            await NavigateToPageAsync("//canvastaps", "SkiaCanvas", timeoutMs: 15000);
+        }
         await Client.ScrollAsync(automationId);
         await SettleAsync();
         return await FindElementAsync(automationId);

@@ -8,7 +8,7 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 /// </summary>
 public sealed class GtkFixture : AppFixtureBase
 {
-    const string TargetFramework = "net10.0";
+    const string TargetFramework = "net11.0";
 
     Process? _appProcess;
 

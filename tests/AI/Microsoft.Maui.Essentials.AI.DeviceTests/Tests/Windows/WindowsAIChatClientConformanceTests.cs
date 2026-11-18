@@ -40,7 +40,7 @@ public class WindowsAIChatClientConformanceTests
 			new DataContent(new byte[] { 0 }, "IMAGE/PNG");
 		AIContent neighbor = role == "tool" ? new FunctionResultContent("call-1", "Keep") : new TextContent("Keep");
 		var error = Assert.Throws<NotSupportedException>(() =>
-			WindowsAIChatClient.NormalizeChatMessages([new(new ChatRole(role), [neighbor, image])]));
+			WindowsAIChatClient.NormalizeChatMessages((ChatMessage[])[new(new ChatRole(role), [neighbor, image])]));
 		Assert.Contains("image", error.Message, StringComparison.OrdinalIgnoreCase);
 	}
 
@@ -49,7 +49,7 @@ public class WindowsAIChatClientConformanceTests
 	public void NormalizeChatMessages_UnknownRole_DoesNotValidateDiscardedImage()
 	{
 		var (system, history) = WindowsAIChatClient.NormalizeChatMessages(
-			[new(new ChatRole("custom"), [new DataContent(new byte[] { 0 }, "image/png")])]);
+			(ChatMessage[])[new(new ChatRole("custom"), [new DataContent(new byte[] { 0 }, "image/png")])]);
 		Assert.Empty(system);
 		Assert.Empty(history);
 	}
@@ -104,7 +104,7 @@ public class WindowsAIChatClientConformanceTests
 
 		using var client = new WindowsAIChatClient();
 		var error = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-			client.GetResponseAsync([new(ChatRole.User, "Hello")], options));
+			client.GetResponseAsync((ChatMessage[])[new(ChatRole.User, "Hello")], options));
 		Assert.Contains(name, error.Message, StringComparison.Ordinal);
 	}
 
@@ -177,7 +177,7 @@ public class WindowsAIModelStatusTests(ITestOutputHelper output)
 				AIFeatureReadyState.OSUpdateNeeded => ChatModelAvailability.RequirementsNotMet,
 			_ => ChatModelAvailability.Unknown,
 		}, second.Availability);
-		Assert.Equal([ChatModelCapability.Text, ChatModelCapability.Streaming, ChatModelCapability.StructuredOutput],
+		Assert.Equal((ChatModelCapability[])[ChatModelCapability.Text, ChatModelCapability.Streaming, ChatModelCapability.StructuredOutput],
 			second.Capabilities);
 	}
 

@@ -643,7 +643,7 @@ public sealed class DeltaCompiler
 	/// <summary>
 	/// Finds the best DLL from a NuGet package directory.
 	/// Prefers: requested version > latest preview.3 > latest version.
-	/// For TFM: prefers net11.0 > net11.0-maccatalyst > any net11.0-* > net10.0-*.
+	/// For TFM: prefers net11.0 > net11.0-maccatalyst > any net11.0-* > net11.0-*.
 	/// </summary>
 	static string? FindBestDllFromPackage(string packageDir, string? requestedVersion)
 	{
@@ -689,7 +689,7 @@ public sealed class DeltaCompiler
 			.Where(d => d is not null)
 			.ToArray();
 
-		// Priority: net11.0 (plain) > net11.0-ios* > net11.0-maccatalyst* > any net11.0-* > net10.0-* > netstandard*
+		// Priority: net11.0 (plain) > net11.0-ios* > net11.0-maccatalyst* > any net11.0-* > net11.0-* > netstandard*
 		// Prefer ios since the companion app typically runs on iOS simulator
 		// Only include TFMs that actually exist in the package
 		var tfmPriority = new List<string>();
@@ -697,7 +697,7 @@ public sealed class DeltaCompiler
 		tfmPriority.AddRange(tfmDirs.Where(d => d!.StartsWith("net11.0-ios")).OrderByDescending(d => d)!);
 		tfmPriority.AddRange(tfmDirs.Where(d => d!.StartsWith("net11.0-maccatalyst")).OrderByDescending(d => d)!);
 		tfmPriority.AddRange(tfmDirs.Where(d => d!.StartsWith("net11.0-") && !d!.StartsWith("net11.0-ios") && !d!.StartsWith("net11.0-maccatalyst")).OrderByDescending(d => d)!);
-		tfmPriority.AddRange(tfmDirs.Where(d => d!.StartsWith("net10.0")).OrderByDescending(d => d)!);
+		tfmPriority.AddRange(tfmDirs.Where(d => d!.StartsWith("net11.0")).OrderByDescending(d => d)!);
 		tfmPriority.AddRange(tfmDirs.Where(d => d!.StartsWith("netstandard")).OrderByDescending(d => d)!);
 
 		foreach (var tfm in tfmPriority)

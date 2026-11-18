@@ -14,7 +14,9 @@ public sealed class ImageGenerationService
 
         var request = original is null
             ? new ImageGenerationRequest(prompt.Trim())
-            : new ImageGenerationRequest(prompt.Trim(), [new DataContent(original.Bytes, original.MediaType)]);
+            : new ImageGenerationRequest(
+                prompt.Trim(),
+                new AIContent[] { new DataContent(original.Bytes, original.MediaType) });
         var response = await generator.GenerateAsync(request, options, cancellationToken).ConfigureAwait(false);
         var images = new List<GeneratedImage>();
         foreach (var content in response.Contents)

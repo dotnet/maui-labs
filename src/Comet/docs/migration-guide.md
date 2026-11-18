@@ -169,8 +169,8 @@ Run the documented build order from the repository root:
 dotnet build src/Comet.SourceGenerator/Comet.SourceGenerator.csproj -c Release
 dotnet build src/Comet/Comet.csproj -c Release
 dotnet build tests/Comet.Tests/Comet.Tests.csproj -c Release
-dotnet build sample/CometMauiApp/CometMauiApp.csproj -c Release -f net10.0-maccatalyst
-dotnet build sample/CometBaristaNotes/CometBaristaNotes.csproj -c Release -f net10.0-maccatalyst
+dotnet build sample/CometMauiApp/CometMauiApp.csproj -c Release -f net11.0-maccatalyst
+dotnet build sample/CometBaristaNotes/CometBaristaNotes.csproj -c Release -f net11.0-maccatalyst
 ```
 
 For component-surface confidence, run the focused component tests after building:

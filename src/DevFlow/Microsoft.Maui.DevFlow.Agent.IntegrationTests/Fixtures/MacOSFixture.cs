@@ -8,7 +8,7 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 /// </summary>
 public sealed class MacOSFixture : AppFixtureBase
 {
-    const string TargetFramework = "net10.0-macos";
+    const string TargetFramework = "net11.0-macos";
 
     Process? _appProcess;
 

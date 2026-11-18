@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-macos</TargetFramework>
+    <TargetFramework>net11.0-macos</TargetFramework>
     <OutputType>Exe</OutputType>
     <RootNamespace>DevFlow.Sample</RootNamespace>
     <UseMaui>true</UseMaui>

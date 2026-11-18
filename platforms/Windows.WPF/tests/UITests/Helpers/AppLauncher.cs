@@ -19,7 +19,7 @@ public class AppLauncher : IDisposable
         _wpfProjectPath = wpfProjectPath
             ?? Path.Combine(repoRoot, "samples", "ControlGallery", "ControlGallery.csproj");
         _winuiExePath = winuiExePath
-            ?? @"D:\repos\davidortinau\ControlGallery\src\ControlGallery\bin\Debug\net10.0-windows10.0.19041.0\win-x64\ControlGallery.exe";
+            ?? @"D:\repos\davidortinau\ControlGallery\src\ControlGallery\bin\Debug\net11.0-windows10.0.19041.0\win-x64\ControlGallery.exe";
         _screenshotDir = Path.Combine(repoRoot, "tests", "UITests", "Screenshots");
         Directory.CreateDirectory(_screenshotDir);
     }
@@ -99,7 +99,7 @@ public class AppLauncher : IDisposable
                     continue;
                 // Skip WinUI processes (different TFM path)
                 var path = p.MainModule?.FileName ?? "";
-                if (path.Contains("net10.0-windows10.0", StringComparison.OrdinalIgnoreCase))
+                if (path.Contains("net11.0-windows10.0", StringComparison.OrdinalIgnoreCase))
                     continue;
                 return p;
             }

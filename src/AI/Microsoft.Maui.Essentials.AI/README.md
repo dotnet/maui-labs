@@ -7,7 +7,9 @@ No cloud service is used.
 
 > **Experimental:** this package ships as a preview. APIs may change.
 
-## Platform support
+## Requirements and platform support
+
+Supports .NET 10 and .NET 11 with matching MAUI workloads.
 
 | Platform | Chat (`IChatClient`) | Image input | Embeddings (`IEmbeddingGenerator`) |
 |----------|---------------------|-------------|-----------------------------------|
@@ -16,8 +18,6 @@ No cloud service is used.
 | macOS 26+ | Apple Intelligence, with tools and structured responses | OS 27+ | NaturalLanguage, macOS 10.15+ |
 | Windows 11 24H2+ | Windows AI on Copilot+ hardware, with structured responses | Not supported | Not supported |
 | Android API 26+ | Gemini Nano on supported AICore hardware, with structured responses; tools on capable models | In-memory images | Not supported |
-
-Requires .NET 10 and the matching MAUI workloads.
 
 ## Install
 

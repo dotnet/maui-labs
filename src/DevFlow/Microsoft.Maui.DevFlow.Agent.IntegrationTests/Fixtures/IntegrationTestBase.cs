@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
@@ -138,20 +139,46 @@ public abstract class IntegrationTestBase
 
     async Task<HttpResponseMessage> SendMutationRawAsync(HttpMethod method, string path, object? body = null)
     {
-        var lease = await Client.ControlMutationLeaseAsync("claim");
-        if (!lease.YouHold)
-            throw new MutationLeaseException(lease);
-
-        return await SendHttpWithTransportRetryAsync(async () =>
+        for (var attempt = 0; ; attempt++)
         {
-            using var request = new HttpRequestMessage(method, path);
-            request.Headers.TryAddWithoutValidation("X-DevFlow-Lease", Client.MutationLeaseId);
-            request.Headers.TryAddWithoutValidation("X-DevFlow-Holder", Client.MutationLeaseHolderKind);
-            if (!string.IsNullOrWhiteSpace(Client.MutationLeaseLabel))
-                request.Headers.TryAddWithoutValidation("X-DevFlow-Label", Client.MutationLeaseLabel);
-            request.Content = CreateJsonContent(body);
-            return await Http.SendAsync(request);
-        });
+            var lease = await Client.ControlMutationLeaseAsync("claim");
+            if (!lease.YouHold)
+                throw new MutationLeaseException(lease);
+
+            var response = await SendHttpWithTransportRetryAsync(async () =>
+            {
+                using var request = new HttpRequestMessage(method, path);
+                request.Headers.TryAddWithoutValidation("X-DevFlow-Lease", Client.MutationLeaseId);
+                request.Headers.TryAddWithoutValidation("X-DevFlow-Holder", Client.MutationLeaseHolderKind);
+                if (!string.IsNullOrWhiteSpace(Client.MutationLeaseLabel))
+                    request.Headers.TryAddWithoutValidation("X-DevFlow-Label", Client.MutationLeaseLabel);
+                request.Content = CreateJsonContent(body);
+                return await Http.SendAsync(request);
+            });
+
+            if (attempt > 0 || !await IsLeaseConflictAsync(response))
+                return response;
+
+            response.Dispose();
+        }
+    }
+
+    static async Task<bool> IsLeaseConflictAsync(HttpResponseMessage response)
+    {
+        if (response.StatusCode != HttpStatusCode.Conflict)
+            return false;
+
+        var responseBody = await response.Content.ReadAsStringAsync();
+        try
+        {
+            var json = JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
+            return json.TryGetProperty("reason", out var reason) &&
+                reason.GetString() == "lease";
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     static StringContent? CreateJsonContent(object? body)
@@ -192,7 +219,17 @@ public abstract class IntegrationTestBase
 
         while (DateTime.UtcNow < deadline)
         {
-            results = await Client.QueryAsync(automationId: automationId);
+            try
+            {
+                results = await Client.QueryAsync(automationId: automationId);
+            }
+            catch (InvalidOperationException ex) when (
+                ex.Message == "The UI kept changing while DevFlow was reading it. Retry the operation after the current UI update completes.")
+            {
+                await Task.Delay(250);
+                continue;
+            }
+
             if (results.Count > 0)
                 return results[0];
             await Task.Delay(250);

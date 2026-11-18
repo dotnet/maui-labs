@@ -23,7 +23,7 @@ protocol, Yoga layout, and typed storage — on top.
 
 ## Local modifications
 
-- Facade `TargetFramework` bumped `net10.0-android` → `net11.0-android`.
+- Facade `TargetFramework` bumped `net11.0-android` → `net11.0-android`.
 - Compose package versions pinned in-csproj (Comet's repo has central package
   management disabled), mirroring the upstream `Directory.Build.targets` pins.
 - Dropped the unused `Microsoft.AndroidX.Compose.Maui` MAUI-backend coupling.

@@ -17,7 +17,7 @@ internal interface IMacOSViewTransformHandler
 
 /// <summary>
 /// Base view handler for macOS that provides PlatformArrange and GetDesiredSize implementations.
-/// The net10.0 (platform-agnostic) ViewHandler has no-op PlatformArrange and returns Size.Zero from
+/// The net11.0 (platform-agnostic) ViewHandler has no-op PlatformArrange and returns Size.Zero from
 /// GetDesiredSize, which means NSView frames are never set and all views measure as zero.
 /// This base class bridges MAUI's layout system to AppKit by setting NSView Frame in
 /// PlatformArrange and using IntrinsicContentSize/FittingSize/SizeThatFits in GetDesiredSize.

@@ -33,10 +33,10 @@ reference packs. Build from the repository root:
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst27.2 -p:UseXcode27Preview=true
 ```
 
-Use `net10.0-ios27.0` or `net10.0-macos27.0` for those platforms.
+Use `net11.0-ios27.2` or `net11.0-macos27.2` for those platforms.
 `UseXcode27Preview` selects reference-pack targets; it does not install or
 select Xcode. The official pipeline also builds unsuffixed Apple target
 frameworks against Xcode 27 with its validated compatibility settings.
@@ -173,7 +173,7 @@ Run managed Mac Catalyst device tests:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst27.2 -p:UseXcode27Preview=true
 ```
 
 Model-dependent tests use `RequiresModel=true`. Runtime availability checks use

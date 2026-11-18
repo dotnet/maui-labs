@@ -39,7 +39,7 @@ public class WpfAppFixture : IDisposable
                         if (p.MainWindowHandle == IntPtr.Zero) continue;
                         // Distinguish WPF from WinUI by checking module path
                         var path = p.MainModule?.FileName ?? "";
-                        if (path.Contains("net10.0-windows10.0", StringComparison.OrdinalIgnoreCase))
+                        if (path.Contains("net11.0-windows10.0", StringComparison.OrdinalIgnoreCase))
                             continue; // Skip WinUI process
                         return p;
                     }

@@ -68,9 +68,9 @@ public abstract class ChatClientOptionsTestsBase<T>
 		var error = await Assert.ThrowsAsync<NotSupportedException>(async () =>
 		{
 			if (streaming)
-				await client.GetStreamingResponseAsync([new(ChatRole.User, "Hello")], options).ToChatResponseAsync();
+				await client.GetStreamingResponseAsync((ChatMessage[])[new(ChatRole.User, "Hello")], options).ToChatResponseAsync();
 			else
-				await client.GetResponseAsync([new(ChatRole.User, "Hello")], options);
+				await client.GetResponseAsync((ChatMessage[])[new(ChatRole.User, "Hello")], options);
 		});
 		Assert.Contains(optionName, error.Message, StringComparison.Ordinal);
 	}
@@ -84,7 +84,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	{
 		using var client = new T();
 		var response = await client.GetResponseAsync(
-			[new(ChatRole.User, "Hello")],
+			(ChatMessage[])[new(ChatRole.User, "Hello")],
 			new ChatOptions { Instructions = "You are a helpful assistant." });
 
 		Assert.NotNull(response);
