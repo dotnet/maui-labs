@@ -17,6 +17,8 @@ public partial class DevFlowAgentService
     private readonly List<ExtensionLoadError> _extensionLoadErrors = new();
     private readonly Dictionary<AgentExtension, Task> _pluginStartTasks = new();
     private CancellationTokenSource? _pluginCts;
+    private readonly object _pluginStopGate = new();
+    private Task? _pluginStopTask;
     private int _pluginsActivated;
 
     /// <summary>How long stopping all plugins may take before the agent stops without them.</summary>
@@ -44,6 +46,7 @@ public partial class DevFlowAgentService
         IServiceProvider? services;
         try { services = ExtensionServices; }
         catch { services = null; }
+        _options.ProviderPolicy.Freeze();
 
         var registrations = new List<ExtensionRegistration>(_options.ExtensionFactories);
         registrations.AddRange(GetServiceRegistrations(services));
@@ -60,6 +63,8 @@ public partial class DevFlowAgentService
             try
             {
                 plugin = registration.Factory(services);
+                if (plugin is DevFlowHostExtension)
+                    throw new InvalidOperationException("Host plugins must be installed in the CLI/MCP/Inspector host, not in an app.");
             }
             catch (Exception ex)
             {
@@ -75,7 +80,9 @@ public partial class DevFlowAgentService
                 extension = new AgentExtension(plugin.Namespace, plugin.Description, plugin.Version, plugin.Features)
                 {
                     Plugin = plugin,
-                    ToolPrefix = plugin.ToolPrefix
+                    Bindings = _options.ProviderPolicy.GetBindings(plugin.Namespace),
+                    ToolPrefix = plugin.ToolPrefix,
+                    State = "starting"
                 };
             }
             catch (Exception ex)
@@ -144,10 +151,17 @@ public partial class DevFlowAgentService
     /// <summary>Runs every plugin's <see cref="DevFlowExtension.StartAsync"/> in the background.</summary>
     internal void StartPlugins()
     {
-        if (_plugins.Count == 0 || _pluginCts is not null)
+        lock (_pluginStopGate)
+            StartPluginsCore();
+    }
+
+    private void StartPluginsCore()
+    {
+        if (_disposed || _plugins.Count == 0 || _pluginCts is not null || _pluginStopTask is { IsCompleted: false })
             return;
 
         _pluginCts = new CancellationTokenSource();
+        _pluginStopTask = null;
         var ct = _pluginCts.Token;
 
         IServiceProvider? services;
@@ -157,6 +171,7 @@ public partial class DevFlowAgentService
 
         foreach (var extension in _plugins.Where(e => e.Error is null && e.Plugin is not null))
         {
+            extension.State = "starting";
             var context = new ExtensionContext(
                 services,
                 (ILogger?)loggerFactory?.CreateLogger($"DevFlow.Extension.{extension.Namespace}")
@@ -172,6 +187,8 @@ public partial class DevFlowAgentService
                 try
                 {
                     await extension.Plugin!.StartAsync(context, ct).ConfigureAwait(false);
+                    if (!ct.IsCancellationRequested)
+                        extension.State = "ready";
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -192,25 +209,56 @@ public partial class DevFlowAgentService
     /// </summary>
     internal async Task StopPluginsAsync()
     {
+        Task stop;
+        lock (_pluginStopGate)
+            stop = _pluginStopTask ??= StopPluginsCoreAsync();
+        await stop.ConfigureAwait(false);
+    }
+
+    private async Task StopPluginsCoreAsync()
+    {
         var cts = Interlocked.Exchange(ref _pluginCts, null);
         if (cts is null)
             return;
 
-        cts.Cancel();
+        var starts = new Dictionary<AgentExtension, Task>(_pluginStartTasks);
+        _pluginStartTasks.Clear();
         var deadline = DateTime.UtcNow + PluginStopTimeout;
-        using var stopToken = new CancellationTokenSource(PluginStopTimeout);
+        foreach (var extension in _plugins) extension.State = "stopping";
+        var cancellation = Task.Run(async () =>
+        {
+            try { await cts.CancelAsync().ConfigureAwait(false); }
+            catch (Exception ex) { Console.WriteLine($"[Microsoft.Maui.DevFlow] Plugin cancellation callback failed: {ex.Message}"); }
+        });
+        if (!await CompletesWithinAsync(cancellation, deadline).ConfigureAwait(false))
+            Console.WriteLine("[Microsoft.Maui.DevFlow] Plugin cancellation callbacks did not finish within the shutdown deadline.");
+        var stopToken = new CancellationTokenSource(PluginStopTimeout);
+        var stops = new List<Task>();
 
         foreach (var extension in _plugins.Where(e => e.Plugin is not null))
         {
-            if (_pluginStartTasks.Remove(extension, out var startTask)
+            extension.State = "stopping";
+            if (starts.TryGetValue(extension, out var startTask)
                 && !await CompletesWithinAsync(startTask, deadline).ConfigureAwait(false))
             {
-                Console.WriteLine($"[Microsoft.Maui.DevFlow] Extension '{extension.Namespace}' did not finish starting; stopping it anyway.");
+                Console.WriteLine($"[Microsoft.Maui.DevFlow] Extension '{extension.Namespace}' did not finish starting; cleanup will run when startup finishes.");
             }
 
             try
             {
-                var stopTask = extension.Plugin!.StopAsync(stopToken.Token);
+                var stopTask = Task.Run(async () =>
+                {
+                    try
+                    {
+                        if (startTask is not null) await startTask.ConfigureAwait(false);
+                        await extension.Plugin!.StopAsync(stopToken.Token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[Microsoft.Maui.DevFlow] Extension '{extension.Namespace}' failed to stop: {ex.Message}");
+                    }
+                }, CancellationToken.None);
+                stops.Add(stopTask);
                 if (!await CompletesWithinAsync(stopTask, deadline).ConfigureAwait(false))
                     Console.WriteLine($"[Microsoft.Maui.DevFlow] Extension '{extension.Namespace}' did not stop within {PluginStopTimeout.TotalSeconds:0}s.");
                 else
@@ -221,7 +269,10 @@ public partial class DevFlowAgentService
                 Console.WriteLine($"[Microsoft.Maui.DevFlow] Extension '{extension.Namespace}' failed to stop: {ex.Message}");
             }
         }
-        cts.Dispose();
+        // A late start or cancellation callback can still use this token after the deadline.
+        _ = Task.WhenAll(starts.Values.Concat(stops).Append(cancellation)).ContinueWith(_ =>
+            { stopToken.Dispose(); cts.Dispose(); },
+            CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
     /// <summary>
@@ -230,10 +281,21 @@ public partial class DevFlowAgentService
     /// </summary>
     private void StopPluginsForDispose()
     {
-        if (_pluginCts is null)
-            return;
+        lock (_pluginStopGate)
+            if (_pluginCts is null && (_pluginStopTask is null || _pluginStopTask.IsCompleted))
+                return;
 
-        try { Task.Run(StopPluginsAsync).Wait(PluginStopTimeout + TimeSpan.FromSeconds(1)); }
+        var stop = Task.Run(async () =>
+        {
+            try { await StopPluginsAsync().ConfigureAwait(false); }
+            catch (Exception ex) { Console.WriteLine($"[Microsoft.Maui.DevFlow] Plugin cleanup failed: {ex.Message}"); }
+        });
+        if (_dispatcher is { IsDispatchRequired: false })
+        {
+            Console.WriteLine("[Microsoft.Maui.DevFlow] Plugin cleanup continues asynchronously; await StopAsync before Dispose to finish UI-thread cleanup.");
+            return;
+        }
+        try { stop.Wait(PluginStopTimeout + TimeSpan.FromSeconds(1)); }
         catch (AggregateException) { }
     }
 
@@ -255,9 +317,9 @@ public partial class DevFlowAgentService
 
     /// <summary>Refuses a stream subscription before the upgrade when its plugin is faulted.</summary>
     private static HttpResponse? AdmitExtensionStream(AgentExtension extension)
-        => extension.Error is null
+        => extension.State == "ready"
             ? null
-            : HttpResponse.Error($"Extension '{extension.Namespace}' is faulted: {extension.Error}", 503, "extension-faulted");
+            : extension.UnavailableResponse();
 
     private async Task HandleExtensionStreamWebSocket(
         AgentExtension extension,
@@ -295,7 +357,7 @@ public partial class DevFlowAgentService
             }
             if (droppedCount > 0)
                 frame["dropped"] = droppedCount;
-            await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(frame, DevFlowJson.Options), cts.Token);
+            await AgentHttpServer.WebSocketSendTextAsync(stream, DevFlowJson.Serialize(frame), cts.Token);
         }
 
         async Task DrainAsync()
@@ -356,7 +418,8 @@ public partial class DevFlowAgentService
                 }
             }
 
-            try { await readTask; } catch { }
+            await cts.CancelAsync();
+            try { await readTask; } catch (OperationCanceledException) { }
         }
         catch (OperationCanceledException) { }
         catch (IOException) { }

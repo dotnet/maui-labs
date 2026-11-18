@@ -17,7 +17,8 @@ public sealed record DevFlowEventPage(IReadOnlyList<DevFlowEvent> Events, long N
 /// <summary>
 /// A bounded, thread-safe buffer of events a plugin publishes for the CLI, MCP clients and the
 /// inspector. When full, the oldest event is dropped; readers learn about the gap through
-/// <see cref="DevFlowEventPage.Dropped"/>. Publishing never blocks.
+/// <see cref="DevFlowEventPage.Dropped"/>. Publishing does not wait for transport readers;
+/// explicit subscriber callbacks run synchronously and must be quick.
 /// </summary>
 public class DevFlowEventStream
 {
@@ -72,7 +73,7 @@ public class DevFlowEventStream
         foreach (var observer in snapshot)
         {
             try { observer(evt); }
-            catch { /* an observer must not break the publisher */ }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceError($"[DevFlow] Event stream observer failed: {ex}"); }
         }
     }
 

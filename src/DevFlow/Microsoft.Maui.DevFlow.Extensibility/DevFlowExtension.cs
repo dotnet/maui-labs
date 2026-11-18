@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Microsoft.Maui.DevFlow.Extensibility;
 
 /// <summary>
@@ -13,6 +15,16 @@ namespace Microsoft.Maui.DevFlow.Extensibility;
 /// </remarks>
 public abstract class DevFlowExtension
 {
+    private static readonly Regex NamespacePattern = new("^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$", RegexOptions.CultureInvariant);
+    private static readonly Regex VersionPattern = new("^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$", RegexOptions.CultureInvariant);
+
+    internal static void ValidateIdentity(string ns, string version)
+    {
+        if (!NamespacePattern.IsMatch(ns))
+            throw new ArgumentException("Extension namespace must use reverse-domain notation, e.g. 'com.example.tool'.", "namespace");
+        if (!VersionPattern.IsMatch(version))
+            throw new ArgumentException("Extension version must be a semantic version, e.g. '1.0.0'.", nameof(version));
+    }
     /// <param name="namespace">Reverse-domain namespace, e.g. <c>org.shiny.ble</c>.</param>
     /// <param name="description">One line describing what the plugin exposes.</param>
     /// <param name="version">Semantic version of the plugin's tool surface.</param>
@@ -22,6 +34,7 @@ public abstract class DevFlowExtension
         Namespace = @namespace.Trim();
         Description = description?.Trim() ?? string.Empty;
         Version = string.IsNullOrWhiteSpace(version) ? "1.0.0" : version.Trim();
+        ValidateIdentity(Namespace, Version);
     }
 
     /// <summary>Reverse-domain namespace that scopes the plugin's routes.</summary>

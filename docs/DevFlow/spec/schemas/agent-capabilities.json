@@ -309,7 +309,7 @@
           "items": {
             "$ref": "#/$defs/ExtensionTool"
           },
-          "description": "Self-describing tools exposed by this extension. Each tool maps to an HTTP endpoint under /api/v1/ext/{namespace}/."
+          "description": "Self-describing operations. Legacy capabilities expose extension routes under /api/v1/ext/{namespace}/; the shared /api/v1/operations catalog also includes built-ins at their existing URLs."
         },
         "streams": {
           "type": "array",
@@ -325,10 +325,12 @@
         "state": {
           "type": "string",
           "enum": [
+            "starting",
             "ready",
+            "stopping",
             "faulted"
           ],
-          "description": "Present for plugins (DevFlowExtension). A faulted plugin answers its routes with 503."
+          "description": "Present for plugins (DevFlowExtension). Only ready plugins admit calls and subscriptions; other states answer 503."
         },
         "error": {
           "type": "string",
@@ -383,7 +385,7 @@
         "name": {
           "type": "string",
           "description": "Machine-readable tool name, unique within the extension (e.g. 'build_info', 'capture_message').",
-          "pattern": "^[a-z][a-z0-9_]*$"
+          "minLength": 1
         },
         "description": {
           "type": "string",

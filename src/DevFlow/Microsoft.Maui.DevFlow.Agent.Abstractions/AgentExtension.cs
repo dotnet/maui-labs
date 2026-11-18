@@ -6,28 +6,40 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 
 public sealed class AgentExtension : IDevFlowExtensionBuilder
 {
-    private static readonly Regex NamespacePattern = new("^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex SemanticVersionPattern = new("^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private readonly List<AgentExtensionRoute> _routes = new();
-    private readonly List<ExtensionToolDescriptor> _tools = new();
     private readonly List<ExtensionStreamDescriptor> _streams = new();
+    internal DevFlowOperationCatalog Operations { get; } = new();
+    internal DevFlowProviderBindings? Bindings { get; init; }
+    private string RouteBase => Bindings?.HttpRoutePrefix ?? $"/api/v1/ext/{Namespace}";
+    private string StreamSocketBase => Bindings?.WebSocketRoutePrefix ?? $"/ws/v1/ext/{Namespace}";
 
     public string Namespace { get; }
     public string Description { get; }
     public string Version { get; }
     public IReadOnlyList<string> Features { get; }
     internal IReadOnlyList<AgentExtensionRoute> Routes => _routes;
-    internal IReadOnlyList<ExtensionToolDescriptor> Tools => _tools;
+    internal IReadOnlyList<ExtensionToolDescriptor> Tools => Operations.Operations.Select(operation => new ExtensionToolDescriptor
+    {
+        Name = operation.Name, Description = operation.Description, Method = operation.Method!, Path = operation.Path!,
+        Parameters = operation.Parameters, Returns = operation.Returns,
+        Annotations = operation.Annotations is { } annotations ? new ExtensionToolAnnotations
+        {
+            ReadOnly = annotations.ReadOnly, Destructive = annotations.Destructive,
+            Idempotent = annotations.Idempotent, Category = annotations.Category
+        } : null
+    }).ToArray();
     internal IReadOnlyList<ExtensionStreamDescriptor> Streams => _streams;
 
     /// <summary>Short prefix MCP uses for this extension's tools. Defaults to the last namespace segment.</summary>
     public string? ToolPrefix { get; set; }
 
-    /// <summary><c>ready</c>, or <c>faulted</c> when a plugin failed to configure or start.</summary>
-    public string State => Error is null ? "ready" : "faulted";
+    private volatile string _state = "ready";
+    private volatile string? _error;
+    /// <summary><c>starting</c>, <c>ready</c>, <c>stopping</c>, or <c>faulted</c>.</summary>
+    public string State { get => Error is null ? _state : "faulted"; internal set => _state = value; }
 
     /// <summary>Why the plugin faulted, when <see cref="State"/> is <c>faulted</c>.</summary>
-    public string? Error { get; internal set; }
+    public string? Error { get => _error; internal set => _error = value; }
 
     internal DevFlowExtension? Plugin { get; init; }
 
@@ -41,13 +53,9 @@ public sealed class AgentExtension : IDevFlowExtensionBuilder
         ArgumentException.ThrowIfNullOrWhiteSpace(@namespace);
 
         Namespace = @namespace.Trim();
-        if (!NamespacePattern.IsMatch(Namespace))
-            throw new ArgumentException("Extension namespace must use reverse-domain notation, e.g. 'com.example.tool'.", nameof(@namespace));
-
         Description = description?.Trim() ?? string.Empty;
         Version = string.IsNullOrWhiteSpace(version) ? "1.0.0" : version.Trim();
-        if (!SemanticVersionPattern.IsMatch(Version))
-            throw new ArgumentException("Extension version must be a semantic version, e.g. '1.0.0'.", nameof(version));
+        DevFlowExtension.ValidateIdentity(Namespace, Version);
 
         Features = (features ?? Array.Empty<string>())
             .Where(f => !string.IsNullOrWhiteSpace(f))
@@ -90,28 +98,62 @@ public sealed class AgentExtension : IDevFlowExtensionBuilder
         ExtensionToolAnnotations? annotations = null)
     {
         ArgumentNullException.ThrowIfNull(handler);
+        parameters = parameters?.Clone();
+        returns = returns?.Clone();
 
         var normalizedMethod = method.Trim().ToUpperInvariant();
         var normalizedPath = NormalizePath(path);
-        var fullPath = $"/api/v1/ext/{Namespace}{normalizedPath}";
+        var fullPath = $"{RouteBase}{normalizedPath}";
+        if (!DevFlowProviderPolicy.IsCanonicalPath(fullPath))
+            throw new ArgumentException("Extension routes must be canonical paths within their registered prefix.", nameof(path));
         var toolName = string.IsNullOrWhiteSpace(name) ? BuildToolName(normalizedMethod, normalizedPath) : name.Trim();
-        if (_tools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.OrdinalIgnoreCase)))
+        if (Operations.Operations.Any(tool => string.Equals(tool.Name, toolName, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException($"Duplicate extension tool name registration: {toolName}");
 
         var requiresMutationLease =
             !normalizedMethod.Equals("GET", StringComparison.OrdinalIgnoreCase) &&
             annotations?.ReadOnly != true;
+        var toolDescription = string.IsNullOrWhiteSpace(description) ? $"{normalizedMethod} {fullPath}" : description.Trim();
+        Operations.MapTool(toolName, toolDescription, normalizedMethod, fullPath,
+            async request =>
+            {
+                var response = await handler(new HttpRequest
+                {
+                    Method = request.Method, Path = request.Path, Body = request.Body,
+                    QueryParams = new(request.Query), RouteParams = new(request.RouteValues),
+                    Headers = new(request.Headers, StringComparer.OrdinalIgnoreCase),
+                    CancellationToken = request.CancellationToken
+                }).ConfigureAwait(false);
+                return new DevFlowResponse
+                {
+                    StatusCode = response.StatusCode, ContentType = response.ContentType,
+                    Body = response.Body, BodyBytes = response.BodyBytes, Headers = response.Headers
+                };
+            }, parameters, returns, annotations is null ? null : new DevFlowToolAnnotations
+            {
+                ReadOnly = annotations.ReadOnly, Destructive = annotations.Destructive,
+                Idempotent = annotations.Idempotent, Category = annotations.Category
+            });
         _routes.Add(new AgentExtensionRoute(normalizedMethod, fullPath, handler, requiresMutationLease));
-        _tools.Add(new ExtensionToolDescriptor
-        {
-            Name = toolName,
-            Description = string.IsNullOrWhiteSpace(description) ? $"{normalizedMethod} {fullPath}" : description.Trim(),
-            Method = normalizedMethod,
-            Path = fullPath,
-            Parameters = parameters,
-            Returns = returns,
-            Annotations = annotations
-        });
+    }
+
+    public void MapOperation(
+        string name, string description, Func<DevFlowOperationRequest, Task<DevFlowResponse>> handler,
+        JsonElement? parameters = null, JsonElement? returns = null, DevFlowToolAnnotations? annotations = null,
+        DevFlowTargetRequirement target = DevFlowTargetRequirement.None)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(handler);
+        if (target != DevFlowTargetRequirement.None)
+            throw new ArgumentException("Agent operations already execute in the selected app; target requirements belong to host operations.");
+        ((IDevFlowExtensionBuilder)this).MapTool(name, description, "POST", $"/operations/{Uri.EscapeDataString(name)}",
+            request =>
+            {
+                if ((!string.IsNullOrWhiteSpace(request.Body) && request.BodyJson is null) ||
+                    request.BodyJson is { ValueKind: not (JsonValueKind.Object or JsonValueKind.Null) })
+                    return Task.FromResult(DevFlowResponse.Error("Operation parameters must be a JSON object.", 400));
+                return handler(new(request.BodyJson, request.CancellationToken));
+            }, parameters, returns, annotations);
     }
 
     void IDevFlowExtensionBuilder.MapGet(string path, Func<DevFlowRequest, Task<DevFlowResponse>> handler)
@@ -163,8 +205,8 @@ public sealed class AgentExtension : IDevFlowExtensionBuilder
         {
             Name = normalizedName,
             Description = description?.Trim() ?? string.Empty,
-            Path = $"/api/v1/ext/{Namespace}{relativePath}",
-            WebSocketPath = $"/ws/v1/ext/{Namespace}{relativePath}",
+            Path = $"{RouteBase}{relativePath}",
+            WebSocketPath = $"{StreamSocketBase}{relativePath}",
             Columns = columns?.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToArray() ?? [],
             Stream = stream
         };
@@ -173,9 +215,9 @@ public sealed class AgentExtension : IDevFlowExtensionBuilder
         AddRoute(
             "GET",
             relativePath,
-            request => Task.FromResult(Error is null
+            request => Task.FromResult(State == "ready"
                 ? ReadStream(stream, request)
-                : HttpResponse.Error($"Extension '{Namespace}' is faulted: {Error}", 503, "extension-faulted")),
+                : UnavailableResponse()),
             StreamToolName(normalizedName),
             $"Read events from the '{normalizedName}' stream: {descriptor.Description} Pass the returned nextSequence as 'since' to continue where the last read stopped.",
             StreamParametersSchema,
@@ -194,29 +236,33 @@ public sealed class AgentExtension : IDevFlowExtensionBuilder
         var page = stream.Read(since, limit);
         return new HttpResponse
         {
-            Body = JsonSerializer.Serialize(new
+            Body = DevFlowJson.Serialize(new Dictionary<string, object?>
             {
-                events = page.Events.Select(ToWire),
-                nextSequence = page.NextSequence,
-                dropped = page.Dropped
-            }, DevFlowJson.Options)
+                ["events"] = page.Events.Select(ToWire).ToArray(),
+                ["nextSequence"] = page.NextSequence,
+                ["dropped"] = page.Dropped
+            })
         };
     }
 
-    internal static object ToWire(DevFlowEvent evt) => new
+    internal static object ToWire(DevFlowEvent evt) => new Dictionary<string, object?>
     {
-        seq = evt.Sequence,
-        ts = evt.Timestamp.ToString("O"),
-        data = evt.Data
+        ["seq"] = evt.Sequence,
+        ["ts"] = evt.Timestamp.ToString("O"),
+        ["data"] = evt.Data
     };
+
+    internal HttpResponse UnavailableResponse()
+        => HttpResponse.Error($"Extension '{Namespace}' is {State}: {Error ?? "try again when it is ready"}",
+            503, $"extension-{State}");
 
     private Func<HttpRequest, Task<HttpResponse>> Adapt(Func<DevFlowRequest, Task<DevFlowResponse>> handler)
     {
         ArgumentNullException.ThrowIfNull(handler);
         return async request =>
         {
-            if (Error is not null)
-                return HttpResponse.Error($"Extension '{Namespace}' is faulted: {Error}", 503, "extension-faulted");
+            if (State != "ready")
+                return UnavailableResponse();
 
             DevFlowResponse response;
             try
@@ -245,7 +291,8 @@ public sealed class AgentExtension : IDevFlowExtensionBuilder
                 StatusText = HttpResponse.StatusTextFor(response.StatusCode),
                 ContentType = response.ContentType,
                 Body = response.Body,
-                BodyBytes = response.BodyBytes
+                BodyBytes = response.BodyBytes,
+                Headers = new Dictionary<string, string>(response.Headers, StringComparer.OrdinalIgnoreCase)
             };
         };
     }

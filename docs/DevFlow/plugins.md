@@ -2,7 +2,8 @@
 
 > **Experimental preview**: the plugin API may change between releases.
 
-A DevFlow plugin adds tools and live event streams to the DevFlow agent running inside an app. The
+A DevFlow plugin adds operations and live event streams, either inside an app or on the developer
+machine. The
 `maui devflow` CLI, the MCP server and the Inspector discover them at runtime, so a library can ship a
 plugin for itself without any change to DevFlow, and nothing in DevFlow knows about it.
 
@@ -14,12 +15,17 @@ package. That package has no dependency on the agent or on .NET MAUI.
 
 | Plugin declares | Agent serves | CLI | MCP | Inspector |
 |---|---|---|---|---|
+| `MapOperation(...)` | `/api/v1/ext/{namespace}/operations/{name}` | `operations call` | `ext_{prefix}_{tool}` | Schema-driven tool form |
 | `MapTool(...)` | `/api/v1/ext/{namespace}/{path}` | `extensions call` | `ext_{prefix}_{tool}` | Tool form generated from the JSON schema |
 | `MapStream(...)` | `/ws/v1/ext/{namespace}/streams/{name}` (live) and `/api/v1/ext/{namespace}/streams/{name}` (polling) | `extensions watch`, `extensions events` | A read-only `…_events` tool | Live table with the stream's columns |
 | `MapGet/Post/Put/Delete(...)` | `/api/v1/ext/{namespace}/{path}` | Advertised as a tool with a generated name, e.g. `get_status` for `GET /status` | Same, without a description or schema | Same |
 
-Every route is advertised as a tool, as for inline extensions. Prefer `MapTool`, which lets you give the
-tool a name, a description an AI agent can act on, and a parameter schema.
+Every route is advertised as a tool, as for inline extensions. Prefer `MapOperation` for new code:
+handlers receive JSON parameters, cancellation, and an explicitly selected target without depending
+on HTTP. Use `MapTool` when retaining a particular HTTP binding.
+Route parameters such as `/items/{id}` are supplied as string JSON arguments, escaped into a
+single path segment, and excluded from GET query parameters. Missing values and dot segments are
+rejected before sending the request.
 
 Write routes (POST, PUT, DELETE) not marked read-only require the DevFlow mutation lease, like the
 agent's own mutations.
@@ -99,7 +105,14 @@ If the app does not run the agent, the registration is never used and no plugin 
    service provider (constructor injection works) and calls `Configure`. Routes and streams are mapped
    before the HTTP server listens.
 3. The server starts, then `StartAsync` runs in the background. Subscribe to whatever you monitor here.
-4. `StopAsync` runs when the agent stops.
+   The plugin stays `starting` until it completes; calls, polling, and subscriptions return 503.
+4. `StopAsync` runs when the agent stops. New calls are refused while `stopping`.
+
+Shutdown cancels startup and waits for it before invoking cleanup. The caller waits at most five
+seconds, including synchronous plugin code and cancellation callbacks; late startup is cleaned up
+when it finishes. Plugins must still honor cancellation and finish cleanup promptly. Await the
+agent's `StopAsync` before disposing it when cleanup needs the UI thread. Synchronous `Dispose`
+does not block that thread; cleanup may continue after it returns.
 
 A plain .NET agent (`Microsoft.Maui.DevFlow.Agent.Native`) has no container. Pass an instance with
 `options.AddExtension(new MyPlugin(...))`, or set `AgentOptions.Services`, which also makes plugins
@@ -117,7 +130,8 @@ None of these reach the app.
 ## Event streams
 
 `DevFlowEventStream<T>` is a bounded buffer (1,000 events by default). `Publish` is thread-safe and
-never blocks. When the buffer is full, the oldest event is dropped and readers are told how many they
+does not wait for transport readers. Explicit `Subscribe` callbacks run synchronously and must be
+quick. When the buffer is full, the oldest event is dropped and readers are told how many they
 missed. Sequence numbers start at 1 and never repeat while the app runs.
 
 Each event is serialized when it is published (camelCase, enums as strings), so the agent and clients
@@ -142,6 +156,176 @@ are told through `notifications/tools/list_changed`. `maui_extension_list` and `
 remain for clients that do not refresh their tool list.
 
 Write tool descriptions for an AI agent: say what the tool returns and when to use it.
+Names that need sanitization or truncation, or otherwise collide, receive a stable hash derived
+from their full provider and tool identity; distinct declarations are never silently dropped.
+
+## One catalog, compatible transports
+
+`DevFlowOperationCatalog` is the common registration and invocation model. `AgentExtension` and
+`DevFlowExtension` remain supported adapters into it; there is no second app-plugin registry.
+`GET /api/v1/operations` discovers app providers plus `[DevFlowAction]` methods as `devflow.actions`
+and migrated built-ins as `devflow.agent` (currently status and capabilities). Existing `/ext`,
+action, status, and capabilities URLs still work. Built-ins keep their original response envelopes,
+UI dispatch, capture headers, and lease checks. Built-in provider identities cannot be replaced;
+additional `devflow.*` providers require explicit registration grants.
+
+```bash
+maui devflow operations list
+maui devflow operations describe devflow.actions
+maui devflow operations call devflow.agent status
+maui devflow operations call devflow.actions reset '{"args":[]}'
+```
+
+Actions retain their positional `args` array and existing hot-reload discovery. More built-ins can
+migrate incrementally; this PR does not replace every built-in endpoint. Legacy `extensions`
+commands and capabilities discovery remain available. New clients fall back to capabilities when
+an older agent does not implement `/api/v1/operations`.
+
+### Approved transport bindings
+
+Ordinary plugins always stay under `/api/v1/ext/{namespace}`, `/ws/v1/ext/{namespace}`, and
+`ext_{prefix}_{tool}`. Setting a plugin's `ToolPrefix`, or advertising a different path, does not
+grant access to non-extension names.
+
+The application and tooling host can explicitly allow a provider to use other transport bindings:
+
+```csharp
+var bindings = new DevFlowProviderBindings(
+    httpRoutePrefix: "/api/v1/diagnostics",
+    webSocketRoutePrefix: "/ws/v1/diagnostics",
+    mcpToolPrefix: "maui_diagnostics");
+
+// Application owner: configure every grant before registering providers.
+options.ProviderPolicy.Allow("com.contoso.diagnostics", bindings);
+options.AddExtension<DiagnosticsPlugin>();
+
+// Tooling host owner: independently configure the CLI's root service provider.
+// Do not populate this policy from the connected app's discovery response.
+var policy = new DevFlowProviderPolicy()
+    .Allow("com.contoso.diagnostics", bindings);
+services.AddSingleton(policy);
+// An embedding CLI host sets its configured root provider before first use.
+Microsoft.Maui.Cli.Program.Services = services.BuildServiceProvider();
+```
+
+The same plugin can now map `/status` at `/api/v1/diagnostics/status` and publish streams under
+`/api/v1/diagnostics/streams/...` and `/ws/v1/diagnostics/streams/...`. Its MCP tools use
+`maui_diagnostics_{tool}`. Each prefix is independent; omitted bindings retain their extension
+defaults. For host-side MCP grants use the full `host:{namespace}` identity.
+
+These are local, registration-owned grants, not flags a plugin can set in its descriptor.
+The stock CLI grants only known built-ins; additional grants belong in an embedding/custom host's
+root services. Agent-side approval alone does not authorize MCP or Inspector proxy breakout.
+Policies freeze when providers are registered or the host starts loading plugins.
+
+Built-in status/capabilities and action adapters already use this policy, publishing as
+`maui_agent_status`, `maui_agent_capabilities`, and `maui_action_{name}`. Existing hand-written
+`maui_status`, `maui_capabilities`, and `maui_invoke_action` tools remain compatible. Moving an
+existing tool name into the catalog requires removing its old registration in the same change.
+Conflicting approved names or routes fail explicitly instead of replacing existing handlers.
+Ordinary extension naming collisions retain their stable disambiguating suffixes.
+
+Discovery-aware stream consumers use `AgentClient.GetExtensionEventsAsync(streamDescriptor, ...)`
+and `GetExtensionStreamWebSocketUrl(streamDescriptor, ...)`, so they honor approved bindings.
+The namespace/name overloads retain their original `/ext` URLs for compatibility.
+Naming grants never bypass mutation leases, lifecycle admission, or the host/agent execution split,
+and are not a sandbox for loaded code.
+
+## Host-side plugins
+
+Derive from `DevFlowHostExtension` to execute ADB commands or native developer-machine APIs.
+Reference only Extensibility, not an app agent package. `Configure`, `StartAsync`, streams, JSON
+schemas, and annotations are shared with app plugins. Dependencies come from the host container,
+not the app's services. A host embedding DevFlow can register compiled plugins using
+`services.AddDevFlowHostExtension<T>()`.
+
+For example, a plugin can declare a device-scoped operation:
+
+```csharp
+public sealed class AndroidTools : DevFlowHostExtension
+{
+    public AndroidTools() : base("com.contoso.android", "Local Android tools") { }
+
+    protected override void Configure(IDevFlowExtensionBuilder builder)
+    {
+        builder.MapOperation("model", "Read the explicitly selected Android device's model.",
+            async request =>
+            {
+                var start = new System.Diagnostics.ProcessStartInfo("adb")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                };
+                foreach (var arg in new[] { "-s", request.Target!.DeviceId!, "shell", "getprop", "ro.product.model" })
+                    start.ArgumentList.Add(arg);
+                using var process = System.Diagnostics.Process.Start(start)
+                    ?? throw new InvalidOperationException("adb could not be started.");
+                var stdout = process.StandardOutput.ReadToEndAsync(request.CancellationToken);
+                var stderr = process.StandardError.ReadToEndAsync(request.CancellationToken);
+                try
+                {
+                    await process.WaitForExitAsync(request.CancellationToken);
+                }
+                catch (OperationCanceledException) when (request.CancellationToken.IsCancellationRequested)
+                {
+                    if (!process.HasExited)
+                        process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync(CancellationToken.None);
+                    throw;
+                }
+                return process.ExitCode == 0
+                    ? DevFlowResponse.Text((await stdout).Trim())
+                    : DevFlowResponse.Error(await stderr, 502);
+            }, annotations: new DevFlowToolAnnotations { ReadOnly = true },
+            target: DevFlowTargetRequirement.Device);
+    }
+}
+```
+
+Load an explicitly trusted local assembly with `--host-plugin` (repeat for multiple assemblies).
+Keep its dependency/native-library files alongside it. Loading executes arbitrary developer-machine
+code; there is no sandbox. Never load a plugin based on an app's advertised path or package.
+
+```bash
+maui devflow --host-plugin /absolute/AndroidTools.dll operations list --location host
+maui devflow --host-plugin /absolute/AndroidTools.dll --device SERIAL operations call host:com.contoso.android model
+maui devflow --host-plugin /absolute/AndroidTools.dll --device SERIAL mcp
+maui devflow --host-plugin /absolute/AndroidTools.dll --device SERIAL broker start --foreground
+```
+
+Host identity is `host:{namespace}`, so an app and host can use the same namespace without ambiguity.
+`--location all` includes app and host providers; `--location host` does not resolve or contact an
+app. Host-only operations and streams work without an app. Device operations require an explicit
+`--device`; they never default to whichever device ADB finds first. Agent-targeted operations use
+the selected app's host/port, and mutations claim the same lease as built-ins before host code runs.
+These requirements are declared with `DevFlowTargetRequirement.None`, `Device`, or `Agent`.
+
+MCP publishes trusted host tools alongside app tools. The Inspector merges the local host catalog,
+preserves its token/origin/replay protections, and polls host streams locally rather than proxying
+them to the app. A plugin-enabled Inspector broker must run in the foreground: detached brokers
+cannot inherit loaded code. NativeAOT hosts support compiled-in service registrations, but explicitly
+reject dynamic assembly loading; use the JIT CLI build for `--host-plugin`.
+
+Plugin-owned child processes must be terminated on cancellation and native resources released in
+`StopAsync`; canceling a .NET wait alone does not stop a native operation.
+
+## NativeAOT and JSON contracts
+
+`AgentJson` and `DevFlowJson` share one source-generated metadata registry. Primitive values,
+JSON elements, and dynamic dictionary/sequence envelopes work with reflection disabled.
+Register custom payload metadata before serializing or publishing it:
+
+```csharp
+DevFlowJson.RegisterContext(MyPluginJsonContext.Default);
+// AgentJson.RegisterContext(...) is the compatible agent-side spelling.
+```
+
+Use web/camelCase source-generation options for plugin DTOs, with `UseStringEnumConverter = true`
+when they contain enums. `DevFlowResponse.Json(value, typeInfo)`
+also accepts explicit `JsonTypeInfo<T>`. A missing contract fails explicitly with JSON metadata
+guidance, never an empty success response. Polling failures likewise preserve the plugin's error
+instead of returning an empty event page.
 
 ## Packaging
 

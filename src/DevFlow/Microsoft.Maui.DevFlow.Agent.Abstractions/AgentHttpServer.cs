@@ -93,6 +93,41 @@ public class AgentHttpServer : IDisposable
         _wsAdmission[path.TrimEnd('/')] = admission;
     }
 
+    internal void EnsureRoutesAvailable(IEnumerable<(string Method, string Path)> routes)
+    {
+        var pending = new List<(string Method, string Path)>();
+        foreach (var (method, path) in routes)
+        {
+            IEnumerable<string> existing = method switch
+            {
+                "GET" => _getRoutes.Keys,
+                "POST" => _postRoutes.Keys,
+                "PUT" => _putRoutes.Keys,
+                "DELETE" => _deleteRoutes.Keys,
+                "WS" => _wsRoutes.Keys,
+                _ => throw new InvalidOperationException($"Unsupported route method: {method}")
+            };
+            // Exact routes intentionally take precedence over a provider's own parameterized fallback.
+            if (existing.Any(other => Overlaps(other, path)) ||
+                pending.Where(r => r.Method == method).Any(other =>
+                    IsTemplate(other.Path) == IsTemplate(path) && Overlaps(other.Path, path)))
+                throw new InvalidOperationException($"Provider route conflicts with an existing route: {method} {path}");
+            pending.Add((method, path));
+        }
+
+        static bool IsTemplate(string path) => path.Split('/').Any(part => part.StartsWith('{') && part.EndsWith('}'));
+
+        static bool Overlaps(string left, string right)
+        {
+            var a = left.TrimEnd('/').Split('/');
+            var b = right.TrimEnd('/').Split('/');
+            return a.Length == b.Length && a.Zip(b).All(pair =>
+                string.Equals(pair.First, pair.Second, StringComparison.OrdinalIgnoreCase) ||
+                pair.First.StartsWith('{') && pair.First.EndsWith('}') ||
+                pair.Second.StartsWith('{') && pair.Second.EndsWith('}'));
+        }
+    }
+
     public void Start()
     {
         if (_disposed) throw new ObjectDisposedException(nameof(AgentHttpServer));

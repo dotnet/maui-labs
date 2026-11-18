@@ -75,7 +75,7 @@ public sealed class DevFlowRequest
 
     /// <summary>Deserializes the body with web defaults (camelCase, case-insensitive).</summary>
     public T? ReadJson<T>()
-        => string.IsNullOrWhiteSpace(Body) ? default : JsonSerializer.Deserialize<T>(Body, DevFlowJson.Options);
+        => string.IsNullOrWhiteSpace(Body) ? default : DevFlowJson.Deserialize<T>(Body);
 
     /// <summary>
     /// Returns a tool parameter by name, looking in route values, then the query string, then a

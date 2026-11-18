@@ -49,6 +49,31 @@ tags:
     description: Third-party extension routes
 
 paths:
+  /api/v1/operations:
+    get:
+      operationId: getOperationProviders
+      tags: [agent, extensions, invoke]
+      summary: Discover operation providers
+      description: >
+        Shared catalog for inline extensions, agent plugins, registered DevFlowActions
+        (devflow.actions), and migrated built-ins (devflow.agent). Invoke each tool
+        through its advertised method and path; existing URLs, mutation leases,
+        backend dispatch, and response envelopes are preserved.
+        Host plugins are discovered locally by the CLI, MCP server, or Inspector,
+        never installed or activated by this app response. The devflow.* provider
+        namespace is reserved for built-ins.
+      responses:
+        "200":
+          description: Map of provider identities to descriptors
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: "./schemas/agent-capabilities.json#/$defs/ExtensionDescriptor"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   # ─────────────────────────────── Agent ───────────────────────────────
   /api/v1/agent/status:
     get:

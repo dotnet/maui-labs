@@ -5,6 +5,9 @@ namespace Microsoft.Maui.DevFlow.Driver;
 
 public sealed class ExtensionDescriptor
 {
+    [JsonPropertyName("executionLocation")]
+    public string ExecutionLocation { get; set; } = "agent";
+
     [JsonPropertyName("version")]
     public string Version { get; set; } = "";
 
@@ -95,6 +98,9 @@ public sealed class ExtensionLoadErrorInfo
 
 public sealed class ExtensionToolInfo
 {
+    [JsonPropertyName("target")]
+    public string Target { get; set; } = "none";
+
     [JsonPropertyName("name")]
     public string Name { get; set; } = "";
 

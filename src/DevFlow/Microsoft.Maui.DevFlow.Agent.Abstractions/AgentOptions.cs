@@ -186,6 +186,9 @@ public class AgentOptions
     /// </summary>
     public IList<AgentExtension> Extensions { get; } = new List<AgentExtension>();
 
+    /// <summary>Registration-owned grants for custom HTTP/WebSocket routes and MCP names. Configure before registering providers.</summary>
+    public DevFlowProviderPolicy ProviderPolicy { get; } = new();
+
     public AgentExtension RegisterExtension(
         string @namespace,
         string description,
@@ -199,7 +202,9 @@ public class AgentOptions
         string version,
         IEnumerable<string>? features = null)
     {
-        var extension = new AgentExtension(@namespace, description, version, features);
+        ProviderPolicy.Freeze();
+        var extension = new AgentExtension(@namespace, description, version, features)
+            { Bindings = ProviderPolicy.GetBindings(@namespace.Trim()) };
         Extensions.Add(extension);
         return extension;
     }
@@ -225,23 +230,23 @@ public class AgentOptions
         where T : DevFlowExtension
         => AddExtension(typeof(T).FullName ?? typeof(T).Name, services => services is null
             ? Activator.CreateInstance<T>()
-            : ActivatorUtilities.CreateInstance<T>(services));
+            : ActivatorUtilities.CreateInstance<T>(services), typeof(T));
 
     /// <summary>Adds a plugin instance.</summary>
     public AgentOptions AddExtension(DevFlowExtension extension)
     {
         ArgumentNullException.ThrowIfNull(extension);
-        return AddExtension(extension.GetType().FullName ?? extension.Namespace, _ => extension);
+        return AddExtension(extension.GetType().FullName ?? extension.Namespace, _ => extension, extension.GetType());
     }
 
     /// <summary>Adds a plugin created by <paramref name="factory"/> when the agent starts.</summary>
     public AgentOptions AddExtension(Func<IServiceProvider?, DevFlowExtension> factory)
         => AddExtension("extension factory", factory);
 
-    private AgentOptions AddExtension(string name, Func<IServiceProvider?, DevFlowExtension> factory)
+    private AgentOptions AddExtension(string name, Func<IServiceProvider?, DevFlowExtension> factory, Type? serviceType = null)
     {
         ArgumentNullException.ThrowIfNull(factory);
-        ExtensionFactories.Add(new ExtensionRegistration(name, factory));
+        ExtensionFactories.Add(new ExtensionRegistration(name, factory, serviceType));
         return this;
     }
 }

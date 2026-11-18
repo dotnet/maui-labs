@@ -11,6 +11,9 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp;
 public static class McpServerHost
 {
 	public static async Task RunAsync()
+		=> await RunAsync("localhost", null, null);
+
+	public static async Task RunAsync(string agentHost, int? agentPort, string? deviceId)
 	{
 		var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
 
@@ -22,7 +25,7 @@ public static class McpServerHost
 		builder.Logging.ClearProviders();
 		builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 
-		builder.Services.AddSingleton<McpAgentSession>();
+		builder.Services.AddSingleton(new McpAgentSession { DefaultAgentHost = agentHost, DefaultAgentPort = agentPort, HostDeviceId = deviceId });
 		builder.Services.AddSingleton<ExtensionToolCatalog>();
 		builder.Services.AddHostedService<ExtensionToolCatalogStartup>();
 
