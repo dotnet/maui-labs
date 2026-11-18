@@ -4,6 +4,7 @@
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Utils;
+using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 
 namespace Microsoft.Maui.Cli.Providers.Android;
@@ -204,7 +205,8 @@ public class JdkManager : IJdkManager
 		var targetPath = installPath ?? PlatformDetector.Paths.DefaultJdkPath;
 		Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
 
-		var downloadUrl = GetDownloadUrl(resolvedVersion);
+		var platform = PlatformDetector.IsMacOS ? OSPlatform.OSX : PlatformDetector.IsWindows ? OSPlatform.Windows : OSPlatform.Linux;
+		var downloadUrl = GetDownloadUrl(resolvedVersion, platform, RuntimeInformation.OSArchitecture);
 		var tempArchivePath = Path.Combine(Path.GetTempPath(), $"openjdk-{resolvedVersion}.tar.gz");
 
 		try
@@ -258,20 +260,12 @@ public class JdkManager : IJdkManager
 		}
 	}
 
-	static string GetDownloadUrl(int version)
+	internal static string GetDownloadUrl(int version, OSPlatform platform, Architecture architecture)
 	{
-		// Use Eclipse Temurin (Adoptium) builds
-		var os = PlatformDetector.IsMacOS ? "mac" : PlatformDetector.IsWindows ? "windows" : "linux";
-		var arch = PlatformDetector.IsArm64 ? "aarch64" : "x64";
-		var ext = PlatformDetector.IsWindows ? "zip" : "tar.gz";
-
-		// Latest LTS versions from Adoptium
-		return version switch
-		{
-			17 => $"https://api.adoptium.net/v3/binary/latest/17/ga/{os}/{arch}/jdk/hotspot/normal/eclipse?project=jdk",
-			21 => $"https://api.adoptium.net/v3/binary/latest/21/ga/{os}/{arch}/jdk/hotspot/normal/eclipse?project=jdk",
-			_ => throw new MauiToolException(ErrorCodes.JdkVersionUnsupported, $"JDK version {version} is not available for automatic download")
-		};
+		var os = platform == OSPlatform.OSX ? "macOS" : platform == OSPlatform.Windows ? "windows" : "linux";
+		var arch = architecture == Architecture.Arm64 ? "aarch64" : "x64";
+		var ext = platform == OSPlatform.Windows ? "zip" : "tar.gz";
+		return $"https://aka.ms/download-jdk/microsoft-jdk-{version}-{os}-{arch}.{ext}";
 	}
 
 	/// <summary>
@@ -309,7 +303,7 @@ public class JdkManager : IJdkManager
 				$"Install path is too shallow (requires at least 3 directory levels): {path}");
 	}
 
-	async Task ExtractArchiveAsync(string archivePath, string targetPath, CancellationToken cancellationToken)
+	internal static async Task ExtractArchiveAsync(string archivePath, string targetPath, CancellationToken cancellationToken)
 	{
 		ValidateInstallPath(targetPath);
 
@@ -340,18 +334,15 @@ public class JdkManager : IJdkManager
 			}
 		}
 
-		// On macOS, the JDK is inside Contents/Home
-		if (PlatformDetector.IsMacOS)
+		var jdkHome = PlatformDetector.Paths.FindJdkHome(targetPath)
+			?? throw new MauiToolException(ErrorCodes.JdkInstallFailed, "JDK archive does not contain a Java executable");
+		if (jdkHome != targetPath)
 		{
-			var contentsHome = Path.Combine(targetPath, "Contents", "Home");
-			if (Directory.Exists(contentsHome))
-			{
-				// Move contents up
-				var tempDir = Path.Combine(Path.GetTempPath(), $"jdk-temp-{Guid.NewGuid()}");
-				Directory.Move(contentsHome, tempDir);
-				Directory.Delete(targetPath, recursive: true);
-				Directory.Move(tempDir, targetPath);
-			}
+			var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(targetPath)))!;
+			var tempDir = Path.Combine(parent, $".maui-jdk-{Guid.NewGuid():N}");
+			Directory.Move(jdkHome, tempDir);
+			Directory.Delete(targetPath, recursive: true);
+			Directory.Move(tempDir, targetPath);
 		}
 	}
 
