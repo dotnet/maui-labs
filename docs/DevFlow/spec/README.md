@@ -29,6 +29,23 @@ Do not commit a generated JSON copy of the OpenAPI document. If a consumer needs
 
 The DevFlow unit tests parse `openapi.yaml` with OpenAPI tooling and validate YAML/JSON syntax plus `$ref` targets across this directory.
 
+## Screenshot resolution negotiation
+
+`GET /api/v1/ui/screenshot` remains PNG-only and backward compatible. Agents that advertise
+`ui.screenshot/resolution-hints` accept a bounded `targetScale` plus pixel caps. The current
+implementation never upscales and applies negotiation after native capture, so it reduces PNG
+transfer, decode, and Inspector cache cost but does not promise lower platform capture CPU.
+Successful responses report the actual pixel and logical dimensions, native scale, capture scale,
+format, and whether the request was clamped. MAUI and Native backends apply bounded downsampling
+after their normal platform capture. GTK does not advertise resolution hints because its snapshot
+scale cannot yet be reported reliably.
+
+Older agents ignore the new query parameters. New clients also send the requested pixel width
+through legacy `maxWidth` with explicit `scale=auto`, allowing older agents to honor the most
+useful bound without changing new-agent auto-density behavior. A caller that explicitly combines
+legacy `maxWidth` with new caps while omitting both `targetScale` and `scale` retains the historical
+maxWidth-first behavior.
+
 ## Existing WebView contract
 
 `GET /api/v1/webview/contexts` returns `{ "webviews": [...] }` for registered CDP

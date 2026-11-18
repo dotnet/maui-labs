@@ -26,6 +26,9 @@ const frame = normalizeFrameDescriptor({
     pixelHeight: 600,
     rootOffsetX: 12,
     rootOffsetY: 24,
+    nativeScale: 3,
+    requestedCaptureScale: 2,
+    resolutionClamped: true,
     createdAt: "2026-11-04T12:00:00Z",
   },
 });
@@ -46,8 +49,17 @@ test("normalizes legacy frame state with conservative defaults", () => {
   assert.equal(legacy.pixelWidth, 320);
   assert.equal(legacy.pixelHeight, 640);
   assert.equal(legacy.captureScale, 1);
+  assert.equal(legacy.nativeScale, null);
+  assert.equal(legacy.requestedCaptureScale, 1);
+  assert.equal(legacy.resolutionClamped, null);
   assert.equal(legacy.frameRevision, 0);
   assert.equal(legacy.streamId, null);
+});
+
+test("normalizes negotiated screenshot metadata inside the immutable descriptor", () => {
+  assert.equal(frame.nativeScale, 3);
+  assert.equal(frame.requestedCaptureScale, 2);
+  assert.equal(frame.resolutionClamped, true);
 });
 
 test("normalization deeply freezes the immutable descriptor", () => {

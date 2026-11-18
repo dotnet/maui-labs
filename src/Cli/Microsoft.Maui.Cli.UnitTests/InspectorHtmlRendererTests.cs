@@ -8,6 +8,17 @@ namespace Microsoft.Maui.Cli.UnitTests;
 public class InspectorHtmlRendererTests
 {
     [Fact]
+    public void Render_PreservesLegacyIntegerViewportSignature()
+    {
+        var parameters = typeof(HtmlRenderer)
+            .GetMethod(nameof(HtmlRenderer.Render))!
+            .GetParameters();
+
+        Assert.Equal(typeof(int), parameters[2].ParameterType);
+        Assert.Equal(typeof(int), parameters[3].ParameterType);
+    }
+
+    [Fact]
     public void RenderElements_EscapesHtmlInTextAttribute()
     {
         var tree = new List<ElementInfo>
@@ -227,9 +238,9 @@ public class InspectorHtmlRendererTests
     }
 
     [Fact]
-    public void Render_PreservesFractionalLogicalSize()
+    public void RenderWithViewport_PreservesFractionalLogicalSize()
     {
-        var html = HtmlRenderer.Render(
+        var html = HtmlRenderer.RenderWithViewport(
             [],
             hasScreenshot: true,
             screenshotWidth: 320.5,

@@ -134,8 +134,8 @@ jobs:
               if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
               [xml]$trx = Get-Content "artifacts\TestResults\InspectorBrowser\$logName"
               $results = @($trx.TestRun.Results.UnitTestResult)
-              if ($results.Count -ne 20 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
-                throw "All 20 retry regressions must execute and pass on $framework iteration $iteration."
+              if ($results.Count -ne 22 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+                throw "All 22 retry regressions must execute and pass on $framework iteration $iteration."
               }
             }
           }
@@ -240,7 +240,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           [xml]$results = Get-Content artifacts/TestResults/inspector-browser/inspector-browser.trx -Raw
           $counts = $results.TestRun.ResultSummary.Counters
-          $expected = '26'
+          $expected = '29'
           if ($counts.total -ne $expected -or $counts.executed -ne $expected -or $counts.passed -ne $expected -or $counts.notExecuted -ne '0' -or $counts.failed -ne '0') {
             throw "All $expected Inspector browser fixtures must execute and pass with zero skips."
           }
