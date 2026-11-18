@@ -65,21 +65,30 @@ jobs:
       xcode-version: '27.2'
 
   sample-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        dotnet: ['10', '11']
     uses: ./.github/workflows/_build.yml
     with:
       project-path: platforms/MacOS/samples/MacOS.Sample/MacOS.Sample.csproj
-      project-name: macos-appkit-sample
+      project-name: macos-appkit-sample-net${{ matrix.dotnet }}
       os: '["xcode-27"]'
-      build-target-framework: net11.0-macos
+      build-target-framework: net${{ matrix.dotnet }}.0-macos
       run-tests: false
       pack: false
       install-workloads: true
       workloads: 'macos maui'
+      workload-rollback-file: ${{ matrix.dotnet == '10' && 'eng/workloads/dotnet11-ga-macos-net10.json' || 'eng/workloads/dotnet11-ga.json' }}
       android-project: ''
       xcode-version: '27.2'
 
   resource-acceptance:
-    name: Package-only AppKit resource acceptance
+    name: Package-only AppKit resource acceptance (net${{ matrix.dotnet }})
+    strategy:
+      fail-fast: false
+      matrix:
+        dotnet: ['10', '11']
     runs-on: xcode-27
     timeout-minutes: 30
     permissions:
@@ -96,35 +105,29 @@ jobs:
         with:
           global-json-file: global.json
       - name: Install pinned AppKit workloads
-        run: ./eng/common/dotnet.sh workload install macos maui --from-rollback-file eng/workloads/dotnet11-ga.json
+        run: ./eng/common/dotnet.sh workload install macos maui --from-rollback-file ${{ matrix.dotnet == '10' && 'eng/workloads/dotnet11-ga-macos-net10.json' || 'eng/workloads/dotnet11-ga.json' }}
       - name: Verify referenced-library assets, mutation, publish, and collisions
         shell: pwsh
-        run: ./eng/smoke-tests/community-resource-acceptance.ps1 -Backend appkit -ArtifactsDirectory "$PWD/artifacts/appkit-resources" -KeepArtifacts
+        run: ./eng/smoke-tests/community-resource-acceptance.ps1 -Backend appkit -AppKitTargetFramework net${{ matrix.dotnet }}.0-macos -ArtifactsDirectory "$PWD/artifacts/appkit-resources" -KeepArtifacts
       - name: Upload resource evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: appkit-resource-acceptance
+          name: appkit-resource-acceptance-net${{ matrix.dotnet }}
           path: artifacts/appkit-resources/
           if-no-files-found: warn
 
   native-runtime:
     name: AppKit runtime (${{ matrix.scenario }}, ${{ matrix.maui-version || 'default' }})
     needs: build
-    runs-on: ${{ startsWith(matrix.maui-version, '10.') && 'macos-26' || 'xcode-27' }}
+    runs-on: xcode-27
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
+        scenario: [layout, contentview-clipping, shell-sections, shell-tabs, dialog-registration, dialogs, window-page-reset, picker, background-reset, tap-buttons, focus-state, menu-localization, collection-view-grid, bundle-resources]
+        maui-version: ['', '10.0.110']
         include:
-          - scenario: layout
-            maui-version: ''
-          - scenario: contentview-clipping
-            maui-version: ''
-          - scenario: shell-sections
-            maui-version: ''
-          - scenario: shell-tabs
-            maui-version: ''
           - scenario: dialog-registration
             maui-version: '10.0.41'
           - scenario: dialog-registration
@@ -132,37 +135,19 @@ jobs:
           - scenario: dialog-registration
             maui-version: '10.0.70'
           - scenario: dialog-registration
-            maui-version: '10.0.110'
-          - scenario: dialog-registration
             maui-version: '11.0.10'
           - scenario: dialogs
             maui-version: '10.0.70'
           - scenario: dialogs
             maui-version: '11.0.10'
-          - scenario: window-page-reset
-            maui-version: ''
-          - scenario: picker
-            maui-version: ''
-          - scenario: background-reset
-            maui-version: ''
-          - scenario: tap-buttons
-          - scenario: focus-state
-            maui-version: ''
           - scenario: menu-localization
             packages: true
-          - scenario: collection-view-grid
-            maui-version: ''
           - scenario: bundle-resources
-            maui-version: ''
-            workloads: 'macos maui maui-tizen'
-            packages: true
-          - scenario: bundle-resources
-            maui-version: '10.0.110'
             workloads: 'macos maui maui-tizen'
             packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages
-      APPKIT_XCODE_VERSION: ${{ startsWith(matrix.maui-version, '10.') && '26.0.1' || '27.2' }}
+      APPKIT_XCODE_VERSION: '27.2'
     steps:
       - uses: actions/checkout@v6
       - name: Select Xcode
@@ -174,7 +159,7 @@ jobs:
         with:
           global-json-file: global.json
       - name: Install pinned scenario workloads
-        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --from-rollback-file eng/workloads/dotnet11-ga.json
+        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --from-rollback-file ${{ startsWith(matrix.maui-version, '10.') && 'eng/workloads/dotnet11-ga-macos-net10.json' || 'eng/workloads/dotnet11-ga.json' }}
       - name: Download requested product packages
         if: matrix.packages == true
         uses: actions/download-artifact@v8

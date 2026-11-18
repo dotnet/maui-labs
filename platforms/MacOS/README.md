@@ -79,8 +79,12 @@ assertions as `appkit-runtime-shell-sections-default`. See the
 
 The packages include both `net10.0-macos` (MAUI 10.0.110 by default) and
 `net11.0-macos` (MAUI 11.0.10). Native application validation requires the Xcode
-version pinned by each Apple pack: Xcode 26.0.x for the net10 compatibility pack
-(`26.0.11017`) and Xcode 27.2 for the net11 pack (`27.2.11039`). A successful
+version pinned by each Apple pack: Xcode 27.2 for both the net10 servicing pack
+(`27.2.10000`) and the net11 pack (`27.2.11039`). Install the net10 lane with
+`dotnet workload install macos maui --from-rollback-file eng/workloads/dotnet11-ga-macos-net10.json`.
+Switch back to `eng/workloads/dotnet11-ga.json` for net11 builds. The root SDK stays
+at .NET 11; the compatibility manifest selects the released .NET 10 Apple pack.
+A successful
 library build is not a native application or resource-bundle pass.
 
 Source-based net10 AppKit heads must align their direct MAUI references with
@@ -93,8 +97,11 @@ assembly-aware font registration, view screenshots, and standard `BlazorWebView`
 hosting. Essentials static facades use the application's DI provider; .NET 10
 retains its reflection compatibility path. The existing AppKit screenshot
 overload, raw asset logical names and filename defaults, and native `.icns`
-packaging remain available. Processed images and fonts use their processed
-outputs; referenced-library resources retain Apple's library-resource packaging.
+packaging remain available. .NET 11 images and fonts use their processed
+outputs; .NET 10 retains source image packaging and its static web asset bridge.
+Both generations track native resource outputs for stale-file removal, normalize
+Unicode logical paths, and reject resource-name collisions. Referenced-library
+resources retain Apple's library-resource packaging.
 Embedded fonts resolve an exact manifest path before a unique basename fallback;
 ambiguous matches fail explicitly instead of depending on manifest ordering.
 
@@ -102,15 +109,26 @@ Blazor root-component replacements and clears are serialized through the same
 managed reconciler used by GTK. The shared regression tests hold asynchronous
 adds/removals open and verify selector reuse, no duplicate operations, and recovery
 after a renderer failure. They do not prove native WebKit behavior.
+`builder.AddMacOSBlazorWebView()` registers the required Blazor services on both
+frameworks; native JavaScript messages are dispatched on the AppKit main thread.
 
 The AppKit workflow accepts pull requests targeting `main` or the GTK stack branch,
 `redth-maui-net11-gtk`. Portable contracts run independently of native build jobs;
 native and package-consumer jobs retain Xcode validation. .NET 11 jobs use the
 hosted [`xcode-27` image](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
-with Xcode 27.2 explicitly selected. .NET 10 native scenarios use the `macos-26`
-image with Xcode 26.0.1. Both use the repository's GA workload rollback manifest.
+with Xcode 27.2 explicitly selected. .NET 10 uses the same image and Xcode with
+the AppKit-specific servicing rollback manifest. The sample, every non-camera
+native scenario, DevFlow integration, and package-only resource acceptance run
+for both framework generations.
 Camera validation is opt-in on a camera-equipped self-hosted runner
 (`MAUI_APPKIT_CAMERA_TESTS=1`).
+
+Run package-only resource acceptance with
+`pwsh eng/smoke-tests/community-resource-acceptance.ps1 -Backend appkit -AppKitTargetFramework net10.0-macos -KeepArtifacts`
+(or `net11.0-macos`) after selecting the corresponding workload manifest.
+Build the platform demo with
+`dotnet build platforms/MacOS/samples/MacOS.Sample/MacOS.Sample.csproj -f net10.0-macos`
+or `-f net11.0-macos`.
 
 ## Quick start
 
@@ -320,8 +338,9 @@ image pipeline so its processed image is available in `Contents/Resources/Images
 Native macOS does not define an operating-system launch-screen contract, so AppKit
 does not automatically display that image before the first window.
 
-Razor static web assets are converted by the standard MAUI Blazor targets and flow
-through `MauiProcessedAsset`; no manual `BundleResource` glob for `wwwroot` is needed.
+On .NET 11, Razor static web assets are converted by the standard MAUI Blazor targets
+and flow through `MauiProcessedAsset`. .NET 10 uses the compatibility static web
+asset bridge; neither framework requires a manual `BundleResource` glob for `wwwroot`.
 
 The standalone package-resource acceptance gate uses supported `dotnet publish`,
 expands the resulting `.pkg` with `pkgutil --expand-full` without installing it,

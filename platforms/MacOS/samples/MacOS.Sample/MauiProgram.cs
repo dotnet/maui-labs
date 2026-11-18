@@ -23,7 +23,7 @@ public static class MauiProgram
             .UseCupertinoMauiIcons()
             .AddMacOSEssentials();
 
-        builder.Services.AddMacOSBlazorWebView();
+        builder.AddMacOSBlazorWebView();
 
         // Use native NSOutlineView source list sidebar for FlyoutPage
         builder.ConfigureMauiHandlers(handlers =>

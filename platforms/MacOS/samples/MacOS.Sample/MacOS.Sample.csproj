@@ -4,7 +4,7 @@
           Condition="Exists('..\..\src\MacOS\buildTransitive\Microsoft.Maui.Platforms.MacOS.props')" />
 
   <PropertyGroup>
-    <TargetFramework>net11.0-macos</TargetFramework>
+    <TargetFrameworks>net10.0-macos;net11.0-macos</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <Nullable>enable</Nullable>
     <UseMaui>true</UseMaui>
@@ -35,8 +35,14 @@
 
   <ItemGroup>
     <PackageReference Include="AathifMahir.Maui.MauiIcons.Cupertino" />
-    <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(MacOSMaui11Version)" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" VersionOverride="$(MacOSBlazorWebView11Version)" />
+    <PackageReference Include="Microsoft.Maui.Controls">
+      <VersionOverride Condition="'$(TargetFramework)' == 'net10.0-macos'">$(MacOSMaui10Version)</VersionOverride>
+      <VersionOverride Condition="'$(TargetFramework)' == 'net11.0-macos'">$(MacOSMaui11Version)</VersionOverride>
+    </PackageReference>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui">
+      <VersionOverride Condition="'$(TargetFramework)' == 'net10.0-macos'">$(MacOSBlazorWebView10Version)</VersionOverride>
+      <VersionOverride Condition="'$(TargetFramework)' == 'net11.0-macos'">$(MacOSBlazorWebView11Version)</VersionOverride>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

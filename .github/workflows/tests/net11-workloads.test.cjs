@@ -99,6 +99,22 @@ test("root-SDK callers do not install a .NET 10 workload set", () => {
   }
 });
 
+test("AppKit net10 uses the servicing workload for the same Xcode as net11", () => {
+  const rollback = JSON.parse(read("eng/workloads/dotnet11-ga.json"));
+  const appkitRollback = JSON.parse(read("eng/workloads/dotnet11-ga-macos-net10.json"));
+  assert.equal(appkitRollback["microsoft.net.sdk.macos"], "27.2.10000/10.0.100");
+  delete appkitRollback["microsoft.net.sdk.macos"];
+  delete rollback["microsoft.net.sdk.macos"];
+  assert.deepEqual(appkitRollback, rollback);
+  const appkit = read(".github/workflows/ci-macos-appkit.yml");
+  assert.match(appkit, /AppKitTargetFramework net\$\{\{ matrix\.dotnet \}\}\.0-macos/);
+  assert.match(appkit, /maui-version: \['', '10\.0\.110'\]/);
+  assert.doesNotMatch(appkit, /26\.0\.1|macos-26/);
+  for (const text of [appkit, read(".github/workflows/devflow-integration.yml")]) {
+    assert.match(text, /eng\/workloads\/dotnet11-ga-macos-net10\.json/);
+  }
+});
+
 test("GA workload callers retain the MAUI Tizen workload declared by the GA manifest", () => {
   for (const file of [
     ".github/workflows/_build.yml",

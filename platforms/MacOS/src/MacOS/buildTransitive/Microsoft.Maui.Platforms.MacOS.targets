@@ -1,6 +1,6 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
-  <PropertyGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))">
+  <PropertyGroup>
     <IncrementalCleanDependsOn>$(IncrementalCleanDependsOn);_MacOSTrackBundleResourceOutputs</IncrementalCleanDependsOn>
   </PropertyGroup>
 
@@ -35,7 +35,7 @@
         <LogicalName Condition="'%(MauiAsset.LogicalName)' == ''">%(Filename)%(Extension)</LogicalName>
       </_MacOSMauiBundleResource>
       <_MacOSMauiBundleResource>
-        <LogicalName>$([System.String]::Copy('%(_MacOSMauiBundleResource.LogicalName)').Replace('\', '/'))</LogicalName>
+        <LogicalName>$([System.String]::Copy('%(_MacOSMauiBundleResource.LogicalName)').Replace('\', '/').Normalize(System.Text.NormalizationForm.FormD))</LogicalName>
       </_MacOSMauiBundleResource>
       <!-- Replace default Resources glob entries for these files: otherwise the
            SDK may keep the default Raw/ path instead of the MauiAsset logical name. -->
@@ -163,7 +163,6 @@
           BeforeTargets="_ComputeBundleResourceOutputPaths"
           DependsOnTargets="_CollectBundleResources;_UnpackLibraryResources"
           Condition="'$(TargetPlatformIdentifier)' == 'macos'
-                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
                      and '$(_CanOutputAppBundle)' == 'true'
                      and '$(EnableMacOSMauiResourceMapping)' != 'false'">
     <ItemGroup>
@@ -183,7 +182,6 @@
   <Target Name="_MacOSTrackBundleResourceOutputs"
           DependsOnTargets="_ComputeBundleResourceOutputPaths"
           Condition="'$(TargetPlatformIdentifier)' == 'macos'
-                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
                      and '$(_CanOutputAppBundle)' == 'true'
                      and '$(EnableMacOSMauiResourceMapping)' != 'false'">
     <ItemGroup>
@@ -198,7 +196,6 @@
           BeforeTargets="_BeforeUnpackLibraryResources"
           DependsOnTargets="_PrepareUnpackLibraryResources"
           Condition="'$(TargetPlatformIdentifier)' == 'macos'
-                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
                      and '$(_CanOutputAppBundle)' == 'true'
                      and '$(EnableMacOSMauiResourceMapping)' != 'false'">
     <Delete Files="%(_UnpackLibraryResourceItems.StampFile)"

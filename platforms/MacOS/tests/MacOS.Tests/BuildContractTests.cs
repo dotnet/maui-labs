@@ -42,6 +42,9 @@ public sealed class BuildContractTests
 		Assert.Contains("Normalize(System.Text.NormalizationForm.FormD)", images.ToString());
 		Assert.Contains("Normalize(System.Text.NormalizationForm.FormD)", fonts.ToString());
 		Assert.Contains("Normalize(System.Text.NormalizationForm.FormD)", assets.ToString());
+		var compatibility = targets.Descendants().Single(element =>
+			element.Attribute("Name")?.Value == "_MacOSCollectMauiResources");
+		Assert.Contains("Normalize(System.Text.NormalizationForm.FormD)", compatibility.ToString());
 		Assert.Contains(images.Descendants(), element => element.Name.LocalName == "FileWrites" &&
 			element.Attribute("Include")?.Value == "@(MauiProcessedImage)");
 		Assert.Contains(fonts.Descendants(), element => element.Name.LocalName == "FileWrites" &&
@@ -103,11 +106,13 @@ public sealed class BuildContractTests
 			"Microsoft.Maui.Platforms.MacOS.targets"));
 		Assert.Contains("_MacOSTrackBundleResourceOutputs",
 			Element(targets, "IncrementalCleanDependsOn")?.Value);
+		Assert.Null(Element(targets, "IncrementalCleanDependsOn")?.Parent?.Attribute("Condition"));
 		var track = targets.Descendants().Single(element =>
 			element.Attribute("Name")?.Value == "_MacOSTrackBundleResourceOutputs");
 		Assert.Equal("_ComputeBundleResourceOutputPaths", track.Attribute("DependsOnTargets")?.Value);
 		Assert.Contains("'$(_CanOutputAppBundle)' == 'true'", track.Attribute("Condition")?.Value);
 		Assert.Contains("'$(EnableMacOSMauiResourceMapping)' != 'false'", track.Attribute("Condition")?.Value);
+		Assert.DoesNotContain("net11.", track.Attribute("Condition")?.Value);
 		Assert.Equal("@(_BundleResourceWithOutputPath -> '%(OutputPath)')",
 			track.Elements().Single().Elements().Single().Attribute("Include")?.Value);
 	}
@@ -126,18 +131,29 @@ public sealed class BuildContractTests
 		Assert.Equal("_PrepareUnpackLibraryResources", recover.Attribute("DependsOnTargets")?.Value);
 		Assert.Contains("'$(_CanOutputAppBundle)' == 'true'", recover.Attribute("Condition")?.Value);
 		Assert.Contains("'$(EnableMacOSMauiResourceMapping)' != 'false'", recover.Attribute("Condition")?.Value);
+		Assert.DoesNotContain("net11.", recover.Attribute("Condition")?.Value);
 		var delete = recover.Elements().Single();
 		Assert.Equal("%(_UnpackLibraryResourceItems.StampFile)", delete.Attribute("Files")?.Value);
 		Assert.Equal("!Exists('%(_UnpackLibraryResourceItems.ItemsFile)')", delete.Attribute("Condition")?.Value);
 	}
 
 	[Fact]
-	public void BlazorAssets_UseStandardMauiAssetPipeline()
+	public void BlazorAssets_UseStandardMauiAssetPipelineWithNet10Compatibility()
 	{
 		var targets = XDocument.Load(Path.Combine(GetBuildContractsDirectory(),
 			"Microsoft.Maui.Platforms.MacOS.BlazorWebView.targets"));
-		Assert.DoesNotContain(targets.Descendants(), element =>
+		var compatibility = Assert.Single(targets.Descendants(), element =>
 			element.Name.LocalName == "Target");
+		Assert.Contains("!$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))",
+			compatibility.Attribute("Condition")?.Value);
+		Assert.Contains("'$(TargetPlatformIdentifier)' == 'macos'",
+			compatibility.Attribute("Condition")?.Value);
+		Assert.Equal("_CollectBundleResources", compatibility.Attribute("BeforeTargets")?.Value);
+		Assert.Contains("StaticWebAssetsPrepareForRun", compatibility.Attribute("DependsOnTargets")?.Value);
+		var compute = compatibility.Elements().Single(element =>
+			element.Name.LocalName == "ComputeStaticWebAssetsTargetPaths");
+		Assert.Equal("wwwroot", compute.Attribute("PathPrefix")?.Value);
+		Assert.Contains("Normalize(System.Text.NormalizationForm.FormD)", compatibility.ToString());
 	}
 
 	static string GetBuildContractsDirectory() =>

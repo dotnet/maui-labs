@@ -4,6 +4,8 @@ param(
     [string] $DotNet = 'dotnet',
     [ValidateSet('all', 'gtk', 'wpf', 'appkit', 'switch')]
     [string] $Backend = 'gtk',
+    [ValidateSet('net10.0-macos', 'net11.0-macos')]
+    [string] $AppKitTargetFramework = 'net11.0-macos',
     [switch] $KeepArtifacts
 )
 
@@ -171,18 +173,25 @@ function Assert-Icns {
 function Assert-AppKitStandardResources {
     param(
         [string] $Root,
-        [string] $FixtureRoot
+        [string] $FixtureRoot,
+        [string] $TargetFramework = 'net11.0-macos'
     )
 
-    Assert-PngDimensions $Root 'Images/pipeline.png' 16 16
-    Assert-PngDimensions $Root 'Images/pipeline@2x.png' 32 32
-    Assert-PngDimensions $Root 'Images/splash.png' 128 128
-    Assert-PngDimensions $Root 'Images/splash@2x.png' 256 256
+    if ($TargetFramework -eq 'net10.0-macos') {
+        Assert-SingleFile $Root 'Images/pipeline.svg' ([System.IO.File]::ReadAllBytes((Join-Path $FixtureRoot 'Consumer/Resources/Images/pipeline.svg'))) | Out-Null
+        Assert-SingleFile $Root 'Images/splash.svg' ([System.IO.File]::ReadAllBytes((Join-Path $FixtureRoot 'Consumer/Resources/Splash/splash.svg'))) | Out-Null
+    } else {
+        Assert-PngDimensions $Root 'Images/pipeline.png' 16 16
+        Assert-PngDimensions $Root 'Images/pipeline@2x.png' 32 32
+        Assert-PngDimensions $Root 'Images/splash.png' 128 128
+        Assert-PngDimensions $Root 'Images/splash@2x.png' 256 256
+        Assert-NoFile $Root 'Images/pipeline.svg'
+        Assert-NoFile $Root 'Images/splash.svg'
+    }
     Assert-SingleFile $Root 'Fonts/OpenSans-Regular.ttf' ([System.IO.File]::ReadAllBytes((Join-Path $FixtureRoot 'Consumer/Resources/Fonts/OpenSans-Regular.ttf'))) | Out-Null
     Assert-Icns $Root 'AppIcon.icns'
     Assert-NoFile $Root 'AppIcon/appicon.svg'
     Assert-NoFile $Root 'AppIcon/appicon.png'
-    Assert-NoFile $Root 'Images/pipeline.svg'
     Assert-NoFile $Root 'Splash/splash.svg'
 }
 
@@ -233,8 +242,12 @@ function Invoke-BackendAcceptance {
     )
 
     Write-Host "=== $Name resource acceptance ==="
-    Invoke-DotNet @('pack', $Project, '-c', 'Release', '-o', $packages.FullName,
+    $packArguments = @('pack', $Project, '-c', 'Release', '-o', $packages.FullName,
         "-p:PackageVersion=$version", '-v:minimal')
+    if ($Name -eq 'appkit') {
+        $packArguments += "-p:TargetFrameworks=$TargetFramework"
+    }
+    Invoke-DotNet $packArguments
 
     $root = Join-Path $work $Name
     Copy-Fixture $root
@@ -304,7 +317,7 @@ function Invoke-BackendAcceptance {
             Assert-SingleFile $output 'pipeline.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Images\pipeline.svg'))) | Out-Null
         }
     } elseif ($Name -eq 'appkit') {
-        Assert-AppKitStandardResources $output $root
+        Assert-AppKitStandardResources $output $root $TargetFramework
     }
 
     $payload = Join-Path $root 'ReferencedAssets\Resources\Raw\Nested\payload.bin'
@@ -359,7 +372,7 @@ function Invoke-BackendAcceptance {
             Assert-SingleFile $publishedResources 'pipeline.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Images\pipeline.svg'))) | Out-Null
         }
     } elseif ($Name -eq 'appkit') {
-        Assert-AppKitStandardResources $publishedResources $root
+        Assert-AppKitStandardResources $publishedResources $root $TargetFramework
     }
     Assert-NoFile $publishedResources 'Shared/Nested/payload.bin'
     Assert-NoFile $publishedResources 'Shared/zero.bin'
@@ -546,10 +559,11 @@ try {
             -Name 'appkit' `
             -PackageId 'Microsoft.Maui.Platforms.MacOS' `
             -Project (Join-Path $repo 'platforms\MacOS\src\MacOS\MacOS.csproj') `
-            -TargetFramework 'net11.0-macos' `
+            -TargetFramework $AppKitTargetFramework `
             -PlatformProperties '<UseMaui>true</UseMaui><RuntimeIdentifier>osx-arm64</RuntimeIdentifier><ApplicationId>com.microsoft.maui.resourceacceptance</ApplicationId><ApplicationTitle>Resource Acceptance</ApplicationTitle><ApplicationVersion>1</ApplicationVersion><ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>' `
             -ExpectedBackendIdentity 'macos' `
-            -RuntimeIdentifier 'osx-arm64'
+            -RuntimeIdentifier 'osx-arm64' `
+            -ConsumerMauiVersion $(if ($AppKitTargetFramework -eq 'net10.0-macos') { '10.0.110' } else { $mauiVersion })
     }
 
     if ($Backend -in @('all', 'switch')) {

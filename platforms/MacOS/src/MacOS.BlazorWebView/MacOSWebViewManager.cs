@@ -37,9 +37,10 @@ internal class MacOSWebViewManager : WebViewManager
     protected override void SendMessage(string message)
     {
         var messageJSStringLiteral = JavaScriptEncoder.Default.Encode(message);
-        _webview.EvaluateJavaScript(
-            $"__dispatchMessageCallback(\"{messageJSStringLiteral}\")",
-            (NSObject? result, NSError? error) => { });
+        _webview.BeginInvokeOnMainThread(() =>
+            _webview.EvaluateJavaScript(
+                $"__dispatchMessageCallback(\"{messageJSStringLiteral}\")",
+                (NSObject? result, NSError? error) => { }));
     }
 
     internal void MessageReceivedInternal(Uri uri, string message)

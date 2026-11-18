@@ -28,6 +28,7 @@ public static class BlazorWebViewExtensions
 #if NET11_0_OR_GREATER
         builder.Services.AddMacOSBlazorWebView();
 #else
+        builder.Services.AddMauiBlazorWebView();
         builder.ConfigureMauiHandlers(handlers =>
         {
             handlers.AddHandler<MacOSBlazorWebView, Microsoft.Maui.Platforms.MacOS.Handlers.BlazorWebViewHandler>();

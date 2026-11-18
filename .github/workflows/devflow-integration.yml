@@ -460,8 +460,8 @@ jobs:
           - framework: native
             dotnet: '11'
     name: macos (${{ matrix.framework }}, net${{ matrix.dotnet }})
-    # net11.0-macos requires the GA Apple workload's exact Xcode 27.2.
-    runs-on: ${{ matrix.dotnet == '11' && 'xcode-27' || 'macos-15' }}
+    # Both Apple workload generations use the released Xcode 27.2 bindings.
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: macos
@@ -479,11 +479,9 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # Match the Apple packs carried by the GA workload set: net10 uses Xcode 26.0,
-          # net11 requires exactly Xcode 27.2.
+          # Match the Apple packs pinned for both AppKit framework generations.
           COMPATIBLE="${COMPATIBLE:-}"
-          candidates="/Applications/Xcode_26.0.app /Applications/Xcode_26.app"
-          [[ "${{ matrix.dotnet }}" == "11" ]] && candidates="/Applications/Xcode_27.2.app"
+          candidates="/Applications/Xcode_27.2.app"
           for candidate in $candidates; do
             if [[ -d "$candidate" ]]; then
               COMPATIBLE="$candidate"
@@ -510,7 +508,7 @@ jobs:
       - name: Install Apple MAUI workloads
         # Keep this list to workloads the repo actually targets so unavailable
         # runtime packs for unused workloads cannot break the job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ matrix.dotnet == '10' && 'eng/workloads/dotnet11-ga-macos-net10.json' || env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
 
       - name: Run DevFlow integration tests (macos)
         run: >

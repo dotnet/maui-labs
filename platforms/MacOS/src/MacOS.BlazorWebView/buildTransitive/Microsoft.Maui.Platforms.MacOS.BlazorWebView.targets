@@ -1,4 +1,21 @@
 <Project>
   <!-- Standard MAUI Blazor targets convert static web assets to MauiAsset.
        The core AppKit package maps the processed assets to BundleResource. -->
+
+  <!-- MAUI 10 does not expose the external-backend static web asset hooks. -->
+  <Target Name="_IncludeBlazorWebViewBundleResources"
+          BeforeTargets="_CollectBundleResources"
+          DependsOnTargets="ResolveProjectReferences;StaticWebAssetsPrepareForRun"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and !$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ComputeStaticWebAssetsTargetPaths Assets="@(StaticWebAsset)" PathPrefix="wwwroot">
+      <Output TaskParameter="AssetsWithTargetPath" ItemName="_BlazorBundleResourceWithTargetPath" />
+    </ComputeStaticWebAssetsTargetPaths>
+    <ItemGroup>
+      <BundleResource Include="@(_BlazorBundleResourceWithTargetPath)">
+        <LogicalName>$([System.String]::Copy('%(_BlazorBundleResourceWithTargetPath.TargetPath)').Replace('\', '/').Normalize(System.Text.NormalizationForm.FormD))</LogicalName>
+      </BundleResource>
+    </ItemGroup>
+  </Target>
 </Project>

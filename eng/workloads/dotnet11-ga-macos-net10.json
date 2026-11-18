@@ -1,0 +1,8 @@
+{
+  "microsoft.net.sdk.android": "37.2.31/11.0.100",
+  "microsoft.net.sdk.ios": "27.2.11039/11.0.100",
+  "microsoft.net.sdk.maccatalyst": "27.2.11039/11.0.100",
+  "microsoft.net.sdk.macos": "27.2.10000/10.0.100",
+  "microsoft.net.sdk.maui": "11.0.0/11.0.100",
+  "microsoft.net.sdk.tvos": "27.2.11039/11.0.100"
+}

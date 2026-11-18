@@ -71,8 +71,11 @@ python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
 The default run targets `net11.0-macos`. Passing a MAUI 10 version with
 `--maui-version` selects `net10.0-macos`, keeping the release compatibility lane
 without enabling any MAUI 10 private workaround in the .NET 11 build.
-Hosted CI uses `macos-26` with Xcode 26.0.1 for MAUI 10 and `xcode-27` with
-Xcode 27.2 for MAUI 11. Both use `eng/workloads/dotnet11-ga.json`. The runner explicitly
+Hosted CI uses `xcode-27` with Xcode 27.2 for both MAUI 10 and MAUI 11.
+Before a MAUI 10 run, install
+`dotnet workload install macos maui --from-rollback-file eng/workloads/dotnet11-ga-macos-net10.json`
+to select the servicing macOS pack `27.2.10000`. Restore
+`eng/workloads/dotnet11-ga.json` before running MAUI 11. The runner explicitly
 enables Xcode validation, which matches the workload's required major/minor
 version; a different major/minor is not accepted as a native pass.
 
@@ -149,6 +152,9 @@ predicate through `Assert`. A timeout is never a baseline success. The first
 terminal result wins atomically; `result.json` and process exit must agree.
 `WriteJson`, `AppendJson`, `EvidencePath` and `Capture` provide isolated evidence.
 Native captures are composited onto white, not claimed as full-screen screenshots.
+WindowServer captures are converted from the display profile to sRGB before
+saving and checking pixel colors, keeping exact marker assertions independent
+of a developer's display color profile.
 Call `Capture` and access native UI state only on AppKit's main thread, including
 after asynchronous work. JSON file writers have no additional AppKit affinity.
 `FlushMainQueueAsync()` drains two native dispatch turns, not a timed sleep.
