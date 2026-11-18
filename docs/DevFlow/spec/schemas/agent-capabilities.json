@@ -139,13 +139,14 @@
             ]
           },
           "ui.screenshot": {
-            "version": 2,
+            "version": 3,
             "features": [
               "element",
               "native-element",
               "fullscreen",
               "selector",
-              "capture-epoch"
+              "capture-epoch",
+              "resolution-hints"
             ]
           },
           "ui.menus": {

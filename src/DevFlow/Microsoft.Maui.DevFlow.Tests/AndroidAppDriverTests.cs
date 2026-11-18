@@ -1,4 +1,5 @@
 using Microsoft.Maui.DevFlow.Driver;
+using System.Diagnostics;
 using System.Globalization;
 using Xamarin.Android.Tools;
 
@@ -184,17 +185,90 @@ public class AndroidAppDriverAdbTests
     [Fact]
     public async Task EnsureRecordingProcessStartedAsync_ImmediateNonzeroExit_ReportsFailure()
     {
-        using var error = new StringWriter(CultureInfo.InvariantCulture);
-        error.Write("device offline");
-
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             AndroidAppDriver.EnsureRecordingProcessStartedAsync(
-                Task.FromResult(1),
-                error,
+                Task.FromResult((1, string.Empty, "device offline")),
                 "adb screenrecord"));
 
         Assert.Contains("code 1", exception.Message);
         Assert.Contains("device offline", exception.Message);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(7)]
+    public async Task RunAdbWithOutputAsync_LargeOutput_CapturesBothStreamsAndChecksExitCode(int exitCode)
+    {
+        using var driver = new AndroidAppDriver
+        {
+            AdbPath = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
+        };
+        string[] arguments = OperatingSystem.IsWindows()
+            ? ["/d", "/c", $"(for /l %i in (1,1,8192) do @echo KO: output) & (for /l %i in (1,1,8192) do @echo error) 1>&2 & exit /b {exitCode}"]
+            : ["-c", $"i=0; while [ \"$i\" -lt 8192 ]; do printf 'KO: output\\n'; printf 'error\\n' >&2; i=$((i + 1)); done; exit {exitCode}"];
+
+        var command = driver.RunAdbWithOutputAsync(arguments);
+        if (exitCode == 0)
+        {
+            var output = await command.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.Equal(string.Concat(Enumerable.Repeat($"KO: output{Environment.NewLine}", 8192)), output);
+        }
+        else
+        {
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => command.WaitAsync(TimeSpan.FromSeconds(15)));
+            Assert.EndsWith(string.Concat(Enumerable.Repeat($"error{Environment.NewLine}", 8192)), exception.Message);
+        }
+    }
+
+    [Fact]
+    public async Task CaptureAsync_PreCancelledToken_DoesNotStartProcess()
+    {
+        using var cancel = new CancellationTokenSource();
+        cancel.Cancel();
+        int? pid = null;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HostProcess.CaptureAsync(
+                new ProcessStartInfo("must-not-start"),
+                cancel.Token,
+                killEntireProcessTree: false,
+                onStarted: value => pid = value));
+
+        Assert.Null(pid);
+    }
+
+    [Fact]
+    public async Task EnsureRecordingProcessStartedAsync_RunningProcess_RemainsAliveUntilCancelled()
+    {
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        int? pid = null;
+        var startInfo = AndroidAppDriver.CreateAdbProcessStartInfo(
+            OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
+            OperatingSystem.IsWindows()
+                ? ["/d", "/c", "for /l %i in (1,1,1000000000) do @rem"]
+                : ["-c", "exec sleep 30"]);
+        var command = HostProcess.CaptureAsync(
+            startInfo,
+            cancel.Token,
+            killEntireProcessTree: false,
+            onStarted: value => pid = value);
+        Assert.NotNull(pid);
+        using var process = Process.GetProcessById(pid.Value);
+        try
+        {
+            await AndroidAppDriver.EnsureRecordingProcessStartedAsync(command, "adb screenrecord");
+
+            Assert.False(process.HasExited);
+            Assert.False(command.IsCompleted);
+        }
+        finally
+        {
+            cancel.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command);
+        }
+
+        Assert.True(process.HasExited);
     }
 
     private sealed class TestAndroidAppDriver(

@@ -273,14 +273,14 @@ public class iOSSimulatorAppDriver : AppDriverBase, IAlertDriver
 
                     if (File.Exists(tempFile))
                     {
-                        var bytes = await File.ReadAllBytesAsync(tempFile).ConfigureAwait(false);
+                        var bytes = await ScreenshotImage.ResizeSimulatorAsync(tempFile).ConfigureAwait(false);
                         if (bytes.Length > 0)
-                            return ResizeSimctlPng(bytes);
+                            return bytes;
                     }
                 }
                 finally
                 {
-                    try { File.Delete(tempFile); } catch { }
+                    ScreenshotImage.DeleteTemporaryFile(tempFile);
                 }
             }
             catch
@@ -356,51 +356,6 @@ public class iOSSimulatorAppDriver : AppDriverBase, IAlertDriver
     {
         if (string.IsNullOrEmpty(DeviceUdid))
             throw new InvalidOperationException("DeviceUdid must be set for simulator operations.");
-    }
-
-    /// <summary>
-    /// Downscales a native-resolution simctl screenshot to 1x logical pixels.
-    /// Infers the display density from common iOS simulator pixel widths.
-    /// </summary>
-    private static byte[] ResizeSimctlPng(byte[] pngData)
-    {
-        try
-        {
-            using var original = SkiaSharp.SKBitmap.Decode(pngData);
-            if (original == null) return pngData;
-
-            double density = original.Width switch
-            {
-                1290 or 1320 or 1206 => 3.0,
-                1170 => 3.0,
-                1125 => 3.0,
-                1242 => 3.0,
-                828 => 2.0,
-                750 => 2.0,
-                2048 or 2388 or 2360 => 2.0,
-                _ => original.Width > 1000 ? 3.0 : 2.0
-            };
-
-            var targetWidth = (int)(original.Width / density);
-            if (targetWidth <= 0 || targetWidth >= original.Width)
-                return pngData;
-
-            var scale = (float)targetWidth / original.Width;
-            var newHeight = (int)(original.Height * scale);
-
-            using var resized = original.Resize(
-                new SkiaSharp.SKImageInfo(targetWidth, newHeight),
-                SkiaSharp.SKSamplingOptions.Default);
-            if (resized == null) return pngData;
-
-            using var image = SkiaSharp.SKImage.FromBitmap(resized);
-            using var encoded = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
-            return encoded.ToArray();
-        }
-        catch
-        {
-            return pngData;
-        }
     }
 
     /// <summary>

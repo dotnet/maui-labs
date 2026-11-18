@@ -49,7 +49,7 @@ Microsoft.Maui.DevFlow.Client (netstandard2.0 + modern .NET)
 Microsoft.Maui.DevFlow.Driver (modern .NET, platform-specific)
 ├── Microsoft.Maui.DevFlow.Client
 ├── App process management, UI Automation, Mac accessibility
-└── SkiaSharp (screenshot processing)
+└── OS image facilities (macOS sips resizing; Windows GDI+ PNG encoding)
 
 Microsoft.Maui.DevFlow.Agent.Abstractions (no MAUI dependency)
 ├── AgentHttpServer, AgentOptions, routing, DevFlowAgentService

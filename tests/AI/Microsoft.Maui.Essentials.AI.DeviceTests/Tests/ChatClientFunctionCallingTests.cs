@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -21,6 +22,24 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	protected virtual bool SupportsBaselineSamplingOptions => false;
 	protected virtual bool PreservesToolActivityContext => false;
 	protected virtual bool PreservesToolCancellation => false;
+	// True when one request can both invoke tools and return a ChatResponseFormat.ForJsonSchema result.
+	protected virtual bool SupportsStructuredOutputWithTools => false;
+	// True when ReasoningOutput.Full can be combined with tools; returned reasoning is replayed by function invocation.
+	protected virtual bool SupportsReasoningOutput => false;
+	// False when the model may skip reasoning or return empty summaries for simple prompts.
+	protected virtual bool ReasoningContentIsGuaranteed => SupportsReasoningOutput;
+	protected virtual int? ReasoningMaxOutputTokens => null;
+	// False when the model can invoke available tools for a prompt that needs none.
+	protected virtual bool AvoidsUnneededToolCalls => true;
+
+	// Provider-specific checks applied to every streamed update of the tool round-trip tests.
+	protected virtual void AssertStreamingUpdate(ChatResponseUpdate update)
+	{
+	}
+
+	public record SecretReport(string Secret, string Key);
+	public record Weather(string City, int TemperatureC, string Condition);
+	public record Person(string Name, int Age, string City);
 
 	private void ConfigureBaselineSamplingOptions(ChatOptions options)
 	{
@@ -29,6 +48,31 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 
 		options.Temperature = 0;
 		options.Reasoning = new() { Effort = ReasoningEffort.None };
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ParameterlessTool_InvokesOnceAndReturnsActualResult(bool streaming)
+	{
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+		var calls = 0;
+		var tool = AIFunctionFactory.Create(() =>
+		{
+			Interlocked.Increment(ref calls);
+			return "PARAMETERLESS_VALUE_5827";
+		}, name: "read_secret", description: "Reads the secret local value. Takes no arguments.");
+		using var client = EnableFunctionCalling(new T());
+		ChatMessage[] messages = [new(ChatRole.User,
+			"Call read_secret exactly once, then answer with the returned value. Do not call again after receiving the result.")];
+		var options = new ChatOptions { Tools = [tool], MaxOutputTokens = 256 };
+		ConfigureBaselineSamplingOptions(options);
+		var response = streaming
+			? await client.GetStreamingResponseAsync(messages, options, timeout.Token).ToChatResponseAsync(cancellationToken: timeout.Token)
+			: await client.GetResponseAsync(messages, options, timeout.Token);
+		Assert.Equal(1, calls);
+		Assert.Contains("PARAMETERLESS_VALUE_5827", response.Text, StringComparison.Ordinal);
 	}
 
 	[Theory]
@@ -1953,6 +1997,193 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			Assert.True(csharpNulls.Count == 0,
 				$"Run {run + 1}/3: Found {csharpNulls.Count} C# null TextContent.Text in raw stream!\n{log}");
 		}
+	}
+
+	private async IAsyncEnumerable<ChatResponseUpdate> CaptureStream(IAsyncEnumerable<ChatResponseUpdate> updates)
+	{
+		await foreach (var update in updates)
+		{
+			AssertStreamingUpdate(update);
+			yield return update;
+		}
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ToolWithArgument_InvokesOnceAndReturnsActualResult(bool streaming)
+	{
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+		var calls = 0;
+		string Lookup(string key)
+		{
+			Assert.Equal("orchard", key);
+			Interlocked.Increment(ref calls);
+			return "ORCHARD_SECRET_7291";
+		}
+		var options = new ChatOptions
+		{
+			MaxOutputTokens = 256,
+			Instructions = "Use lookup_secret to retrieve the secret. After the tool result, answer with that exact result and do not call again.",
+			Tools = [AIFunctionFactory.Create(Lookup, "lookup_secret", "Reads a secret from the local database by key.")],
+		};
+		ConfigureBaselineSamplingOptions(options);
+		using var client = EnableFunctionCalling(new T());
+		ChatMessage[] messages = [new(ChatRole.User, "Use lookup_secret with key orchard and tell me the secret.")];
+		var response = streaming
+			? await CaptureStream(client.GetStreamingResponseAsync(messages, options, timeout.Token)).ToChatResponseAsync(cancellationToken: timeout.Token)
+			: await client.GetResponseAsync(messages, options, timeout.Token);
+		Assert.Equal(1, calls);
+		Assert.Contains("ORCHARD_SECRET_7291", response.Text, StringComparison.Ordinal);
+	}
+
+	// [AIToolSource] and strict MEAI tools close every object schema with additionalProperties=false.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ClosedObjectToolSchemas_InvokeOnceAndReturnActualResult(bool streaming)
+	{
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+		var calls = 0;
+		AIFunction Strict(Delegate method, string name, string description)
+		{
+			var function = AIFunctionFactory.Create(method, new AIFunctionFactoryOptions
+			{
+				Name = name,
+				Description = description,
+				JsonSchemaCreateOptions = new() { TransformOptions = new() { DisallowAdditionalProperties = true } },
+			});
+			Assert.False(function.JsonSchema.GetProperty("additionalProperties").GetBoolean());
+			return function;
+		}
+		var lookup = Strict((string key) =>
+		{
+			Assert.Equal("orchard", key);
+			Interlocked.Increment(ref calls);
+			return "ORCHARD_SECRET_7291";
+		}, "lookup_secret", "Reads a secret from the local database by key.");
+		var clock = Strict(() => "12:00", "current_time", "Returns the current local time.");
+		var options = new ChatOptions
+		{
+			MaxOutputTokens = 256,
+			Instructions = "Use lookup_secret to retrieve the secret. After the tool result, answer with that exact result and do not call again.",
+			Tools = [clock, lookup],
+		};
+		ConfigureBaselineSamplingOptions(options);
+		using var client = EnableFunctionCalling(new T());
+		ChatMessage[] messages = [new(ChatRole.User, "Use lookup_secret with key orchard and tell me the secret.")];
+		var response = streaming
+			? await CaptureStream(client.GetStreamingResponseAsync(messages, options, timeout.Token)).ToChatResponseAsync(cancellationToken: timeout.Token)
+			: await client.GetResponseAsync(messages, options, timeout.Token);
+		Assert.Equal(1, calls);
+		Assert.Contains("ORCHARD_SECRET_7291", response.Text, StringComparison.Ordinal);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ToolsAndSchema_CallToolsThenReturnTypedResult(bool streaming)
+	{
+		if (!SupportsStructuredOutputWithTools)
+			return;
+
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+		using var client = EnableFunctionCalling(new T());
+		var secretCalls = 0;
+		var weatherCalls = 0;
+		var options = new ChatOptions
+		{
+			Tools =
+			[
+				AIFunctionFactory.Create((string key) =>
+				{
+					Interlocked.Increment(ref secretCalls);
+					return "ORCHARD_SECRET_7291";
+				}, "lookup_secret", "Reads a secret from the local database by key."),
+				AIFunctionFactory.Create((string city) =>
+				{
+					Interlocked.Increment(ref weatherCalls);
+					return city.Contains("paris", StringComparison.OrdinalIgnoreCase)
+						? """{"temperatureC":18,"condition":"cloudy"}"""
+						: """{"temperatureC":10,"condition":"rainy"}""";
+				}, "get_weather", "Gets the current weather for a city."),
+			],
+		};
+		ConfigureBaselineSamplingOptions(options);
+
+		async Task<TResult> Run<TResult>(string prompt)
+		{
+			ChatMessage[] messages = [new(ChatRole.User, prompt)];
+			if (!streaming)
+				return (await client.GetResponseAsync<TResult>(messages, options, cancellationToken: timeout.Token)).Result;
+			var streamOptions = options.Clone();
+			streamOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema<TResult>(JsonSerializerOptions.Web);
+			var text = "";
+			await foreach (var update in client.GetStreamingResponseAsync(messages, streamOptions, timeout.Token))
+				text += update.Text;
+			return JsonSerializer.Deserialize<TResult>(text, JsonSerializerOptions.Web)!;
+		}
+
+		var secret = await Run<SecretReport>("Use lookup_secret with key orchard and report the secret.");
+		Assert.Equal("ORCHARD_SECRET_7291", secret.Secret);
+		Assert.Equal(1, secretCalls);
+
+		var weather = await Run<Weather>("What is the weather in Paris right now?");
+		Assert.Equal(18, weather.TemperatureC);
+		Assert.Equal("cloudy", weather.Condition, StringComparer.OrdinalIgnoreCase);
+		Assert.Equal(1, weatherCalls);
+
+		var person = await Run<Person>("Extract the person: Alice is 30 years old and lives in Oslo.");
+		Assert.Equal(new Person("Alice", 30, "Oslo"), person);
+		if (AvoidsUnneededToolCalls)
+		{
+			Assert.Equal(1, secretCalls);
+			Assert.Equal(1, weatherCalls);
+		}
+	}
+
+	// Function invocation replays the first turn's reasoning as history on the second round.
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	[InlineData(true, true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ThinkingAndTools_ReplayReasoningAcrossRounds(bool streaming, bool schema)
+	{
+		if (!SupportsReasoningOutput || (schema && !SupportsStructuredOutputWithTools))
+			return;
+
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+		using var client = EnableFunctionCalling(new T());
+		var calls = 0;
+		var options = new ChatOptions
+		{
+			MaxOutputTokens = ReasoningMaxOutputTokens,
+			Reasoning = new() { Output = ReasoningOutput.Full },
+			Tools = [AIFunctionFactory.Create((string key) =>
+			{
+				Interlocked.Increment(ref calls);
+				return "ORCHARD_SECRET_7291";
+			}, "lookup_secret", "Reads a secret from the local database by key.")],
+		};
+		if (schema)
+			options.ResponseFormat = ChatResponseFormat.ForJsonSchema<SecretReport>(JsonSerializerOptions.Web);
+		ChatMessage[] messages = [new(ChatRole.User, "Use lookup_secret with key orchard and report the secret.")];
+		var response = streaming
+			? await client.GetStreamingResponseAsync(messages, options, timeout.Token).ToChatResponseAsync(timeout.Token)
+			: await client.GetResponseAsync(messages, options, timeout.Token);
+		var thoughts = response.Messages.SelectMany(message => message.Contents).OfType<TextReasoningContent>().Count();
+		Assert.Equal(1, calls);
+		if (ReasoningContentIsGuaranteed)
+			Assert.True(thoughts > 0, $"No reasoning content (streaming={streaming}, schema={schema}): {response.Text}");
+		if (schema)
+			Assert.Equal("ORCHARD_SECRET_7291", JsonSerializer.Deserialize<SecretReport>(response.Text, JsonSerializerOptions.Web)!.Secret);
+		else
+			Assert.Contains("ORCHARD_SECRET_7291", response.Text, StringComparison.Ordinal);
 	}
 }
 

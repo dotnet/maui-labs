@@ -32,6 +32,10 @@
             <Color x:Key="ToolBubbleDark">#233650</Color>
             <Color x:Key="SystemBubble">#F1F5F9</Color>
             <Color x:Key="SystemBubbleDark">#2B394D</Color>
+            <Color x:Key="ModelWarningBackground">#FEF3C7</Color>
+            <Color x:Key="ModelWarningBackgroundDark">#422F0D</Color>
+            <Color x:Key="ModelWarningText">#713F12</Color>
+            <Color x:Key="ModelWarningTextDark">#FDE68A</Color>
             <Style TargetType="Label">
                 <Setter Property="TextColor"
                         Value="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />

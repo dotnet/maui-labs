@@ -73,7 +73,8 @@ public sealed class InspectorExtensionsPanelTests(ITestOutputHelper output) : IA
         await Expect(tab).ToHaveAttributeAsync("aria-selected", "true");
 
         var body = _page.Locator("#df-dock-body");
-        await Expect(body.Locator(".df-ext-rail-item")).ToHaveCountAsync(2);
+        await Expect(body.Locator(".df-ext-rail-item")).ToHaveCountAsync(4);
+        await body.Locator(".df-ext-rail-item", new() { HasText = "org.example.ble" }).ClickAsync();
         await Expect(body.Locator(".df-ext-title")).ToHaveTextAsync("org.example.ble");
         await Expect(body.Locator(".df-ext-header")).ToContainTextAsync("v1.2.0");
         await Expect(body.Locator(".df-ext-header")).ToContainTextAsync("ready");

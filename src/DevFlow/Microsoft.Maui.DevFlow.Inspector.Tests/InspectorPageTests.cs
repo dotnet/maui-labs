@@ -276,13 +276,20 @@ public partial class InspectorPageTests : IAsyncLifetime
     {
         foreach (var (file, exportedSymbol) in new[]
         {
+            ("inspector-actions.js", "export function createActionOverlayController"),
             ("inspector-api.js", "export function createInspectorApi"),
+            ("inspector-command-policy.js", "export function evaluateCommandStates"),
             ("inspector-dialog.js", "export function confirmModal"),
             ("inspector-data-context.js", "export function createDataSnapshot"),
+            ("inspector-frame.js", "export function normalizeFrameDescriptor"),
+            ("inspector-presentation.js", "export function deriveInspectorPresentation"),
             ("inspector-properties.js", "export function createPropertyGridController"),
+            ("inspector-resolution.js", "export function selectScreenshotScaleBucket"),
             ("inspector-tree.js", "export function createElementTreeController"),
             ("inspector-layout.js", "export function createLayoutPanel"),
             ("inspector-extensions.js", "export function createExtensionsPanel"),
+            ("inspector-viewport.js", "export function fitViewportScale"),
+            ("inspector-viewport-controller.js", "export function createViewportController"),
         })
         {
             var response = await _page.APIRequest.GetAsync(ResolveUrl(file));
@@ -298,18 +305,10 @@ public partial class InspectorPageTests : IAsyncLifetime
     public async Task ClickSendsTapToAgent()
     {
         await _page.GotoAsync(BaseUrl);
-        await _page.Locator("#df-mode-interact").ClickAsync();
-        var presence = _page.Locator("#df-presence");
-        await Expect(presence).ToHaveTextAsync(
-            new System.Text.RegularExpressions.Regex("Driving|Read-only"));
-        if (!(await presence.TextContentAsync() ?? "").Contains("Driving", StringComparison.Ordinal))
-        {
-            await _page.Locator("#df-take-control").ClickAsync();
-            await _page.GetByRole(AriaRole.Dialog)
-                .GetByRole(AriaRole.Button, new() { Name = "Take control" })
-                .ClickAsync();
-        }
-        await Expect(presence).ToContainTextAsync("Driving");
+        await EnsureInspectorControlAsync();
+        var interact = _page.Locator("#df-mode-interact");
+        await Expect(interact).ToHaveAttributeAsync("aria-disabled", "false");
+        await interact.ClickAsync();
 
         var viewport = _page.Locator("#app-viewport");
         var initialScreenshot = await _page.Locator("#screenshot").GetAttributeAsync("src");
@@ -393,7 +392,7 @@ public partial class InspectorPageTests : IAsyncLifetime
             (await viewport.GetAttributeAsync("data-height"))!,
             CultureInfo.InvariantCulture);
 
-        await _page.RouteAsync("**/api/state", async route =>
+        await _page.RouteAsync("**/api/state*", async route =>
         {
             await route.FulfillAsync(new()
             {
@@ -813,24 +812,41 @@ public partial class InspectorPageTests : IAsyncLifetime
     [LiveInspectorFact]
     public async Task EmptyRecordingStopClosesTimeline()
     {
+        var recordingActive = false;
         await _page.RouteAsync("**/api/control", route => route.FulfillAsync(new()
         {
             Status = 200,
             ContentType = "application/json",
             Body = "{\"youAreWriter\":true,\"heldByOther\":false}",
         }));
-        await _page.RouteAsync("**/api/flows/record/start", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/flows/record/start", route =>
+        {
+            recordingActive = true;
+            return route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = "{\"ok\":true,\"recordingId\":\"empty-recording\",\"name\":\"empty\"}",
+            });
+        });
+        await _page.RouteAsync("**/api/flows/record/status", route => route.FulfillAsync(new()
         {
             Status = 200,
             ContentType = "application/json",
-            Body = "{\"ok\":true,\"recordingId\":\"empty-recording\",\"name\":\"empty\"}",
+            Body = recordingActive
+                ? "{\"ok\":true,\"recording\":true,\"recordingId\":\"empty-recording\",\"name\":\"empty\",\"steps\":0}"
+                : "{\"ok\":true,\"recording\":false,\"steps\":0}",
         }));
-        await _page.RouteAsync("**/api/flows/record/stop", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/flows/record/stop", route =>
         {
-            Status = 200,
-            ContentType = "application/json",
-            Body = "{\"ok\":true,\"empty\":true,\"steps\":0}",
-        }));
+            recordingActive = false;
+            return route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = "{\"ok\":true,\"empty\":true,\"steps\":0}",
+            });
+        });
 
         await _page.GotoAsync(BaseUrl);
         await _page.Locator("#df-mode-interact").ClickAsync();
@@ -1353,15 +1369,11 @@ public partial class InspectorPageTests : IAsyncLifetime
     }
 
     [LiveInspectorFact]
-    public async Task FitMode_SelectionDetailsDoNotResizeOrOscillateScreenshot()
+    public async Task FitMode_SelectionDetailsKeepScreenshotFittedWithoutOscillation()
     {
         await _page.SetViewportSizeAsync(1000, 700);
         await _page.GotoAsync(BaseUrl);
         await Expect(_page.Locator("#df-toggle-fit")).ToHaveAttributeAsync("aria-pressed", "true");
-
-        var stage = _page.Locator("#df-stage");
-        var before = await stage.BoundingBoxAsync();
-        Assert.NotNull(before);
 
         await _page.Locator("#df-mode-inspect").ClickAsync();
         var showModal = _page.Locator(".devflow-element[data-automationId='ShowModalButton']");
@@ -1378,21 +1390,27 @@ public partial class InspectorPageTests : IAsyncLifetime
 
         await showModal.ClickAsync(new() { Force = true });
         await Expect(_page.Locator("#df-hit-candidates")).ToBeVisibleAsync();
+        // Compact layout docks Properties beside the preview, so Fit re-fits once around it.
+        await Expect(_page.Locator("#df-props-pane")).ToBeVisibleAsync();
         await _page.WaitForTimeoutAsync(250);
 
-        var after = await stage.BoundingBoxAsync();
-        Assert.NotNull(after);
-        Assert.True(Math.Abs(before.Width - after.Width) <= 1,
-            $"Selection details changed fitted stage width from {before.Width} to {after.Width}.");
-        Assert.True(Math.Abs(before.Height - after.Height) <= 1,
-            $"Selection details changed fitted stage height from {before.Height} to {after.Height}.");
+        var fit = await _page.EvaluateAsync<double[]>(
+            """
+            () => {
+                const stage = document.getElementById('df-stage').getBoundingClientRect();
+                const wrap = document.getElementById('df-viewport-wrap');
+                return [stage.width, stage.height, wrap.clientWidth, wrap.clientHeight];
+            }
+            """);
+        Assert.True(fit[0] <= fit[2] + 1 && fit[1] <= fit[3] + 1,
+            $"Fitted stage {fit[0]}x{fit[1]} overflowed its {fit[2]}x{fit[3]} viewport after selection.");
 
         Assert.Equal(
             "absolute",
             await _page.Locator("#df-hit-candidates")
                 .EvaluateAsync<string>("element => getComputedStyle(element).position"));
         Assert.Equal(
-            "hidden",
+            "clip",
             await _page.Locator("#df-viewport-wrap")
                 .EvaluateAsync<string>("element => getComputedStyle(element).overflowX"));
 
@@ -1451,7 +1469,11 @@ public partial class InspectorPageTests : IAsyncLifetime
         await Expect(_page.Locator("#df-view-pane")).ToHaveAttributeAsync("role", "main");
         await Expect(_page.Locator("#df-tree-pane")).ToHaveAttributeAsync("aria-label", "Visual tree");
         await Expect(_page.Locator("#df-props-pane")).ToHaveAttributeAsync("aria-label", "Properties");
-        await Expect(_page.Locator("#df-presence")).ToHaveAttributeAsync("role", "status");
+        await Expect(_page.Locator("#df-health-live")).ToHaveAttributeAsync("role", "status");
+        await Expect(_page.Locator("#df-action-announcer")).ToHaveAttributeAsync("aria-live", "polite");
+        await Expect(_page.Locator("#df-action-announcer")).ToHaveAttributeAsync("aria-atomic", "true");
+        await Expect(_page.Locator("#df-action-overlay")).ToHaveAttributeAsync("aria-hidden", "true");
+        await Expect(_page.Locator("#df-action-chrome")).ToHaveAttributeAsync("aria-hidden", "true");
         await Expect(_page.Locator("#df-pane-scrim")).ToHaveAttributeAsync("tabindex", "-1");
         await Expect(_page.Locator(".df-modes")).ToHaveAttributeAsync("role", "radiogroup");
         await Expect(_page.Locator("#df-mode-interact")).ToHaveAttributeAsync("role", "radio");
@@ -1461,6 +1483,7 @@ public partial class InspectorPageTests : IAsyncLifetime
         await Expect(_page.Locator("#df-mode-inspect")).ToHaveAttributeAsync("aria-checked", "false");
         await Expect(_page.Locator("#df-toolbar-overflow")).ToHaveAttributeAsync("role", "menu");
         await Expect(_page.Locator("#df-toolbar-overflow")).ToHaveAttributeAsync("aria-label", "More inspector actions");
+        await EnsureInspectorControlAsync();
         await _page.Locator("#df-more").ClickAsync();
         await Expect(_page.Locator("#df-toolbar-overflow")).ToBeVisibleAsync();
         await Expect(_page.Locator("#df-toolbar-overflow > button").First).ToHaveAttributeAsync("role", "menuitem");
@@ -1470,10 +1493,25 @@ public partial class InspectorPageTests : IAsyncLifetime
         await assertAction.EvaluateAsync("button => button.focus()");
         Assert.True(await assertAction.EvaluateAsync<bool>("button => button === document.activeElement"));
         await assertAction.DispatchEventAsync("click");
-        await Expect(_page.Locator("#df-status")).ToContainTextAsync("Enabled while recording");
+        await Expect(_page.Locator("#df-status")).ToContainTextAsync("Start recording before adding an assertion");
         await Expect(_page.Locator(".df-dock-tab-list")).ToHaveAttributeAsync("aria-label", "App data");
         await Expect(_page.Locator("#df-viewport-wrap")).ToHaveAttributeAsync("role", "region");
         await Expect(_page.Locator("#df-viewport-wrap")).ToHaveAttributeAsync("aria-label", "Live app viewport");
+    }
+
+    private async Task EnsureInspectorControlAsync()
+    {
+        var presence = _page.Locator("#df-presence");
+        await Expect(presence).ToHaveTextAsync(
+            new System.Text.RegularExpressions.Regex("Driving|Read-only"));
+        if (!(await presence.TextContentAsync() ?? "").Contains("Driving", StringComparison.Ordinal))
+        {
+            await _page.Locator("#df-take-control").ClickAsync();
+            await _page.GetByRole(AriaRole.Dialog)
+                .GetByRole(AriaRole.Button, new() { Name = "Take control" })
+                .ClickAsync();
+        }
+        await Expect(presence).ToContainTextAsync("Driving");
     }
 
     [LiveInspectorFact]
@@ -1689,7 +1727,7 @@ public partial class InspectorPageTests : IAsyncLifetime
                 Body = $"{{\"youAreWriter\":{ownsLease.ToString().ToLowerInvariant()},\"heldByOther\":false}}",
             });
         });
-        await _page.RouteAsync("**/api/state", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/state*", route => route.FulfillAsync(new()
         {
             Status = 200,
             ContentType = "application/json",
@@ -1775,24 +1813,41 @@ public partial class InspectorPageTests : IAsyncLifetime
     public async Task ReplayDialogEnterOnCancelDoesNotReplay()
     {
         var replayRequests = 0;
+        var recordingActive = false;
         await _page.RouteAsync("**/api/control", route => route.FulfillAsync(new()
         {
             Status = 200,
             ContentType = "application/json",
             Body = "{\"youAreWriter\":true,\"heldByOther\":false}",
         }));
-        await _page.RouteAsync("**/api/flows/record/start", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/flows/record/start", route =>
+        {
+            recordingActive = true;
+            return route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = "{\"ok\":true,\"recordingId\":\"test-recording\",\"name\":\"keyboard-test\"}",
+            });
+        });
+        await _page.RouteAsync("**/api/flows/record/status", route => route.FulfillAsync(new()
         {
             Status = 200,
             ContentType = "application/json",
-            Body = "{\"ok\":true,\"recordingId\":\"test-recording\",\"name\":\"keyboard-test\"}",
+            Body = recordingActive
+                ? "{\"ok\":true,\"recording\":true,\"recordingId\":\"test-recording\",\"name\":\"keyboard-test\",\"steps\":1}"
+                : "{\"ok\":true,\"recording\":false,\"steps\":1}",
         }));
-        await _page.RouteAsync("**/api/flows/record/stop", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/flows/record/stop", route =>
         {
-            Status = 200,
-            ContentType = "application/json",
-            Body = "{\"ok\":true,\"name\":\"keyboard-test\",\"steps\":1,\"markdown\":\"# keyboard test\"}",
-        }));
+            recordingActive = false;
+            return route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = "{\"ok\":true,\"name\":\"keyboard-test\",\"steps\":1,\"markdown\":\"# keyboard test\"}",
+            });
+        });
         await _page.RouteAsync("**/api/flows/replay", route =>
         {
             replayRequests++;
@@ -1808,9 +1863,11 @@ public partial class InspectorPageTests : IAsyncLifetime
         var record = _page.Locator("#df-toggle-record");
         await Expect(record).ToBeEnabledAsync();
         await record.ClickAsync();
+        await Expect(record).ToHaveAttributeAsync("aria-pressed", "true");
         await record.ClickAsync();
+        await Expect(record).ToHaveAttributeAsync("aria-pressed", "false");
         var replay = _page.Locator("#df-toggle-replay");
-        await Expect(replay).ToBeEnabledAsync();
+        await Expect(replay).ToHaveAttributeAsync("aria-disabled", "false");
         await replay.ClickAsync();
 
         var dialog = _page.GetByRole(AriaRole.Dialog);
@@ -2222,28 +2279,46 @@ public partial class InspectorPageTests : IAsyncLifetime
     [LiveInspectorFact]
     public async Task MissingRecordingStopClearsStaleLocalState()
     {
+        var recordingActive = false;
         await _page.RouteAsync("**/api/control", route => route.FulfillAsync(new()
         {
             Status = 200,
             ContentType = "application/json",
             Body = "{\"youAreWriter\":true,\"heldByOther\":false}",
         }));
-        await _page.RouteAsync("**/api/flows/record/start", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/flows/record/start", route =>
+        {
+            recordingActive = true;
+            return route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = "{\"ok\":true,\"recordingId\":\"stale\",\"name\":\"stale\"}",
+            });
+        });
+        await _page.RouteAsync("**/api/flows/record/status", route => route.FulfillAsync(new()
         {
             Status = 200,
             ContentType = "application/json",
-            Body = "{\"ok\":true,\"recordingId\":\"stale\",\"name\":\"stale\"}",
+            Body = recordingActive
+                ? "{\"ok\":true,\"recording\":true,\"recordingId\":\"stale\",\"name\":\"stale\",\"steps\":0}"
+                : "{\"ok\":true,\"recording\":false,\"steps\":0}",
         }));
-        await _page.RouteAsync("**/api/flows/record/stop", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/flows/record/stop", route =>
         {
-            Status = 400,
-            ContentType = "application/json",
-            Body = "{\"ok\":false,\"error\":\"No recording is active for this app.\"}",
-        }));
+            recordingActive = false;
+            return route.FulfillAsync(new()
+            {
+                Status = 400,
+                ContentType = "application/json",
+                Body = "{\"ok\":false,\"error\":\"No recording is active for this app.\"}",
+            });
+        });
 
         await _page.GotoAsync(BaseUrl);
         var record = _page.Locator("#df-toggle-record");
         await record.ClickAsync();
+        await Expect(record).ToHaveAttributeAsync("aria-pressed", "true");
         await record.ClickAsync();
 
         await Expect(record).ToHaveAttributeAsync("aria-pressed", "false");

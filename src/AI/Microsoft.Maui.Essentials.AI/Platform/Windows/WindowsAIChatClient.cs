@@ -66,7 +66,7 @@ public sealed class WindowsAIChatClient : IChatClient
 
 	/// <summary>Reads current native availability and effective capabilities without caching or downloading.</summary>
 	/// <param name="cancellationToken">A token that cancels the status request before the native read.</param>
-	/// <returns>A fresh snapshot preserving the unavailable reason from <see cref="LanguageModel.GetReadyState"/>.</returns>
+	/// <returns>A fresh snapshot of availability and effective capabilities.</returns>
 	public static Task<ChatModelStatus> GetModelStatusAsync(CancellationToken cancellationToken = default)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
@@ -84,7 +84,6 @@ public sealed class WindowsAIChatClient : IChatClient
 		};
 		return Task.FromResult(new ChatModelStatus(
 			availability,
-			state is AIFeatureReadyState.Ready ? null : state.ToString(),
 			[ChatModelCapability.Text, ChatModelCapability.Streaming, ChatModelCapability.StructuredOutput]));
 	}
 

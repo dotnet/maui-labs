@@ -157,10 +157,6 @@ public partial class PlaygroundPageLayout : ContentView
             return;
 
         _isCompact = compact;
-        Grid.SetRow(HeaderActionsPresenter, compact ? 1 : 0);
-        Grid.SetColumn(HeaderActionsPresenter, compact ? 1 : 2);
-        Grid.SetColumnSpan(HeaderActionsPresenter, compact ? 2 : 1);
-        HeaderActionsPresenter.HorizontalOptions = compact ? LayoutOptions.End : LayoutOptions.Fill;
         OpenSettingsButton.IsVisible = compact;
         CloseSettingsButton.IsVisible = compact;
         SettingsBackdrop.IsVisible = false;

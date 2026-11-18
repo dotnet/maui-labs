@@ -19,6 +19,7 @@ import { createTransport } from "./transport.js";
 import type { Transport, TransportOptions } from "./transport.js";
 import { err, ok } from "./types.js";
 import type {
+  ActionCorrelation,
   AgentRegistration,
   AgentStatus,
   AgentTarget,
@@ -37,6 +38,16 @@ export interface ScreenshotOptions {
   selector?: string;
   maxWidth?: number;
   scale?: string;
+  targetScale?: number;
+  maxPixelWidth?: number;
+  maxPixelHeight?: number;
+  maxPixels?: number;
+}
+
+function minPositive(...values: Array<number | undefined>): number | undefined {
+  const positive = values.filter((value): value is number =>
+    typeof value === "number" && Number.isFinite(value) && value > 0);
+  return positive.length > 0 ? Math.min(...positive) : undefined;
 }
 
 export interface OpenEventsHandlers {
@@ -50,6 +61,20 @@ export interface TapTarget {
   elementId?: string;
   x?: number;
   y?: number;
+  correlation?: ActionCorrelation;
+}
+
+function unsupportedDirectCoordinateSpace(
+  correlation: ActionCorrelation | undefined,
+  operation: string,
+): DevFlowResult<void> | null {
+  if (!correlation || correlation.coordinateSpace === "windowLogical") return null;
+  return err({
+    kind: "invalid-argument",
+    message: `${operation} coordinates sent directly to an agent must use windowLogical space`,
+    operation,
+    retriable: false,
+  });
 }
 
 export class DevFlowClient {
@@ -172,15 +197,17 @@ export class DevFlowClient {
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   async tap(target: TapTarget): Promise<DevFlowResult<void>> {
-    if (target.elementId) return this.run(requests.tapElement(target.elementId));
+    if (target.elementId) return this.run(requests.tapElement(target.elementId, target.correlation));
     if (typeof target.x === "number" && typeof target.y === "number") {
+      const coordinateError = unsupportedDirectCoordinateSpace(target.correlation, "tap");
+      if (coordinateError) return coordinateError;
       // The agent has no coordinate tap; resolve to an element via hit-test, then tap the
       // first element that accepts it (most-specific → general), like the InspectorServer.
       const hit = await this.hitTest(target.x, target.y);
       if (!hit.ok) return hit;
       for (const el of hit.value) {
         if (!el.id) continue;
-        const r = await this.run(requests.tapElement(el.id));
+        const r = await this.run(requests.tapElement(el.id, target.correlation));
         if (r.ok) return r;
         // Only advance to the next element on a semantic rejection (delivered, not
         // accepted). A transport/HTTP error must stop here — retrying would risk a
@@ -191,49 +218,66 @@ export class DevFlowClient {
     }
     return err({ kind: "invalid-argument", message: "tap requires elementId or x/y", operation: "tap", retriable: false });
   }
-  fill(elementId: string, text: string): Promise<DevFlowResult<void>> {
-    return this.run(requests.fill(elementId, text));
+  fill(elementId: string, text: string, correlation?: ActionCorrelation): Promise<DevFlowResult<void>> {
+    return this.run(requests.fill(elementId, text, correlation));
   }
-  clear(elementId: string): Promise<DevFlowResult<void>> {
-    return this.run(requests.clear(elementId));
+  clear(elementId: string, correlation?: ActionCorrelation): Promise<DevFlowResult<void>> {
+    return this.run(requests.clear(elementId, correlation));
   }
-  focus(elementId: string): Promise<DevFlowResult<void>> {
-    return this.run(requests.focus(elementId));
+  focus(elementId: string, correlation?: ActionCorrelation): Promise<DevFlowResult<void>> {
+    return this.run(requests.focus(elementId, correlation));
   }
   async scroll(args: ScrollArgs): Promise<DevFlowResult<void>> {
     if (!args.elementId && typeof args.x === "number" && typeof args.y === "number") {
+      const coordinateError = unsupportedDirectCoordinateSpace(args.correlation, "scroll");
+      if (coordinateError) return coordinateError;
       // Coordinate scroll: hit-test, then scroll the first element that accepts the delta;
       // fall back to a global scroll. Mirrors the InspectorServer's translation.
       const hit = await this.hitTest(args.x, args.y);
       if (!hit.ok) return hit;
       for (const el of hit.value) {
         if (!el.id) continue;
-        const r = await this.run(requests.scroll({ elementId: el.id, deltaX: args.deltaX, deltaY: args.deltaY, animated: args.animated }));
+        const r = await this.run(requests.scroll({
+          elementId: el.id,
+          deltaX: args.deltaX,
+          deltaY: args.deltaY,
+          animated: args.animated,
+          correlation: args.correlation,
+        }));
         if (r.ok) return r;
         // As with tap: fall through only on a semantic rejection, never on a transport error.
         if (r.error.kind !== "action-rejected") return r;
       }
-      return this.run(requests.scroll({ deltaX: args.deltaX, deltaY: args.deltaY, animated: args.animated }));
+      return this.run(requests.scroll({
+        deltaX: args.deltaX,
+        deltaY: args.deltaY,
+        animated: args.animated,
+        correlation: args.correlation,
+      }));
     }
     return this.run(requests.scroll(args));
   }
-  gesture(args: GestureArgs): Promise<DevFlowResult<void>> {
+  async gesture(args: GestureArgs): Promise<DevFlowResult<void>> {
+    if (args.points) {
+      const coordinateError = unsupportedDirectCoordinateSpace(args.correlation, "gesture");
+      if (coordinateError) return coordinateError;
+    }
     return this.run(requests.gesture(args));
   }
-  back(): Promise<DevFlowResult<void>> {
-    return this.run(requests.back());
+  back(correlation?: ActionCorrelation): Promise<DevFlowResult<void>> {
+    return this.run(requests.back(correlation));
   }
-  navigate(route: string): Promise<DevFlowResult<void>> {
-    return this.run(requests.navigate(route));
+  navigate(route: string, correlation?: ActionCorrelation): Promise<DevFlowResult<void>> {
+    return this.run(requests.navigate(route, correlation));
   }
-  key(key: string, elementId?: string, text?: string): Promise<DevFlowResult<void>> {
-    return this.run(requests.key(key, elementId, text));
+  key(key: string, elementId?: string, text?: string, correlation?: ActionCorrelation): Promise<DevFlowResult<void>> {
+    return this.run(requests.key(key, elementId, text, correlation));
   }
   resize(width: number, height: number, window?: number): Promise<DevFlowResult<void>> {
     return this.run(requests.resize(width, height, window));
   }
-  setProperty(id: string, name: string, value: string): Promise<DevFlowResult<void>> {
-    return this.run(requests.setProperty(id, name, value));
+  setProperty(id: string, name: string, value: string, correlation?: ActionCorrelation): Promise<DevFlowResult<void>> {
+    return this.run(requests.setProperty(id, name, value, correlation));
   }
   setTheme(theme: DevFlowTheme): Promise<DevFlowResult<ThemeResult | null>> {
     return this.run(requests.themeSet(theme));
@@ -314,12 +358,20 @@ export class DevFlowClient {
 
   async screenshot(opts: ScreenshotOptions = {}): Promise<DevFlowResult<Buffer>> {
     if (this.disposed) return this.disposedErr("screenshot");
+    const hasResolutionHints = opts.targetScale !== undefined
+      || opts.maxPixelWidth !== undefined
+      || opts.maxPixelHeight !== undefined
+      || opts.maxPixels !== undefined;
     const path = `/api/v1/ui/screenshot${buildQuery({
       window: opts.window,
       elementId: opts.elementId,
       selector: opts.selector,
-      maxWidth: opts.maxWidth,
-      scale: opts.scale,
+      maxWidth: minPositive(opts.maxWidth, opts.maxPixelWidth),
+      scale: opts.scale ?? (hasResolutionHints && opts.maxWidth === undefined ? "auto" : undefined),
+      targetScale: opts.targetScale,
+      maxPixelWidth: opts.maxPixelWidth,
+      maxPixelHeight: opts.maxPixelHeight,
+      maxPixels: opts.maxPixels,
     })}`;
     const resolved = await this.resolver.resolve();
     if (!resolved.ok) return { ok: false, error: resolved.error };
@@ -561,8 +613,24 @@ function snippet(data: unknown): string | undefined {
 // ── Public re-exports ──────────────────────────────────────────────────────────
 export * from "./types.js";
 export { optionsFromEnv, parsePort } from "./env.js";
-export { openEventStream } from "./events.js";
-export type { DevFlowEvent, EventStreamHandle, EventStreamStatus, EventStreamOptions } from "./events.js";
+export {
+  isUiActionCompletedEvent,
+  isUiActionStartedEvent,
+  isUiActionUpdatedEvent,
+  openEventStream,
+} from "./events.js";
+export type {
+  DevFlowEvent,
+  EventStreamHandle,
+  EventStreamOptions,
+  EventStreamStatus,
+  UiActionCompletedEvent,
+  UiActionCorrelation,
+  UiActionEventData,
+  UiActionSource,
+  UiActionStartedEvent,
+  UiActionUpdatedEvent,
+} from "./events.js";
 export type { ScrollArgs, GestureArgs, AgentRequest } from "./agent.js";
 export { toRoots, buildQuery, requests } from "./agent.js";
 export type { ResolvedConnection } from "./resolve.js";

@@ -26,6 +26,8 @@ public partial class InspectorLayoutWorkspaceTests(ITestOutputHelper output) : I
     private readonly List<string> _pageErrors = [];
     private readonly HashSet<string> _scripts = [];
     private string BaseUrl => $"http://127.0.0.1:{_inspector.Port}/";
+    private static bool IsStateUrl(string url)
+        => new Uri(url).AbsolutePath.EndsWith("/api/state", StringComparison.Ordinal);
 
     public async Task InitializeAsync()
     {
@@ -65,7 +67,14 @@ public partial class InspectorLayoutWorkspaceTests(ITestOutputHelper output) : I
         if (_agent is not null) await _agent.DisposeAsync();
         output.WriteLine($"Loaded embedded scripts: {string.Join(", ", _scripts.Order())}");
         Assert.Contains("/devflow.js", _scripts);
+        Assert.Contains("/inspector-actions.js", _scripts);
+        Assert.Contains("/inspector-frame.js", _scripts);
+        Assert.Contains("/inspector-command-policy.js", _scripts);
         Assert.Contains("/inspector-layout.js", _scripts);
+        Assert.Contains("/inspector-presentation.js", _scripts);
+        Assert.Contains("/inspector-resolution.js", _scripts);
+        Assert.Contains("/inspector-viewport.js", _scripts);
+        Assert.Contains("/inspector-viewport-controller.js", _scripts);
         Assert.Empty(_pageErrors);
     }
 

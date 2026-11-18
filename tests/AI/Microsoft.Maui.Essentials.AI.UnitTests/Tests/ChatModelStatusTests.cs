@@ -15,6 +15,8 @@ public class ChatModelStatusTests
 				ChatModelAvailability.Disabled,
 				ChatModelAvailability.RequirementsNotMet,
 				ChatModelAvailability.Unknown,
+				ChatModelAvailability.Unavailable,
+				ChatModelAvailability.Downloading,
 			],
 			Enum.GetValues<ChatModelAvailability>());
 	}
@@ -26,6 +28,8 @@ public class ChatModelStatusTests
 	[InlineData(ChatModelAvailability.Disabled, "Disabled")]
 	[InlineData(ChatModelAvailability.RequirementsNotMet, "RequirementsNotMet")]
 	[InlineData(ChatModelAvailability.Unknown, "Unknown")]
+	[InlineData(ChatModelAvailability.Unavailable, "Unavailable")]
+	[InlineData(ChatModelAvailability.Downloading, "Downloading")]
 	public void Availability_ToStringReturnsStableName(ChatModelAvailability availability, string name) =>
 		Assert.Equal(name, availability.ToString());
 
@@ -56,45 +60,23 @@ public class ChatModelStatusTests
 	public void Capability_ToStringReturnsStableName(ChatModelCapability capability, string name) =>
 		Assert.Equal(name, capability.ToString());
 
-	[Fact]
-	public void Status_RejectsUnavailableReasonForAvailableModel()
-	{
-		Assert.Throws<ArgumentException>(() =>
-			new ChatModelStatus(ChatModelAvailability.Available, "unexpected", null));
-	}
-
 	[Theory]
-	[InlineData("")]
-	[InlineData(" \r\n\t")]
-	public void Status_RejectsBlankUnavailableReason(string reason)
+	[InlineData(ChatModelAvailability.Unavailable)]
+	[InlineData(ChatModelAvailability.NotReady)]
+	[InlineData(ChatModelAvailability.Downloading)]
+	[InlineData(ChatModelAvailability.Unknown)]
+	public void Status_PreservesAvailability(ChatModelAvailability availability)
 	{
-		Assert.Throws<ArgumentException>(() =>
-			new ChatModelStatus(ChatModelAvailability.NotReady, reason, null));
-	}
+		var status = new ChatModelStatus(availability, null);
 
-	[Fact]
-	public void Status_AllowsUnavailableStateWithoutProviderReason()
-	{
-		var status = new ChatModelStatus(ChatModelAvailability.Unknown, null, null);
-
-		Assert.Equal(ChatModelAvailability.Unknown, status.Availability);
-		Assert.Null(status.UnavailableReason);
-	}
-
-	[Fact]
-	public void Status_PreservesUnavailableReason()
-	{
-		var status = new ChatModelStatus(ChatModelAvailability.NotReady, "modelNotReady", null);
-
-		Assert.Equal(ChatModelAvailability.NotReady, status.Availability);
-		Assert.Equal("modelNotReady", status.UnavailableReason);
+		Assert.Equal(availability, status.Availability);
 	}
 
 	[Fact]
 	public void Status_DistinguishesUnknownFromKnownEmptyCapabilities()
 	{
-		var unknown = new ChatModelStatus(ChatModelAvailability.Available, null, null);
-		var knownNone = new ChatModelStatus(ChatModelAvailability.Available, null, []);
+		var unknown = new ChatModelStatus(ChatModelAvailability.Available, null);
+		var knownNone = new ChatModelStatus(ChatModelAvailability.Available, []);
 
 		Assert.Null(unknown.Capabilities);
 		Assert.NotNull(knownNone.Capabilities);
@@ -105,7 +87,7 @@ public class ChatModelStatusTests
 	public void Status_DefensivelyCopiesCallerList()
 	{
 		List<ChatModelCapability> capabilities = [ChatModelCapability.Text, ChatModelCapability.Streaming];
-		var status = new ChatModelStatus(ChatModelAvailability.Available, null, capabilities);
+		var status = new ChatModelStatus(ChatModelAvailability.Available, capabilities);
 
 		capabilities[0] = ChatModelCapability.ImageInput;
 		capabilities.Clear();
@@ -118,9 +100,9 @@ public class ChatModelStatusTests
 	public void Status_DefensivelyCopiesCallerArrayAndReadOnlyWrapper()
 	{
 		var capabilities = new[] { ChatModelCapability.Text };
-		var fromArray = new ChatModelStatus(ChatModelAvailability.Available, null, capabilities);
+		var fromArray = new ChatModelStatus(ChatModelAvailability.Available, capabilities);
 		var fromWrapper = new ChatModelStatus(
-			ChatModelAvailability.Available, null, Array.AsReadOnly(capabilities));
+			ChatModelAvailability.Available, Array.AsReadOnly(capabilities));
 
 		capabilities[0] = ChatModelCapability.ImageInput;
 
@@ -132,7 +114,7 @@ public class ChatModelStatusTests
 	public void Status_CapabilitiesCannotBeMutatedThroughCollectionInterfaces()
 	{
 		var status = new ChatModelStatus(
-			ChatModelAvailability.Available, null, [ChatModelCapability.Text]);
+			ChatModelAvailability.Available, [ChatModelCapability.Text]);
 		var list = Assert.IsAssignableFrom<IList<ChatModelCapability>>(status.Capabilities);
 
 		Assert.True(list.IsReadOnly);
@@ -153,7 +135,7 @@ public class ChatModelStatusTests
 			System.Reflection.BindingFlags.DeclaredOnly);
 
 		Assert.Equal(
-			["get_Availability", "get_Capabilities", "get_UnavailableReason"],
+			["get_Availability", "get_Capabilities"],
 			methods.Select(method => method.Name).OrderBy(name => name));
 	}
 
@@ -169,11 +151,10 @@ public class ChatModelStatusTests
 			0 => [],
 			_ => [ChatModelCapability.Text],
 		};
-		var first = new ChatModelStatus(ChatModelAvailability.Available, null, capabilities);
-		var second = new ChatModelStatus(ChatModelAvailability.Available, null, capabilities);
+		var first = new ChatModelStatus(ChatModelAvailability.Available, capabilities);
+		var second = new ChatModelStatus(ChatModelAvailability.Available, capabilities);
 
 		Assert.Equal(first.Availability, second.Availability);
-		Assert.Equal(first.UnavailableReason, second.UnavailableReason);
 		Assert.Equal(first.Capabilities, second.Capabilities);
 		Assert.False(first.Equals(second));
 		Assert.False(first == second);

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -70,6 +71,248 @@ public class InspectorPropertyEndpointTests
         Assert.True(InspectorServer.SupportsUiEvents(supported.RootElement));
         Assert.False(InspectorServer.SupportsUiEvents(unsupported.RootElement));
         Assert.Null(InspectorServer.SupportsUiEvents(default));
+    }
+
+    [Fact]
+    public async Task UiActionEvents_UseCachedFrameDescriptorWhenAgentOnlyKnowsCapture()
+    {
+        await using var agent = new FakeAgent(
+            new ElementInfo
+            {
+                Id = "action-target",
+                Type = "Button",
+                IsVisible = true,
+                IsEnabled = true,
+                CaptureEpoch = 42,
+                RegistryGeneration = 7,
+                WindowId = 0,
+                Bounds = new BoundsInfo { X = 10, Y = 20, Width = 100, Height = 40 }
+            },
+            diagnosticInputsRevision: "7:3:0");
+        using var inspector = new InspectorServer(
+            FreePort(),
+            "127.0.0.1",
+            agent.Port);
+        inspector.Start();
+        try
+        {
+            using var http = new HttpClient();
+            var page = await http.GetStringAsync($"http://127.0.0.1:{inspector.Port}/");
+            var encodedFrame = Regex.Match(
+                page,
+                "<meta\\s+name=\"devflow-frame\"\\s+content=\"([^\"]+)\"")
+                .Groups[1]
+                .Value;
+            using var state = JsonDocument.Parse(WebUtility.HtmlDecode(encodedFrame));
+            var frame = state.RootElement;
+            var captureEpoch = frame.GetProperty("captureEpoch").GetInt64();
+            var registryGeneration = frame.GetProperty("registryGeneration").GetInt64();
+            var windowId = frame.GetProperty("windowId").GetInt32();
+            var diagnosticInputsRevision = frame
+                .GetProperty("diagnosticInputsRevision")
+                .GetString();
+            foreach (var eventType in new[] { "ui-action-started", "ui-action-updated" })
+            {
+                var payload = JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    type = eventType,
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    data = new
+                    {
+                        correlation = new { actionId = "action-1", source = "mcp" },
+                        kind = "tap",
+                        elementId = "action-target",
+                        captureEpoch = captureEpoch + 100,
+                        registryGeneration,
+                        windowId,
+                        diagnosticInputsRevision
+                    }
+                });
+
+                using var enriched = JsonDocument.Parse(inspector.ProcessUiEventPayload(payload));
+                var correlation = enriched.RootElement
+                    .GetProperty("data")
+                    .GetProperty("correlation");
+                Assert.False(string.IsNullOrWhiteSpace(correlation.GetProperty("frameId").GetString()));
+                Assert.False(string.IsNullOrWhiteSpace(correlation.GetProperty("streamId").GetString()));
+                Assert.True(correlation.GetProperty("frameRevision").GetInt64() > 0);
+            }
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task UiActionEvents_LocalFailureAndInitialSnapshots_DoNotSupersedeFrame()
+    {
+        await using var agent = new FakeAgent(
+            new ElementInfo
+            {
+                Id = "action-target",
+                Type = "Button",
+                IsVisible = true,
+                IsEnabled = true,
+                Bounds = new BoundsInfo { X = 10, Y = 20, Width = 100, Height = 40 }
+            },
+            tapResponse: _ => false);
+        using var inspector = new InspectorServer(
+            FreePort(),
+            "127.0.0.1",
+            agent.Port);
+        inspector.Start();
+        try
+        {
+            using var http = new HttpClient();
+            var page = await http.GetStringAsync(
+                $"http://127.0.0.1:{inspector.Port}/");
+            var encodedFrame = Regex.Match(
+                page,
+                "<meta\\s+name=\"devflow-frame\"\\s+content=\"([^\"]+)\"")
+                .Groups[1]
+                .Value;
+            using var state = JsonDocument.Parse(
+                WebUtility.HtmlDecode(encodedFrame));
+            var frameId = state.RootElement.GetProperty("frameId").GetString();
+            var generation = InspectorCacheGeneration(inspector);
+            const string actionId = "local-rejected-candidate";
+
+            using var response = await http.PostAsync(
+                $"http://127.0.0.1:{inspector.Port}/api/tap",
+                Json(
+                    $$"""
+                    {
+                      "elementId":"action-target",
+                      "correlation":{
+                        "actionId":"{{actionId}}",
+                        "source":"inspector",
+                        "frameId":"{{frameId}}"
+                      }
+                    }
+                    """));
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(generation, InspectorCacheGeneration(inspector));
+
+            var failed = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                type = "ui-action-completed",
+                timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                data = new
+                {
+                    correlation = new { actionId, source = "inspector" },
+                    kind = "tap",
+                    success = false,
+                    outcome = "failed",
+                    reason = "action-rejected"
+                }
+            });
+            inspector.ProcessUiEventPayload(failed);
+            Assert.Equal(generation, InspectorCacheGeneration(inspector));
+
+            var snapshotTimestamp = DateTimeOffset.UtcNow.ToString("O");
+            var relayState = new InspectorServer.UiEventRelayState();
+            inspector.ProcessUiEventPayload(
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    type = "lifecycle",
+                    timestamp = snapshotTimestamp,
+                    data = new { state = "started", timestamp = snapshotTimestamp }
+                }),
+                relayState);
+            inspector.ProcessUiEventPayload(
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    type = "ui-action-started",
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    data = new
+                    {
+                        correlation = new { actionId = "interleaved", source = "mcp" },
+                        kind = "tap"
+                    }
+                }),
+                relayState);
+            inspector.ProcessUiEventPayload(
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    type = "navigation",
+                    timestamp = snapshotTimestamp,
+                    data = new
+                    {
+                        from = (string?)null,
+                        to = "//current",
+                        route = "//current",
+                        timestamp = snapshotTimestamp
+                    }
+                }),
+                relayState);
+            Assert.Equal(generation, InspectorCacheGeneration(inspector));
+
+            inspector.ProcessUiEventPayload(
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    type = "treeChange",
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    data = new { reason = "changed" }
+                }),
+                relayState);
+            Assert.Equal(generation + 1, InspectorCacheGeneration(inspector));
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task UiActionEvents_IdentitylessDefaultWindowDoesNotMatchAnotherWindow()
+    {
+        await using var agent = new FakeAgent(
+            new ElementInfo
+            {
+                Id = "window-two-target",
+                Type = "Button",
+                IsVisible = true,
+                IsEnabled = true,
+                CaptureEpoch = 42,
+                RegistryGeneration = 7,
+                WindowId = 2,
+                Bounds = new BoundsInfo { X = 10, Y = 20, Width = 100, Height = 40 }
+            },
+            diagnosticInputsRevision: "7:3:0");
+        using var inspector = new InspectorServer(
+            FreePort(),
+            "127.0.0.1",
+            agent.Port);
+        inspector.Start();
+        try
+        {
+            using var http = new HttpClient();
+            await http.GetStringAsync($"http://127.0.0.1:{inspector.Port}/");
+            var payload = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                type = "ui-action-started",
+                timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                data = new
+                {
+                    correlation = new { actionId = "default-window", source = "mcp" },
+                    kind = "tap",
+                    diagnosticInputsRevision = "7:3:0"
+                }
+            });
+
+            using var processed = JsonDocument.Parse(
+                inspector.ProcessUiEventPayload(payload));
+            var correlation = processed.RootElement
+                .GetProperty("data")
+                .GetProperty("correlation");
+
+            Assert.False(correlation.TryGetProperty("frameId", out _));
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
     }
 
     [Fact]
@@ -800,6 +1043,11 @@ public class InspectorPropertyEndpointTests
 
     private static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
 
+    private static long InspectorCacheGeneration(InspectorServer inspector)
+        => Assert.IsType<long>(typeof(InspectorServer)
+            .GetField("_cacheGeneration", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(inspector));
+
     private static int FreePort()
     {
         var l = new TcpListener(IPAddress.Loopback, 0);
@@ -824,6 +1072,7 @@ public class InspectorPropertyEndpointTests
         private readonly string? _hitTestResponse;
         private readonly string? _propertyDescriptorsResponse;
         private readonly Func<string, bool>? _tapResponse;
+        private readonly string? _diagnosticInputsRevision;
 
         public FakeAgent(
             ElementInfo? element = null,
@@ -833,7 +1082,8 @@ public class InspectorPropertyEndpointTests
             Func<string, (int StatusCode, string Body)>? recordingResponse = null,
             string? hitTestResponse = null,
             string? propertyDescriptorsResponse = null,
-            Func<string, bool>? tapResponse = null)
+            Func<string, bool>? tapResponse = null,
+            string? diagnosticInputsRevision = null)
         {
             _element = element;
             _rejectProperty = rejectProperty;
@@ -842,6 +1092,7 @@ public class InspectorPropertyEndpointTests
             _hitTestResponse = hitTestResponse;
             _propertyDescriptorsResponse = propertyDescriptorsResponse;
             _tapResponse = tapResponse;
+            _diagnosticInputsRevision = diagnosticInputsRevision;
             if (initialProperties is not null)
             {
                 foreach (var property in initialProperties)
@@ -877,12 +1128,38 @@ public class InspectorPropertyEndpointTests
                     var (method, path, body) = await ReadRequest(stream, ct);
 
                     string json = "{\"error\":\"not found\"}";
+                    byte[]? binaryPayload = null;
+                    var contentType = "application/json";
                     var status = "404 Not Found";
                     if (method == "GET" &&
                         _element is not null &&
                         path.Equals($"/api/v1/ui/elements/{_element.Id}", StringComparison.Ordinal))
                     {
                         json = JsonSerializer.Serialize(_element);
+                        status = "200 OK";
+                    }
+
+                    if (method == "GET"
+                        && path.StartsWith("/api/v1/ui/screenshot", StringComparison.Ordinal))
+                    {
+                        binaryPayload = Convert.FromBase64String(
+                            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+                        contentType = "image/png";
+                        status = "200 OK";
+                    }
+
+                    if (method == "GET"
+                        && _element is not null
+                        && path.StartsWith("/api/v1/ui/tree", StringComparison.Ordinal))
+                    {
+                        json = _diagnosticInputsRevision is null
+                            ? JsonSerializer.Serialize(new[] { _element })
+                            : JsonSerializer.Serialize(new
+                            {
+                                revision = "fixture-tree",
+                                diagnosticInputsRevision = _diagnosticInputsRevision,
+                                elements = new[] { _element }
+                            });
                         status = "200 OK";
                     }
 
@@ -972,8 +1249,8 @@ public class InspectorPropertyEndpointTests
                         }
                     }
 
-                    var payload = Encoding.UTF8.GetBytes(json);
-                    var header = $"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n";
+                    var payload = binaryPayload ?? Encoding.UTF8.GetBytes(json);
+                    var header = $"HTTP/1.1 {status}\r\nContent-Type: {contentType}\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n";
                     await stream.WriteAsync(Encoding.UTF8.GetBytes(header), ct);
                     await stream.WriteAsync(payload, ct);
                     await stream.FlushAsync(ct);

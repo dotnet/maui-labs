@@ -1,6 +1,9 @@
 package com.microsoft.maui.essentials.ai
 
 import com.google.mlkit.genai.prompt.TextPart
+import com.google.mlkit.genai.prompt.ModelPreference
+import com.google.mlkit.genai.prompt.ModelReleaseStage
+import com.google.mlkit.genai.prompt.GenerateContentRequest
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -11,8 +14,47 @@ class NativeChatRequestTest {
 
     private fun request(
         vararg messages: NativeChatMessage,
-        options: NativeChatOptions = NativeChatOptions(null, null, null, null, false),
-    ) = NativeChatRequest(arrayOf(*messages), options    )
+        options: NativeChatOptions = NativeChatOptions(null, null, null, null, false, null),
+    ) = NativeChatRequest(arrayOf(*messages), options)
+
+    @Test
+    fun structuredOutputUsesTheCallersOutputLimitUnchanged() {
+        val options = NativeChatOptions(null, null, null, null, false, null).apply {
+            responseSchemaJson = """{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}"""
+        }
+        val unset = GenerateContentRequest.Builder(TextPart("hello")).build().maxOutputTokens
+        assertEquals(unset, request(message("user", "hello"), options = options).toNative().maxOutputTokens)
+        assertEquals(128, request(message("user", "hello"),
+            options = NativeChatOptions(null, null, null, 128, false, null).apply {
+                responseSchemaJson = options.responseSchemaJson
+            }).toNative().maxOutputTokens)
+        val withoutSchema = request(message("user", "hello")).toNative()
+        assertEquals(GenerateContentRequest.Builder(TextPart("hello")).apply { maxOutputTokens = null }.build().maxOutputTokens,
+            withoutSchema.maxOutputTokens)
+    }
+
+    @Test
+    fun modelConfigurationUsesTheRequestedStageAndPreference() {
+        for ((id, stage, preference) in listOf(
+            Triple(null, ModelReleaseStage.STABLE, ModelPreference.FULL),
+            Triple("gemini-nano", ModelReleaseStage.STABLE, ModelPreference.FULL),
+            Triple("gemini-nano-full", ModelReleaseStage.STABLE, ModelPreference.FULL),
+            Triple("gemini-nano-fast", ModelReleaseStage.STABLE, ModelPreference.FAST),
+            Triple("gemini-nano-preview-full", ModelReleaseStage.PREVIEW, ModelPreference.FULL),
+            Triple("gemini-nano-preview-fast", ModelReleaseStage.PREVIEW, ModelPreference.FAST),
+        )) {
+            val config = modelConfiguration(id).modelConfig
+            assertEquals(stage, config.releaseStage)
+            assertEquals(preference, config.preference)
+        }
+    }
+
+    @Test
+    fun unknownModelIdsAreRejectedRatherThanUsingAnotherModel() {
+        for (id in listOf("", "nano-v3", "nano-v4-fast", "unknown")) {
+            assertThrows(IllegalArgumentException::class.java) { modelConfiguration(id) }
+        }
+    }
 
     @Test
     fun userContentsAndPartsArePassedToNativeWithoutRoleTokens() {
@@ -78,9 +120,25 @@ class NativeChatRequestTest {
     @Test
     fun thinkingMapsToTheNativeFlag() {
         val request = request(message("user", "hello"),
-            options = NativeChatOptions(null, null, null, null, true))
+            options = NativeChatOptions(null, null, null, null, true, null))
 
         assertTrue(request.toNative().enableThinking)
+    }
+
+    @Test
+    fun sdkUpdateKeepsRequestsStatelessAndWithoutNativeTools() {
+        val result = request(
+            message("system", "Be concise."),
+            message("user", "hello"),
+            options = NativeChatOptions(null, null, null, null, true, null),
+        ).toNative()
+
+        assertTrue(result.dynamicTools.isNullOrEmpty())
+        assertNull(result.sessionId)
+        assertNull(result.cachedContextName)
+        assertNull(result.promptPrefix)
+        assertEquals("Be concise.", result.systemInstruction!!.textString)
+        assertTrue(result.enableThinking)
     }
 
     @Test
@@ -132,7 +190,7 @@ class NativeChatRequestTest {
     @Test
     fun supportedGenerationOptionsMapDirectlyToTheNativeRequest() {
         val result = request(message("user", "hello"),
-            options = NativeChatOptions(0.3f, 12, 42, 128, false))
+            options = NativeChatOptions(0.3f, 12, 42, 128, false, null))
             .toNative()
 
         assertEquals(0.3f, result.temperature, 0f)
@@ -145,7 +203,7 @@ class NativeChatRequestTest {
     fun nativeBuilderOwnsGenerationValueValidation() {
         val error = runCatching {
             request(message("user", "hello"),
-                options = NativeChatOptions(2f, null, null, null, false))
+                options = NativeChatOptions(2f, null, null, null, false, null))
                 .toNative()
         }.exceptionOrNull()
 

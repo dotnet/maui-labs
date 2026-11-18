@@ -10,10 +10,27 @@ public class AgentClientCompatibilityTests
     {
         var driver = typeof(AndroidAppDriver).Assembly;
         Assert.Contains(typeof(LayoutSizingEvidence), driver.GetForwardedTypes());
+        Assert.Contains(typeof(ScreenshotResolutionOptions), driver.GetForwardedTypes());
         Assert.Same(
             typeof(LayoutSizingEvidence),
             driver.GetType(typeof(LayoutSizingEvidence).FullName!, throwOnError: true));
+        Assert.Same(
+            typeof(ScreenshotResolutionOptions),
+            driver.GetType(typeof(ScreenshotResolutionOptions).FullName!, throwOnError: true));
         Assert.Equal("Microsoft.Maui.DevFlow.Client", typeof(LayoutSizingEvidence).Assembly.GetName().Name);
+        Assert.Equal("Microsoft.Maui.DevFlow.Client", typeof(ScreenshotResolutionOptions).Assembly.GetName().Name);
+    }
+
+    [Fact]
+    public void DriverFacade_ForwardsPointerSessionProtocolTypes()
+    {
+        var driver = typeof(AndroidAppDriver).Assembly;
+        var forwarded = driver.GetForwardedTypes();
+
+        Assert.Contains(typeof(PointerSessionStartRequest), forwarded);
+        Assert.Contains(typeof(PointerSessionSample), forwarded);
+        Assert.Contains(typeof(PointerSessionResult), forwarded);
+        Assert.Equal("Microsoft.Maui.DevFlow.Client", typeof(PointerSessionResult).Assembly.GetName().Name);
     }
 
     [Fact]
@@ -99,6 +116,17 @@ public class AgentClientCompatibilityTests
             typeof(string),
             typeof(int?),
             typeof(string));
+        AssertMethod(
+            type,
+            nameof(AgentClient.ScreenshotResultAsync),
+            typeof(int?),
+            typeof(string),
+            typeof(string),
+            typeof(int?),
+            typeof(string),
+            typeof(long?),
+            typeof(long?),
+            typeof(ScreenshotResolutionOptions));
         AssertMethod(
             type,
             nameof(AgentClient.SetPropertyAsync),

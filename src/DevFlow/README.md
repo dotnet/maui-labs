@@ -369,6 +369,7 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Visual Tree Inspection** — query the full MAUI visual tree via HTTP API or CLI
 - **Layout Diagnostics** — detect clipping, lost overflow, text truncation, overlap, and interaction occlusion with platform-specific evidence and confidence
 - **Element Interaction** — tap, fill, scroll, navigate, focus, resize, and mutate properties
+- **Continuous Pointer Sessions** — capability-negotiated, bounded/coalesced press-move-release input for Android and opt-in UIKit targets, with safe legacy gesture fallback
 - **Application Menus** — inspect and invoke the app menu bar: the cross-platform MAUI `MenuBarItems` tree plus the native macOS AppKit `NSMenu` and active Mac Catalyst responder-chain key commands. Disabled items and disabled ancestors are respected; unhandled native actions report failure.
 - **Screenshots** — capture PNG screenshots from any platform (full window or per-element); AppKit window capture includes native chrome and attached sheets without activating the app
 - **Screen Recording** — start/stop video recording of app sessions
@@ -390,7 +391,23 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Plugins** — libraries ship their own DevFlow plugins (`Microsoft.Maui.DevFlow.Extensibility`) with tools and live event streams; MCP publishes their tools as `ext_*` and the Inspector shows them in its Extensions tab ([guide](../../docs/DevFlow/plugins.md))
 - **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK
 
+Android driver commands and screen recording use `System.Diagnostics.Process` through the
+driver's internal `HostProcess` helper, not `Xamarin.Android.Tools.ProcessUtils`. Output and
+error streams drain concurrently; cancelling an ADB command terminates only its client, not
+the shared ADB server. `Xamarin.Android.Tools.AndroidSdk` remains required for `AdbRunner`
+device discovery and reverse-port setup.
+
 ## Focus-safe capture and native dialogs
+
+iOS Simulator full-screen screenshots use `simctl`, including system dialogs. CLI and
+Driver share resizing through macOS's built-in `/usr/bin/sips`, preserving logical sizing,
+aspect-ratio rounding and no-upscaling. The CLI supports `--max-width`; `--scale native`
+and `--scale full` bypass resizing. Resize failures warn on stderr and return the original
+PNG. Resampling and compression can differ from earlier SkiaSharp output.
+
+Windows host fallback uses GDI for capture and built-in GDI+ for PNG encoding, preserving
+bounds, top-down BGRA order and opaque alpha. Temporary files and native resources are
+released after capture. Neither host path bundles SkiaSharp; in-app agents are unchanged.
 
 AppKit screenshots prefer ScreenCaptureKit and fall back to CoreGraphics or in-process
 rendering without activating or reordering windows. On macOS 14.0–14.1, an attached sheet

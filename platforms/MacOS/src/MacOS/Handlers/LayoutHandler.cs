@@ -177,6 +177,8 @@ public partial class LayoutHandler : MacOSViewHandler<ILayout, MacOSContainerVie
 
         if (layout.Background is Graphics.SolidPaint solidPaint && solidPaint.Color != null)
             handler.PlatformView.Layer.BackgroundColor = solidPaint.Color.ToPlatformColor().CGColor;
+        else
+            handler.PlatformView.Layer.BackgroundColor = null;
     }
 
     public static void MapClipsToBounds(LayoutHandler handler, ILayout layout)

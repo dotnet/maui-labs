@@ -66,6 +66,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
             if (ViewCommandMapper is CommandMapper<IView, IViewHandler> cmdMapper)
             {
                 cmdMapper[nameof(IView.Focus)] = MapFocus;
+                cmdMapper[nameof(IView.Unfocus)] = MapUnfocus;
                 cmdMapper[nameof(IView.InvalidateMeasure)] = (handler, view, args) =>
                 {
                     if (handler.PlatformView is not NSView platformView)
@@ -510,6 +511,14 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
 
         var result = window.MakeFirstResponder(platformView);
         request.TrySetResult(result);
+    }
+
+    static new void MapUnfocus(IViewHandler handler, IView view, object? args)
+    {
+        // Resign only if this view actually holds focus; the window then becomes first responder and
+        // MacOSFocusTracker clears IsFocused.
+        if (handler.PlatformView is NSView { Window: { } window } && MacOSFocusTracker.OwnsFirstResponder(window, view))
+            window.MakeFirstResponder(null);
     }
 
     public override void PlatformArrange(Rect rect)

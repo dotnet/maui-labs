@@ -177,7 +177,6 @@ public class WindowsAIModelStatusTests(ITestOutputHelper output)
 				AIFeatureReadyState.OSUpdateNeeded => ChatModelAvailability.RequirementsNotMet,
 			_ => ChatModelAvailability.Unknown,
 		}, second.Availability);
-		Assert.Equal(state is AIFeatureReadyState.Ready ? null : state.ToString(), second.UnavailableReason);
 		Assert.Equal([ChatModelCapability.Text, ChatModelCapability.Streaming, ChatModelCapability.StructuredOutput],
 			second.Capabilities);
 	}

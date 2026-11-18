@@ -6,27 +6,14 @@ public sealed class ChatModelStatus
 {
 	internal ChatModelStatus(
 		ChatModelAvailability availability,
-		string? unavailableReason,
 		IEnumerable<ChatModelCapability>? capabilities)
 	{
-		if (availability is ChatModelAvailability.Available && unavailableReason is not null)
-			throw new ArgumentException("An available model cannot have an unavailable reason.", nameof(unavailableReason));
-		if (unavailableReason is not null)
-			ArgumentException.ThrowIfNullOrWhiteSpace(unavailableReason);
 		Availability = availability;
-		UnavailableReason = unavailableReason;
 		Capabilities = capabilities is null ? null : Array.AsReadOnly(capabilities.ToArray());
 	}
 
 	/// <summary>The model's availability at the time of the snapshot, not a readiness guarantee.</summary>
 	public ChatModelAvailability Availability { get; }
-
-	/// <summary>
-	/// The provider-native unavailable reason, or <see langword="null"/> when unavailable details are not
-	/// known. This is always <see langword="null"/> when <see cref="Availability"/> is
-	/// <see cref="ChatModelAvailability.Available"/>.
-	/// </summary>
-	public string? UnavailableReason { get; }
 
 	/// <summary>
 	/// Effective capabilities exposed by the provider, copied into a read-only collection.

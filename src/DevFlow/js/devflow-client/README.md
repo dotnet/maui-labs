@@ -119,7 +119,11 @@ not** (a lost response can mean the change already applied) unless `retryMutatio
 **Events** (`events.ts`): the client checks for the `ui.events` capability before opening a
 WebSocket. Older agents report `transport: "polling-only"` without repeated failed upgrades. The
 capability is rechecked every 60 seconds so replacing an agent in place recovers automatically;
-transient discovery failures retain bounded reconnect backoff.
+transient discovery failures retain bounded reconnect backoff. Structured
+`ui-action-started`, coalesced `ui-action-updated`, and `ui-action-completed` events expose
+geometry-only lifecycle metadata and the stable `correlation` shape used by Inspector overlays.
+`isUiActionStartedEvent`, `isUiActionUpdatedEvent`, and `isUiActionCompletedEvent` narrow those
+messages while unknown future event types remain forward-compatible.
 
 **Broker bootstrap** is opt-in (`bootstrapBroker: "never" | "once" | "always"`, default
 `"never"`) — a library shouldn't spawn `maui devflow list` behind the caller's back.

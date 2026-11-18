@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Text;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Client.Tests;
@@ -243,6 +245,154 @@ public class AgentClientRetryTests
         finally
         {
             (await agentTask).Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task ScreenshotResultAsync_RetriesConnectionDroppedMidBody()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var requests = 0;
+        var serverTask = Task.Run(async () =>
+        {
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                using var connection = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
+                using var stream = connection.GetStream();
+                await ReadHeadersAsync(stream).ConfigureAwait(false);
+                Interlocked.Increment(ref requests);
+                if (attempt == 0)
+                {
+                    var partial = Encoding.ASCII.GetBytes(
+                        "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: image/png\r\n" +
+                        "Content-Length: 12\r\n" +
+                        "Connection: close\r\n\r\nabc");
+                    await stream.WriteAsync(partial, 0, partial.Length).ConfigureAwait(false);
+                    continue;
+                }
+
+                var body = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4 };
+                var header = Encoding.ASCII.GetBytes(
+                    "HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: image/png\r\n" +
+                    $"Content-Length: {body.Length}\r\n" +
+                    "Connection: close\r\n\r\n");
+                await stream.WriteAsync(header, 0, header.Length).ConfigureAwait(false);
+                await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
+            }
+        });
+
+        using var client = new AgentClient("localhost", port)
+        {
+            TransientFailureRetryCount = 1,
+            TransientFailureRetryDelay = TimeSpan.Zero,
+        };
+
+        try
+        {
+            var result = await client.ScreenshotResultAsync(
+                window: null,
+                elementId: null,
+                selector: null,
+                maxWidth: null,
+                scale: null,
+                captureEpoch: null,
+                registryGeneration: null,
+                resolution: new ScreenshotResolutionOptions
+                {
+                    MaxEncodedBytes = 1024
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal(2, Volatile.Read(ref requests));
+            await serverTask;
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task ScreenshotResultAsync_TimesOutWhenResponseStallsMidBody()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var releaseServer = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var serverTask = Task.Run(async () =>
+        {
+            using var connection = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
+            using var stream = connection.GetStream();
+            await ReadHeadersAsync(stream).ConfigureAwait(false);
+            var partial = Encoding.ASCII.GetBytes(
+                "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: image/png\r\n" +
+                "Content-Length: 12\r\n" +
+                "Connection: close\r\n\r\nabc");
+            await stream.WriteAsync(partial, 0, partial.Length).ConfigureAwait(false);
+            await stream.FlushAsync().ConfigureAwait(false);
+            await releaseServer.Task.ConfigureAwait(false);
+        });
+
+        using var client = new AgentClient("localhost", port)
+        {
+            HttpTimeout = TimeSpan.FromMilliseconds(250),
+            TransientFailureRetryCount = 0,
+        };
+
+        try
+        {
+            var stopwatch = Stopwatch.StartNew();
+            var result = await client.ScreenshotResultAsync(
+                window: null,
+                elementId: null,
+                selector: null,
+                maxWidth: null,
+                scale: null,
+                captureEpoch: null,
+                registryGeneration: null,
+                resolution: new ScreenshotResolutionOptions
+                {
+                    MaxEncodedBytes = 1024
+                });
+
+            Assert.False(result.Success);
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromSeconds(3),
+                $"The stalled screenshot took {stopwatch.Elapsed} to time out.");
+        }
+        finally
+        {
+            releaseServer.TrySetResult(true);
+            listener.Stop();
+            await serverTask;
+        }
+    }
+
+    private static async Task ReadHeadersAsync(NetworkStream stream)
+    {
+        var buffer = new byte[1024];
+        using var received = new MemoryStream();
+        while (true)
+        {
+            var read = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+            if (read <= 0)
+                return;
+            received.Write(buffer, 0, read);
+            var data = received.ToArray();
+            for (var i = 0; i + 3 < data.Length; i++)
+            {
+                if (data[i] == '\r' && data[i + 1] == '\n' &&
+                    data[i + 2] == '\r' && data[i + 3] == '\n')
+                {
+                    return;
+                }
+            }
         }
     }
 

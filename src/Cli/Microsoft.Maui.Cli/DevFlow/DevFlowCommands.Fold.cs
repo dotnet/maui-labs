@@ -48,9 +48,9 @@ public partial class DevFlowCommands
         fold.Add(get);
 
         var mode = new Argument<string>("mode") { Description = "folded, unfolded, or partially-folded (default partial angle: 90 degrees)" };
-        var angle = new Option<double?>("--angle") { Description = "Explicit degrees strictly between 0 and 180; requires partially-folded" };
+        var angle = WithInvariantParsing(new Option<double?>("--angle") { Description = "Explicit degrees strictly between 0 and 180; requires partially-folded" });
         var index = new Option<int>("--hinge-index") { Description = "Enabled hinge index (default: 0); presets affect this hinge only" };
-        var duration = new Option<double>("--duration") { Description = "Animate from the observed angle over 0..30 seconds (default: immediate)" };
+        var duration = WithInvariantParsing(new Option<double>("--duration") { Description = "Animate from the observed angle over 0..30 seconds (default: immediate)" });
         var timeout = new Option<int>("--timeout") { Description = "Overall operation timeout, including helper build and verification (1..120 seconds)", DefaultValueFactory = _ => 30 };
         var screenshot = new Option<string?>("--and-screenshot") { Description = "Capture the connected app after verification (optional output path); requires an agent", Arity = ArgumentArity.ZeroOrOne };
         var tree = new Option<bool>("--and-tree") { Description = "Read the connected app tree after verification; requires an agent" };

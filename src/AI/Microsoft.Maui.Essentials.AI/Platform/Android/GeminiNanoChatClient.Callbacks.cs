@@ -88,6 +88,7 @@ public sealed partial class GeminiNanoChatClient
 	private sealed class StreamingResponseCallback(
 		ChannelWriter<ChatResponseUpdate> writer,
 		bool includeThoughts,
+		ChatOptions? options,
 		CancellationToken cancellationToken) :
 		Java.Lang.Object,
 		AndroidNative.INativeChatCallback
@@ -134,8 +135,12 @@ public sealed partial class GeminiNanoChatClient
 
 			try
 			{
-				writer.TryWrite(CreateFinalUpdate(response));
+				writer.TryWrite(CreateFinalUpdate(response, options));
 				writer.TryComplete();
+			}
+			catch (Exception exception)
+			{
+				writer.TryComplete(exception);
 			}
 			finally
 			{

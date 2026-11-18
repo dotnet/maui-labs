@@ -25,6 +25,36 @@ public class GeminiNanoChatClientInstantiationTests : ChatClientInstantiationTes
 public class GeminiNanoChatClientCancellationTests : ChatClientCancellationTestsBase<GeminiNanoChatClient>;
 
 [Collection(nameof(GeminiNanoCollection))]
+public class GeminiNanoNativeFunctionCallingTests : ChatClientFunctionCallingTestsBase<GeminiNanoChatClient>
+{
+	internal const string ToolModelId = "gemini-nano-preview-fast";
+
+	// Native tool support is profile-dependent; V3 cannot register tools.
+	protected override bool? SupportsRequiredToolMode => false;
+	protected override bool PreservesToolActivityContext => true;
+	// AICore emits no function calls under a schema; the bridge lets the model call tools first.
+	protected override bool SupportsStructuredOutputWithTools => true;
+	protected override bool SupportsReasoningOutput => true;
+	// Thinking spends the output budget before the tool call and again before the final answer.
+	protected override int? ReasoningMaxOutputTokens => 2048;
+
+	protected override IChatClient EnableFunctionCalling(GeminiNanoChatClient client, Action<ChatOptions>? configureOptions = null) =>
+		client.AsBuilder().UseFunctionInvocation().ConfigureOptions(options =>
+		{
+			options.ModelId = ToolModelId;
+			options.Temperature = 0;
+			configureOptions?.Invoke(options);
+		}).Build();
+
+	// Gemma function-call control tokens must never leak into streamed text.
+	protected override void AssertStreamingUpdate(ChatResponseUpdate update)
+	{
+		Assert.DoesNotContain("<ctrl42>", update.Text, StringComparison.Ordinal);
+		Assert.DoesNotContain("<ctrl43>", update.Text, StringComparison.Ordinal);
+	}
+}
+
+[Collection(nameof(GeminiNanoCollection))]
 public class GeminiNanoChatClientMessagesTests : ChatClientMessagesTestsBase<GeminiNanoChatClient>
 {
 	// ML Kit needs conversation content and cannot consume the other standard MEAI content kinds.
@@ -32,7 +62,9 @@ public class GeminiNanoChatClientMessagesTests : ChatClientMessagesTestsBase<Gem
 	protected override bool RejectsUnsupportedMedia => true;
 	protected override bool SupportsBinaryMedia(string mediaType) =>
 		string.Equals(mediaType, "image/png", StringComparison.OrdinalIgnoreCase);
-	protected override bool RejectsUnsupportedStandardContent(string kind, ChatRole role) => true;
+	// The model's own reasoning is dropped from Assistant history so function invocation can replay it.
+	protected override bool RejectsUnsupportedStandardContent(string kind, ChatRole role) =>
+		kind != "reasoning" || role != ChatRole.Assistant;
 	protected override bool RejectsMisplacedFunctionContent(ChatRole role, bool isCall) => true;
 	protected override bool SupportsTrailingSystemInstruction => true;
 }
@@ -43,7 +75,7 @@ public class GeminiNanoChatClientOptionsTests : ChatClientOptionsTestsBase<Gemin
 	protected override bool RejectsStatefulConversationOptions => true;
 	protected override bool SupportsReasoningEffortNone => true;
 
-	// The untyped ML Kit Prompt API adapter has no JSON guarantee, including schema-free JSON.
+	// Native structured output needs an explicit schema; schema-free JSON remains unsupported.
 	[Fact]
 	public override Task GetResponseAsync_WithResponseFormat_AcceptsJsonFormat() => RejectJsonAsync(false);
 
@@ -87,8 +119,19 @@ public class GeminiNanoChatClientUsageTests(ITestOutputHelper output) : ChatClie
 [Collection(nameof(GeminiNanoCollection))]
 public class GeminiNanoChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<GeminiNanoChatClient>
 {
-	// The adapter deliberately rejects structured output rather than pretending a prompt is a schema guarantee.
-	protected override bool SupportsStructuredOutput => false;
+	protected override bool? RequiresExplicitJsonSchema => true;
+	protected override bool SupportsBaselineSamplingOptions => true;
+	// The default model (Nano V3) stops after about 40 tokens when MaxOutputTokens is unset.
+	protected override int? BaselineMaxOutputTokens => 512;
+	// Schema-shape scenarios cover both native profiles; only the preview profile supports thinking.
+	protected override IReadOnlyList<string?> StructuredOutputModelIds => ["gemini-nano-full", GeminiNanoNativeFunctionCallingTests.ToolModelId];
+	protected override bool SupportsReasoningOutput => true;
+	protected override string? ReasoningModelId => GeminiNanoNativeFunctionCallingTests.ToolModelId;
+	// Thinking spends output tokens before the answer, so it needs more than the baseline.
+	protected override int? ReasoningMaxOutputTokens => 2048;
+	// AICore constrained decoding accepts 20 nested object levels.
+	protected override int StructuredSchemaNestingDepth => 20;
+	protected override bool StreamsStructuredOutputIncrementally => true;
 
 	// ML Kit's untyped Prompt API adapter also rejects schema-free JSON.
 	[Fact]
@@ -114,6 +157,122 @@ public class GeminiNanoChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase
 public class GeminiNanoChatClientInteropTests
 {
 	private const string Png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC";
+
+	[Fact]
+	public void ToNative_RegisteredFunctionsCarrySchemasAndTypedHistoryWhileNoneOmitsRegistration()
+	{
+		var function = AIFunctionFactory.Create((string key) => key, "lookup", "Find a value.");
+		ChatMessage[] messages =
+		[
+			new(ChatRole.User, "Find orchard."),
+			new(ChatRole.Assistant, [new FunctionCallContent("call-1", "lookup", new Dictionary<string, object?> { ["key"] = "orchard" })]),
+			new(ChatRole.Tool, [new FunctionResultContent("call-1", "secret")]),
+		];
+		var options = new ChatOptions { Tools = [function], ModelId = "gemini-nano-preview-fast" };
+		using var request = GeminiNanoChatClient.ToNative(messages, options);
+		using var tools = JsonDocument.Parse(request.Options.ToolsJson!);
+		Assert.Equal("lookup", tools.RootElement[0].GetProperty("name").GetString());
+		Assert.True(JsonElement.DeepEquals(function.JsonSchema, tools.RootElement[0].GetProperty("parameters")));
+		Assert.Equal(2, request.GetMessages()[1].GetParts()[0].Kind);
+		Assert.Equal(3, request.GetMessages()[2].GetParts()[0].Kind);
+		options.ToolMode = new NoneChatToolMode();
+		using var none = GeminiNanoChatClient.ToNative(messages, options);
+		Assert.Null(none.Options.ToolsJson);
+		Assert.Equal(0, none.GetMessages()[1].GetParts()[0].Kind);
+		Assert.Same(function, Assert.Single(options.Tools));
+	}
+
+	// Function invocation replays the model's own reasoning; only Assistant reasoning is dropped.
+	[Fact]
+	public void ToNative_DropsAssistantReasoningButRejectsItElsewhere()
+	{
+		using var request = GeminiNanoChatClient.ToNative(
+		[
+			new(ChatRole.User, "hello"),
+			new(ChatRole.Assistant, [new TextReasoningContent("thinking"), new TextContent("hi")]),
+			new(ChatRole.Assistant, [new TextReasoningContent("only thinking")]),
+			new(ChatRole.User, "again"),
+		], null);
+		var messages = request.GetMessages();
+		Assert.Equal(4, messages.Length);
+		Assert.Equal("hi", Assert.Single(messages[1].GetParts()).Text);
+		Assert.Empty(messages[2].GetParts());
+
+		Assert.Throws<NotSupportedException>(() => GeminiNanoChatClient.ToNative(
+			[new(ChatRole.User, [new TextContent("hello"), new TextReasoningContent("thinking")])], null));
+	}
+
+	[Fact]
+	public void ToNative_StrictToolSchemasDropOnlyClosedObjectMarkers()
+	{
+		var strict = new AIFunctionFactoryOptions
+		{
+			Name = "search",
+			JsonSchemaCreateOptions = new() { TransformOptions = new() { DisallowAdditionalProperties = true } },
+		};
+		var function = AIFunctionFactory.Create((string query, Filter? filter) => query, strict);
+		var clock = AIFunctionFactory.Create(() => "12:00",
+			new AIFunctionFactoryOptions { Name = "clock", JsonSchemaCreateOptions = strict.JsonSchemaCreateOptions });
+		Assert.False(function.JsonSchema.GetProperty("additionalProperties").GetBoolean());
+		using var request = GeminiNanoChatClient.ToNative([new(ChatRole.User, "hello")], new ChatOptions { Tools = [function, clock] });
+		var json = request.Options.ToolsJson!;
+		Assert.DoesNotContain("additionalProperties", json, StringComparison.Ordinal);
+		Assert.DoesNotContain("$schema", json, StringComparison.Ordinal);
+		using var tools = JsonDocument.Parse(json);
+		var parameters = tools.RootElement[0].GetProperty("parameters");
+		Assert.True(parameters.GetProperty("properties").GetProperty("filter").GetProperty("properties").TryGetProperty("track", out _));
+		Assert.Contains(parameters.GetProperty("required").EnumerateArray(), name => name.GetString() == "query");
+		Assert.False(function.JsonSchema.GetProperty("additionalProperties").GetBoolean());
+
+		// Schema-valued additionalProperties (dictionaries) stay intact so the native bridge rejects them.
+		var dictionary = AIFunctionFactory.Create((Dictionary<string, int> values) => values.Count, "count");
+		using var dictionaryRequest = GeminiNanoChatClient.ToNative([new(ChatRole.User, "hello")], new ChatOptions { Tools = [dictionary] });
+		using var dictionaryTools = JsonDocument.Parse(dictionaryRequest.Options.ToolsJson!);
+		Assert.Equal("integer", dictionaryTools.RootElement[0].GetProperty("parameters").GetProperty("properties")
+			.GetProperty("values").GetProperty("additionalProperties").GetProperty("type").GetString());
+	}
+
+	public sealed record Filter(string Track);
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void NativeResponses_MapTypedFunctionCallsAndFinishReasonWithoutLeakingProtocolText(bool streaming)
+	{
+		var function = AIFunctionFactory.Create((string key) => key, "lookup");
+		var options = new ChatOptions { Tools = [function] };
+		using var native = new AndroidNative.NativeChatResponse("", [], 0, "nano-v4-fast", 12);
+		native.SetFunctionCalls([new AndroidNative.NativeFunctionCall("id", "lookup", """{"key":"orchard"}""")]);
+		var contents = streaming
+			? GeminiNanoChatClient.CreateFinalUpdate(native, options).Contents
+			: GeminiNanoChatClient.FromNative(native, options).Messages.Single().Contents;
+		var call = Assert.Single(contents.OfType<FunctionCallContent>());
+		Assert.Equal("id", call.CallId);
+		Assert.Equal("lookup", call.Name);
+		Assert.Equal("orchard", Assert.IsType<JsonElement>(call.Arguments!["key"]).GetString());
+		Assert.Empty(contents.OfType<TextContent>());
+		Assert.Equal(ChatFinishReason.ToolCalls, GeminiNanoChatClient.FromNative(native, options).FinishReason);
+		Assert.Equal(ChatFinishReason.ToolCalls, GeminiNanoChatClient.CreateFinalUpdate(native, options).FinishReason);
+
+		Assert.Throws<InvalidOperationException>(() => GeminiNanoChatClient.FromNative(native, null));
+		native.SetFunctionCalls([
+			new AndroidNative.NativeFunctionCall("id", "lookup", "{}"),
+			new AndroidNative.NativeFunctionCall("id", "lookup", "{}"),
+		]);
+		Assert.Throws<InvalidOperationException>(() => GeminiNanoChatClient.CreateFinalUpdate(native, options));
+		options.AllowMultipleToolCalls = false;
+		Assert.Throws<InvalidOperationException>(() => GeminiNanoChatClient.FromNative(native, options));
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void CreateModelStatus_ReportsNativeToolCapabilityWithoutInferringItFromThinking(bool toolCalling)
+	{
+		var status = GeminiNanoChatClient.CreateModelStatus(3, thinkingAvailable: false, toolCalling);
+		Assert.Equal(toolCalling, status.Capabilities!.Contains(ChatModelCapability.ToolCalling));
+		Assert.DoesNotContain(ChatModelCapability.Reasoning, status.Capabilities!);
+	}
 
 	// Verify JNI DTO ordering/copying and ML Kit's separate system slot without requiring AICore.
 	[Fact]
@@ -297,14 +456,14 @@ public class GeminiNanoChatClientInteropTests
 		Assert.Equal(bytes, parts[1].GetImage());
 	}
 
-	// Only the four native builder options are marshalled. Optional unsupported MEAI settings are ignored.
+	// Sampling, thinking, and model selection are marshalled; unsupported optional controls remain ignored.
 	[Fact]
 	public void ToNative_MapsNativeOptionsAndIgnoresUnsupportedOptionalControls()
 	{
 		using var request = GeminiNanoChatClient.ToNative([new(ChatRole.User, "hello")], new()
 		{
 			Temperature = 0.5f, TopK = 12, Seed = int.MinValue, MaxOutputTokens = 128,
-			TopP = 0.7f, FrequencyPenalty = 0.1f, PresencePenalty = 0.1f, ModelId = "ignored",
+			TopP = 0.7f, FrequencyPenalty = 0.1f, PresencePenalty = 0.1f, ModelId = "gemini-nano-preview-fast",
 			StopSequences = ["stop"], AdditionalProperties = new() { ["custom"] = true },
 			RawRepresentationFactory = _ => throw new InvalidOperationException("Must not invoke unsupported factory."),
 			AllowBackgroundResponses = false, Reasoning = new() { Output = ReasoningOutput.Full },
@@ -314,6 +473,42 @@ public class GeminiNanoChatClientInteropTests
 		Assert.Equal(int.MinValue, request.Options.Seed!.IntValue());
 		Assert.Equal(128, request.Options.MaxOutputTokens!.IntValue());
 		Assert.True(request.Options.EnableThinking);
+		Assert.Equal("gemini-nano-preview-fast", request.Options.ModelId);
+	}
+
+	[Theory]
+	[InlineData(null)]
+	[InlineData("gemini-nano")]
+	[InlineData("gemini-nano-full")]
+	[InlineData("gemini-nano-fast")]
+	[InlineData("gemini-nano-preview-full")]
+	[InlineData("gemini-nano-preview-fast")]
+	public void ToNative_PreservesModelIdForNativeSelection(string? modelId)
+	{
+		using var request = GeminiNanoChatClient.ToNative([new(ChatRole.User, "Hello")],
+			new ChatOptions { ModelId = modelId });
+		Assert.Equal(modelId, request.Options.ModelId);
+	}
+
+	[Theory]
+	[InlineData("")]
+	[InlineData("nano-v3")]
+	[InlineData("nano-v4-fast")]
+	[InlineData("unknown")]
+	public async Task UnknownModelProfiles_RejectBeforeCallingAICore(string modelId)
+	{
+		using var client = new GeminiNanoChatClient();
+		var error = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetResponseAsync(
+			[new(ChatRole.User, "Hello")], new ChatOptions { ModelId = modelId }));
+		Assert.Contains("Unsupported Gemini Nano model ID", error.Message);
+		await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetStreamingResponseAsync(
+			[new(ChatRole.User, "Hello")], new ChatOptions { ModelId = modelId }).ToChatResponseAsync());
+		await Assert.ThrowsAsync<InvalidOperationException>(() => GeminiNanoChatClient.GetModelStatusAsync(modelId));
+		await Assert.ThrowsAsync<InvalidOperationException>(() => GeminiNanoChatClient.PrepareModelAsync(modelId));
+		await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+		{
+			await foreach (var _ in GeminiNanoChatClient.DownloadModelAsync(modelId)) { }
+		});
 	}
 
 	// Java seed is Int32. Verify the checked conversion cannot wrap the MEAI Int64 input.
@@ -356,8 +551,8 @@ public class GeminiNanoChatClientInteropTests
 	[Theory]
 	[InlineData(3, ChatModelAvailability.Available)]
 	[InlineData(1, ChatModelAvailability.NotReady)]
-	[InlineData(2, ChatModelAvailability.NotReady)]
-	[InlineData(0, ChatModelAvailability.Unknown)]
+	[InlineData(2, ChatModelAvailability.Downloading)]
+	[InlineData(0, ChatModelAvailability.Unavailable)]
 	[InlineData(99, ChatModelAvailability.Unknown)]
 	public void CreateModelStatus_MapsAvailabilityAndOnlyAdvertisesEffectiveCapabilities(int native, ChatModelAvailability expected)
 	{
@@ -365,14 +560,6 @@ public class GeminiNanoChatClientInteropTests
 		{
 			var status = GeminiNanoChatClient.CreateModelStatus(native, thinking);
 			Assert.Equal(expected, status.Availability);
-			Assert.Equal(native switch
-			{
-				0 => "UNAVAILABLE (0): Gemini Nano is unsupported or AICore configuration is not ready.",
-				1 => "DOWNLOADABLE (1)",
-				2 => "DOWNLOADING (2)",
-				3 => null,
-				_ => $"Unknown ML Kit FeatureStatus ({native})",
-			}, status.UnavailableReason);
 			Assert.Equal(thinking ? 5 : 4, status.Capabilities!.Count);
 			Assert.Contains(ChatModelCapability.Text, status.Capabilities);
 			Assert.Contains(ChatModelCapability.Streaming, status.Capabilities);
@@ -399,6 +586,10 @@ public class GeminiNanoChatClientInteropTests
 		});
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(
 			() => GeminiNanoChatClient.PrepareModelAsync(cts.Token));
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(
+			() => GeminiNanoChatClient.GetModelStatusAsync("gemini-nano-preview-full", cts.Token));
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(
+			() => GeminiNanoChatClient.PrepareModelAsync("gemini-nano-preview-full", cts.Token));
 	}
 
 	// Exercise the new Java-friendly status callback/cleanup on devices without requiring or downloading AICore models.
@@ -411,16 +602,12 @@ public class GeminiNanoChatClientInteropTests
 		Assert.NotSame(first, second);
 		foreach (var status in new[] { first, second })
 		{
-			if (status.Availability == ChatModelAvailability.Available)
-				Assert.Null(status.UnavailableReason);
-			else
-				Assert.False(string.IsNullOrWhiteSpace(status.UnavailableReason));
+			Assert.True(Enum.IsDefined(status.Availability));
 			Assert.Contains(ChatModelCapability.Text, status.Capabilities!);
 			Assert.Contains(ChatModelCapability.Streaming, status.Capabilities!);
 			Assert.Contains(ChatModelCapability.ImageInput, status.Capabilities!);
 			Assert.Contains(ChatModelCapability.TokenUsage, status.Capabilities!);
 			Assert.DoesNotContain(ChatModelCapability.ToolCalling, status.Capabilities!);
-			Assert.DoesNotContain(ChatModelCapability.StructuredOutput, status.Capabilities!);
 		}
 	}
 

@@ -5,7 +5,12 @@ import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import test from "node:test";
 
-import { openEventStream } from "../src/events.js";
+import {
+  isUiActionCompletedEvent,
+  isUiActionStartedEvent,
+  isUiActionUpdatedEvent,
+  openEventStream,
+} from "../src/events.js";
 import { decodeFrame, OPCODE } from "../src/ws-frame.js";
 
 const webSocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -157,4 +162,53 @@ test("polling-only event stream periodically rechecks for an in-place agent upgr
   } finally {
     stream.close();
   }
+});
+
+test("action lifecycle type guards accept structured events without narrowing unknown events", () => {
+  const started = {
+    type: "ui-action-started",
+    timestamp: "2026-11-04T00:00:00Z",
+    data: {
+      correlation: {
+        actionId: "action-1",
+        source: "mcp",
+        frameId: "frame-1",
+        coordinateSpace: "appLogical",
+      },
+      kind: "tap",
+      elementId: "save-button",
+      x: 120,
+      y: 340,
+    },
+  };
+  const completed = {
+    type: "ui-action-completed",
+    data: {
+      ...started.data,
+      success: false,
+      outcome: "failed",
+      reason: "stale-capture-epoch",
+    },
+  };
+
+  assert.equal(isUiActionStartedEvent(started), true);
+  assert.equal(isUiActionCompletedEvent(started), false);
+  assert.equal(isUiActionCompletedEvent(completed), true);
+  assert.equal(isUiActionUpdatedEvent({ ...started, type: "ui-action-updated" }), true);
+  assert.equal(isUiActionStartedEvent({ type: "future-event", data: { value: 1 } }), false);
+});
+
+test("action lifecycle type guards reject malformed correlation data", () => {
+  assert.equal(isUiActionStartedEvent({
+    type: "ui-action-started",
+    data: { kind: "tap", correlation: { source: "mcp" } },
+  }), false);
+  assert.equal(isUiActionCompletedEvent({
+    type: "ui-action-completed",
+    data: {
+      kind: "tap",
+      correlation: { actionId: "a", source: "mcp" },
+      success: "yes",
+    },
+  }), false);
 });
