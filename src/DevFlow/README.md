@@ -238,7 +238,8 @@ capture is enabled.
 
 MAUI has no tvOS backend of its own. Apps that run MAUI on tvOS through a community backend
 such as [Platform.Maui.TvOS](https://github.com/shinyorg/mauiplatforms) use the standard
-`Microsoft.Maui.DevFlow.Agent` package, which has a `net10.0-tvos` target. Register it the same
+`Microsoft.Maui.DevFlow.Agent` package, which has a `net10.0-tvos` target (built on macOS
+only). Register it the same
 way, in the backend's `CreateMauiApp`:
 
 ```csharp
@@ -873,10 +874,12 @@ DEVFLOW_TEST_PLATFORM=windows dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Age
 
 tvOS drives the smaller `samples/DevFlow.Sample.TvOS` on an Apple TV simulator (a booted
 one is preferred), so only its own tests apply; run them with `--filter Category=TvOS`. The
-sample uses the community Platform.Maui.TvOS backend. On tvOS 27, point
+sample uses the community Platform.Maui.TvOS backend, which is published to nuget.org only and
+so is not on the repo's feeds: set `DEVFLOW_TEST_TVOS_BACKEND_SOURCE` to a feed that has it
+(such as `https://api.nuget.org/v3/index.json`). On tvOS 27, point
 `DEVFLOW_TEST_TVOS_BACKEND_PROJECT` at a mauiplatforms checkout's
-`src/Platform.Maui.TvOS/Platform.Maui.TvOS.csproj` to build against a backend version with
-scene lifecycle support:
+`src/Platform.Maui.TvOS/Platform.Maui.TvOS.csproj` instead, to build against a backend version
+with scene lifecycle support:
 
 ```bash
 DEVFLOW_TEST_PLATFORM=tvos \

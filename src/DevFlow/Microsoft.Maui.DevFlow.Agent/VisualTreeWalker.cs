@@ -778,7 +778,13 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
                 return $"Native menu launcher '{elementId}' requires iOS or Mac Catalyst 17.4 or later for programmatic invocation";
             }
 
+#if TVOS
+            // A Siri Remote select press raises PrimaryActionTriggered; TouchUpInside comes from
+            // touchscreens only.
+            control.SendActionForControlEvents(UIKit.UIControlEvent.PrimaryActionTriggered);
+#else
             control.SendActionForControlEvents(UIKit.UIControlEvent.TouchUpInside);
+#endif
             return "ok";
         }
 

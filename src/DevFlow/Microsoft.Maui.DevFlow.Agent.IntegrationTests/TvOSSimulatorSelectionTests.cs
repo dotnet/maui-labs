@@ -66,6 +66,29 @@ public class TvOSSimulatorSelectionTests
     }
 
     [Fact]
+    public void CreateBuildArguments_AddsBackendPackageSource()
+    {
+        var arguments = TvOSSimulatorFixture.CreateBuildArguments(
+            "tvossimulator-arm64",
+            backendProject: null,
+            backendSource: "https://api.nuget.org/v3/index.json");
+
+        Assert.Equal(
+            "-p:RuntimeIdentifier=tvossimulator-arm64 \"-p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json\"",
+            arguments);
+    }
+
+    [Fact]
+    public void CreateBuildArguments_IgnoresPackageSourceForLocalBackend()
+    {
+        var project = Path.Combine(Path.GetTempPath(), "mauiplatforms", "Platform.Maui.TvOS.csproj");
+
+        var arguments = TvOSSimulatorFixture.CreateBuildArguments("tvossimulator-arm64", project, "https://example.invalid/index.json");
+
+        Assert.DoesNotContain("RestoreAdditionalProjectSources", arguments);
+    }
+
+    [Fact]
     public void CreateBuildArguments_BuildsLocalBackendForNet10()
     {
         var project = Path.Combine(Path.GetTempPath(), "mauiplatforms", "Platform.Maui.TvOS.csproj");
