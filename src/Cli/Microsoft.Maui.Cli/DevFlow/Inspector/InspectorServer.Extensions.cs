@@ -3,7 +3,9 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Maui.DevFlow;
 using Microsoft.Maui.DevFlow.Driver;
+using Microsoft.Maui.DevFlow.Extensibility;
 
 namespace Microsoft.Maui.Cli.DevFlow.Inspector;
 
@@ -15,10 +17,9 @@ namespace Microsoft.Maui.Cli.DevFlow.Inspector;
 public sealed partial class InspectorServer
 {
     internal const string ExtensionStreamWebSocketPath = "/ws/extensions";
-    private const string ExtensionToolPathPrefix = "/api/v1/ext/";
-    private const string ExtensionStreamWebSocketPathPrefix = "/ws/v1/ext/";
     private const int MaxExtensionResponseBytes = 1_048_576;
     private const int MaxExtensionEventLimit = 500;
+    internal DevFlowHostPlugins HostPlugins { get; set; } = DevFlowHostPlugins.Current;
 
     // One shared client: tool calls are infrequent and must carry this inspector's lease headers,
     // which AgentClient.CallExtensionToolAsync would apply but then discard the agent's error body.
@@ -26,8 +27,24 @@ public sealed partial class InspectorServer
 
     private async Task<(int, string, byte[])> HandleExtensionsListAsync()
     {
-        var capabilities = await _client.GetCapabilitiesAsync();
-        if (capabilities.ValueKind != JsonValueKind.Object)
+        var providers = await HostPlugins.DescribeAsync();
+        JsonElement capabilities = default;
+        try
+        {
+            capabilities = await _client.GetCapabilitiesAsync();
+            if (capabilities.ValueKind == JsonValueKind.Object)
+                foreach (var pair in await _client.GetOperationProvidersAsync())
+                {
+                    if (pair.Key.StartsWith("host:", StringComparison.Ordinal))
+                        throw new InvalidOperationException("The app advertised a reserved host provider identity.");
+                    providers.Add(pair.Key, pair.Value);
+                }
+        }
+        catch (Exception ex) when (IsAgentUnavailableException(ex) && providers.Count > 0)
+        {
+            Console.Error.WriteLine($"[DevFlow Inspector] Showing local host operations; agent discovery failed: {ex.Message}");
+        }
+        if (capabilities.ValueKind != JsonValueKind.Object && providers.Count == 0)
             return Ok("{\"ok\":false,\"unavailable\":true,\"error\":\"The DevFlow agent is unavailable.\"}");
 
         using var buffer = new MemoryStream();
@@ -36,12 +53,9 @@ public sealed partial class InspectorServer
             writer.WriteStartObject();
             writer.WriteBoolean("ok", true);
             writer.WritePropertyName("extensions");
-            if (capabilities.TryGetProperty("extensions", out var extensions) && extensions.ValueKind == JsonValueKind.Object)
-                extensions.WriteTo(writer);
-            else
-                writer.WriteRawValue("{}");
+            JsonSerializer.Serialize(writer, providers, DevFlowCliJsonContext.Default.DictionaryStringExtensionDescriptor);
             writer.WritePropertyName("extensionErrors");
-            if (capabilities.TryGetProperty("extensionErrors", out var errors) && errors.ValueKind == JsonValueKind.Array)
+            if (capabilities.ValueKind == JsonValueKind.Object && capabilities.TryGetProperty("extensionErrors", out var errors) && errors.ValueKind == JsonValueKind.Array)
                 errors.WriteTo(writer);
             else
                 writer.WriteRawValue("[]");
@@ -81,18 +95,25 @@ public sealed partial class InspectorServer
         if (string.IsNullOrWhiteSpace(ns) || string.IsNullOrWhiteSpace(toolName) || ns.Length > 256 || toolName.Length > 256)
             return BadRequest("namespace and tool are required");
 
-        var extensions = await _client.GetExtensionsAsync();
+        if (ns.StartsWith("host:", StringComparison.Ordinal))
+            return await HandleHostOperationAsync(ns, toolName, parameters, leaseId, holderKind, holderLabel);
+
+        var extensions = await _client.GetOperationProvidersAsync();
         if (!extensions.TryGetValue(ns, out var extension))
             return NotFoundJson($"Extension '{ns}' was not found.");
         var tool = extension.Tools.FirstOrDefault(x => string.Equals(x.Name, toolName, StringComparison.OrdinalIgnoreCase));
         if (tool is null)
             return NotFoundJson($"Tool '{toolName}' was not found in extension '{ns}'.");
-        if (!tool.Path.StartsWith(ExtensionToolPathPrefix, StringComparison.Ordinal))
-            return BadRequest("The agent advertised a tool path outside the extension route space.");
+        if (!HostPlugins.ProviderPolicy.AllowsPath(ns, tool.Path))
+            return BadRequest("The agent advertised a route outside the provider's approved bindings.");
 
         var method = string.IsNullOrWhiteSpace(tool.Method) ? "GET" : tool.Method.Trim().ToUpperInvariant();
         if (method is not ("GET" or "POST" or "PUT" or "DELETE"))
             return BadRequest($"Unsupported tool method '{method}'.");
+
+        string toolUri;
+        try { toolUri = BuildExtensionToolUri(method, tool.Path, parameters); }
+        catch (ArgumentException ex) { return BadRequest(ex.Message); }
 
         var mutates = ExtensionToolMutates(method, tool.Annotations?.ReadOnly == true);
         if (mutates)
@@ -103,22 +124,10 @@ public sealed partial class InspectorServer
             // Same agent-enforced global lease the Inspector's own mutations claim.
             var status = await _client.ControlMutationLeaseAsync("claim", force: false, leaseId, holderKind, holderLabel);
             if (!status.YouHold)
-            {
-                var payload = JsonSerializer.Serialize(new
-                {
-                    ok = false,
-                    reason = "writer",
-                    error = "Another session is driving this app.",
-                    holderKind = status.HolderKind,
-                    label = status.Label,
-                    expiresInMs = status.ExpiresInMs,
-                    authority = status.Authority
-                }, CamelCase);
-                return (409, "application/json", Encoding.UTF8.GetBytes(payload));
-            }
+                return ExtensionLeaseConflict(status);
         }
 
-        using var request = new HttpRequestMessage(new HttpMethod(method), BuildExtensionToolUri(method, tool.Path, parameters));
+        using var request = new HttpRequestMessage(new HttpMethod(method), toolUri);
         if (method != "GET")
             request.Content = new StringContent(parameters?.GetRawText() ?? "{}", Encoding.UTF8, "application/json");
         request.Headers.TryAddWithoutValidation("X-DevFlow-Lease", leaseId);
@@ -164,11 +173,19 @@ public sealed partial class InspectorServer
         var since = ReadLongField(body, "since");
         var limit = ReadIntField(body, "limit", 100, 1, MaxExtensionEventLimit);
 
+        if (ns.StartsWith("host:", StringComparison.Ordinal))
+        {
+            var response = await HostPlugins.ReadStreamAsync(ns, streamName, since, limit, _lifetimeCts.Token);
+            return (response.StatusCode, response.ContentType, Encoding.UTF8.GetBytes(response.Body ?? "{}"));
+        }
+
         var stream = await FindExtensionStreamAsync(ns, streamName);
         if (stream is null)
             return NotFoundJson($"Stream '{streamName}' was not found in extension '{ns}'.");
 
-        var page = await _client.GetExtensionEventsAsync(ns, stream.Name, since, limit);
+        if (!HostPlugins.ProviderPolicy.AllowsPath(ns, stream.Path))
+            return BadRequest("The agent advertised a stream outside the provider's approved bindings.");
+        var page = await _client.GetExtensionEventsAsync(stream, since, limit);
         return Ok(JsonSerializer.Serialize(new
         {
             ok = true,
@@ -178,17 +195,64 @@ public sealed partial class InspectorServer
         }, CamelCase));
     }
 
+    private async Task<(int, string, byte[])> HandleHostOperationAsync(string provider, string name, JsonElement? parameters,
+        string leaseId, string holderKind, string holderLabel)
+    {
+        var providers = await HostPlugins.DescribeAsync(_lifetimeCts.Token);
+        var tool = providers.GetValueOrDefault(provider)?.Tools.FirstOrDefault(t => t.Name == name);
+        if (tool is null) return NotFoundJson($"Host operation '{provider}/{name}' is not installed.");
+        var mutates = tool.Annotations?.ReadOnly != true;
+        if (mutates && Volatile.Read(ref _replayInProgress) == 1)
+            return (409, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false,\"error\":\"A replay is in progress.\"}"));
+        using var lease = _client.UseMutationLease(leaseId, holderKind, holderLabel);
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        DevFlowResponse result;
+        try
+        {
+            result = await HostPlugins.InvokeAsync(provider, name, parameters,
+                new(HostPlugins.DeviceId, _agentHost, _agentPort), tool.Target == "agent" ? _client : null, _lifetimeCts.Token);
+        }
+        catch (MutationLeaseException ex) { return ExtensionLeaseConflict(ex.Status); }
+        if (mutates && result.StatusCode < 400) InvalidateScreenshotCache();
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteBoolean("ok", result.StatusCode < 400);
+            writer.WriteNumber("status", result.StatusCode);
+            writer.WriteString("method", "HOST");
+            writer.WriteString("path", $"{provider}/{name}");
+            writer.WriteNumber("durationMs", timer.ElapsedMilliseconds);
+            writer.WriteString("contentType", result.ContentType);
+            var text = result.Body ?? Convert.ToBase64String(result.BodyBytes ?? []);
+            var truncated = Encoding.UTF8.GetByteCount(text) > MaxExtensionResponseBytes;
+            writer.WriteBoolean("truncated", truncated);
+            writer.WritePropertyName("body");
+            if (!truncated && TryParseJson(text, out var value)) value.WriteTo(writer);
+            else writer.WriteStringValue(truncated ? text[..Math.Min(text.Length, MaxExtensionResponseBytes / 4)] : text);
+            writer.WriteEndObject();
+        }
+        return (200, "application/json", buffer.ToArray());
+    }
+
+    private static (int, string, byte[]) ExtensionLeaseConflict(MutationLeaseStatus status)
+        => (409, "application/json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        {
+            ok = false, reason = "writer", error = "Another session is driving this app.",
+            holderKind = status.HolderKind, label = status.Label, expiresInMs = status.ExpiresInMs, authority = status.Authority
+        }, CamelCase)));
+
     internal static bool ExtensionToolMutates(string method, bool readOnly)
         => !string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase) && !readOnly;
 
     internal static string BuildExtensionToolUri(string agentBase, string method, string path, JsonElement? parameters)
     {
-        var uri = agentBase + path;
+        var uri = agentBase + ExtensionRouteBinding.Bind(path, parameters, out var routeValues);
         if (!string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase) || parameters is not { ValueKind: JsonValueKind.Object } values)
             return uri;
 
         var query = values.EnumerateObject()
-            .Where(p => p.Value.ValueKind != JsonValueKind.Null)
+            .Where(p => p.Value.ValueKind != JsonValueKind.Null && !routeValues.ContainsKey(p.Name))
             .Select(p => $"{Uri.EscapeDataString(p.Name)}={Uri.EscapeDataString(p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() ?? "" : p.Value.GetRawText())}")
             .ToArray();
         return query.Length == 0 ? uri : uri + "?" + string.Join("&", query);
@@ -203,7 +267,7 @@ public sealed partial class InspectorServer
         if (!extensions.TryGetValue(ns, out var extension))
             return null;
         var stream = extension.Streams.FirstOrDefault(s => string.Equals(s.Name, streamName, StringComparison.OrdinalIgnoreCase));
-        return stream is not null && stream.WebSocketPath.StartsWith(ExtensionStreamWebSocketPathPrefix, StringComparison.Ordinal)
+        return stream is not null && HostPlugins.ProviderPolicy.AllowsPath(ns, stream.WebSocketPath, webSocket: true)
             ? stream
             : null;
     }

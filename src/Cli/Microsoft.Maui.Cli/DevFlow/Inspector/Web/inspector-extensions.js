@@ -643,6 +643,8 @@ export function createExtensionsPanel(options) {
       if (disposed || socket) return;
       clearTimeout(retryTimer);
       retryTimer = 0;
+      // Local host streams are polled; they are never forwarded to an app's WebSocket.
+      if (ns.startsWith('host:')) pollUntil = Infinity;
       if (Date.now() < pollUntil) { startPolling(); return; }
       stopPolling();
       gotMessageOnSocket = false;

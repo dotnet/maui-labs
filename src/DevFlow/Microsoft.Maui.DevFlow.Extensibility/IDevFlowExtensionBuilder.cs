@@ -12,6 +12,16 @@ namespace Microsoft.Maui.DevFlow.Extensibility;
 /// </remarks>
 public interface IDevFlowExtensionBuilder
 {
+    /// <summary>Registers a transport-neutral operation. Legacy HTTP mappings remain available as adapters.</summary>
+    void MapOperation(
+        string name,
+        string description,
+        Func<DevFlowOperationRequest, Task<DevFlowResponse>> handler,
+        JsonElement? parameters = null,
+        JsonElement? returns = null,
+        DevFlowToolAnnotations? annotations = null,
+        DevFlowTargetRequirement target = DevFlowTargetRequirement.None);
+
     /// <summary>Maps a read-only GET route.</summary>
     void MapGet(string path, Func<DevFlowRequest, Task<DevFlowResponse>> handler);
 

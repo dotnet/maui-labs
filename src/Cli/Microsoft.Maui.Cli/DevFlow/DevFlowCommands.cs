@@ -86,6 +86,13 @@ public partial class DevFlowCommands
         devflowCommand.Add(platformOption);
         noJsonOption.Recursive = true;
         devflowCommand.Add(noJsonOption);
+        HostPluginOption = new Option<string[]>("--host-plugin")
+        {
+            Description = "Load a trusted local DevFlowHostExtension assembly (repeat for multiple assemblies). Executes developer-machine code.",
+            Recursive = true, AllowMultipleArgumentsPerToken = false, Arity = ArgumentArity.OneOrMore
+        };
+        devflowCommand.Add(HostPluginOption);
+        devflowCommand.Add(CreateOperationsCommand(agentHostOption, agentPortOption, deviceOption, jsonOption, noJsonOption));
 
         // ===== WebView commands (Blazor WebView / CDP) =====
         
@@ -1642,6 +1649,8 @@ public partial class DevFlowCommands
         brokerStartCmd.SetAction(async (ctx, ct) =>
         {
             var foreground = ctx.GetValue(brokerForegroundOption);
+            DevFlowHostPlugins.Current.DeviceId = ctx.GetValue(deviceOption);
+            await DevFlowHostPlugins.Current.LoadAsync([], ct);
             await BrokerStartAsync(foreground);
         });
         brokerCommand.Add(brokerStartCmd);
@@ -1902,7 +1911,11 @@ public partial class DevFlowCommands
         // ===== MCP server command =====
         var mcpCmd = new Command("mcp", "Start MCP (Model Context Protocol) server for AI agent integration via stdio");
         mcpCmd.Aliases.Add("mcp-serve");
-        mcpCmd.SetAction(async (ctx, ct) => { await Mcp.McpServerHost.RunAsync(); });
+        mcpCmd.SetAction(async (ctx, ct) =>
+        {
+            await Mcp.McpServerHost.RunAsync(ctx.GetValue(agentHostOption)!, ctx.GetResult(agentPortOption)?.Implicit == false ? ctx.GetValue(agentPortOption) : null,
+                ctx.GetValue(deviceOption));
+        });
         devflowCommand.Add(mcpCmd);
 
         _devflowCommand = devflowCommand;
@@ -4828,6 +4841,8 @@ public partial class DevFlowCommands
 
     private static async Task BrokerStartAsync(bool foreground)
     {
+        if (!foreground && DevFlowHostPlugins.Current.HasPlugins)
+            throw new InvalidOperationException("Host plugins require 'broker start --foreground'; a detached broker cannot inherit loaded plugin code.");
         if (foreground)
         {
             using var cts = new CancellationTokenSource();

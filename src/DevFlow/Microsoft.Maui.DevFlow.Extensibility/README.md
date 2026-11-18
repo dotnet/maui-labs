@@ -18,6 +18,13 @@ can ship a plugin for itself without pulling DevFlow into its consumers' release
 - **App services**: the agent creates plugins from the app's service provider, including plugins a
   library registered there with `AddDevFlowExtension<T>()`.
 - **Contained failures**: a plugin that fails to start is reported as faulted instead of crashing the app.
+- **Shared operations**: `MapOperation` is transport-neutral; legacy routes, app actions, and migrated
+  built-ins remain available through compatible bindings and shared catalog discovery.
+- **Host plugins**: `DevFlowHostExtension` runs explicitly installed developer-machine code, with
+  selected-device/agent requirements and agent mutation-lease protection.
+- **Approved bindings**: registration-owned policies allow selected providers to use custom route
+  and MCP prefixes, providing a migration path for built-ins without letting plugins grant themselves
+  access to those names.
 
 ## Platform support
 
@@ -83,8 +90,10 @@ maui devflow extensions watch com.contoso.orders events
 
 ## Requirements
 
-- .NET 10
-- An app running a DevFlow agent with plugin support
+- .NET 9 or .NET 10 for the contract and developer-machine plugins
+- For app-side plugins, an app running a DevFlow agent with plugin support (.NET 10)
+- NativeAOT payloads need registered source-generated JSON metadata; dynamic host assembly loading
+  requires the JIT CLI build
 
 ## Learn more
 

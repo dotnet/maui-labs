@@ -5,6 +5,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Maui.Cli.DevFlow.Inspector;
+using Microsoft.Maui.Cli.DevFlow;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Driver;
 using Microsoft.Maui.DevFlow.Extensibility;
@@ -18,6 +20,70 @@ namespace Microsoft.Maui.DevFlow.Tests;
 public class InspectorExtensionsProxyTests
 {
     const string Ns = "org.example.ble";
+
+    [Fact]
+    public async Task TrustedHostOperations_AreLocal_TokenGated_AndKeepAgentLeaseProtection()
+    {
+        var state = new DevFlowHostPluginTests.HostState();
+        using var services = new ServiceCollection().AddSingleton(state)
+            .AddDevFlowHostExtension<DevFlowHostPluginTests.HostPlugin>().BuildServiceProvider();
+        await using var host = DevFlowHostPlugins.ForServices(services);
+        await using var app = await TestApp.StartAsync(host: host);
+        using var http = new HttpClient();
+        var token = await ReadTokenAsync(http, app.InspectorUrl);
+        const string local = """{"namespace":"host:com.example.host","tool":"local"}""";
+        using (var denied = await http.PostAsync($"{app.InspectorUrl}/api/extensions/call", Json(local)))
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+
+        var list = await PostJsonAsync(http, $"{app.InspectorUrl}/api/extensions", "{}", token);
+        Assert.Equal("host", list.GetProperty("extensions").GetProperty("host:com.example.host").GetProperty("executionLocation").GetString());
+        var call = await PostJsonAsync(http, $"{app.InspectorUrl}/api/extensions/call", local, token);
+        Assert.Equal("host", call.GetProperty("body").GetString());
+        var events = await PostJsonAsync(http, $"{app.InspectorUrl}/api/extensions/events",
+            """{"namespace":"host:com.example.host","stream":"events"}""", token);
+        Assert.Single(events.GetProperty("events").EnumerateArray());
+        using var other = new AgentClient("localhost", app.AgentPort) { MutationLeaseId = "other" };
+        Assert.True((await other.ControlMutationLeaseAsync("claim")).YouHold);
+        using var conflict = await AuthorizedPostAsync(http, $"{app.InspectorUrl}/api/extensions/call",
+            """{"namespace":"host:com.example.host","tool":"agent"}""", token, lease: "tab");
+        Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+        Assert.Equal(0, state.Mutations);
+
+        await app.Agent.StopAsync();
+        call = await PostJsonAsync(http, $"{app.InspectorUrl}/api/extensions/call", local, token);
+        Assert.True(call.GetProperty("ok").GetBoolean());
+        Assert.Equal("host", call.GetProperty("body").GetString());
+    }
+
+    [Fact]
+    public async Task ApprovedBindings_ProxyToolsPollingAndWebSockets_OnlyWithLocalApproval()
+    {
+        var bindings = new DevFlowProviderBindings("/api/v1/ble", "/ws/v1/ble", "maui_ble");
+        using var defaultServices = new ServiceCollection().BuildServiceProvider();
+        await using var defaultHost = DevFlowHostPlugins.ForServices(defaultServices);
+        await using var app = await TestApp.StartAsync(host: defaultHost, bindings: bindings);
+        using var http = new HttpClient();
+        var token = await ReadTokenAsync(http, app.InspectorUrl);
+        var call = $$$"""{"namespace":"{{{Ns}}}","tool":"status"}""";
+        using (var denied = await AuthorizedPostAsync(http, $"{app.InspectorUrl}/api/extensions/call", call, token))
+            Assert.Equal(HttpStatusCode.BadRequest, denied.StatusCode);
+
+        using var services = new ServiceCollection().AddSingleton(new DevFlowProviderPolicy().Allow(Ns, bindings))
+            .BuildServiceProvider();
+        await using var host = DevFlowHostPlugins.ForServices(services);
+        app.Inspector.HostPlugins = host;
+        var result = await PostJsonAsync(http, $"{app.InspectorUrl}/api/extensions/call", call, token);
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Equal("/api/v1/ble/status", result.GetProperty("path").GetString());
+        app.Plugin.Events.Publish(new BleEvent("scan", "HR", "buffered"));
+        var page = await PostJsonAsync(http, $"{app.InspectorUrl}/api/extensions/events",
+            $$$"""{"namespace":"{{{Ns}}}","stream":"events","since":0}""", token);
+        Assert.Single(page.GetProperty("events").EnumerateArray());
+        using var ws = new ClientWebSocket();
+        ws.Options.SetRequestHeader("Origin", app.InspectorUrl);
+        await ws.ConnectAsync(StreamUri(app.InspectorUrl, token, since: 0), Timeout());
+        await AssertFramesAsync(ws, app.Plugin, "buffered");
+    }
 
     [Fact]
     public async Task ExtensionList_IsTokenGated_AndIncludesFaultedPluginsAndLoadErrors()
@@ -65,6 +131,22 @@ public class InspectorExtensionsProxyTests
         Assert.Equal("Polar", body.GetProperty("filter").GetString());
         Assert.Equal("2", body.GetProperty("limit").GetString());
         Assert.Equal("true", body.GetProperty("connected").GetString());
+    }
+
+    [Fact]
+    public async Task ParameterizedTool_BindsEscapedRouteValues_AndRejectsMissingArguments()
+    {
+        await using var app = await TestApp.StartAsync();
+        using var http = new HttpClient();
+        var token = await ReadTokenAsync(http, app.InspectorUrl);
+        var result = await PostJsonAsync(http, $"{app.InspectorUrl}/api/extensions/call",
+            $$$"""{"namespace":"{{{Ns}}}","tool":"lookup","parameters":{"id":"a/b","limit":2}}""", token);
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Equal("a/b", result.GetProperty("body").GetProperty("id").GetString());
+        Assert.Equal("2", result.GetProperty("body").GetProperty("limit").GetString());
+        using var invalid = await AuthorizedPostAsync(http, $"{app.InspectorUrl}/api/extensions/call",
+            $$$"""{"namespace":"{{{Ns}}}","tool":"lookup","parameters":{}}""", token);
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
     }
 
     [Fact]
@@ -347,11 +429,13 @@ public class InspectorExtensionsProxyTests
         public required int AgentPort { get; init; }
         public required string InspectorUrl { get; init; }
 
-        public static async Task<TestApp> StartAsync(bool includeFaulty = false)
+        public static async Task<TestApp> StartAsync(bool includeFaulty = false, DevFlowHostPlugins? host = null,
+            DevFlowProviderBindings? bindings = null)
         {
             var agentPort = FreePort();
             var plugin = new BlePlugin();
             var options = new AgentOptions { Port = agentPort };
+            if (bindings is not null) options.ProviderPolicy.Allow(Ns, bindings);
             options.AddExtension(plugin);
             if (includeFaulty)
             {
@@ -363,6 +447,7 @@ public class InspectorExtensionsProxyTests
 
             var inspectorPort = FreePort();
             var inspector = new InspectorServer(inspectorPort, "localhost", agentPort);
+            if (host is not null) inspector.HostPlugins = host;
             inspector.Start();
             var url = $"http://127.0.0.1:{inspectorPort}";
             using var http = new HttpClient();
@@ -416,6 +501,12 @@ public class InspectorExtensionsProxyTests
                 LastConnected = request.GetParameter("uuid");
                 return Task.FromResult(DevFlowResponse.Ok());
             });
+            builder.MapTool("lookup", "Read a peripheral.", "GET", "/items/{id}",
+                request => Task.FromResult(DevFlowResponse.Json(new
+                {
+                    id = request.RouteValues["id"],
+                    limit = request.GetParameter("limit")
+                })));
             builder.MapTool("broken", "Always fails.", "GET", "/broken",
                 _ => throw new InvalidOperationException("adapter unplugged"),
                 annotations: new DevFlowToolAnnotations { ReadOnly = true });

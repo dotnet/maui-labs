@@ -15,6 +15,16 @@ namespace Microsoft.Extensions.DependencyInjection;
 /// </remarks>
 public static class DevFlowServiceCollectionExtensions
 {
+    /// <summary>Registers trusted developer-machine code with a CLI/MCP/Inspector host's container.</summary>
+    public static IServiceCollection AddDevFlowHostExtension<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
+        this IServiceCollection services) where T : DevFlowHostExtension
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        if (!services.Any(d => d.ImplementationInstance is DevFlowHostExtensionRegistration r && r.ExtensionType == typeof(T)))
+            services.AddSingleton(new DevFlowHostExtensionRegistration(typeof(T), sp => ActivatorUtilities.CreateInstance<T>(sp)));
+        return services;
+    }
+
     /// <summary>
     /// Registers <typeparamref name="T"/> as a DevFlow plugin. The agent creates it from the app's
     /// service provider when it starts, so its constructor can take app services. Registering the same
@@ -40,7 +50,7 @@ public static class DevFlowServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(extensionType);
         ArgumentNullException.ThrowIfNull(factory);
-        if (!typeof(DevFlowExtension).IsAssignableFrom(extensionType))
+        if (!typeof(DevFlowExtension).IsAssignableFrom(extensionType) || typeof(DevFlowHostExtension).IsAssignableFrom(extensionType))
             throw new ArgumentException($"{extensionType} does not derive from {nameof(DevFlowExtension)}.", nameof(extensionType));
 
         foreach (var descriptor in services)
@@ -65,3 +75,6 @@ public static class DevFlowServiceCollectionExtensions
 /// <param name="ExtensionType">The plugin type, used in error reports and to skip duplicates.</param>
 /// <param name="Factory">Creates the plugin from the app's service provider.</param>
 public sealed record DevFlowExtensionRegistration(Type ExtensionType, Func<IServiceProvider, DevFlowExtension> Factory);
+
+/// <summary>A host-only plugin registration; never resolved by the in-app agent.</summary>
+public sealed record DevFlowHostExtensionRegistration(Type ExtensionType, Func<IServiceProvider, DevFlowHostExtension> Factory);

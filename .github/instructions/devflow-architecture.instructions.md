@@ -117,6 +117,21 @@ so source stays compatible. Label such PRs `breaking-change` and say so in the d
 
 ### Adding a New HTTP Endpoint
 
+Prefer the shared operation catalog for new built-in providers. Declare tools through a
+catalog-backed `AgentExtension`, with the existing virtual handlers as HTTP compatibility bindings.
+Add the provider's HTTP/WebSocket and MCP prefixes to the explicit built-in registry in
+`Microsoft.Maui.DevFlow.Extensibility/DevFlowProviderPolicy.cs`; the agent and tooling host use that
+same registry. Do not introduce another plugin registry, blanket `devflow.*` trust, or unrestricted
+route/MCP name overrides. Existing URLs, leases, response shapes and backend dispatch must remain
+compatible when migrating handlers. MCP name conflicts must be resolved by migrating/removing the
+old registration in the same change, never by silently replacing it.
+
+Non-built-in providers stay under `/ext` and `ext_` unless both the application owner and tooling
+host owner explicitly approve bindings in their local `DevFlowProviderPolicy`. Discovery metadata
+is not an authorization source. See [approved transport bindings](../../docs/DevFlow/plugins.md#approved-transport-bindings).
+
+For existing endpoint groups that have not yet migrated:
+
 1. Add route in `Agent.Abstractions/DevFlowAgentService.Handlers.cs` → `RegisterRoutes()`:
    ```csharp
    _server.MapGet("/api/v1/myfeature", HandleMyFeature);

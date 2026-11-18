@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <PackageId>Microsoft.Maui.DevFlow.Extensibility</PackageId>
@@ -13,6 +13,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Agent.Abstractions" />
     <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Tests" />
+    <InternalsVisibleTo Include="maui" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../Microsoft.Maui.DevFlow.Client/ExtensionRouteBinding.cs" Link="Compatibility/ExtensionRouteBinding.cs" />
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 

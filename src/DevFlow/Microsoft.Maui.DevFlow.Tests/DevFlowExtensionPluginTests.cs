@@ -13,6 +13,153 @@ namespace Microsoft.Maui.DevFlow.Tests;
 public class DevFlowExtensionPluginTests
 {
     [Fact]
+    public void PluginJson_PreservesStringEnums_WithoutChangingAgentDefaults()
+    {
+        Assert.Equal("\"readyNow\"", DevFlowJson.Serialize(PluginMode.ReadyNow));
+        Assert.Equal("1", AgentJson.Serialize(PluginMode.ReadyNow));
+        Assert.Equal("1", AgentJson.Serialize(PluginMode.ReadyNow, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+    }
+
+    private enum PluginMode { ReadyNow = 1 }
+
+    [Fact]
+    public async Task StartingPlugin_RefusesCallsPollingAndSockets_UntilStartupCompletes()
+    {
+        var port = GetFreePort();
+        var plugin = new GatedPlugin();
+        var options = new AgentOptions { Port = port };
+        options.AddExtension(plugin);
+        using var service = new DevFlowAgentService(options);
+        using var client = new AgentClient("localhost", port);
+        using var http = new HttpClient();
+        service.StartServerOnly(null);
+        await plugin.Starting.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("starting", (await client.GetExtensionsAsync())["com.example.gated"].State);
+        using var call = await http.PostAsync($"http://localhost:{port}/api/v1/ext/com.example.gated/operations/read", new StringContent("{}"));
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, call.StatusCode);
+        var failure = await Assert.ThrowsAsync<HttpRequestException>(() => client.GetExtensionEventsAsync("com.example.gated", "events", 10));
+        Assert.Contains("is starting", failure.Message);
+        using var ws = new System.Net.WebSockets.ClientWebSocket();
+        ws.Options.CollectHttpResponseDetails = true;
+        await Assert.ThrowsAsync<System.Net.WebSockets.WebSocketException>(() =>
+            ws.ConnectAsync(new Uri(client.GetExtensionStreamWebSocketUrl("com.example.gated", "events")), CancellationToken.None));
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, ws.HttpStatusCode);
+        plugin.AllowStart.TrySetResult();
+        await WaitUntilAsync(async () => (await client.GetExtensionsAsync())["com.example.gated"].State == "ready");
+        using var ready = await http.PostAsync($"http://localhost:{port}/api/v1/ext/com.example.gated/operations/read", new StringContent("{}"));
+        Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
+    }
+
+    [Fact]
+    public async Task RepeatedTypedRegistration_ConstructsAndStartsThePluginOnce()
+    {
+        var counts = new RegistrationCounts();
+        using var services = new ServiceCollection().AddSingleton(counts).BuildServiceProvider();
+        var options = new AgentOptions { Port = GetFreePort(), Services = services };
+        options.AddExtension<CountedPlugin>().AddExtension<CountedPlugin>();
+        using var agent = new DevFlowAgentService(options);
+        agent.StartServerOnly(null);
+        await WaitUntilAsync(() => counts.Starts == 1);
+        Assert.Equal(1, counts.Constructors);
+        Assert.Empty(agent.ExtensionLoadErrors);
+    }
+
+    [Fact]
+    public async Task StopDuringStartupRegistration_WaitsForEveryStart_BeforeCleanup()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var plugins = new[] { new RacingLifecyclePlugin("com.example.race") };
+        var options = new AgentOptions { Port = GetFreePort() };
+        foreach (var plugin in plugins) options.AddExtension(plugin);
+        using var agent = new GatedServicesAgent(options, entered, release);
+        agent.ActivatePlugins();
+        agent.BlockServices = true;
+        var starting = Task.Run(agent.StartPlugins);
+        try
+        {
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+            var stopping = Task.Run(agent.StopPluginsAsync);
+            await Task.Delay(50);
+            release.Set();
+            await Task.WhenAll(starting, stopping).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.All(plugins, plugin =>
+            {
+                Assert.Equal(1, plugin.Starts);
+                Assert.Equal(1, plugin.Stops);
+                Assert.False(plugin.StartedAfterStop);
+            });
+        }
+        finally { release.Set(); await starting; }
+    }
+
+    private sealed class GatedServicesAgent(AgentOptions options, ManualResetEventSlim entered, ManualResetEventSlim release)
+        : DevFlowAgentService(options)
+    {
+        public bool BlockServices { get; set; }
+        protected override IServiceProvider? ExtensionServices
+        {
+            get
+            {
+                if (BlockServices) { entered.Set(); release.Wait(TimeSpan.FromSeconds(5)); }
+                return base.ExtensionServices;
+            }
+        }
+    }
+
+    private sealed class RacingLifecyclePlugin(string ns) : DevFlowExtension(ns, "Racing lifecycle")
+    {
+        public int Starts;
+        public int Stops;
+        public bool StartedAfterStop;
+        protected internal override void Configure(IDevFlowExtensionBuilder builder) { }
+        protected internal override Task StartAsync(IDevFlowExtensionContext context, CancellationToken cancellationToken)
+        {
+            StartedAfterStop = Volatile.Read(ref Stops) != 0;
+            Interlocked.Increment(ref Starts);
+            return Task.CompletedTask;
+        }
+        protected internal override Task StopAsync(CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref Stops);
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task SynchronouslyBlockingStop_IsBounded_AndUiDisposeDoesNotBlockCleanup()
+    {
+        using var release = new ManualResetEventSlim();
+        var plugin = new BlockingStopPlugin(release);
+        var options = new AgentOptions { Port = GetFreePort() };
+        options.AddExtension(plugin);
+        using var agent = new DevFlowAgentService(options) { PluginStopTimeout = TimeSpan.FromMilliseconds(200) };
+        agent.StartServerOnly(null);
+        try
+        {
+            await agent.StopAsync().WaitAsync(TimeSpan.FromSeconds(3));
+            await plugin.StopEntered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        finally { release.Set(); }
+        await plugin.StopFinished.Task.WaitAsync(TimeSpan.FromSeconds(3));
+
+        using var uiRelease = new ManualResetEventSlim();
+        var uiPlugin = new BlockingStopPlugin(uiRelease);
+        var uiOptions = new AgentOptions { Port = GetFreePort() };
+        uiOptions.AddExtension(uiPlugin);
+        var uiAgent = new DevFlowAgentService(uiOptions);
+        uiAgent.StartServerOnly(new DelegateAgentDispatcher(() => false, action => action()));
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            uiAgent.Dispose();
+            Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"UI Dispose blocked for {watch.Elapsed}.");
+        }
+        finally { uiRelease.Set(); }
+        await uiPlugin.StopFinished.Task.WaitAsync(TimeSpan.FromSeconds(3));
+    }
+
+    [Fact]
     public async Task Plugin_IsCreatedFromServices_AndItsToolsAreCallable()
     {
         var port = GetFreePort();
@@ -214,19 +361,18 @@ public class DevFlowExtensionPluginTests
     public async Task FaultedPlugin_ClosesSubscriptionsThatWereAlreadyOpen()
     {
         var port = GetFreePort();
-        // The test decides when the plugin faults: only once the subscription is open.
-        var fault = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var plugin = new FailingStartStreamPlugin(fault.Task);
+        var plugin = new StreamPlugin(capacity: 10);
         var options = new AgentOptions { Port = port };
         options.AddExtension(plugin);
 
         using var service = new DevFlowAgentService(options);
         using var client = new AgentClient("localhost", port);
         service.StartServerOnly(null);
+        await WaitUntilAsync(async () => (await client.GetExtensionsAsync())["com.example.stream"].State == "ready");
 
         using var ws = new System.Net.WebSockets.ClientWebSocket();
-        await ws.ConnectAsync(new Uri(client.GetExtensionStreamWebSocketUrl("com.example.failstream", "events")), CancellationToken.None);
-        fault.SetResult();
+        await ws.ConnectAsync(new Uri(client.GetExtensionStreamWebSocketUrl("com.example.stream", "events")), CancellationToken.None);
+        Assert.Single(options.Extensions).Error = "radio lost";
 
         var buffer = new byte[1024];
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -718,6 +864,52 @@ public class DevFlowExtensionPluginTests
         {
             StopCalled = true;
             return new TaskCompletionSource().Task; // never completes and ignores the token
+        }
+    }
+
+    public sealed class GatedPlugin() : DevFlowExtension("com.example.gated", "Gated startup")
+    {
+        public TaskCompletionSource Starting { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource AllowStart { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        protected internal override void Configure(IDevFlowExtensionBuilder builder)
+        {
+            builder.MapOperation("read", "Read", _ => Task.FromResult(DevFlowResponse.Ok()), annotations: new() { ReadOnly = true });
+            builder.MapStream("events", "Events", new DevFlowEventStream());
+        }
+        protected internal override async Task StartAsync(IDevFlowExtensionContext context, CancellationToken cancellationToken)
+        {
+            Starting.TrySetResult();
+            await AllowStart.Task.WaitAsync(cancellationToken);
+        }
+    }
+
+    public sealed class RegistrationCounts { public int Constructors; public int Starts; }
+    public sealed class CountedPlugin : DevFlowExtension
+    {
+        private readonly RegistrationCounts _counts;
+        public CountedPlugin(RegistrationCounts counts) : base("com.example.counted", "Counted")
+        {
+            _counts = counts;
+            Interlocked.Increment(ref counts.Constructors);
+        }
+        protected internal override void Configure(IDevFlowExtensionBuilder builder) { }
+        protected internal override Task StartAsync(IDevFlowExtensionContext context, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _counts.Starts);
+            return Task.CompletedTask;
+        }
+    }
+    public sealed class BlockingStopPlugin(ManualResetEventSlim release) : DevFlowExtension("com.example.blocking", "Blocking stop")
+    {
+        public TaskCompletionSource StopEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource StopFinished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        protected internal override void Configure(IDevFlowExtensionBuilder builder) { }
+        protected internal override Task StopAsync(CancellationToken cancellationToken)
+        {
+            StopEntered.TrySetResult();
+            release.Wait();
+            StopFinished.TrySetResult();
+            return Task.CompletedTask;
         }
     }
 

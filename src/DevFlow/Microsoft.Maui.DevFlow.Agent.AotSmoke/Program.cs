@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Agent.Core.Network;
 using Microsoft.Maui.DevFlow.Logging;
+using Microsoft.Maui.DevFlow.Extensibility;
 
 if (JsonSerializer.IsReflectionEnabledByDefault)
     throw new InvalidOperationException("This smoke must run with JSON reflection disabled.");
@@ -59,6 +60,9 @@ broker.Start();
 
 using var registration = new BrokerRegistration("aot-smoke", "net10.0", "host", "AOT smoke", brokerPort);
 var agentOptions = new AgentOptions { Port = agentPort, EnableProfiler = true };
+agentOptions.ProviderPolicy.Allow("com.devflow.plugin", new("/api/v1/plugin-smoke", "/ws/v1/plugin-smoke"));
+DevFlowJson.RegisterContext(PluginSmokeJsonContext.Default);
+agentOptions.AddExtension(new AotPlugin());
 var routes = agentOptions.RegisterExtension("com.devflow.smoke", "Source-generated extension contracts");
 routes.MapPost("/echo", request => Task.FromResult(HttpResponse.Json(request.BodyAs<ExtensionReply>()!)));
 routes.MapGet("/unsupported", _ => Task.FromResult(HttpResponse.Json(new MissingContract("unsupported"))));
@@ -90,6 +94,23 @@ http.DefaultRequestHeaders.Add("X-DevFlow-Lease", "smoke");
 var status = await Get("/api/v1/agent/status");
 Check(status.GetProperty("agent").GetProperty("name").GetString() == "Microsoft.Maui.DevFlow.Agent", "status");
 await Get("/api/v1/agent/capabilities");
+await Get("/api/v1/operations");
+var pluginReady = false;
+while (!pluginReady)
+{
+    var discovery = await Get("/api/v1/agent/capabilities");
+    pluginReady = discovery.GetProperty("extensions").GetProperty("com.devflow.plugin").GetProperty("state").GetString() == "ready";
+    if (!pluginReady) await Task.Delay(20, ct);
+}
+var pluginReply = await Post("/api/v1/plugin-smoke/operations/echo", """{"value":"AOT"}""");
+Check(pluginReply.GetProperty("value").GetString() == "AOT", "plugin operation and shared source-generated JSON");
+var pluginEvents = await Get("/api/v1/plugin-smoke/streams/events");
+Check(pluginEvents.GetProperty("events")[0].GetProperty("data").GetProperty("value").GetString() == "started", "plugin event serialization");
+using (var primitive = JsonDocument.Parse(DevFlowResponse.Ok("hello").Body!))
+    Check(primitive.RootElement.GetProperty("message").GetString() == "hello", "AOT-safe response envelopes");
+Check(DevFlowJson.Serialize(PluginMode.ReadyNow) == "\"readyNow\"", "reflection-disabled plugin string enums");
+Check(AgentJson.Serialize(PluginMode.ReadyNow, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }) == "1",
+    "agent camelCase options retain numeric enums");
 await Get("/api/v1/storage/roots");
 var lease = await Post("/api/v1/agent/lease", """{"ACTION":"acquire","LEASEID":"smoke"}""");
 Check(lease.GetProperty("authority").GetString() == "broker", "broker-authoritative lease");
@@ -346,6 +367,32 @@ sealed class SmokeAgent(AgentOptions options) : DevFlowAgentService(options)
 
 sealed record MissingContract(string Value);
 sealed record ExtensionReply([property: JsonPropertyName("name")] string Name, int Count);
+
+sealed record PluginPayload(string Value);
+enum PluginMode { ReadyNow = 1 }
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(PluginPayload))]
+partial class PluginSmokeJsonContext : JsonSerializerContext;
+
+sealed class AotPlugin() : DevFlowExtension("com.devflow.plugin", "NativeAOT plugin smoke")
+{
+    private readonly DevFlowEventStream<PluginPayload> _events = new();
+    protected override void Configure(IDevFlowExtensionBuilder builder)
+    {
+        builder.MapOperation("echo", "Echo", request =>
+        {
+            var value = new DevFlowRequest("POST", "/", body: request.Parameters?.GetRawText()).ReadJson<PluginPayload>();
+            return Task.FromResult(DevFlowResponse.Json(value));
+        });
+        builder.MapStream("events", "Events", _events);
+    }
+    protected override Task StartAsync(IDevFlowExtensionContext context, CancellationToken cancellationToken)
+    {
+        _events.Publish(new("started"));
+        return Task.CompletedTask;
+    }
+}
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$kind")]
 [JsonDerivedType(typeof(DerivedExtension), "derived")]
 abstract class BaseExtension;

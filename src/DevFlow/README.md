@@ -31,7 +31,7 @@ The separate `ci-devflow.yml` workflow runs host, browser, JavaScript and AOT te
 | **Microsoft.Maui.DevFlow.CLI** | DevFlow command implementation used by the unified `maui devflow` CLI surface for automation, debugging, and MCP server support. |
 | **Microsoft.Maui.DevFlow.Client** | Portable protocol client: `AgentClient`, element and protocol DTOs, and their serialization. Targets `netstandard2.0`, so .NET Framework harnesses speak the same protocol as modern .NET consumers. |
 | **Microsoft.Maui.DevFlow.Driver** | Platform-aware app driver for iOS, Android, Mac Catalyst, Windows, and Linux. Builds on `Microsoft.Maui.DevFlow.Client`. |
-| **Microsoft.Maui.DevFlow.Extensibility** | Plugin contract: `DevFlowExtension`, tools, and live event streams that the CLI, MCP server and Inspector discover at runtime. No agent or MAUI dependency. See [Writing DevFlow plugins](../../docs/DevFlow/plugins.md). |
+| **Microsoft.Maui.DevFlow.Extensibility** | Shared operation catalog, app and trusted host plugins, and live streams discovered by CLI, MCP and Inspector. No agent or MAUI dependency. See [Writing DevFlow plugins](../../docs/DevFlow/plugins.md). |
 | **Microsoft.Maui.DevFlow.Logging** | Buffered rotating JSONL file logger. No MAUI dependency. |
 
 ## Quick Start
@@ -478,6 +478,7 @@ All DevFlow commands are available under `maui devflow`. Run `maui devflow <comm
 | `storage` | Read/write app preferences, secure storage, discover file storage roots, and manage sandboxed app files |
 | `agent` | Discover and inspect connected agents (status, list, wait, diagnose) |
 | `extensions` | List, describe, and call extension and plugin tools; read (`events`) and follow (`watch`) their event streams |
+| `operations` | Shared discovery and calls for app plugins, actions, built-ins, and explicitly installed `host:` plugins (`--host-plugin`) |
 | `broker` | Manage the agent broker (start, stop, status, log) |
 | `batch` | Execute command sequences from stdin |
 | `commands` | List all available commands (schema discovery) |
