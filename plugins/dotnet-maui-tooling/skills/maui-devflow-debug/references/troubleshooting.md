@@ -10,8 +10,9 @@
 
 ## Reading machine-readable output and errors
 
-Always pass `--json` to any `maui` command an agent will parse, and `--ci` for
-non-interactive failure-fast runs.
+Pass `--json` to commands an agent will parse, and `--ci` for unattended setup
+where supported. Interactive license review is an exception: see
+[Android license guidance](android.md#license-prompts-and-unattended-setup).
 
 The full `--json` error envelope contract (schema, code categories, worked examples, PowerShell and Bash consumers) is documented in
 [`src/Cli/README.md` — Error envelope](https://github.com/dotnet/maui-labs/blob/main/src/Cli/README.md#error-envelope).
@@ -34,7 +35,7 @@ The full `--json` error envelope contract (schema, code categories, worked examp
 
 ### Error envelope
 
-When a `maui` command fails with `--json`, it writes a structured error object
+When a command using the standard error formatter fails with `--json`, it writes a structured error object
 at the **top level** of stdout (there is no enclosing `"error"` wrapper).
 Property names are `snake_case`:
 
@@ -71,7 +72,8 @@ before dereferencing.
 
 When present, `remediation.type` is a **lowercase** string, one of:
 
-- `autofixable` — run `remediation.command` and retry the original command.
+- `autofixable` — inspect `remediation.command`, obtain any required approval,
+  then run it and retry the original command.
 - `useraction` — present `remediation.manual_steps` to the user.
 - `terminal` — cannot be fixed (e.g., unsupported OS); abort.
 - `unknown` — fall back to displaying `message`.
@@ -117,16 +119,17 @@ If `maui devflow ui status` fails with connection refused:
    maui port check <port> --json
    ```
    With the broker, this is less common since ports are auto-assigned.
-6. **Android?** `maui devflow wait --wait-platform android` (or `maui devflow list`)
+6. **Android?** `maui devflow wait --wait-platform android --json`
    sets up the broker reverse (tcp:19223) and agent forward automatically; re-run
    `list` after each deploy to repair the agent forward. If broker/list is empty,
    the direct `.mauidevflow` port is the one forward the CLI does *not* auto-set —
    do it manually and check direct status:
    ```bash
-   adb devices
-   adb forward tcp:9223 tcp:9223
-   maui devflow agent status --agent-host localhost --agent-port 9223
+   maui device list --platform android --json
+   maui android port forward 9223 --device <serial> --json
+   maui devflow agent status --agent-host localhost --agent-port 9223 --json
    ```
+   Substitute the actual `.mauidevflow` port if it is not 9223.
 7. **Mac Catalyst?** Check entitlements include `network.server` (see setup.md step 5).
 8. **macOS (AppKit)?** Ensure `AddMacOSEssentials()` is called and the app window appeared.
    See [references/macos.md](macos.md) for troubleshooting.
@@ -144,8 +147,8 @@ ADB taps work.
 Capture evidence before changing app code:
 
 ```bash
-maui devflow agent status --agent-host localhost --agent-port <port>
-maui devflow ui query --automationId <control-id> --agent-host localhost --agent-port <port>
+maui devflow agent status --agent-host localhost --agent-port <port> --json
+maui devflow ui query --automationId <control-id> --agent-host localhost --agent-port <port> --json
 adb logcat -d -t 300 | grep -i "CalledFromWrongThreadException\\|DevFlow\\|DOTNET"
 ```
 
@@ -173,8 +176,10 @@ Fix: Install the required .NET SDK version, or check `global.json` for version p
 ```
 error XA0000: Could not find Android SDK
 ```
-Fix: Install Android SDK via `maui android sdk install "platforms;android-35"`
-(or run `maui android install` for guided setup), or set `$ANDROID_HOME`.
+Fix: Bootstrap a missing SDK with `maui android install`, or set `$ANDROID_HOME`
+to an existing SDK. For an installed SDK missing a platform package, use
+`maui android sdk install "platforms;android-35" --json` with the API required
+by the project.
 Error code via `maui` JSON: `E2101` AndroidSdkNotFound.
 
 **iOS provisioning / signing errors:**

@@ -63,9 +63,9 @@ for MAUI DevFlow product feedback. Do not run it automatically.
 5. Wait for the DevFlow agent before inspecting UI:
 
    ```bash
-   maui devflow wait
-   maui devflow agent status
-   maui devflow ui tree --depth 3 --fields "id,type,text,automationId"
+   maui devflow wait --json
+   maui devflow agent status --json
+   maui devflow ui tree --depth 3 --fields "id,type,text,automationId" --json
    ```
 
    Treat `agent status` as the runtime truth for reachability and app identity.
@@ -77,8 +77,8 @@ for MAUI DevFlow product feedback. Do not run it automatically.
 6. Prefer AutomationId-first validation for UI flows:
 
    ```bash
-   maui devflow ui query --automationId save-button
-   maui devflow ui tap <element-id-from-query>
+   maui devflow ui query --automationId save-button --json
+   maui devflow ui tap <element-id-from-query> --json
    ```
 
    If important controls do not have stable `AutomationId`s, add them before
@@ -101,10 +101,13 @@ operations. For programmatic consumption:
 - Inspect `code` to branch logic. Categories: `E1xxx` tool, `E2xxx`
   platform/SDK, `E3xxx` user action, `E4xxx` network, `E5xxx` permission.
 - When `remediation` is present and `remediation.type` is `autofixable`
-  (lowercase), run `remediation.command` and retry. When it is `useraction`,
+  (lowercase), inspect `remediation.command` and obtain any required approval
+  before running it and retrying. When it is `useraction`,
   follow `remediation.manual_steps`. If `remediation` is absent, surface
   `message` and stop retrying — there is no auto-fix.
-- Use `--ci` for non-interactive failure-fast runs (no prompts, fail on first error).
+- Use `--ci` for unattended setup where supported; it does not accept license
+  terms or replace required arguments. Interactive-only operations are called
+  out in the references.
 
 ## Critical Anti-patterns
 
