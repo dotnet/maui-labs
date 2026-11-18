@@ -32,6 +32,15 @@ test("shared build and device workflows default to the mirrored GA manifests", (
   }
 });
 
+test("WPF build and template smoke isolate the SDK from machine-wide workloads", () => {
+  const build = read(".github/workflows/_build.yml");
+  assert.match(build, /isolated-dotnet:\n\s+required: false\n\s+type: boolean\n\s+default: false/);
+  assert.match(build, /DOTNET_INSTALL_DIR: \$\{\{ inputs\.isolated-dotnet && format\('\{0\}\/maui-ci-dotnet', runner\.temp\) \|\| '' \}\}/);
+  const wpf = read(".github/workflows/ci-wpf.yml");
+  assert.match(wpf, /project-name: wpf\n\s+additional-dotnet-version: 10\.0\.403\n\s+isolated-dotnet: true/);
+  assert.match(wpf, /template-smoke:[\s\S]*?uses: actions\/setup-dotnet@v5\n\s+env:\n\s+DOTNET_INSTALL_DIR: \$\{\{ runner\.temp \}\}\/maui-ci-dotnet/);
+});
+
 test("Apple build and device callers export only a physical DEVELOPER_DIR", () => {
   for (const file of ["_build.yml", "_device-tests.yml", "ci-macos-appkit.yml"]) {
     const text = read(`.github/workflows/${file}`);

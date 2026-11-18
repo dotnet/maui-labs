@@ -15,6 +15,11 @@ on:
         type: string
         default: ''
         description: 'Additional SDK/runtime lane to install alongside the repository-pinned SDK for multi-targeted tests.'
+      isolated-dotnet:
+        required: false
+        type: boolean
+        default: false
+        description: 'Install the SDK in a clean runner directory instead of using machine-wide Visual Studio workloads.'
       run-tests:
         required: false
         type: boolean
@@ -133,6 +138,8 @@ jobs:
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ inputs.isolated-dotnet && format('{0}/maui-ci-dotnet', runner.temp) || '' }}
         with:
           global-json-file: global.json
           dotnet-version: ${{ inputs.additional-dotnet-version }}
