@@ -21,6 +21,9 @@ public readonly record struct XamlSourceEntry(
 
 public sealed class XamlSourceMap
 {
+    private const string MauiXmlNamespace = "http://schemas.microsoft.com/dotnet/2021/maui";
+    private const string XamlXmlNamespace = "http://schemas.microsoft.com/winfx/2009/xaml";
+
     private static readonly HashSet<string> s_contentProperties = new(StringComparer.Ordinal)
     {
         "Content",
@@ -57,6 +60,13 @@ public sealed class XamlSourceMap
         => Parse(xaml, file, contentHash: null);
 
     public static XamlSourceMap? Parse(string xaml, string file, string? contentHash)
+        => Parse(xaml, file, contentHash, namespaceMappings: null);
+
+    public static XamlSourceMap? Parse(
+        string xaml,
+        string file,
+        string? contentHash,
+        IReadOnlyDictionary<string, string>? namespaceMappings)
     {
         if (string.IsNullOrWhiteSpace(xaml))
             return null;
@@ -64,7 +74,29 @@ public sealed class XamlSourceMap
         XDocument document;
         try
         {
-            document = XDocument.Parse(xaml, LoadOptions.SetLineInfo);
+            var nameTable = new NameTable();
+            var namespaceManager = new XmlNamespaceManager(nameTable);
+            namespaceManager.AddNamespace(string.Empty, MauiXmlNamespace);
+            namespaceManager.AddNamespace("x", XamlXmlNamespace);
+            if (namespaceMappings is not null)
+            {
+                foreach (var mapping in namespaceMappings)
+                    namespaceManager.AddNamespace(mapping.Key, mapping.Value);
+            }
+            var parserContext = new XmlParserContext(
+                nameTable,
+                namespaceManager,
+                null,
+                XmlSpace.None);
+            using var reader = XmlReader.Create(
+                new StringReader(xaml),
+                new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Parse,
+                    XmlResolver = null
+                },
+                parserContext);
+            document = XDocument.Load(reader, LoadOptions.SetLineInfo);
         }
         catch (XmlException)
         {

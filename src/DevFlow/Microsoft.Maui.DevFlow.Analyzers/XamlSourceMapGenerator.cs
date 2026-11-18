@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -15,6 +16,9 @@ namespace Microsoft.Maui.DevFlow.Analyzers;
 public sealed class XamlSourceMapGenerator : IIncrementalGenerator
 {
     private const string XamlMarkerMetadata = "build_metadata.AdditionalFiles.DevFlowXaml";
+    private const string MauiXmlNamespace = "http://schemas.microsoft.com/dotnet/2021/maui";
+    private const string XamlXmlNamespace = "http://schemas.microsoft.com/winfx/2009/xaml";
+    private const string XmlnsPrefixAttributeMetadataName = "Microsoft.Maui.Controls.XmlnsPrefixAttribute";
 
     private static readonly XName[] s_classAttributeNames =
     [
@@ -24,21 +28,32 @@ public sealed class XamlSourceMapGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        var namespaceMappings = context.CompilationProvider
+            .Select(static (compilation, _) => GetNamespaceMappings(compilation))
+            .WithComparer(NamespaceMappingsComparer.Instance);
+
         var models = context.AdditionalTextsProvider
             .Combine(context.AnalyzerConfigOptionsProvider)
+            .Combine(namespaceMappings)
             .Select(static (pair, cancellationToken) =>
-                TryReadXaml(pair.Left, pair.Right, cancellationToken))
+                TryReadXaml(
+                    pair.Left.Left,
+                    pair.Left.Right,
+                    pair.Right,
+                    cancellationToken))
             .Where(static model => model is not null)
             .Select(static (model, _) => model!.Value);
 
         context.RegisterSourceOutput(
-            models.Collect(),
-            static (productionContext, items) => Emit(productionContext, items));
+            models.Collect().Combine(namespaceMappings),
+            static (productionContext, pair) =>
+                Emit(productionContext, pair.Left, pair.Right));
     }
 
     private static XamlModel? TryReadXaml(
         AdditionalText file,
         AnalyzerConfigOptionsProvider optionsProvider,
+        ImmutableArray<XmlnsPrefixMapping> namespaceMappings,
         CancellationToken cancellationToken)
     {
         var options = optionsProvider.GetOptions(file);
@@ -53,7 +68,7 @@ public sealed class XamlSourceMapGenerator : IIncrementalGenerator
         if (string.IsNullOrWhiteSpace(xaml))
             return null;
 
-        var fullTypeName = TryReadClass(xaml!);
+        var fullTypeName = TryReadClass(xaml!, namespaceMappings);
         return fullTypeName is null
             ? null
             : new XamlModel(
@@ -122,12 +137,84 @@ public sealed class XamlSourceMapGenerator : IIncrementalGenerator
             .Replace('/', Path.DirectorySeparatorChar);
     }
 
-    private static string? TryReadClass(string xaml)
+    private static ImmutableArray<XmlnsPrefixMapping> GetNamespaceMappings(
+        Compilation compilation)
+    {
+        var mappings = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [string.Empty] = MauiXmlNamespace,
+            ["x"] = XamlXmlNamespace
+        };
+        var xmlnsPrefixAttribute =
+            compilation.GetTypeByMetadataName(XmlnsPrefixAttributeMetadataName);
+        if (xmlnsPrefixAttribute is not null)
+        {
+            var visited = new HashSet<IAssemblySymbol>(SymbolEqualityComparer.Default);
+            var pending = new Stack<IAssemblySymbol>();
+            pending.Push(compilation.Assembly);
+
+            // Prefix attributes may be declared by the app or any referenced assembly.
+            while (pending.Count > 0)
+            {
+                var assembly = pending.Pop();
+                if (!visited.Add(assembly))
+                    continue;
+
+                foreach (var attribute in assembly.GetAttributes())
+                {
+                    if (!SymbolEqualityComparer.Default.Equals(
+                        attribute.AttributeClass,
+                        xmlnsPrefixAttribute)
+                        || attribute.ConstructorArguments.Length < 2)
+                    {
+                        continue;
+                    }
+
+                    var xmlNamespace = attribute.ConstructorArguments[0].Value as string;
+                    var prefix = attribute.ConstructorArguments[1].Value as string;
+                    if (!string.IsNullOrEmpty(prefix) && !string.IsNullOrEmpty(xmlNamespace))
+                        mappings[prefix!] = xmlNamespace!;
+                }
+
+                foreach (var module in assembly.Modules)
+                {
+                    foreach (var referencedAssembly in module.ReferencedAssemblySymbols)
+                        pending.Push(referencedAssembly);
+                }
+            }
+        }
+
+        return mappings
+            .OrderBy(static pair => pair.Key, StringComparer.Ordinal)
+            .Select(static pair => new XmlnsPrefixMapping(pair.Key, pair.Value))
+            .ToImmutableArray();
+    }
+
+    private static string? TryReadClass(
+        string xaml,
+        ImmutableArray<XmlnsPrefixMapping> namespaceMappings)
     {
         XDocument document;
         try
         {
-            document = XDocument.Parse(xaml);
+            var nameTable = new NameTable();
+            var namespaceManager = new XmlNamespaceManager(nameTable);
+            foreach (var mapping in namespaceMappings)
+                namespaceManager.AddNamespace(mapping.Prefix, mapping.XmlNamespace);
+            var parserContext = new XmlParserContext(
+                nameTable,
+                namespaceManager,
+                null,
+                XmlSpace.None);
+            using var reader = XmlReader.Create(
+                new StringReader(xaml),
+                new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Parse,
+                    XmlResolver = null
+                },
+                parserContext);
+            document = XDocument.Load(reader);
         }
         catch (System.Xml.XmlException)
         {
@@ -147,7 +234,8 @@ public sealed class XamlSourceMapGenerator : IIncrementalGenerator
 
     private static void Emit(
         SourceProductionContext context,
-        ImmutableArray<XamlModel> items)
+        ImmutableArray<XamlModel> items,
+        ImmutableArray<XmlnsPrefixMapping> namespaceMappings)
     {
         if (items.IsDefaultOrEmpty)
             return;
@@ -180,13 +268,23 @@ public sealed class XamlSourceMapGenerator : IIncrementalGenerator
                 + $"{SymbolDisplay.FormatLiteral(model.Xaml, true)}),");
         }
         builder.AppendLine("        };");
+        builder.AppendLine("        private static readonly global::System.Collections.Generic.IReadOnlyDictionary<string, string> _namespaces =");
+        builder.AppendLine("            new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.Ordinal)");
+        builder.AppendLine("        {");
+        foreach (var mapping in namespaceMappings)
+        {
+            builder.AppendLine(
+                $"            [{SymbolDisplay.FormatLiteral(mapping.Prefix, true)}] = "
+                + $"{SymbolDisplay.FormatLiteral(mapping.XmlNamespace, true)},");
+        }
+        builder.AppendLine("        };");
         builder.AppendLine("        private readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap> _cache =");
         builder.AppendLine("            new global::System.Collections.Concurrent.ConcurrentDictionary<string, global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap>(global::System.StringComparer.Ordinal);");
         builder.AppendLine("        public global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap? GetMap(string fullTypeName)");
         builder.AppendLine("        {");
         builder.AppendLine("            if (_cache.TryGetValue(fullTypeName, out var cached)) return cached;");
         builder.AppendLine("            if (!_sources.TryGetValue(fullTypeName, out var entry)) return null;");
-        builder.AppendLine("            var map = global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap.Parse(entry.Xaml, entry.File);");
+        builder.AppendLine("            var map = global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap.Parse(entry.Xaml, entry.File, null, _namespaces);");
         builder.AppendLine("            if (map is not null) _cache[fullTypeName] = map;");
         builder.AppendLine("            return map;");
         builder.AppendLine("        }");
@@ -207,4 +305,27 @@ public sealed class XamlSourceMapGenerator : IIncrementalGenerator
         string FullTypeName,
         string Path,
         string Xaml);
+
+    private readonly record struct XmlnsPrefixMapping(
+        string Prefix,
+        string XmlNamespace);
+
+    private sealed class NamespaceMappingsComparer : IEqualityComparer<ImmutableArray<XmlnsPrefixMapping>>
+    {
+        public static readonly NamespaceMappingsComparer Instance = new();
+
+        public bool Equals(ImmutableArray<XmlnsPrefixMapping> x, ImmutableArray<XmlnsPrefixMapping> y)
+            => x.SequenceEqual(y);
+
+        public int GetHashCode(ImmutableArray<XmlnsPrefixMapping> mappings)
+        {
+            unchecked
+            {
+                var hash = 17;
+                foreach (var mapping in mappings)
+                    hash = hash * 31 + mapping.GetHashCode();
+                return hash;
+            }
+        }
+    }
 }

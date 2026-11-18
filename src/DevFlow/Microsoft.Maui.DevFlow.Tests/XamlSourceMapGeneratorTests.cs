@@ -29,6 +29,25 @@ public class XamlSourceMapGeneratorTests
         "    </VerticalStackLayout>\n" +
         "</ContentPage>\n";
 
+    private const string GloballyDeclaredNamespacesXaml =
+        "<ContentPage x:Class=\"TestApp.MainPage\">\n" +
+        "    <VerticalStackLayout>\n" +
+        "        <Label Text=\"Hello\" />\n" +
+        "        <Button Text=\"Click\" />\n" +
+        "    </VerticalStackLayout>\n" +
+        "</ContentPage>\n";
+
+    private const string ProjectNamespacePrefixSource =
+        "[assembly: Microsoft.Maui.Controls.XmlnsPrefixAttribute("
+        + "\"clr-namespace:TestControls;assembly=TestControls\", \"widgets\")]\n";
+
+    private const string XamlWithProjectPrefix =
+        "<ContentPage x:Class=\"TestApp.MainPage\">\n" +
+        "    <widgets:CustomView>\n" +
+        "        <Label Text=\"Hello\" />\n" +
+        "    </widgets:CustomView>\n" +
+        "</ContentPage>\n";
+
     private const string ResourceDictionaryXaml =
         "<ResourceDictionary xmlns=\"http://schemas.microsoft.com/dotnet/2021/maui\"\n" +
         "                    xmlns:x=\"http://schemas.microsoft.com/winfx/2009/xaml\">\n" +
@@ -50,6 +69,113 @@ public class XamlSourceMapGeneratorTests
         // The generated source must compile cleanly against Agent.Core.
         var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
         Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void GeneratedProvider_RegistersMap_ForXamlWithProjectWideNamespaces()
+    {
+        var (output, diagnostics, generated) =
+            Run(("MainPage.xaml", GloballyDeclaredNamespacesXaml, true));
+
+        Assert.Empty(diagnostics);
+        Assert.NotNull(generated);
+        Assert.Contains("TestApp.MainPage", generated);
+        Assert.Contains("__DevFlowXamlSourceMapProvider", generated);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+
+        XamlSourceMapRegistry.Instance.Reset();
+        try
+        {
+            LoadAndRunModuleInitializer(output);
+
+            var map = XamlSourceMapRegistry.Instance.GetMap("TestApp.MainPage");
+            Assert.NotNull(map);
+            Assert.True(map!.TryGet("0/0", out var entry));
+            Assert.Equal("Label", entry.TypeName);
+        }
+        finally
+        {
+            XamlSourceMapRegistry.Instance.Reset();
+        }
+    }
+
+    [Fact]
+    public void GeneratedProvider_UsesAssemblyXmlnsPrefix_ForProjectWideCustomNamespace()
+    {
+        var (output, diagnostics, generated) =
+            Run(
+                ("MainPage.xaml", XamlWithProjectPrefix, true, @"C:\proj\MainPage.xaml"),
+                ProjectNamespacePrefixSource);
+
+        Assert.Empty(diagnostics);
+        Assert.NotNull(generated);
+        Assert.Contains("widgets", generated);
+        Assert.Contains("clr-namespace:TestControls;assembly=TestControls", generated);
+
+        XamlSourceMapRegistry.Instance.Reset();
+        try
+        {
+            LoadAndRunModuleInitializer(output);
+
+            var map = Assert.IsType<XamlSourceMap>(
+                XamlSourceMapRegistry.Instance.GetMap("TestApp.MainPage"));
+            Assert.True(map.TryGet("0", out var customControl));
+            Assert.Equal("CustomView", customControl.TypeName);
+            Assert.Equal("TestControls.CustomView", customControl.FullTypeName);
+            Assert.True(map.TryGet("0/0", out var label));
+            Assert.Equal("Label", label.TypeName);
+        }
+        finally
+        {
+            XamlSourceMapRegistry.Instance.Reset();
+        }
+    }
+
+    [Fact]
+    public void Generator_UsesXmlnsPrefix_FromReferencedAssembly()
+    {
+        var (_, diagnostics, generated) =
+            Run(
+                ("MainPage.xaml", XamlWithProjectPrefix, true, @"C:\proj\MainPage.xaml"),
+                additionalReference: CreateNamespacePrefixReference());
+
+        Assert.Empty(diagnostics);
+        Assert.Contains("widgets", generated);
+        Assert.Contains("clr-namespace:TestControls;assembly=TestControls", generated);
+    }
+
+    [Fact]
+    public void Generator_CachesOutput_WhenUnrelatedCodeChanges()
+    {
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
+        var compilation = CSharpCompilation.Create(
+            "IncrementalTest",
+            references: References,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var file = new TestAdditionalText(@"C:\proj\MainPage.xaml", SampleXaml);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            generators: [new XamlSourceMapGenerator().AsSourceGenerator()],
+            additionalTexts: [file],
+            parseOptions: parseOptions,
+            optionsProvider: new TestOptionsProvider(file, marked: true),
+            driverOptions: new GeneratorDriverOptions(
+                IncrementalGeneratorOutputKind.None,
+                trackIncrementalGeneratorSteps: true));
+
+        driver = driver.RunGenerators(compilation);
+        compilation = compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText("class Other {}", parseOptions));
+        driver = driver.RunGenerators(compilation);
+
+        var outputSteps = driver.GetRunResult().Results.Single().TrackedOutputSteps
+            .SelectMany(step => step.Value)
+            .SelectMany(step => step.Outputs)
+            .ToArray();
+        Assert.NotEmpty(outputSteps);
+        Assert.All(outputSteps, output => Assert.Equal(IncrementalStepRunReason.Cached, output.Reason));
+
+        compilation = compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(ProjectNamespacePrefixSource, parseOptions));
+        driver = driver.RunGenerators(compilation);
+        Assert.Contains("widgets", driver.GetRunResult().GeneratedTrees.Single().ToString());
     }
 
     [Fact]
@@ -125,16 +251,23 @@ public class XamlSourceMapGeneratorTests
 
     private static (Compilation Output, ImmutableArray<Diagnostic> Diagnostics, string? Generated) Run(
         (string Name, string Xaml, bool Marked) file)
-        => Run((file.Name, file.Xaml, file.Marked, @"C:\proj\" + file.Name));
+        => Run((file.Name, file.Xaml, file.Marked, @"C:\proj\" + file.Name), source: null);
 
     private static (Compilation Output, ImmutableArray<Diagnostic> Diagnostics, string? Generated) Run(
-        (string Name, string Xaml, bool Marked, string Path) file)
+        (string Name, string Xaml, bool Marked, string Path) file,
+        string? source = null,
+        MetadataReference? additionalReference = null)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
         var compilation = CSharpCompilation.Create(
             assemblyName: "GenTest_" + System.Guid.NewGuid().ToString("N"),
-            syntaxTrees: System.Array.Empty<SyntaxTree>(),
-            references: References,
+            syntaxTrees: source is null
+                ? System.Array.Empty<SyntaxTree>()
+                : ImmutableArray.Create<SyntaxTree>(
+                    CSharpSyntaxTree.ParseText(source, parseOptions)),
+            references: additionalReference is null
+                ? References
+                : References.Add(additionalReference),
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
 
         var additionalText = new TestAdditionalText(file.Path, file.Xaml);
@@ -153,6 +286,23 @@ public class XamlSourceMapGeneratorTests
             : runResult.GeneratedTrees[0].ToString();
 
         return (output, diagnostics, generated);
+    }
+
+    private static MetadataReference CreateNamespacePrefixReference()
+    {
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
+        var compilation = CSharpCompilation.Create(
+            assemblyName: "XmlnsPrefixReference_" + System.Guid.NewGuid().ToString("N"),
+            syntaxTrees: ImmutableArray.Create<SyntaxTree>(
+                CSharpSyntaxTree.ParseText(ProjectNamespacePrefixSource, parseOptions)),
+            references: References,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        using var ms = new System.IO.MemoryStream();
+        var emit = compilation.Emit(ms);
+        Assert.True(
+            emit.Success,
+            string.Join("\n", emit.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)));
+        return MetadataReference.CreateFromImage(ms.ToArray());
     }
 
     private static void LoadAndRunModuleInitializer(Compilation output)
@@ -183,6 +333,7 @@ public class XamlSourceMapGeneratorTests
 
         AddIfMissing(typeof(object));
         AddIfMissing(typeof(XamlSourceMap)); // Agent.Core — so generated provider compiles.
+        AddIfMissing(typeof(Microsoft.Maui.Controls.XmlnsPrefixAttribute));
         return refs.ToImmutableArray();
     }
 
