@@ -59,6 +59,24 @@ public class UIAgentOptions
     public IServiceProvider? Services { get; set; }
 
     /// <summary>
+    /// Gets or sets the clock used to timestamp live blocks, such as a
+    /// <see cref="ReasoningContentBlock"/>'s <see cref="ReasoningContentBlock.StartedAt"/> and
+    /// <see cref="ReasoningContentBlock.CompletedAt"/>. The default is <see cref="TimeProvider.System"/>.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
+    public TimeProvider TimeProvider
+    {
+        get => _timeProvider;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            _timeProvider = value;
+        }
+    }
+
+    private TimeProvider _timeProvider = TimeProvider.System;
+
+    /// <summary>
     /// Gets or sets the maximum number of request rounds of one turn, including its first request. The
     /// default is 40, the default of <see cref="FunctionInvokingChatClient.MaximumIterationsPerRequest"/>.
     /// </summary>

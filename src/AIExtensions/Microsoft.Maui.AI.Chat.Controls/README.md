@@ -161,6 +161,7 @@ grows. `ConversationItems` flattens the session into one row per block, plus a r
 | `BlockTypeMatch` | `{chat:Is chat:TextContentBlock}` | `BlockMatch.Is<TextContentBlock>()` | The type and derived types, including `[ToolBlock]` types |
 | `ToolMatch` | `{chat:Tool calculate}` | `BlockMatch.Tool("calculate")` | The tool's calls and UI actions (case-insensitive), not its approvals. In a wrapper's `When`, also the block inside an approval of the tool |
 | `RoleMatch` | `{chat:Role user}` | `BlockMatch.Role(ChatRole.User)` | Blocks with the role (case-insensitive) |
+| `AuthorMatch` | `{chat:Author researcher}` | `BlockMatch.Author("researcher")` | Blocks with the `AuthorName` (case-insensitive) |
 | `AllMatch` | `<chat:AllMatch>…</chat:AllMatch>` | `BlockMatch.All(…)` | Blocks that satisfy every condition |
 | `AnyMatch` | `<chat:AnyMatch>…</chat:AnyMatch>` | `BlockMatch.Any(…)` | Blocks that satisfy one condition |
 | `NotMatch` | `<chat:NotMatch>…</chat:NotMatch>` | `BlockMatch.Not(…)` | Blocks that don't satisfy the condition |

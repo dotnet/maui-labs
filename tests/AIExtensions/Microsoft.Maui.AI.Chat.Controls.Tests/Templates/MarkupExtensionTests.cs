@@ -42,6 +42,11 @@ public class MarkupExtensionTests
                             <Label Text="{Binding RawText}" />
                         </DataTemplate>
                     </chat:BlockTemplate>
+                    <chat:BlockTemplate When="{chat:Author researcher}">
+                        <DataTemplate x:DataType="chat:TextContentBlock">
+                            <Label Text="{Binding AuthorName}" />
+                        </DataTemplate>
+                    </chat:BlockTemplate>
                     <chat:BlockTemplate Template="{chat:ViewTemplate local:RawTextLabel}">
                         <chat:BlockTemplate.When>
                             <chat:AllMatch>
@@ -97,6 +102,15 @@ public class MarkupExtensionTests
     }
 
     [Fact]
+    public void Author_ProvidesAnAuthorMatch()
+    {
+        var match = Provide(new AuthorExtension { Name = "researcher" });
+
+        Assert.Equal("researcher", Assert.IsType<AuthorMatch>(match).Name);
+        Assert.True(match.Matches(Blocks.Text("hi", authorName: "Researcher")));
+    }
+
+    [Fact]
     public void ViewTemplate_ProvidesATemplateThatCreatesTheView()
     {
         var template = new ViewTemplateExtension { ViewType = typeof(RawTextLabel) }.ProvideValue(EmptyServices.Instance);
@@ -111,6 +125,7 @@ public class MarkupExtensionTests
         Assert.Throws<InvalidOperationException>(() => Provide(new IsExtension()));
         Assert.Throws<InvalidOperationException>(() => Provide(new ToolExtension()));
         Assert.Throws<InvalidOperationException>(() => Provide(new RoleExtension()));
+        Assert.Throws<InvalidOperationException>(() => Provide(new AuthorExtension()));
         Assert.Throws<InvalidOperationException>(() => new ViewTemplateExtension().ProvideValue(EmptyServices.Instance));
     }
 
@@ -120,6 +135,7 @@ public class MarkupExtensionTests
         Assert.Equal(nameof(IsExtension.Type), BlockMatchTests.ContentProperty<IsExtension>());
         Assert.Equal(nameof(ToolExtension.Name), BlockMatchTests.ContentProperty<ToolExtension>());
         Assert.Equal(nameof(RoleExtension.Role), BlockMatchTests.ContentProperty<RoleExtension>());
+        Assert.Equal(nameof(AuthorExtension.Name), BlockMatchTests.ContentProperty<AuthorExtension>());
         Assert.Equal(nameof(ViewTemplateExtension.ViewType), BlockMatchTests.ContentProperty<ViewTemplateExtension>());
     }
 
@@ -134,7 +150,7 @@ public class MarkupExtensionTests
     private static void AssertSelector(BlockTemplateSelector selector)
     {
         Assert.Equal(2, selector.Wrappers.Count);
-        Assert.Equal(6, selector.Templates.Count);
+        Assert.Equal(7, selector.Templates.Count);
 
         var search = Assert.IsType<ToolNameView>(Create(selector, Blocks.ToolCall("search")));
         Assert.Equal("search", search.Label.Text);
@@ -159,6 +175,9 @@ public class MarkupExtensionTests
 
         var user = Assert.IsType<Label>(Create(selector, Blocks.Text("Hi", ChatRole.User)));
         Assert.Equal("Hi", user.Text);
+
+        var researcher = Assert.IsType<Label>(Create(selector, Blocks.Text("Findings", authorName: "Researcher")));
+        Assert.Equal("Researcher", researcher.Text);
 
         var assistant = Assert.IsType<RawTextLabel>(Create(selector, Blocks.Text("Hello")));
         Assert.Equal("Hello", assistant.Text);

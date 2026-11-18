@@ -416,7 +416,8 @@ public class UIAgent : IDisposable
                     var requestPipeline = new BlockMappingPipeline(
                         _options,
                         _logger,
-                        calls);
+                        calls,
+                        isRestored: true);
                     await foreach (var block in requestPipeline.Process(
                         update,
                         cancellationToken))
@@ -427,7 +428,8 @@ public class UIAgent : IDisposable
                     responsePipeline = new BlockMappingPipeline(
                         _options,
                         _logger,
-                        calls);
+                        calls,
+                        isRestored: true);
                     inRoundRequest = false;
                     continue;
                 }
@@ -445,7 +447,8 @@ public class UIAgent : IDisposable
                     responsePipeline = new BlockMappingPipeline(
                         _options,
                         _logger,
-                        calls);
+                        calls,
+                        isRestored: true);
                     inRoundRequest = isContinuation;
                 }
 
@@ -459,7 +462,8 @@ public class UIAgent : IDisposable
                     responsePipeline = new BlockMappingPipeline(
                         _options,
                         _logger,
-                        calls);
+                        calls,
+                        isRestored: true);
                     inRoundRequest = true;
                 }
                 else if (!isContinuation && inRoundRequest)

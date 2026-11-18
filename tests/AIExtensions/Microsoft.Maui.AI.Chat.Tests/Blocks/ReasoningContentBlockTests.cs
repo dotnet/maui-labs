@@ -52,4 +52,25 @@ public class ReasoningContentBlockTests
         Assert.Throws<ArgumentNullException>(
             () => new ReasoningContentBlock().AppendText(null!));
     }
+
+    [Fact]
+    public void Duration_IsNullUntilStartedAndCompleted()
+    {
+        var start = new DateTimeOffset(2026, 11, 18, 12, 0, 0, TimeSpan.Zero);
+        var block = new ReasoningContentBlock();
+
+        Assert.Null(block.StartedAt);
+        Assert.Null(block.CompletedAt);
+        Assert.Null(block.Duration);
+
+        block.StartedAt = start;
+        Assert.Null(block.Duration);
+
+        block.CompletedAt = start.AddSeconds(4);
+        Assert.Equal(TimeSpan.FromSeconds(4), block.Duration);
+
+        // A clock skew where CompletedAt is before StartedAt clamps to zero.
+        block.CompletedAt = start.AddSeconds(-1);
+        Assert.Equal(TimeSpan.Zero, block.Duration);
+    }
 }

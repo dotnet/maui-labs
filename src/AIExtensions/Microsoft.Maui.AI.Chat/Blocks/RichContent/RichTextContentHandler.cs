@@ -33,9 +33,12 @@ internal sealed class RichTextContentHandler : ContentBlockHandler<RichContentBl
                 : BlockMappingResult<RichContentBlock>.Pass();
         }
 
-        if (state.Id.Length > 0
-            && context.Update.MessageId is { Length: > 0 } messageId
-            && !string.Equals(state.Id, messageId, StringComparison.Ordinal))
+        if ((state.Id.Length > 0
+                && context.Update.MessageId is { Length: > 0 } messageId
+                && !string.Equals(state.Id, messageId, StringComparison.Ordinal))
+            || (state.AuthorName is { Length: > 0 } blockAuthor
+                && context.Update.AuthorName is { Length: > 0 } author
+                && !string.Equals(blockAuthor, author, StringComparison.Ordinal)))
         {
             return BlockMappingResult<RichContentBlock>.Complete();
         }
@@ -57,6 +60,9 @@ internal sealed class RichTextContentHandler : ContentBlockHandler<RichContentBl
                 ?? Guid.NewGuid().ToString("N");
             return BlockMappingResult<RichContentBlock>.Emit(state, state);
         }
+
+        if (state.AuthorName is null && context.Update.AuthorName is { Length: > 0 } updateAuthor)
+            state.AuthorName = updateAuthor;
 
         return BlockMappingResult<RichContentBlock>.Update(state);
     }

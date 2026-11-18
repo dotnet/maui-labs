@@ -37,11 +37,14 @@ internal sealed class ReasoningHandler : ContentBlockHandler<ReasoningContentBlo
         }
 
         // The block's item already ended with its protected data, or the reasoning belongs to another
-        // message: the content starts a new block.
+        // message or author: the content starts a new block.
         if (state.ProtectedData is not null
             || (state.MessageId is { Length: > 0 } blockMessageId
                 && context.Update.MessageId is { Length: > 0 } messageId
-                && !string.Equals(blockMessageId, messageId, StringComparison.Ordinal)))
+                && !string.Equals(blockMessageId, messageId, StringComparison.Ordinal))
+            || (state.AuthorName is { Length: > 0 } blockAuthor
+                && context.Update.AuthorName is { Length: > 0 } author
+                && !string.Equals(blockAuthor, author, StringComparison.Ordinal)))
         {
             return BlockMappingResult<ReasoningContentBlock>.Complete();
         }
@@ -63,6 +66,11 @@ internal sealed class ReasoningHandler : ContentBlockHandler<ReasoningContentBlo
             state.Id = context.Update.MessageId ?? Guid.NewGuid().ToString("N");
             return BlockMappingResult<ReasoningContentBlock>.Emit(state, state);
         }
+
+        if (state.MessageId is null && context.Update.MessageId is { Length: > 0 } updateMessageId)
+            state.MessageId = updateMessageId;
+        if (state.AuthorName is null && context.Update.AuthorName is { Length: > 0 } updateAuthor)
+            state.AuthorName = updateAuthor;
 
         return BlockMappingResult<ReasoningContentBlock>.Update(state);
     }

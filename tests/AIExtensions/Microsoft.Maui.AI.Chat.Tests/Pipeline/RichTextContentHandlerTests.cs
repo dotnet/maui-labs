@@ -121,6 +121,36 @@ public class RichTextContentHandlerTests
     }
 
     [Fact]
+    public async Task Process_SnapshotsWithDifferentAuthors_EmitSeparateBlocks()
+    {
+        var pipeline = new BlockMappingPipeline(new UIAgentOptions());
+
+        var first = Assert.IsAssignableFrom<RichContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                AuthorName = "Planner",
+                Contents = [new RichTextContent("First", [CreateParagraph("First")])],
+            })));
+        var second = Assert.IsAssignableFrom<RichContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                AuthorName = "Coder",
+                Contents = [new RichTextContent("Second", [CreateParagraph("Second")])],
+            })));
+
+        Assert.Equal("First", first.RawText);
+        Assert.Equal("Planner", first.AuthorName);
+        Assert.Equal(BlockLifecycleState.Inactive, first.LifecycleState);
+        Assert.Equal("Second", second.RawText);
+        Assert.Equal("Coder", second.AuthorName);
+        Assert.Equal(BlockLifecycleState.Active, second.LifecycleState);
+    }
+
+    [Fact]
     public async Task Process_SnapshotsForSameMessage_UpdateBlockAndNotify()
     {
         var pipeline = new BlockMappingPipeline(new UIAgentOptions());

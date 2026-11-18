@@ -25,15 +25,18 @@ internal class BlockMappingPipeline
     private readonly ILogger _logger;
     private readonly FunctionCallRegistry _calls;
     private readonly IReadOnlyDictionary<string, UIAgentOptions.UIActionRegistration> _uiActions;
+    private readonly TimeProvider? _timeProvider;
 
     internal BlockMappingPipeline(
         UIAgentOptions options,
         ILogger? logger = null,
-        FunctionCallRegistry? calls = null)
+        FunctionCallRegistry? calls = null,
+        bool isRestored = false)
     {
         _logger = logger ?? NullLogger.Instance;
         _calls = calls ?? new FunctionCallRegistry();
         _uiActions = options.UIActions;
+        _timeProvider = isRestored ? null : options.TimeProvider;
 
         // Registered UI actions claim their function calls first, so the action always runs. A handler
         // registered for an action's name shows the call inside the action instead.
@@ -106,7 +109,7 @@ internal class BlockMappingPipeline
                     break;
 
                 case HandleResult.ResultKind.Complete:
-                    active.Block.LifecycleState = BlockLifecycleState.Inactive;
+                    CompleteBlock(active.Block);
                     active.Block.InvokeNotifyChanged();
                     _activeStack.RemoveAt(i);
                     break;
@@ -145,6 +148,8 @@ internal class BlockMappingPipeline
                         emitBlock.Role = update.Role;
                         emitBlock.AuthorName = update.AuthorName;
                         emitBlock.CreatedAt = update.CreatedAt;
+                        if (emitBlock is ReasoningContentBlock reasoning && _timeProvider is { } timeProvider)
+                            reasoning.StartedAt = timeProvider.GetUtcNow();
                         var alreadyComplete = IsAlreadyComplete(emitBlock);
                         emitBlock.LifecycleState = alreadyComplete
                             ? BlockLifecycleState.Inactive
@@ -201,12 +206,23 @@ internal class BlockMappingPipeline
 
         foreach (var active in _activeStack)
         {
-            active.Block.LifecycleState = BlockLifecycleState.Inactive;
+            CompleteBlock(active.Block);
             active.Block.InvokeNotifyChanged();
         }
         _activeStack.Clear();
 
         return Array.Empty<ContentBlock>();
+    }
+
+    private void CompleteBlock(ContentBlock block)
+    {
+        if (block is ReasoningContentBlock reasoning)
+        {
+            reasoning.Complete(_timeProvider?.GetUtcNow());
+            return;
+        }
+
+        block.LifecycleState = BlockLifecycleState.Inactive;
     }
 
     /// <summary>

@@ -101,6 +101,44 @@ public class ReasoningHandlerTests
     }
 
     [Fact]
+    public async Task ReasoningFromADifferentAuthorWithoutAMessageId_StartsANewBlock()
+    {
+        var pipeline = CreatePipeline();
+        var first = Assert.IsType<ReasoningContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                AuthorName = "Planner",
+                Contents = [new TextReasoningContent("First ")],
+            })));
+        Assert.Empty(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                AuthorName = "Planner",
+                Contents = [new TextReasoningContent("thought")],
+            }));
+
+        var second = Assert.IsType<ReasoningContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                AuthorName = "Coder",
+                Contents = [new TextReasoningContent("Second thought")],
+            })));
+
+        Assert.Equal("First thought", first.Text);
+        Assert.Equal("Planner", first.AuthorName);
+        Assert.Equal(BlockLifecycleState.Inactive, first.LifecycleState);
+        Assert.Equal("Second thought", second.Text);
+        Assert.Equal("Coder", second.AuthorName);
+        Assert.Equal(BlockLifecycleState.Active, second.LifecycleState);
+    }
+
+    [Fact]
     public async Task ReasoningAfterProtectedData_StartsANewBlockAndTheDataStaysWithItsItem()
     {
         var pipeline = CreatePipeline();

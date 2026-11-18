@@ -72,6 +72,26 @@ public sealed class TurnErrorConverter : IValueConverter
         throw new NotSupportedException();
 }
 
+/// <summary>Describes a <see cref="ReasoningContentBlock"/>: whether it is still thinking or how long it took.</summary>
+public sealed class ReasoningHeaderConverter : IMultiValueConverter
+{
+    /// <inheritdoc />
+    public object Convert(object[]? values, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (values is [BlockLifecycleState.Active, ..])
+            return "THINKING\u2026";
+
+        if (values is [_, TimeSpan duration])
+            return $"THOUGHT FOR {Math.Max(1, (int)Math.Round(duration.TotalSeconds, MidpointRounding.AwayFromZero))}S";
+
+        return "THOUGHT";
+    }
+
+    /// <inheritdoc />
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 /// <summary>Converts the content of a <see cref="MediaContentBlock"/> to an image, when it is one.</summary>
 public sealed class MediaImageConverter : IValueConverter
 {

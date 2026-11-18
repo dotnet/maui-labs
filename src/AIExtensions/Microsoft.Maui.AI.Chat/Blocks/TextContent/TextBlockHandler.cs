@@ -30,10 +30,14 @@ internal sealed class TextBlockHandler : ContentBlockHandler<TextContentBlock>
                 : BlockMappingResult<TextContentBlock>.Pass();
         }
 
-        // Each message gets its own block, for example consecutive restored assistant messages.
-        if (state.MessageId is { Length: > 0 } blockMessageId
-            && context.Update.MessageId is { Length: > 0 } messageId
-            && !string.Equals(blockMessageId, messageId, StringComparison.Ordinal))
+        // Each message or author gets its own block, for example consecutive restored assistant messages
+        // or an agent handoff that omits MessageId.
+        if ((state.MessageId is { Length: > 0 } blockMessageId
+                && context.Update.MessageId is { Length: > 0 } messageId
+                && !string.Equals(blockMessageId, messageId, StringComparison.Ordinal))
+            || (state.AuthorName is { Length: > 0 } blockAuthor
+                && context.Update.AuthorName is { Length: > 0 } author
+                && !string.Equals(blockAuthor, author, StringComparison.Ordinal)))
         {
             return BlockMappingResult<TextContentBlock>.Complete();
         }
@@ -49,6 +53,11 @@ internal sealed class TextBlockHandler : ContentBlockHandler<TextContentBlock>
         }
         else
         {
+            if (state.MessageId is null && context.Update.MessageId is { Length: > 0 } updateMessageId)
+                state.MessageId = updateMessageId;
+            if (state.AuthorName is null && context.Update.AuthorName is { Length: > 0 } updateAuthor)
+                state.AuthorName = updateAuthor;
+
             return BlockMappingResult<TextContentBlock>.Update(state);
         }
     }

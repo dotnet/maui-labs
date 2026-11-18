@@ -62,6 +62,30 @@ public class BlockPropertyChangedTests
     }
 
     [Fact]
+    public void ReasoningContentBlock_RaisesStartedAtCompletedAtAndDurationWhenTheyChange()
+    {
+        var start = new DateTimeOffset(2026, 11, 18, 12, 0, 0, TimeSpan.Zero);
+        var end = start.AddSeconds(3);
+        var block = new ReasoningContentBlock { LifecycleState = BlockLifecycleState.Active };
+        var seen = new List<string>();
+        block.PropertyChanged += (_, e) => seen.Add($"{e.PropertyName}:{block.LifecycleState}:{block.Duration?.TotalSeconds}");
+
+        block.StartedAt = start;
+        block.StartedAt = start;
+        block.Complete(end);
+        block.Complete(end.AddSeconds(5));
+
+        Assert.Equal(
+            [
+                "StartedAt:Active:",
+                "LifecycleState:Inactive:3",
+                "CompletedAt:Inactive:3",
+                "Duration:Inactive:3",
+            ],
+            seen);
+    }
+
+    [Fact]
     public void FunctionInvocationContentBlock_RaisesTheCallAndResultWithWhatDependsOnThem()
     {
         var block = new FunctionInvocationContentBlock();

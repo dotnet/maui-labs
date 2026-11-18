@@ -340,11 +340,13 @@ These match upstream so that upstream fixes apply directly:
   block in a flat virtualized list still knows its turn. Upstream's `Id` setter is internal and blocks
   have no link to their turn.
 - **`TextContentBlock`** marks plain streamed text so a renderer can tell it from a provider's rich
-  text. A new block starts when the update's message id changes; upstream appends consecutive
+  text. A new block starts when the update's message id or author changes (`RichTextContentHandler`
+  splits on author change too); upstream appends consecutive
   messages' text to one block. Paragraphs are built only when `Content` is read, and finished
   paragraphs are kept, so a long reply is not re-split on every token as upstream does.
 - **Reasoning.** `ReasoningContentBlock` and its handler show reasoning and protected reasoning (with
-  cached text), one block per reasoning item: a new message id, or reasoning after the item's
+  cached text, plus live `StartedAt`, `CompletedAt` and `Duration` stamped from
+  `UIAgentOptions.TimeProvider`), one block per reasoning item: a new message id or author, or reasoning after the item's
   protected data (which providers send last), starts a new block, so separate reasoning summaries are
   not concatenated and each keeps its own protected data. Upstream has no reasoning blocks.
 - **Media.** One `MediaContentBlock` per item, each with its own id, as in #68672, but the block is

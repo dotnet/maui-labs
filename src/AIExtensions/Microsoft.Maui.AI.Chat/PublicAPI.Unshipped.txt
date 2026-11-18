@@ -202,10 +202,13 @@ Microsoft.Maui.AI.Chat.ParagraphNode
 Microsoft.Maui.AI.Chat.ParagraphNode.ParagraphNode() -> void
 Microsoft.Maui.AI.Chat.ReasoningContentBlock
 Microsoft.Maui.AI.Chat.ReasoningContentBlock.AppendText(string! text) -> void
+Microsoft.Maui.AI.Chat.ReasoningContentBlock.CompletedAt.get -> System.DateTimeOffset?
+Microsoft.Maui.AI.Chat.ReasoningContentBlock.Duration.get -> System.TimeSpan?
 Microsoft.Maui.AI.Chat.ReasoningContentBlock.IsEncrypted.get -> bool
 Microsoft.Maui.AI.Chat.ReasoningContentBlock.ProtectedData.get -> string?
 Microsoft.Maui.AI.Chat.ReasoningContentBlock.ProtectedData.set -> void
 Microsoft.Maui.AI.Chat.ReasoningContentBlock.ReasoningContentBlock() -> void
+Microsoft.Maui.AI.Chat.ReasoningContentBlock.StartedAt.get -> System.DateTimeOffset?
 Microsoft.Maui.AI.Chat.ReasoningContentBlock.Text.get -> string!
 Microsoft.Maui.AI.Chat.ReferenceKind
 Microsoft.Maui.AI.Chat.ReferenceKind.Collapsed = 1 -> Microsoft.Maui.AI.Chat.ReferenceKind
@@ -312,6 +315,8 @@ Microsoft.Maui.AI.Chat.UIAgentOptions.StateMapper.get -> System.Action<Microsoft
 Microsoft.Maui.AI.Chat.UIAgentOptions.StateMapper.set -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions.Thread.get -> Microsoft.Maui.AI.Chat.IConversationThread?
 Microsoft.Maui.AI.Chat.UIAgentOptions.Thread.set -> void
+Microsoft.Maui.AI.Chat.UIAgentOptions.TimeProvider.get -> System.TimeProvider!
+Microsoft.Maui.AI.Chat.UIAgentOptions.TimeProvider.set -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions.UIAgentOptions() -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions.RegisterUIAction(Microsoft.Extensions.AI.AIFunction! function, Microsoft.Maui.AI.Chat.UIActionInvocationMode mode) -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions<TState>

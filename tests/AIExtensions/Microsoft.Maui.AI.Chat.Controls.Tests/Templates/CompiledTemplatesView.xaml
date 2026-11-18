@@ -36,6 +36,11 @@
                     <Label Text="{Binding RawText}" />
                 </DataTemplate>
             </chat:BlockTemplate>
+            <chat:BlockTemplate When="{chat:Author researcher}">
+                <DataTemplate x:DataType="chat:TextContentBlock">
+                    <Label Text="{Binding AuthorName}" />
+                </DataTemplate>
+            </chat:BlockTemplate>
             <chat:BlockTemplate Template="{chat:ViewTemplate local:RawTextLabel}">
                 <chat:BlockTemplate.When>
                     <chat:AllMatch>

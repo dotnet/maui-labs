@@ -182,6 +182,74 @@ public class BlockMappingPipelineTests
         Assert.Equal("msg-2", second.Id);
     }
 
+    [Fact]
+    public async Task Process_TextFromANewAuthorWithoutAMessageId_StartsANewBlock()
+    {
+        var pipeline = CreatePipelineWithTextHandler();
+        var first = Assert.IsType<TextContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                AuthorName = "Planner",
+                Contents = [new TextContent("Plan: ")],
+            })));
+        Assert.Empty(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                AuthorName = "Planner",
+                Contents = [new TextContent("step 1")],
+            }));
+
+        var second = Assert.IsType<TextContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                AuthorName = "Coder",
+                Contents = [new TextContent("Done.")],
+            })));
+
+        Assert.Equal("Plan: step 1", first.RawText);
+        Assert.Equal("Planner", first.AuthorName);
+        Assert.Equal(BlockLifecycleState.Inactive, first.LifecycleState);
+        Assert.Equal("Done.", second.RawText);
+        Assert.Equal("Coder", second.AuthorName);
+        Assert.Equal(BlockLifecycleState.Active, second.LifecycleState);
+    }
+
+    [Theory]
+    [InlineData(null, "Planner")]
+    [InlineData("Planner", null)]
+    public async Task Process_TextWhereOnlyOneChunkNamesTheAuthor_ContinuesTheActiveBlock(
+        string? firstAuthor,
+        string? secondAuthor)
+    {
+        var pipeline = CreatePipelineWithTextHandler();
+        var block = Assert.IsType<TextContentBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                AuthorName = firstAuthor,
+                Contents = [new TextContent("Hello")],
+            })));
+
+        Assert.Empty(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                AuthorName = secondAuthor,
+                Contents = [new TextContent(" world")],
+            }));
+
+        Assert.Equal("Hello world", block.RawText);
+        Assert.Equal("Planner", block.AuthorName);
+    }
+
     [Theory]
     [InlineData(null, "msg-1")]
     [InlineData("msg-1", null)]

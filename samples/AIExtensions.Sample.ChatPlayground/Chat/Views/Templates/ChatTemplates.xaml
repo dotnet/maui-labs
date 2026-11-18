@@ -18,6 +18,7 @@
     <local:ToolArgumentsConverter x:Key="ToolArguments" />
     <local:ToolResultConverter x:Key="ToolResult" />
     <local:ApprovalStatusConverter x:Key="ApprovalStatus" />
+    <local:ReasoningHeaderConverter x:Key="ReasoningHeader" />
     <local:MediaImageConverter x:Key="MediaImage" />
     <local:HasValueConverter x:Key="HasValue" />
     <local:BoldTextConverter x:Key="BoldText" />
@@ -149,7 +150,14 @@
         <chat:BlockTemplate When="{chat:Is chat:ReasoningContentBlock}">
             <DataTemplate x:DataType="chat:ReasoningContentBlock">
                 <VerticalStackLayout Spacing="2" Margin="0,4" AutomationId="Reasoning">
-                    <Label Text="THINKING" Style="{StaticResource CardCaption}" />
+                    <Label Style="{StaticResource CardCaption}" AutomationId="ReasoningHeader">
+                        <Label.Text>
+                            <MultiBinding Converter="{StaticResource ReasoningHeader}">
+                                <Binding Path="LifecycleState" />
+                                <Binding Path="Duration" />
+                            </MultiBinding>
+                        </Label.Text>
+                    </Label>
                     <Label FormattedText="{Binding Text, Converter={StaticResource BoldText}}" Style="{StaticResource CardDetail}" />
                 </VerticalStackLayout>
             </DataTemplate>

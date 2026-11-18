@@ -76,6 +76,28 @@ public class BlockMatchTests
         Assert.False(new RoleMatch().Matches(Blocks.Text("hi")));
 
     [Fact]
+    public void Author_MatchesTheBlockAuthorCaseInsensitively()
+    {
+        var match = BlockMatch.Author("Researcher");
+
+        Assert.True(match.Matches(Blocks.Text("findings", authorName: "researcher")));
+        Assert.True(new AuthorMatch { Name = "RESEARCHER" }.Matches(Blocks.Text("findings", authorName: "Researcher")));
+        Assert.False(match.Matches(Blocks.Text("findings", authorName: "Coder")));
+        Assert.False(match.Matches(Blocks.Text("findings")));
+    }
+
+    [Fact]
+    public void AuthorMatch_WithoutAName_MatchesNoBlock() =>
+        Assert.False(new AuthorMatch().Matches(Blocks.Text("hi", authorName: "researcher")));
+
+    [Fact]
+    public void Author_WithoutAName_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(() => BlockMatch.Author(null!));
+        Assert.Throws<ArgumentException>(() => BlockMatch.Author(string.Empty));
+    }
+
+    [Fact]
     public void All_MatchesWhenEveryConditionMatches()
     {
         var match = BlockMatch.All(BlockMatch.Is<FunctionInvocationContentBlock>(), BlockMatch.Tool("search"));
@@ -180,6 +202,7 @@ public class BlockMatchTests
             BlockMatch.Is<TextContentBlock>(),
             BlockMatch.Tool("search"),
             BlockMatch.Role(ChatRole.User),
+            BlockMatch.Author("researcher"),
             BlockMatch.All(),
             BlockMatch.Any(),
             BlockMatch.Not(BlockMatch.Tool("search")),

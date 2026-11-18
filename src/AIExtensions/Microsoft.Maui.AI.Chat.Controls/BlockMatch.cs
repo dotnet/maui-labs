@@ -6,13 +6,14 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// <remarks>
 /// <para>
 /// Each derived type tests one thing: <see cref="BlockTypeMatch"/> the block's type, <see cref="ToolMatch"/> the tool
-/// of a call, approval, or UI action, and <see cref="RoleMatch"/> the role. <see cref="AllMatch"/>,
-/// <see cref="AnyMatch"/>, and <see cref="NotMatch"/> combine them. Derive from <see cref="BlockMatch"/> for any other
-/// condition.
+/// of a call, approval, or UI action, <see cref="RoleMatch"/> the role, and <see cref="AuthorMatch"/> the author.
+/// <see cref="AllMatch"/>, <see cref="AnyMatch"/>, and <see cref="NotMatch"/> combine them. Derive from
+/// <see cref="BlockMatch"/> for any other condition.
 /// </para>
 /// <para>
 /// In XAML, write the common cases with the markup extensions (<c>{chat:Is chat:TextContentBlock}</c>,
-/// <c>{chat:Tool calculate}</c>, <c>{chat:Role user}</c>) and compose the types as elements. In code, use the factory
+/// <c>{chat:Tool calculate}</c>, <c>{chat:Role user}</c>, <c>{chat:Author researcher}</c>) and compose the types as
+/// elements. In code, use the factory
 /// methods, such as <c>BlockMatch.All(BlockMatch.Is&lt;FunctionInvocationContentBlock&gt;(), BlockMatch.Tool("calculate"))</c>.
 /// </para>
 /// <para>
@@ -65,6 +66,15 @@ public abstract class BlockMatch
     /// <param name="role">The role.</param>
     /// <returns>A <see cref="RoleMatch"/>.</returns>
     public static BlockMatch Role(ChatRole role) => new RoleMatch { Role = role.Value };
+
+    /// <summary>Matches blocks by their <see cref="ContentBlock.AuthorName"/> (case-insensitive).</summary>
+    /// <param name="name">The author name.</param>
+    /// <returns>An <see cref="AuthorMatch"/>.</returns>
+    public static BlockMatch Author(string name)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        return new AuthorMatch { Name = name };
+    }
 
     /// <summary>Matches blocks that satisfy every one of <paramref name="matches"/>.</summary>
     /// <param name="matches">The conditions.</param>

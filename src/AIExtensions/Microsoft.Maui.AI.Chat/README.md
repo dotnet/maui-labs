@@ -107,7 +107,7 @@ and receives the action's result, and the action still runs. The block must deri
 - Extensible `ActivityContentBlock`/`ActivityHandler<TBlock>` support for provider activity
   snapshots and deltas (handlers are opt-in).
 - Reasoning and protected-reasoning blocks, one per reasoning item (for example each reasoning
-  summary).
+  summary), with live `StartedAt`, `CompletedAt` and `Duration` timestamps (`UIAgentOptions.TimeProvider`).
 - One `MediaContentBlock` per media item (`DataContent` or `UriContent`), including hosted
   image-generation outputs; streamed partial images update their block in place.
 - Custom streaming handlers and many-to-one aggregate blocks.

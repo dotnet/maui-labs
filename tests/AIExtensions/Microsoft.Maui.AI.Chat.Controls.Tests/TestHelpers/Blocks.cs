@@ -3,9 +3,9 @@ namespace Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
 /// <summary>Builds engine blocks directly, for view and template tests that need no session.</summary>
 internal static class Blocks
 {
-    public static TextContentBlock Text(string text, ChatRole? role = null)
+    public static TextContentBlock Text(string text, ChatRole? role = null, string? authorName = null)
     {
-        var block = new TextContentBlock { Role = role ?? ChatRole.Assistant };
+        var block = new TextContentBlock { Role = role ?? ChatRole.Assistant, AuthorName = authorName };
         block.AppendText(text);
         return block;
     }

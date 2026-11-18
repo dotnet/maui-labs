@@ -50,6 +50,25 @@ public sealed class ChatConvertersTests
     }
 
     [Fact]
+    public void ReasoningHeader_ShowsThinkingWhileActiveAndDurationOnceComplete()
+    {
+        var converter = new ReasoningHeaderConverter();
+
+        Assert.Equal(
+            "THINKING\u2026",
+            converter.Convert([BlockLifecycleState.Active, null!], typeof(string), null, CultureInfo.InvariantCulture));
+        Assert.Equal(
+            "THOUGHT FOR 1S",
+            converter.Convert([BlockLifecycleState.Inactive, TimeSpan.FromMilliseconds(200)], typeof(string), null, CultureInfo.InvariantCulture));
+        Assert.Equal(
+            "THOUGHT FOR 4S",
+            converter.Convert([BlockLifecycleState.Inactive, TimeSpan.FromSeconds(3.6)], typeof(string), null, CultureInfo.InvariantCulture));
+        Assert.Equal(
+            "THOUGHT",
+            converter.Convert([BlockLifecycleState.Inactive, null!], typeof(string), null, CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
     public void TurnError_SaysWhyTheTurnFailedOnOneLine()
     {
         var converter = new TurnErrorConverter();
