@@ -598,6 +598,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Use a file-based .NET SDK
+        shell: pwsh
+        run: '"DOTNET_INSTALL_DIR=$(Join-Path $env:RUNNER_TEMP ''maui-labs-dotnet'')" >> $env:GITHUB_ENV'
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
@@ -698,6 +702,10 @@ jobs:
       DEVFLOW_TEST_FRAMEWORK: maui
     steps:
       - uses: actions/checkout@v6
+
+      - name: Use a file-based .NET SDK
+        shell: pwsh
+        run: '"DOTNET_INSTALL_DIR=$(Join-Path $env:RUNNER_TEMP ''maui-labs-dotnet'')" >> $env:GITHUB_ENV'
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5

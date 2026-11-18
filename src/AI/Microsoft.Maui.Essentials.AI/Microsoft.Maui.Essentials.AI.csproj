@@ -70,6 +70,7 @@
       CreateAndroidLibrary="false"
       Condition="'$(EssentialsAIAndroidNativeArtifactsPath)' == ''" />
     <TransformFile Include="Platform\Android\Transforms\Metadata.xml" />
+    <TransformFile Include="Platform\Android\Transforms\Metadata.Net11.xml" Condition="$(TargetFramework.StartsWith('net11.0'))" />
   </ItemGroup>
   <ItemGroup Condition="$(TargetFramework.Contains('-android')) and '$(EssentialsAIAndroidNativeArtifactsPath)' != ''">
     <AndroidLibrary Include="$(EssentialsAIAndroidNativeArtifactsPath)/aar/EssentialsAI-release.aar" />
