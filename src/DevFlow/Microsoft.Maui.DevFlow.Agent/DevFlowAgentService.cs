@@ -851,6 +851,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                 taskRequest.EarliestBeginDate = null;
 
                 NSError? error;
+#if NET11_0_OR_GREATER
                 if (OperatingSystem.IsIOSVersionAtLeast(27) ||
                     OperatingSystem.IsMacCatalystVersionAtLeast(27))
                 {
@@ -862,6 +863,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                     error = await completion.Task;
                 }
                 else
+#endif
                 {
                     BGTaskScheduler.Shared.Submit(taskRequest, out error);
                 }

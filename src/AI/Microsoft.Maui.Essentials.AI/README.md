@@ -9,7 +9,7 @@ No cloud service is used.
 
 ## Requirements and platform support
 
-Requires .NET 11 and matching MAUI workloads.
+Supports .NET 10 and .NET 11 with matching MAUI workloads.
 
 | Platform | Chat (`IChatClient`) | Image input | Embeddings (`IEmbeddingGenerator`) |
 |----------|---------------------|-------------|-----------------------------------|

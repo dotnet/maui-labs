@@ -82,9 +82,9 @@ for MSIX, capability, runtime, and physical-device validation requirements.
 
 ### Full product
 
-The library always targets `net11.0` and Android. Apple targets are added on
+The library always targets `net10.0`/`net11.0` and Android. Apple targets are added on
 non-Linux hosts, using either the default reference packs or the OS 27 packs
-when `UseXcode27Preview=true`. Windows is appended only on Windows hosts.
+(net11 only) when `UseXcode27Preview=true`. Windows is appended only on Windows hosts.
 The Chat Playground and device tests use the same platform conditions, without
 the portable `net11.0` target or native macOS app target.
 
