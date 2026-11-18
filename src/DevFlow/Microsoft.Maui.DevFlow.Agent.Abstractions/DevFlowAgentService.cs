@@ -333,7 +333,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         capabilities["ui.pointerStream"] = BuildPointerStreamCapability();
         capabilities["ui.screenshot"] = Capability(1, IsScreenshotSupported,
             ["element", "fullscreen", "selector"], reason);
-        capabilities["ui.events"] = Capability(1, true, ["stream", "subscribe"], null);
+        capabilities["ui.events"] = Capability(1, true, ["stream", "subscribe", "action-lifecycle"], null);
         capabilities["ui.menus"] = Capability(1, IsMenusSupported, ["list", "invoke"], reason);
 
         if (_options.EnableLayoutDiagnostics)
@@ -532,145 +532,16 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         var body = request.BodyAs<BatchRequest>();
         if (body?.Actions == null || body.Actions.Count == 0)
             return HttpResponse.Error("actions are required");
+        if (body.Actions.Count > MaxUiBatchActions)
+            return HttpResponse.Error(
+                $"A batch can contain at most {MaxUiBatchActions} actions.",
+                statusCode: 400,
+                reason: "batch-too-large");
 
-        var results = new List<object>(body.Actions.Count);
-        var allSucceeded = true;
-
-        foreach (var action in body.Actions)
-        {
-            var actionName = (action.Action ?? action.Type ?? string.Empty).Trim().ToLowerInvariant();
-            HttpResponse response;
-
-            switch (actionName)
-            {
-                case "tap":
-                    response = await HandleTap(new HttpRequest { Method = "POST", Body = AgentJson.Serialize(new TapRequest { ElementId = action.ElementId, X = action.X, Y = action.Y }) });
-                    break;
-                case "fill":
-                    response = await HandleFill(new HttpRequest
-                    {
-                        Method = "POST",
-                        Body = AgentJson.Serialize(new FillRequest { ElementId = action.ElementId, Text = action.Text ?? string.Empty })
-                    });
-                    break;
-                case "clear":
-                    response = await HandleClear(new HttpRequest { Method = "POST", Body = AgentJson.Serialize(new ActionRequest { ElementId = action.ElementId }) });
-                    break;
-                case "focus":
-                    response = await HandleFocus(new HttpRequest { Method = "POST", Body = AgentJson.Serialize(new ActionRequest { ElementId = action.ElementId }) });
-                    break;
-                case "navigate":
-                    response = await HandleNavigate(new HttpRequest
-                    {
-                        Method = "POST",
-                        Body = AgentJson.Serialize(new NavigateRequest { Route = action.Route ?? string.Empty })
-                    });
-                    break;
-                case "resize":
-                    response = await HandleResize(new HttpRequest { Method = "POST", Body = AgentJson.Serialize(new ResizeRequest(action.Width, action.Height)) });
-                    break;
-                case "scroll":
-                    response = await HandleScroll(new HttpRequest
-                    {
-                        Method = "POST",
-                        Body = AgentJson.Serialize(new ScrollRequest
-                        {
-                            ElementId = action.ElementId,
-                            DeltaX = action.DeltaX ?? 0,
-                            DeltaY = action.DeltaY ?? 0,
-                            ItemIndex = action.ItemIndex,
-                            GroupIndex = action.GroupIndex,
-                            ScrollToPosition = action.ScrollToPosition,
-                            Animated = action.Animated
-                        })
-                    });
-                    break;
-                case "back":
-                    response = await HandleBack(new HttpRequest { Method = "POST" });
-                    break;
-                case "key":
-                    response = await HandleKey(new HttpRequest
-                    {
-                        Method = "POST",
-                        Body = AgentJson.Serialize(new KeyActionRequest { ElementId = action.ElementId, Key = action.Key, Text = action.Text })
-                    });
-                    break;
-                case "gesture":
-                    response = await HandleGesture(new HttpRequest
-                    {
-                        Method = "POST",
-                        Body = AgentJson.Serialize(new GestureActionRequest
-                        {
-                            ElementId = action.ElementId,
-                            Type = action.Type ?? action.Action,
-                            Direction = action.Direction,
-                            Distance = action.Distance,
-                            DurationMs = action.DurationMs,
-                            Scale = action.Scale,
-                            Rotation = action.Rotation,
-                            DeltaX = action.DeltaX,
-                            DeltaY = action.DeltaY,
-                            OriginX = action.OriginX,
-                            OriginY = action.OriginY,
-                            X = action.X,
-                            Y = action.Y,
-                            ToX = action.ToX,
-                            ToY = action.ToY,
-                            ToElementId = action.ToElementId,
-                            HoldMs = action.HoldMs,
-                            Steps = action.Steps
-                        })
-                    });
-                    break;
-                case "set-property":
-                case "set_property":
-                    response = await HandleSetProperty(new HttpRequest
-                    {
-                        Method = "PUT",
-                        RouteParams = new Dictionary<string, string>
-                        {
-                            ["id"] = action.ElementId ?? string.Empty,
-                            ["name"] = action.Property ?? string.Empty
-                        },
-                        Body = AgentJson.Serialize(new SetPropertyRequest { Value = action.Value ?? string.Empty })
-                    });
-                    break;
-                case "invoke-action":
-                case "invoke_action":
-                    response = await HandleInvokeAction(new HttpRequest
-                    {
-                        Method = "POST",
-                        RouteParams = new Dictionary<string, string>
-                        {
-                            ["name"] = action.Name ?? string.Empty
-                        },
-                        Body = AgentJson.Serialize(new InvokeActionRequest { Args = action.Args })
-                    });
-                    break;
-                default:
-                    response = HttpResponse.Error($"Unsupported batch action '{actionName}'");
-                    break;
-            }
-
-            var succeeded = response.StatusCode < 400;
-            allSucceeded &= succeeded;
-            results.Add(new Dictionary<string, object?>
-            {
-                ["action"] = actionName,
-                ["success"] = succeeded,
-                ["statusCode"] = response.StatusCode,
-                ["response"] = response.Body
-            });
-
-            if (!succeeded && !body.ContinueOnError)
-                break;
-        }
-
-        return HttpResponse.Json(new Dictionary<string, object?>
-        {
-            ["success"] = allSucceeded,
-            ["results"] = results
-        });
+        return await ExecuteBatchActionsWithLifecycleAsync(
+            request,
+            body,
+            action => ExecuteBatchActionHandlerAsync(action));
     }
 
     /// <summary>Handles <c>POST /api/v1/ui/scroll</c>.</summary>

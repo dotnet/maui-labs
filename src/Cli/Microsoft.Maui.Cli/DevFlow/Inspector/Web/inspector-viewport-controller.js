@@ -161,6 +161,7 @@ export function createViewportController(options) {
     const rendered = renderedTransform();
     viewport.style.transform =
       `translate(${rendered.translateX}px, ${rendered.translateY}px) scale(${rendered.scale})`;
+    viewport.style.setProperty('--df-preview-inverse-scale', String(1 / rendered.scale));
     syncControls();
     onTransformChanged({
       bounds,

@@ -1305,6 +1305,16 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/ActionSuccess"
+        "400":
+          description: The action list is missing, empty, invalid, or exceeds the maximum batch size.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/common.json#/$defs/ProblemDetails"
+              example:
+                success: false
+                error: A batch can contain at most 1000 actions.
+                reason: batch-too-large
         "408":
           $ref: "#/components/responses/Timeout"
         "409":
