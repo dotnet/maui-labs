@@ -54,14 +54,42 @@ public class XamlSourceMapTests
             "</ContentPage>\n";
         var namespaceMappings = new Dictionary<string, string>
         {
+            ["widgets"] = "http://schemas.test/widgets"
+        };
+        var typeMappings = new Dictionary<string, string>
+        {
+            ["http://schemas.test/widgets\0CustomView"] = "Sample.Controls.CustomView"
+        };
+
+        var map = Assert.IsType<XamlSourceMap>(
+            XamlSourceMap.Parse(xaml, "TestPage.xaml", null, namespaceMappings, typeMappings));
+
+        Assert.True(map.TryGet("0", out var customControl));
+        Assert.Equal("Sample.Controls.CustomView", customControl.FullTypeName);
+    }
+
+    [Fact]
+    public void Parse_DoesNotInferTypeIdentity_WhenGeneratedMappingIsUnavailable()
+    {
+        const string xaml =
+            "<ContentPage x:Class=\"Sample.TestPage\">\n" +
+            "  <widgets:CustomView />\n" +
+            "</ContentPage>\n";
+        var namespaceMappings = new Dictionary<string, string>
+        {
             ["widgets"] = "clr-namespace:Sample.Controls;assembly=Sample"
         };
 
         var map = Assert.IsType<XamlSourceMap>(
-            XamlSourceMap.Parse(xaml, "TestPage.xaml", null, namespaceMappings));
+            XamlSourceMap.Parse(
+                xaml,
+                "TestPage.xaml",
+                null,
+                namespaceMappings,
+                new Dictionary<string, string>()));
 
         Assert.True(map.TryGet("0", out var customControl));
-        Assert.Equal("Sample.Controls.CustomView", customControl.FullTypeName);
+        Assert.Null(customControl.FullTypeName);
     }
 
     [Fact]

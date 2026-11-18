@@ -39,7 +39,15 @@ public class XamlSourceMapGeneratorTests
 
     private const string ProjectNamespacePrefixSource =
         "[assembly: Microsoft.Maui.Controls.XmlnsPrefixAttribute("
-        + "\"clr-namespace:TestControls;assembly=TestControls\", \"widgets\")]\n";
+        + "\"http://schemas.test/widgets\", \"widgets\")]\n"
+        + "[assembly: Microsoft.Maui.Controls.XmlnsDefinitionAttribute("
+        + "\"http://schemas.test/widgets\", \"TestControls\")]\n"
+        + "[assembly: Microsoft.Maui.Controls.XmlnsPrefixAttribute("
+        + "\"http://schemas.test/helpers\", \"helpers\")]\n"
+        + "[assembly: Microsoft.Maui.Controls.XmlnsDefinitionAttribute("
+        + "\"http://schemas.test/helpers\", \"TestHelpers\")]\n"
+        + "namespace TestControls { public class CustomView { } public class SharedView { } }\n"
+        + "namespace TestHelpers { public class SharedView { } }\n";
 
     private const string XamlWithProjectPrefix =
         "<ContentPage x:Class=\"TestApp.MainPage\">\n" +
@@ -47,6 +55,38 @@ public class XamlSourceMapGeneratorTests
         "        <Label Text=\"Hello\" />\n" +
         "    </widgets:CustomView>\n" +
         "</ContentPage>\n";
+
+    private const string XamlWithCollidingTypeNames =
+        "<ContentPage x:Class=\"TestApp.MainPage\">\n" +
+        "    <widgets:SharedView />\n" +
+        "    <helpers:SharedView />\n" +
+        "</ContentPage>\n";
+
+    private const string PrefixCollisionXaml =
+        "<ContentPage x:Class=\"TestApp.MainPage\">\n" +
+        "    <widgets:SharedView />\n" +
+        "</ContentPage>\n";
+
+    private const string AppPrefixCollisionSource =
+        "[assembly: Microsoft.Maui.Controls.XmlnsPrefixAttribute("
+        + "\"http://schemas.test/app\", \"widgets\")]\n"
+        + "[assembly: Microsoft.Maui.Controls.XmlnsDefinitionAttribute("
+        + "\"http://schemas.test/app\", \"AppControls\")]\n"
+        + "namespace AppControls { public class SharedView { } }\n";
+
+    private const string DirectPrefixCollisionSource =
+        "[assembly: Microsoft.Maui.Controls.XmlnsPrefixAttribute("
+        + "\"http://schemas.test/direct\", \"widgets\")]\n"
+        + "[assembly: Microsoft.Maui.Controls.XmlnsDefinitionAttribute("
+        + "\"http://schemas.test/direct\", \"DirectControls\")]\n"
+        + "namespace DirectControls { public class SharedView : TransitiveControls.BaseView { } }\n";
+
+    private const string TransitivePrefixCollisionSource =
+        "[assembly: Microsoft.Maui.Controls.XmlnsPrefixAttribute("
+        + "\"http://schemas.test/transitive\", \"widgets\")]\n"
+        + "[assembly: Microsoft.Maui.Controls.XmlnsDefinitionAttribute("
+        + "\"http://schemas.test/transitive\", \"TransitiveControls\")]\n"
+        + "namespace TransitiveControls { public class BaseView { } }\n";
 
     private const string ResourceDictionaryXaml =
         "<ResourceDictionary xmlns=\"http://schemas.microsoft.com/dotnet/2021/maui\"\n" +
@@ -110,7 +150,8 @@ public class XamlSourceMapGeneratorTests
         Assert.Empty(diagnostics);
         Assert.NotNull(generated);
         Assert.Contains("widgets", generated);
-        Assert.Contains("clr-namespace:TestControls;assembly=TestControls", generated);
+        Assert.Contains("http://schemas.test/widgets", generated);
+        Assert.Contains("TestControls.CustomView", generated);
 
         XamlSourceMapRegistry.Instance.Reset();
         try
@@ -132,6 +173,34 @@ public class XamlSourceMapGeneratorTests
     }
 
     [Fact]
+    public void GeneratedProvider_ResolvesSameNamedTypes_ByXmlNamespace()
+    {
+        var (output, diagnostics, generated) =
+            Run(
+                ("MainPage.xaml", XamlWithCollidingTypeNames, true, @"C:\proj\MainPage.xaml"),
+                ProjectNamespacePrefixSource);
+
+        Assert.Empty(diagnostics);
+        Assert.NotNull(generated);
+        XamlSourceMapRegistry.Instance.Reset();
+        try
+        {
+            LoadAndRunModuleInitializer(output);
+
+            var map = Assert.IsType<XamlSourceMap>(
+                XamlSourceMapRegistry.Instance.GetMap("TestApp.MainPage"));
+            Assert.True(map.TryGet("0", out var widget));
+            Assert.Equal("TestControls.SharedView", widget.FullTypeName);
+            Assert.True(map.TryGet("1", out var helper));
+            Assert.Equal("TestHelpers.SharedView", helper.FullTypeName);
+        }
+        finally
+        {
+            XamlSourceMapRegistry.Instance.Reset();
+        }
+    }
+
+    [Fact]
     public void Generator_UsesXmlnsPrefix_FromReferencedAssembly()
     {
         var (_, diagnostics, generated) =
@@ -141,7 +210,32 @@ public class XamlSourceMapGeneratorTests
 
         Assert.Empty(diagnostics);
         Assert.Contains("widgets", generated);
-        Assert.Contains("clr-namespace:TestControls;assembly=TestControls", generated);
+        Assert.Contains("http://schemas.test/widgets", generated);
+        Assert.Contains("TestControls.CustomView", generated);
+    }
+
+    [Fact]
+    public void Generator_PrefixCollision_UsesAppThenDirectReferences_AndIgnoresTransitive()
+    {
+        var transitiveReference = CreateNamespacePrefixReference(
+            "TransitivePrefixReference",
+            TransitivePrefixCollisionSource);
+        var directReference = CreateNamespacePrefixReference(
+            "DirectPrefixReference",
+            DirectPrefixCollisionSource,
+            transitiveReference);
+        var (output, diagnostics, generated) =
+            Run(
+                ("MainPage.xaml", PrefixCollisionXaml, true, @"C:\proj\MainPage.xaml"),
+                AppPrefixCollisionSource,
+                directReference);
+
+        Assert.Empty(diagnostics);
+        Assert.NotNull(generated);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("DirectControls.SharedView", generated);
+        Assert.DoesNotContain("AppControls.SharedView", generated);
+        Assert.DoesNotContain("TransitiveControls.SharedView", generated);
     }
 
     [Fact]
@@ -289,13 +383,21 @@ public class XamlSourceMapGeneratorTests
     }
 
     private static MetadataReference CreateNamespacePrefixReference()
+        => CreateNamespacePrefixReference(
+            "XmlnsPrefixReference_" + System.Guid.NewGuid().ToString("N"),
+            ProjectNamespacePrefixSource);
+
+    private static MetadataReference CreateNamespacePrefixReference(
+        string assemblyName,
+        string source,
+        params MetadataReference[] additionalReferences)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
         var compilation = CSharpCompilation.Create(
-            assemblyName: "XmlnsPrefixReference_" + System.Guid.NewGuid().ToString("N"),
+            assemblyName,
             syntaxTrees: ImmutableArray.Create<SyntaxTree>(
-                CSharpSyntaxTree.ParseText(ProjectNamespacePrefixSource, parseOptions)),
-            references: References,
+                CSharpSyntaxTree.ParseText(source, parseOptions)),
+            references: References.AddRange(additionalReferences),
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         using var ms = new System.IO.MemoryStream();
         var emit = compilation.Emit(ms);
@@ -334,6 +436,7 @@ public class XamlSourceMapGeneratorTests
         AddIfMissing(typeof(object));
         AddIfMissing(typeof(XamlSourceMap)); // Agent.Core — so generated provider compiles.
         AddIfMissing(typeof(Microsoft.Maui.Controls.XmlnsPrefixAttribute));
+        AddIfMissing(typeof(Microsoft.Maui.Controls.XmlnsDefinitionAttribute));
         return refs.ToImmutableArray();
     }
 

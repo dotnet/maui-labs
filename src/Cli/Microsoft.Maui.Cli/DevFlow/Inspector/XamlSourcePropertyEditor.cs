@@ -39,7 +39,7 @@ internal sealed class XamlSourcePropertyEditor
 {
     private const long MaxSourceFileBytes = 5 * 1024 * 1024;
     private const int MaxPropertyValueLength = 64 * 1024;
-    private const string MauiXmlNamespace = "http://schemas.microsoft.com/dotnet/2021/maui";
+    private const string MauiGlobalXmlNamespace = "http://schemas.microsoft.com/dotnet/maui/global";
     private const string XamlXmlNamespace = "http://schemas.microsoft.com/winfx/2009/xaml";
     private static readonly StringComparer PathComparer =
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
@@ -899,7 +899,7 @@ internal sealed class XamlSourcePropertyEditor
     {
         var nameTable = new NameTable();
         var namespaceManager = new ProjectWideNamespaceManager(nameTable);
-        namespaceManager.AddNamespace(string.Empty, MauiXmlNamespace);
+        namespaceManager.AddNamespace(string.Empty, MauiGlobalXmlNamespace);
         namespaceManager.AddNamespace("x", XamlXmlNamespace);
         var parserContext = new XmlParserContext(
             nameTable,
