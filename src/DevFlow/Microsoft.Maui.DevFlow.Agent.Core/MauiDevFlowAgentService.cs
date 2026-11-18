@@ -149,10 +149,16 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             ["gestures"] = SupportedGestures,
             ["reason"] = (string?)null
         };
-        capabilities["ui.screenshot"] = Capability(2, supported: true,
-            SupportsNativeElementScreenshots
-                ? ["element", "native-element", "fullscreen", "selector", "capture-epoch"]
-                : ["element", "fullscreen", "selector", "capture-epoch"],
+        var screenshotFeatures = SupportsNativeElementScreenshots
+            ? new List<string> { "element", "native-element", "fullscreen", "selector", "capture-epoch" }
+            : new List<string> { "element", "fullscreen", "selector", "capture-epoch" };
+        if (SupportsScreenshotResolutionHints)
+            screenshotFeatures.Add("resolution-hints");
+
+        capabilities["ui.screenshot"] = Capability(
+            SupportsScreenshotResolutionHints ? 3 : 2,
+            supported: true,
+            screenshotFeatures.ToArray(),
             reason: null);
     }
 
@@ -507,8 +513,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             ? HttpResponse.Json(new Dictionary<string, object?>
             {
                 ["revision"] = VisualTreeRevision.ComputeTree(tree),
-                ["diagnosticInputsRevision"] = FormattableString.Invariant(
-                    $"{capture.RegistryGeneration}:{capture.MutationGeneration}:{capture.ExternalMutationGeneration}"),
+                ["diagnosticInputsRevision"] = FormatDiagnosticInputsRevision(capture),
                 ["elements"] = tree
             })
             : HttpResponse.Json(tree);
@@ -1160,6 +1165,65 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         }
     }
 
+    protected override string? GetUiActionDiagnosticInputsRevision(
+        long? captureEpoch,
+        long? registryGeneration,
+        int? windowId)
+    {
+        if (captureEpoch is not > 0)
+            return null;
+
+        lock (_captureStateGate)
+        {
+            if (!_captureLeases.TryGetValue(captureEpoch.Value, out var capture)
+                || registryGeneration is not null
+                    && capture.RegistryGeneration != registryGeneration
+                || windowId is not null
+                    && capture.WindowId != windowId)
+            {
+                return null;
+            }
+
+            return FormatDiagnosticInputsRevision(capture);
+        }
+    }
+
+    protected override UiActionCaptureMetadata GetUiActionCaptureMetadata(
+        long? captureEpoch,
+        long? registryGeneration,
+        int? windowId)
+    {
+        if (captureEpoch is not > 0)
+            return base.GetUiActionCaptureMetadata(
+                captureEpoch,
+                registryGeneration,
+                windowId);
+
+        lock (_captureStateGate)
+        {
+            if (_captureLeases.TryGetValue(captureEpoch.Value, out var capture)
+                && (registryGeneration is null
+                    || capture.RegistryGeneration == registryGeneration)
+                && (windowId is null || capture.WindowId == windowId))
+            {
+                return new UiActionCaptureMetadata(
+                    capture.Epoch,
+                    capture.RegistryGeneration,
+                    capture.WindowId,
+                    FormatDiagnosticInputsRevision(capture));
+            }
+        }
+
+        return base.GetUiActionCaptureMetadata(
+            captureEpoch,
+            registryGeneration,
+            windowId);
+    }
+
+    private static string FormatDiagnosticInputsRevision(UiCaptureContext capture)
+        => FormattableString.Invariant(
+            $"{capture.RegistryGeneration}:{capture.MutationGeneration}:{capture.ExternalMutationGeneration}");
+
     private bool CommitUiCapture(UiCaptureContext capture)
     {
         lock (_captureStateGate)
@@ -1324,7 +1388,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             currentRegistryGeneration);
     }
 
-    private (HttpResponse? Error, UiCaptureContext Capture) ReserveUiCapture(CaptureBoundRequest request)
+    private (HttpResponse? Error, UiCaptureContext Capture) ReserveUiCapture(
+        CaptureBoundRequest request,
+        bool consume = true)
     {
         if (request.CaptureEpoch is null && request.RegistryGeneration is null)
             return (null, default);
@@ -1359,10 +1425,13 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 && (request.RegistryGeneration is null || request.RegistryGeneration == currentRegistryGeneration);
             if (isCurrent)
             {
-                _captureLeases.Remove(captureToValidate.Epoch);
-                _latestCapture = _captureLeases.Count > 0
-                    ? _captureLeases.Values.Last()
-                    : default;
+                if (consume)
+                {
+                    _captureLeases.Remove(captureToValidate.Epoch);
+                    _latestCapture = _captureLeases.Count > 0
+                        ? _captureLeases.Values.Last()
+                        : default;
+                }
                 return (null, captureToValidate);
             }
         }
@@ -1568,7 +1637,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return new ScreenshotCaptureOutcome
             {
                 Data = bytes,
-                Density = GetNativeElementDisplayDensity(elementInfo) ?? 1.0
+                Density = GetNativeElementDisplayDensity(elementInfo) ?? 1.0,
+                LogicalWidth = GetElementLogicalWidth(elementInfo),
+                LogicalHeight = GetElementLogicalHeight(elementInfo)
             };
         }
 
@@ -1587,7 +1658,13 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 Data = bytes,
                 Failure = bytes == null ? DescribeScreenshotFailure() : null,
                 Density = GetNativeElementDisplayDensity(nativeElementInfo)
-                    ?? GetWindowDisplayDensity(GetWindow(nativeElementInfo?.WindowId ?? windowIndex))
+                    ?? GetWindowDisplayDensity(GetWindow(nativeElementInfo?.WindowId ?? windowIndex)),
+                LogicalWidth = resolvedElement is VisualElement capturedVisualElement
+                    ? PositiveOrNull(capturedVisualElement.Width)
+                    : GetElementLogicalWidth(nativeElementInfo),
+                LogicalHeight = resolvedElement is VisualElement capturedVisualElementHeight
+                    ? PositiveOrNull(capturedVisualElementHeight.Height)
+                    : GetElementLogicalHeight(nativeElementInfo)
             };
         }) ?? new ScreenshotCaptureOutcome();
     }
@@ -1610,6 +1687,15 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
         return null;
     }
+
+    private static double? GetElementLogicalWidth(ElementInfo? elementInfo)
+        => PositiveOrNull((elementInfo?.Bounds ?? elementInfo?.WindowBounds)?.Width ?? 0);
+
+    private static double? GetElementLogicalHeight(ElementInfo? elementInfo)
+        => PositiveOrNull((elementInfo?.Bounds ?? elementInfo?.WindowBounds)?.Height ?? 0);
+
+    private static double? PositiveOrNull(double value)
+        => double.IsFinite(value) && value > 0 ? value : null;
 
     private static UiCaptureContext GetReservedCapture(HttpRequest request)
         => request.MutationState is UiCaptureContext capture ? capture : default;
@@ -1683,7 +1769,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         {
             lock (_captureStateGate)
             {
-                if (response is { StatusCode: >= 200 and < 300 })
+                if (response is { StatusCode: >= 200 and < 300 }
+                    && !IsPointerSessionHeartbeat(request))
                 {
                     _uiMutationGeneration++;
                     _captureLeases.Clear();
@@ -1692,6 +1779,28 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 _uiMutationInProgress = 0;
             }
             _uiMutationGate.Release();
+        }
+    }
+
+    private static bool IsPointerSessionHeartbeat(HttpRequest request)
+    {
+        if (!request.Path.Contains("/pointer-sessions/", StringComparison.Ordinal)
+            || !request.Path.EndsWith("/move", StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(request.Body))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(request.Body);
+            return document.RootElement.TryGetProperty("samples", out var samples)
+                && samples.ValueKind == JsonValueKind.Array
+                && samples.GetArrayLength() == 0;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 
@@ -2016,6 +2125,13 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
+        ScreenshotResolutionHints? resolutionHints = null;
+        if (SupportsScreenshotResolutionHints
+            && !TryParseScreenshotResolutionHints(request, out resolutionHints, out var resolutionError))
+        {
+            return resolutionError!;
+        }
+
         var requestedWindowIndex = ParseWindowIndex(request);
         var requestedEpoch = ParseLongQueryParameter(request, "captureEpoch");
         var requestedRegistryGeneration = ParseLongQueryParameter(request, "registryGeneration");
@@ -2052,7 +2168,36 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value));
         }
 
-        HttpResponse CompleteScreenshot(byte[] data)
+        int? maxWidth = null;
+        if (request.QueryParams.TryGetValue("maxWidth", out var mwStr) && int.TryParse(mwStr, out var mw) && mw > 0)
+            maxWidth = mw;
+
+        // Auto-scale to 1x by default on HiDPI displays. Override with scale=native to keep full resolution.
+        bool autoScale = true;
+        var scaleModeExplicit = request.QueryParams.TryGetValue("scale", out var scaleParam);
+        if (scaleModeExplicit)
+        {
+            autoScale = !string.Equals(scaleParam, "native", StringComparison.OrdinalIgnoreCase)
+                     && !string.Equals(scaleParam, "full", StringComparison.OrdinalIgnoreCase);
+        }
+
+        ScreenshotImageResult ProcessScreenshot(
+            byte[] data,
+            double density,
+            double? logicalWidth = null,
+            double? logicalHeight = null)
+            => ProcessScreenshotPng(
+                data,
+                maxWidth,
+                density,
+                autoScale,
+                scaleModeExplicit,
+                resolutionHints,
+                includeMetadata: SupportsScreenshotResolutionHints,
+                logicalWidth: logicalWidth,
+                logicalHeight: logicalHeight);
+
+        HttpResponse CompleteScreenshot(ScreenshotImageResult image)
         {
             if (requestedEpoch.HasValue)
             {
@@ -2071,7 +2216,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 return BuildCaptureChangedResponse(capture);
             }
 
-            var response = HttpResponse.Png(data);
+            var response = BuildScreenshotResponse(image);
             response.Headers["X-DevFlow-Capture-Epoch"] = capture.Epoch.ToString();
             response.Headers["X-DevFlow-Registry-Generation"] = capture.RegistryGeneration.ToString();
             if (capture.WindowId.HasValue)
@@ -2084,18 +2229,6 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 ? BuildCaptureChangedResponse(capture)
                 : failure;
 
-        int? maxWidth = null;
-        if (request.QueryParams.TryGetValue("maxWidth", out var mwStr) && int.TryParse(mwStr, out var mw) && mw > 0)
-            maxWidth = mw;
-
-        // Auto-scale to 1x by default on HiDPI displays. Override with scale=native to keep full resolution.
-        bool autoScale = true;
-        if (request.QueryParams.TryGetValue("scale", out var scaleParam))
-        {
-            autoScale = !scaleParam.Equals("native", StringComparison.OrdinalIgnoreCase)
-                     && !scaleParam.Equals("full", StringComparison.OrdinalIgnoreCase);
-        }
-
         // Check for fullscreen mode (captures all windows including dialogs)
         if (request.QueryParams.TryGetValue("fullscreen", out var fs) &&
             fs.Equals("true", StringComparison.OrdinalIgnoreCase))
@@ -2107,7 +2240,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 {
                     var density = await DispatchAsync(
                         () => GetWindowDisplayDensity(GetWindow(windowIndex)));
-                    return CompleteScreenshot(ResizePngIfNeeded(pngData, maxWidth, density, autoScale));
+                    return CompleteScreenshot(ProcessScreenshot(pngData, density));
                 }
                 return CompleteScreenshotFailure(
                     HttpResponse.Error("Full-screen capture not supported on this platform"));
@@ -2161,12 +2294,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             outcome?.Failure,
                             $"Capture returned null for element '{elementId}'"));
 
-                return CompleteScreenshot(
-                    ResizePngIfNeeded(
-                        outcome.Data,
-                        maxWidth,
-                        outcome.Density,
-                        autoScale));
+                return CompleteScreenshot(ProcessScreenshot(
+                    outcome.Data,
+                    outcome.Density,
+                    outcome.LogicalWidth,
+                    outcome.LogicalHeight));
             }
             catch (Exception ex)
             {
@@ -2224,12 +2356,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             outcome?.Failure,
                             $"Capture returned null for element '{matchId}'"));
 
-                return CompleteScreenshot(
-                    ResizePngIfNeeded(
-                        outcome.Data,
-                        maxWidth,
-                        outcome.Density,
-                        autoScale));
+                return CompleteScreenshot(ProcessScreenshot(
+                    outcome.Data,
+                    outcome.Density,
+                    outcome.LogicalWidth,
+                    outcome.LogicalHeight));
             }
             catch (FormatException ex)
             {
@@ -2275,13 +2406,23 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                     }
                 }
 
+                VisualElement? capturedElement;
                 byte[]? bytes;
                 if (topModal != null)
+                {
+                    capturedElement = topModal;
                     bytes = await CaptureScreenshotAsync(topModal);
+                }
                 else if (window.Page is VisualElement rootElement)
+                {
+                    capturedElement = rootElement;
                     bytes = await CaptureScreenshotAsync(rootElement);
+                }
                 else
+                {
+                    capturedElement = null;
                     bytes = null;
+                }
 
                 // Diagnose in the same UI-thread turn as the failed capture so the
                 // reported window/app state matches the state at capture time.
@@ -2289,7 +2430,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 {
                     Data = bytes,
                     Failure = bytes == null ? DescribeScreenshotFailure() : null,
-                    Density = GetWindowDisplayDensity(window)
+                    Density = GetWindowDisplayDensity(window),
+                    LogicalWidth = PositiveOrNull(capturedElement?.Width ?? 0),
+                    LogicalHeight = PositiveOrNull(capturedElement?.Height ?? 0)
                 };
             });
 
@@ -2299,12 +2442,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                         outcome?.Failure,
                         "Failed to capture screenshot"));
 
-            return CompleteScreenshot(
-                ResizePngIfNeeded(
-                    outcome.Data,
-                    maxWidth,
-                    outcome.Density,
-                    autoScale));
+            return CompleteScreenshot(ProcessScreenshot(
+                outcome.Data,
+                outcome.Density,
+                outcome.LogicalWidth,
+                outcome.LogicalHeight));
         }
         catch (Exception ex)
         {
@@ -2342,6 +2484,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
     protected virtual bool SupportsNativeElementScreenshots => false;
 
+    protected virtual bool SupportsScreenshotResolutionHints => true;
+
     /// <summary>
     /// Captures a full-screen screenshot including all windows (dialogs, popups, etc.).
     /// Override in platform-specific subclasses for native support.
@@ -2375,6 +2519,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         public byte[]? Data { get; init; }
         public ScreenshotCaptureFailure? Failure { get; init; }
         public double Density { get; init; } = 1.0;
+        public double? LogicalWidth { get; init; }
+        public double? LogicalHeight { get; init; }
     }
 
     protected override async Task<HttpResponse> HandleProperty(HttpRequest request)
@@ -3696,6 +3842,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         var body = request.BodyAs<BatchRequest>();
         if (body?.Actions == null || body.Actions.Count == 0)
             return HttpResponse.Error("actions are required");
+        if (body.Actions.Count > MaxUiBatchActions)
+            return HttpResponse.Error(
+                $"A batch can contain at most {MaxUiBatchActions} actions.",
+                statusCode: 400,
+                reason: "batch-too-large");
 
         var reservation = ReserveUiCapture(body);
         if (reservation.Error is not null)
@@ -3709,199 +3860,29 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 return identityError;
         }
 
-        var results = new List<object>(body.Actions.Count);
-        var allSucceeded = true;
-
         try
         {
-            foreach (var action in body.Actions)
-            {
-                var actionName = (action.Action ?? action.Type ?? string.Empty).Trim().ToLowerInvariant();
-                HttpResponse response;
-
-                var identityError = await ValidateCapturedElementIdentityAsync(reservation.Capture, action.ElementId)
-                    ?? await ValidateCapturedElementIdentityAsync(reservation.Capture, action.ToElementId);
-                if (identityError is not null)
+            return await ExecuteBatchActionsWithLifecycleAsync(
+                request,
+                body,
+                reservation.Capture.Epoch > 0
+                    ? new UiActionCaptureMetadata(
+                        reservation.Capture.Epoch,
+                        reservation.Capture.RegistryGeneration,
+                        reservation.Capture.WindowId,
+                        FormatDiagnosticInputsRevision(reservation.Capture))
+                    : default,
+                async action =>
                 {
-                    response = identityError;
-                }
-                else
-                {
+                    var identityError = await ValidateCapturedElementIdentityAsync(reservation.Capture, action.ElementId)
+                        ?? await ValidateCapturedElementIdentityAsync(reservation.Capture, action.ToElementId);
+                    if (identityError is not null)
+                        return identityError;
 
-                    switch (actionName)
-                    {
-                        case "tap":
-                            response = await HandleTap(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new TapRequest
-                                {
-                                    ElementId = action.ElementId,
-                                    X = action.X,
-                                    Y = action.Y
-                                })
-                            });
-                            break;
-                        case "fill":
-                            response = await HandleFill(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new FillRequest
-                                {
-                                    ElementId = action.ElementId,
-                                    Text = action.Text ?? string.Empty
-                                })
-                            });
-                            break;
-                        case "clear":
-                            response = await HandleClear(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new ActionRequest
-                                {
-                                    ElementId = action.ElementId
-                                })
-                            });
-                            break;
-                        case "focus":
-                            response = await HandleFocus(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new ActionRequest
-                                {
-                                    ElementId = action.ElementId
-                                })
-                            });
-                            break;
-                        case "navigate":
-                            response = await HandleNavigate(new HttpRequest
-                            {
-                                Method = "POST",
-                                Body = AgentJson.Serialize(new NavigateRequest { Route = action.Route ?? string.Empty })
-                            });
-                            break;
-                        case "resize":
-                            response = await HandleResize(new HttpRequest { Method = "POST", Body = AgentJson.Serialize(new ResizeRequest(action.Width, action.Height)) });
-                            break;
-                        case "scroll":
-                            response = await HandleScroll(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new ScrollRequest
-                                {
-                                    ElementId = action.ElementId,
-                                    DeltaX = action.DeltaX ?? 0,
-                                    DeltaY = action.DeltaY ?? 0,
-                                    ItemIndex = action.ItemIndex,
-                                    GroupIndex = action.GroupIndex,
-                                    ScrollToPosition = action.ScrollToPosition,
-                                    Animated = action.Animated
-                                })
-                            });
-                            break;
-                        case "back":
-                            response = await HandleBack(new HttpRequest { Method = "POST" });
-                            break;
-                        case "key":
-                            response = await HandleKey(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new KeyActionRequest
-                                {
-                                    ElementId = action.ElementId,
-                                    Key = action.Key,
-                                    Text = action.Text
-                                })
-                            });
-                            break;
-                        case "gesture":
-                            response = await HandleGesture(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new GestureActionRequest
-                                {
-                                    ElementId = action.ElementId,
-                                    Type = action.Type ?? action.Action,
-                                    Direction = action.Direction,
-                                    Distance = action.Distance,
-                                    DurationMs = action.DurationMs,
-                                    Scale = action.Scale,
-                                    Rotation = action.Rotation,
-                                    DeltaX = action.DeltaX,
-                                    DeltaY = action.DeltaY,
-                                    OriginX = action.OriginX,
-                                    OriginY = action.OriginY,
-                                    X = action.X,
-                                    Y = action.Y,
-                                    ToX = action.ToX,
-                                    ToY = action.ToY,
-                                    ToElementId = action.ToElementId,
-                                    HoldMs = action.HoldMs,
-                                    Steps = action.Steps
-                                })
-                            });
-                            break;
-                        case "set-property":
-                        case "set_property":
-                            response = await HandleSetProperty(new HttpRequest
-                            {
-                                Method = "PUT",
-                                MutationState = reservation.Capture,
-                                RouteParams = new Dictionary<string, string>
-                                {
-                                    ["id"] = action.ElementId ?? string.Empty,
-                                    ["name"] = action.Property ?? string.Empty
-                                },
-                                Body = AgentJson.Serialize(new SetPropertyRequest
-                                {
-                                    Value = action.Value ?? string.Empty
-                                })
-                            });
-                            break;
-                        case "invoke-action":
-                        case "invoke_action":
-                            response = await HandleInvokeAction(new HttpRequest
-                            {
-                                Method = "POST",
-                                RouteParams = new Dictionary<string, string>
-                                {
-                                    ["name"] = action.Name ?? string.Empty
-                                },
-                                Body = AgentJson.Serialize(new InvokeActionRequest { Args = action.Args })
-                            });
-                            break;
-                        default:
-                            response = HttpResponse.Error($"Unsupported batch action '{actionName}'");
-                            break;
-                    }
-                }
-
-                var succeeded = response.StatusCode < 400;
-                allSucceeded &= succeeded;
-                results.Add(new Dictionary<string, object?>
-                {
-                    ["action"] = actionName,
-                    ["success"] = succeeded,
-                    ["statusCode"] = response.StatusCode,
-                    ["response"] = response.Body
+                    return await ExecuteBatchActionHandlerAsync(
+                        action,
+                        reservation.Capture);
                 });
-
-                if (!succeeded && !body.ContinueOnError)
-                    break;
-            }
-
-            return HttpResponse.Json(new Dictionary<string, object?>
-            {
-                ["success"] = allSucceeded,
-                ["results"] = results
-            });
         }
         finally
         {

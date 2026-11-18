@@ -16,6 +16,86 @@ export interface DevFlowEvent {
   [key: string]: unknown;
 }
 
+export type UiActionSource = "inspector" | "cli" | "mcp" | "replay";
+
+export interface UiActionCorrelation {
+  actionId: string;
+  source: UiActionSource;
+  streamId?: string;
+  frameId?: string;
+  frameRevision?: number;
+  coordinateSpace?: string;
+}
+
+export interface UiActionEventData {
+  correlation: UiActionCorrelation;
+  kind: string;
+  elementId?: string;
+  toElementId?: string;
+  x?: number;
+  y?: number;
+  toX?: number;
+  toY?: number;
+  deltaX?: number;
+  deltaY?: number;
+  distance?: number;
+  originX?: number;
+  originY?: number;
+  direction?: string;
+  durationMs?: number;
+  holdMs?: number;
+  captureEpoch?: number;
+  registryGeneration?: number;
+  windowId?: number;
+  diagnosticInputsRevision?: string;
+}
+
+export interface UiActionStartedEvent extends DevFlowEvent {
+  type: "ui-action-started";
+  data: UiActionEventData;
+}
+
+export interface UiActionUpdatedEvent extends DevFlowEvent {
+  type: "ui-action-updated";
+  data: UiActionEventData;
+}
+
+export interface UiActionCompletedEvent extends DevFlowEvent {
+  type: "ui-action-completed";
+  data: UiActionEventData & {
+    success: boolean;
+    outcome: "completed" | "failed" | "cancelled";
+    reason?: string;
+    statusCode?: number;
+    elapsedMs?: number;
+  };
+}
+
+export function isUiActionStartedEvent(event: DevFlowEvent): event is UiActionStartedEvent {
+  return event.type === "ui-action-started" && hasUiActionData(event.data);
+}
+
+export function isUiActionCompletedEvent(event: DevFlowEvent): event is UiActionCompletedEvent {
+  return event.type === "ui-action-completed"
+    && hasUiActionData(event.data)
+    && typeof (event.data as unknown as Record<string, unknown>).success === "boolean";
+}
+
+export function isUiActionUpdatedEvent(event: DevFlowEvent): event is UiActionUpdatedEvent {
+  return event.type === "ui-action-updated" && hasUiActionData(event.data);
+}
+
+function hasUiActionData(value: unknown): value is UiActionEventData {
+  if (!value || typeof value !== "object") return false;
+  const data = value as Record<string, unknown>;
+  if (typeof data.kind !== "string") return false;
+  if (!data.correlation || typeof data.correlation !== "object") return false;
+  const correlation = data.correlation as Record<string, unknown>;
+  const source = correlation.source;
+  return typeof correlation.actionId === "string"
+    && (source === "inspector" || source === "cli" || source === "mcp" || source === "replay");
+}
+
 export interface EventStreamStatus {
   connected: boolean;
   port?: number;
