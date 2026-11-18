@@ -232,6 +232,11 @@ maui android emulator create --name MyEmulator
 maui android emulator start --name MyEmulator
 ```
 
+The CLI installs the latest Microsoft Build of OpenJDK 21 by default (or 17
+when requested). `maui android install` keeps an existing JDK.
+`maui android jdk install` downloads the current release and replaces its
+target directory. `JAVA_HOME` takes precedence when selecting an existing JDK.
+
 SDK package listing supports both the legacy `sdkmanager` table and the Android
 CLI table produced by Command-line Tools 23. JSON retains
 semicolon-separated package IDs, including dotted API levels such as
