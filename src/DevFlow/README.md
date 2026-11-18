@@ -24,6 +24,7 @@ The separate `ci-devflow.yml` workflow runs host, browser, JavaScript and AOT te
 | **Microsoft.Maui.DevFlow.Agent.Abstractions** | The protocol itself: HTTP server, routing, element DTOs, CSS selector engine, network capture, profiling, extensions. No MAUI dependency. |
 | **Microsoft.Maui.DevFlow.Agent.Core** | The MAUI UI backend: visual tree walker, `VisualElement` interactions, `BindableProperty` access, Essentials endpoints. |
 | **Microsoft.Maui.DevFlow.Agent.Gtk** | GTK/Linux agent for Microsoft.Maui.Platforms.Linux.Gtk4 apps. |
+| **Microsoft.Maui.DevFlow.Agent.Web** | WebAssembly agent for MAUI apps in the browser; the broker relays its API over the agent's WebSocket. |
 | **Microsoft.Maui.DevFlow.Agent.Native** | In-app agent for plain .NET apps with no MAUI reference — Android views, UIKit, and AppKit backends. |
 | **Microsoft.Maui.DevFlow.Agent.Native.Essentials** | Optional add-on that lights up the device, storage and sensor endpoints for native apps using MAUI Essentials. |
 | **Microsoft.Maui.DevFlow.Blazor** | Blazor WebView CDP bridge. Enables Chrome DevTools Protocol access for Blazor Hybrid content via Chobitsu. |
@@ -234,6 +235,38 @@ Optional bridge diagnostics use `GtkBlazorWebViewDebugService.LogCallback`;
 JavaScript console entries are available through the DevFlow log API when log
 capture is enabled.
 
+### Web (WebAssembly) apps
+
+MAUI has no browser backend of its own. Apps that run MAUI on WebAssembly through a community
+backend such as [Platform.Maui.Web](https://github.com/shinyorg/mauiplatforms) use
+`Microsoft.Maui.DevFlow.Agent.Web` instead of the standard agent package:
+
+```csharp
+using Microsoft.Maui.DevFlow.Agent.Web;
+
+// In CreateMauiApp:
+builder.UseMauiAppWeb<App>();
+#if DEBUG
+builder.AddMauiDevFlowAgent();
+#endif
+```
+
+A browser page cannot listen on a port, so the agent serves its API through the broker: it
+registers over the broker WebSocket as a tunneled agent, the broker listens on the assigned
+port, and each request is relayed over that WebSocket. CLI commands, MCP tools and the
+Inspector reach the agent on its port as usual, and `maui devflow list` shows it with the
+`Browser` platform. Start the broker before loading the page (any `maui devflow` command
+starts it; the agent also retries until one is running) and serve the page from a loopback
+address: the broker only accepts browser connections from loopback origins.
+
+The visual tree (with bounds read from the DOM), tap, fill, navigation, logs and
+screenshots work. Screenshots are rendered from the live DOM at CSS pixel size, because
+browsers offer no screenshot API without a permission prompt; text in fonts loaded through
+the `FontFace` API renders in a fallback font, and cross-origin images without CORS render
+blank. WebSocket streams (log and sensor streaming) are not relayed through the tunnel, and
+a tunneled agent is its own mutation lease authority, as when no broker is running. See
+`samples/DevFlow.Sample.Web`.
+
 ### 2b. Or, in a plain .NET app (no MAUI)
 
 The same agent, CLI and MCP tools work against apps that never reference MAUI. Reference
@@ -386,7 +419,7 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Dialog Handling** — detect and dismiss alerts/action sheets programmatically; `maui_native_dialog_detect` / `maui_native_dialog_respond` require an exact, user-confirmed choice and a one-time prompt token
 - **Batch Operations** — execute command sequences from stdin for scripting
 - **Agent Extensions** — expose app-specific diagnostic tools under `/api/v1/ext/{namespace}/...` with self-describing metadata for CLI and MCP discovery
-- **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK
+- **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK, Web (WebAssembly, through a community MAUI backend)
 
 Android driver commands and screen recording use `System.Diagnostics.Process` through the
 driver's internal `HostProcess` helper, not `Xamarin.Android.Tools.ProcessUtils`. Output and
@@ -826,7 +859,7 @@ for Linux-only releases.
 The simulator/emulator-driven suite is separate from the fast host tests and runs
 automatically in integration CI as described above. For local runs, set
 `DEVFLOW_TEST_PLATFORM` to `maccatalyst` (or `mac`/`catalyst`), `ios`, `android`,
-`windows`, `macos`, `gtk`, or `wpf`. It defaults to `maccatalyst` on macOS and
+`windows`, `macos`, `gtk`, `wpf`, or `web`. It defaults to `maccatalyst` on macOS and
 `windows` on Windows.
 
 ```bash
@@ -841,6 +874,17 @@ DEVFLOW_TEST_PLATFORM=android DEVFLOW_TEST_ANDROID_API=35 DEVFLOW_TEST_ANDROID_A
 
 # Windows (run on a Windows machine)
 DEVFLOW_TEST_PLATFORM=windows dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/
+```
+
+The web platform drives the smaller `samples/DevFlow.Sample.Web` in a headless Chromium
+browser (Chrome, Edge or Chromium; set `DEVFLOW_TEST_BROWSER` to choose one), so only its own
+tests apply; run them with `--filter Category=Web`. The fixture uses the running broker, or
+hosts one in-process when none is running. The sample uses the community Platform.Maui.Web
+backend from nuget.org; set `DEVFLOW_TEST_WEB_BACKEND_PROJECT` to a mauiplatforms checkout's
+`src/Platform.Maui.Web/Platform.Maui.Web.csproj` to build against that instead:
+
+```bash
+DEVFLOW_TEST_PLATFORM=web dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter Category=Web
 ```
 
 For local reliability, prefer running one platform suite at a time from a given repo worktree. Android fixture selection can be pinned with `DEVFLOW_TEST_ANDROID_AVD` and `DEVFLOW_TEST_ANDROID_SERIAL` when you want the harness to use a known emulator instance.

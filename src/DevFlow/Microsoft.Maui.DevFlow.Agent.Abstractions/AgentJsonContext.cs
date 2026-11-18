@@ -69,6 +69,8 @@ public partial class DevFlowAgentService
     [JsonSerializable(typeof(MutationRecordingStatus))]
     [JsonSerializable(typeof(MutationObservation))]
     [JsonSerializable(typeof(BrokerRegistration.RegistrationResponse))]
+    [JsonSerializable(typeof(BrokerTunnelRequest))]
+    [JsonSerializable(typeof(BrokerTunnelResponse))]
     [JsonSerializable(typeof(CaptureBoundRequest))]
     [JsonSerializable(typeof(ActionRequest))]
     [JsonSerializable(typeof(TapRequest))]

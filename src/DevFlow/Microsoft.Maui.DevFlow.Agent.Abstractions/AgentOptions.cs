@@ -15,6 +15,13 @@ public class AgentOptions
     public int Port { get; set; } = DefaultPort;
 
     /// <summary>
+    /// Whether to serve the agent API through the broker's WebSocket instead of listening on
+    /// <see cref="Port"/>. The broker then listens on the port and relays requests to the agent.
+    /// Default: true in the browser, where WebAssembly cannot open a listening socket; false elsewhere.
+    /// </summary>
+    public bool UseBrokerTunnel { get; set; } = OperatingSystem.IsBrowser();
+
+    /// <summary>
     /// Whether the agent is enabled. Default: true.
     /// </summary>
     public bool Enabled { get; set; } = true;

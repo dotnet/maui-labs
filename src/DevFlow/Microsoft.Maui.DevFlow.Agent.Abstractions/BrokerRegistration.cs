@@ -33,13 +33,17 @@ public class BrokerRegistration : IDisposable
     private int? _assignedPort;
     private ILogger? _logger;
     private static ILogger? _staticLogger;
-    private static readonly HttpClient _brokerHttp = new(new SocketsHttpHandler
+    // Lazy: SocketsHttpHandler is unsupported in the browser, and a tunneled agent never calls the
+    // broker's HTTP API (see HasBrokerAuthority).
+    private static readonly Lazy<HttpClient> _brokerHttp = new(() => new HttpClient(new SocketsHttpHandler
     {
         ConnectCallback = ConnectBrokerLoopbackAsync
     })
     {
         Timeout = TimeSpan.FromSeconds(2)
-    };
+    });
+    private const int MaxTunnelMessageBytes = 16 * 1_048_576;
+    private readonly SemaphoreSlim _sendGate = new(1, 1);
     private static readonly JsonSerializerOptions _leaseJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -70,10 +74,22 @@ public class BrokerRegistration : IDisposable
     public int? CurrentPort { get; set; }
 
     /// <summary>
+    /// Whether the broker reaches this agent through its WebSocket instead of a TCP port. The
+    /// broker then listens on the assigned port itself and relays each request to
+    /// <see cref="TunnelRequestHandler"/>. Set before registering.
+    /// </summary>
+    public bool UseTunnel { get; set; }
+
+    /// <summary>Serves requests relayed by the broker when <see cref="UseTunnel"/> is set.</summary>
+    internal Func<HttpRequest, CancellationToken, Task<HttpResponse>>? TunnelRequestHandler { get; set; }
+
+    /// <summary>
     /// Whether the agent is currently connected to the broker.
     /// </summary>
     public bool IsConnected => _ws?.State == WebSocketState.Open;
-    internal bool HasBrokerAuthority => !_disposed && _assignedPort.HasValue;
+    // A tunneled agent runs in a browser page, which may not call the broker's HTTP API from its
+    // own origin, so it stays its own lease authority, as it is when no broker is running.
+    internal bool HasBrokerAuthority => !_disposed && _assignedPort.HasValue && !UseTunnel;
     internal string AgentId => _agentId;
     internal int BrokerPort => _brokerPort;
     private static readonly string[] _brokerHttpHosts = ["127.0.0.1", "localhost"];
@@ -169,14 +185,15 @@ public class BrokerRegistration : IDisposable
 
     private async Task MonitorConnectionAsync(CancellationToken ct)
     {
-        var buffer = new byte[256];
         try
         {
-            while (_ws?.State == WebSocketState.Open && !ct.IsCancellationRequested)
+            while (_ws is { State: WebSocketState.Open } socket && !ct.IsCancellationRequested)
             {
-                var result = await _ws.ReceiveAsync(buffer, ct);
-                if (result.MessageType == WebSocketMessageType.Close)
+                var message = await ReceiveMessageAsync(socket, ct);
+                if (message is null)
                     break;
+                if (UseTunnel)
+                    _ = ServeTunnelRequestAsync(socket, message, ct);
             }
         }
         catch { }
@@ -187,6 +204,79 @@ public class BrokerRegistration : IDisposable
             var logger = _logger ?? _staticLogger;
             logger?.LogWarning("DevFlow agent lost broker connection — starting reconnection");
             StartReconnection();
+        }
+    }
+
+    /// <summary>Reads one whole message, or returns null when the broker closes the socket.</summary>
+    private static async Task<byte[]?> ReceiveMessageAsync(WebSocket socket, CancellationToken ct)
+    {
+        var buffer = new byte[16 * 1024];
+        using var message = new MemoryStream();
+        while (true)
+        {
+            var result = await socket.ReceiveAsync(buffer, ct);
+            if (result.MessageType == WebSocketMessageType.Close)
+                return null;
+            if (message.Length + result.Count > MaxTunnelMessageBytes)
+                throw new InvalidDataException("Broker message exceeds the tunnel size limit.");
+            message.Write(buffer, 0, result.Count);
+            if (result.EndOfMessage)
+                return message.ToArray();
+        }
+    }
+
+    private async Task ServeTunnelRequestAsync(WebSocket socket, byte[] message, CancellationToken ct)
+    {
+        BrokerTunnelRequest? frame;
+        try
+        {
+            frame = AgentJson.Deserialize<BrokerTunnelRequest>(Encoding.UTF8.GetString(message));
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+        if (frame is not { Type: BrokerTunnelRequest.FrameType } || string.IsNullOrEmpty(frame.Id))
+            return;
+
+        HttpResponse response;
+        var handler = TunnelRequestHandler;
+        try
+        {
+            response = handler is null
+                ? HttpResponse.Error("The agent is not serving requests yet.", 503)
+                : await handler(
+                    AgentHttpServer.CreateRequest(frame.Method, frame.Target, frame.Headers ?? [], frame.Body),
+                    ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            response = HttpResponse.Error(ex.Message, 500);
+        }
+
+        var body = response.BodyBytes ?? (response.Body is null ? null : Encoding.UTF8.GetBytes(response.Body));
+        var reply = AgentJson.Serialize(new BrokerTunnelResponse
+        {
+            Id = frame.Id,
+            Status = response.StatusCode,
+            ContentType = response.ContentType,
+            Headers = response.Headers.Count == 0 ? null : new Dictionary<string, string>(response.Headers),
+            BodyBase64 = body is null ? null : Convert.ToBase64String(body)
+        });
+
+        // A WebSocket allows one send at a time, and responses finish in any order.
+        await _sendGate.WaitAsync(ct);
+        try
+        {
+            if (socket.State == WebSocketState.Open)
+                await socket.SendAsync(Encoding.UTF8.GetBytes(reply), WebSocketMessageType.Text, true, ct);
+        }
+        catch (WebSocketException)
+        {
+        }
+        finally
+        {
+            _sendGate.Release();
         }
     }
 
@@ -357,7 +447,7 @@ public class BrokerRegistration : IDisposable
             try
             {
                 using var content = new StringContent(json, Encoding.UTF8, "application/json");
-                var response = await _brokerHttp.PostAsync(
+                var response = await _brokerHttp.Value.PostAsync(
                     $"http://{host}:{_brokerPort}{path}",
                     content).ConfigureAwait(false);
                 if (index == _brokerHttpHosts.Length - 1 ||
@@ -448,7 +538,8 @@ public class BrokerRegistration : IDisposable
         ["version"] = typeof(BrokerRegistration).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
         ["sessionId"] = _sessionId,
-        ["processId"] = Environment.ProcessId
+        ["processId"] = Environment.ProcessId,
+        ["transport"] = UseTunnel ? "tunnel" : null
     });
 
     internal record RegistrationResponse

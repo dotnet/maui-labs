@@ -17,8 +17,9 @@ public class AgentHttpServer : IDisposable
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
+    private bool _tunnelStarted;
     private bool _disposed;
-    private readonly int _port;
+    private int _port;
     private readonly Dictionary<string, RouteHandler> _getRoutes = new();
     private readonly Dictionary<string, RouteHandler> _postRoutes = new();
     private readonly Dictionary<string, RouteHandler> _putRoutes = new();
@@ -26,8 +27,19 @@ public class AgentHttpServer : IDisposable
     private readonly Dictionary<string, Func<TcpClient, NetworkStream, HttpRequest, CancellationToken, Task>> _wsRoutes = new();
     private readonly SemaphoreSlim _mutationAdmissionGate = new(1, 1);
 
-    public int Port => _port;
-    public bool IsRunning => _listenTask != null && !_listenTask.IsCompleted;
+    public int Port
+    {
+        get => _port;
+        // A tunneled server never binds its port, so it can adopt the one the broker serves.
+        internal set => _port = UseBrokerTunnel ? value : throw new InvalidOperationException("A listening server cannot change its port.");
+    }
+    public bool IsRunning => _tunnelStarted || (_listenTask != null && !_listenTask.IsCompleted);
+
+    /// <summary>
+    /// Serve requests the broker relays over the agent's WebSocket (see
+    /// <see cref="HandleTunneledRequestAsync"/>) instead of listening on <see cref="Port"/>.
+    /// </summary>
+    public bool UseBrokerTunnel { get; set; }
     internal Func<HttpRequest, Task<MutationLeaseStatus>>? MutationLeaseValidator { get; set; }
     internal Func<HttpRequest, HttpResponse, Task>? MutationObserver { get; set; }
     /// <summary>
@@ -69,6 +81,12 @@ public class AgentHttpServer : IDisposable
         if (_disposed) throw new ObjectDisposedException(nameof(AgentHttpServer));
         if (IsRunning) return;
 
+        if (UseBrokerTunnel)
+        {
+            _tunnelStarted = true;
+            return;
+        }
+
         _cts = new CancellationTokenSource();
         _listener = new TcpListener(IPAddress.Loopback, _port);
         _listener.Start();
@@ -77,6 +95,7 @@ public class AgentHttpServer : IDisposable
 
     public async Task StopAsync()
     {
+        _tunnelStarted = false;
         _cts?.Cancel();
         _listener?.Stop();
         if (_listenTask != null)
@@ -223,6 +242,39 @@ public class AgentHttpServer : IDisposable
         catch (Exception ex) { Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] Request error: {ex.GetType().Name}: {ex.Message}"); }
     }
 
+    /// <summary>
+    /// Serves one request the broker relayed over the agent's WebSocket. Applies the same origin
+    /// check, routing, mutation lease and CORS handling as a request on the TCP listener.
+    /// </summary>
+    internal async Task<HttpResponse> HandleTunneledRequestAsync(HttpRequest request, CancellationToken ct)
+    {
+        if (!_tunnelStarted)
+            return HttpResponse.Error("The agent is not serving requests yet.", 503);
+
+        request.Headers.TryGetValue("Origin", out var origin);
+        if (!IsTrustedBrowserOrigin(origin))
+            return HttpResponse.Error("Browser origin is not allowed.", 403);
+
+        request.CancellationToken = ct;
+        HttpResponse response;
+        try
+        {
+            response = await RouteRequestAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (NotSupportedException ex) when (AgentJson.IsUnsupportedJson(ex))
+        {
+            response = HttpResponse.Error(ex.Message, 500, AgentJson.IsMissingMetadata(ex)
+                ? "json-metadata-missing" : "json-serialization-unsupported");
+        }
+
+        if (!string.IsNullOrWhiteSpace(origin))
+        {
+            response.Headers["Access-Control-Allow-Origin"] = origin;
+            response.Headers["Vary"] = "Origin";
+        }
+        return response;
+    }
+
     private static async Task MonitorClientDisconnectAsync(
         TcpClient client,
         CancellationTokenSource requestCts)
@@ -283,22 +335,6 @@ public class AgentHttpServer : IDisposable
         var method = requestLine[0];
         var fullPath = requestLine[1];
 
-        // Parse path and query string
-        var queryStart = fullPath.IndexOf('?');
-        var path = queryStart >= 0 ? fullPath[..queryStart] : fullPath;
-        var queryString = queryStart >= 0 ? fullPath[(queryStart + 1)..] : "";
-
-        var queryParams = new Dictionary<string, string>();
-        if (!string.IsNullOrEmpty(queryString))
-        {
-            foreach (var param in queryString.Split('&'))
-            {
-                var kv = param.Split('=', 2);
-                if (kv.Length == 2)
-                    queryParams[Uri.UnescapeDataString(kv[0])] = Uri.UnescapeDataString(kv[1]);
-            }
-        }
-
         // Parse headers
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (int i = 1; i < lines.Length; i++)
@@ -354,12 +390,39 @@ public class AgentHttpServer : IDisposable
             body = Encoding.UTF8.GetString(bodyBytes, 0, bodyRead);
         }
 
+        return CreateRequest(method, fullPath, headers, body);
+    }
+
+    /// <summary>
+    /// Builds a request from its method, target (path plus optional query string), headers and body.
+    /// </summary>
+    internal static HttpRequest CreateRequest(
+        string method,
+        string target,
+        Dictionary<string, string> headers,
+        string? body)
+    {
+        var queryStart = target.IndexOf('?');
+        var path = queryStart >= 0 ? target[..queryStart] : target;
+        var queryString = queryStart >= 0 ? target[(queryStart + 1)..] : "";
+
+        var queryParams = new Dictionary<string, string>();
+        if (!string.IsNullOrEmpty(queryString))
+        {
+            foreach (var param in queryString.Split('&'))
+            {
+                var kv = param.Split('=', 2);
+                if (kv.Length == 2)
+                    queryParams[Uri.UnescapeDataString(kv[0])] = Uri.UnescapeDataString(kv[1]);
+            }
+        }
+
         return new HttpRequest
         {
             Method = method,
             Path = path.TrimEnd('/'),
             QueryParams = queryParams,
-            Headers = headers,
+            Headers = new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase),
             Body = body
         };
     }
