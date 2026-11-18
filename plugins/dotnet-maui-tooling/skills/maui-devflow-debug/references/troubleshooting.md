@@ -134,8 +134,12 @@ If `maui devflow ui status` fails with connection refused:
 8. **macOS (AppKit)?** Ensure `AddMacOSEssentials()` is called and the app window appeared.
    See [references/macos.md](macos.md) for troubleshooting.
 9. **Linux/GTK?** No special network setup needed — runs directly on localhost. Check if the app started successfully.
-10. **Broker issues?** `maui devflow broker status` to check. `maui devflow broker stop` then
-    retry (CLI will auto-restart it).
+10. **Broker issues?** Check `maui devflow broker status --json`. If a restart is
+    needed, run `maui devflow broker stop --json`, then explicitly run
+    `maui devflow broker start --json`. Use
+    `maui devflow wait --project <csproj-path> --json` to wait for the intended
+    app to re-register before retrying the original agent command. Agent/UI
+    commands do not start a stopped broker.
 
 ## Android UI Thread Exceptions
 

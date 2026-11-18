@@ -88,8 +88,10 @@ for MAUI DevFlow product feedback. Do not run it automatically.
 
 ## Reading machine-readable output
 
-Always prefer the unified `maui` CLI surface for device prep and DevFlow
-operations. For programmatic consumption:
+Use DevFlow MCP tools first for supported operations when available; use the
+CLI as their fallback. For device prep and CLI-based DevFlow workflows, prefer
+the unified `maui` CLI over legacy standalone CLIs and raw platform tools.
+For programmatic CLI consumption:
 
 - Pass `--json` to any command an agent will parse. Most `maui android`, `maui
   apple`, and `maui device` failures use a structured envelope at the **top
