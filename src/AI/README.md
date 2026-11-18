@@ -85,9 +85,9 @@ for MSIX, capability, runtime, and physical-device validation requirements.
 
 ### Full product
 
-The library always targets `net10.0` and Android. The default .NET 10 Apple
-targets are added on non-Linux hosts; `UseNet11AppleTargets=true` also adds the
-.NET 11 OS 27.2 targets. Windows is appended only on Windows hosts.
+The library always targets `net10.0`/`net11.0` and Android. Apple targets are added on
+non-Linux hosts, using either the default reference packs or the OS 27.2 packs
+(net11 only) when `UseNet11AppleTargets=true`. Windows is appended only on Windows hosts.
 The Chat Playground and device tests use the same platform conditions, without
 the portable `net11.0` target or native macOS app target.
 

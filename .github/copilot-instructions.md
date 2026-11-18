@@ -4,7 +4,7 @@ These instructions guide GitHub Copilot and other AI code generation tools when 
 
 ## Platform-Specific Code
 
-DevFlow targets multiple platforms via multi-targeting. The pattern:
+DevFlow targets multiple platforms via multi-targeting. Shipping libraries target both .NET 10 and .NET 11 (`net10.0*;net11.0*`); `net10.0*` builds use MAUI 10 packages via `eng/Versions.props`. The pattern:
 
 - **`Microsoft.Maui.DevFlow.Agent.Abstractions`** targets `net11.0` — all platform-agnostic code lives here (HTTP server, routing, `DevFlowAgentService` base class). No MAUI dependency.
 - **`Microsoft.Maui.DevFlow.Agent.Core`** targets `net11.0` — MAUI UI backend (`MauiDevFlowAgentService`, `VisualTreeWalker`). Depends on `Agent.Abstractions`.

@@ -15,11 +15,20 @@
   <!-- Dependencies flowing via darc/maestro (match Version.Details.xml) -->
   <PropertyGroup Label="Dotnet MAUI">
     <MicrosoftMauiControlsVersion>11.0.10</MicrosoftMauiControlsVersion>
+    <MicrosoftMauiControlsNet10Version>10.0.41</MicrosoftMauiControlsNet10Version>
+    <MicrosoftAspNetCoreComponentsWebViewNet10Version>10.0.3</MicrosoftAspNetCoreComponentsWebViewNet10Version>
+  </PropertyGroup>
+  <!-- Libraries multi-target net10.0 and net11.0; net10 builds use the matching MAUI 10 packages. -->
+  <PropertyGroup Condition="$(TargetFramework.StartsWith('net10.0'))">
+    <MicrosoftMauiControlsVersion>$(MicrosoftMauiControlsNet10Version)</MicrosoftMauiControlsVersion>
+  </PropertyGroup>
+  <PropertyGroup Label="Dotnet MAUI derived">
     <!-- Keep DevFlow's compile-time MAUI assets aligned with the repository workload.
          Mixing MAUI major versions produces conflicting platform resources in consuming apps. -->
     <DevFlowMauiMinVersion>$(MicrosoftMauiControlsVersion)</DevFlowMauiMinVersion>
     <MicrosoftMauiEssentialsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiEssentialsVersion>
     <MicrosoftAspNetCoreComponentsWebViewVersion>11.0.0</MicrosoftAspNetCoreComponentsWebViewVersion>
+    <MicrosoftAspNetCoreComponentsWebViewVersion Condition="$(TargetFramework.StartsWith('net10.0'))">$(MicrosoftAspNetCoreComponentsWebViewNet10Version)</MicrosoftAspNetCoreComponentsWebViewVersion>
     <MicrosoftMauiControlsMapsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsMapsVersion>
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
     <!-- Community desktop backends consume the .NET 11 public extensibility
