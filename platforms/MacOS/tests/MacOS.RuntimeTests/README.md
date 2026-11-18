@@ -8,7 +8,7 @@ Every launch selects exactly one registered scenario in a fresh process.
 The dialog scenarios replace the standalone `AlertRegistrationProbe` app:
 `dialog-registration` checks the public typed subscription on MAUI 11 plus the
 isolated AppKit compatibility proxy and singleton registration on MAUI 10.
-`dialogs` runs at 10.0.70, first restoring only the legacy registration logic to
+`dialogs` runs on the newest MAUI 10 and 11 releases, first restoring only the legacy registration logic to
 prove the missing service in a real window, then verifying fixed native action
 sheets, prompts and alerts with visible-sheet captures and typed task results.
 A timeout is a failure, not accepted baseline evidence.

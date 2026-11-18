@@ -292,9 +292,10 @@ Portable `MacOS.Tests` remains independent of native AppKit execution.
 The same host also registers `dialog-registration` (the public typed MAUI 11
 contract, the isolated MAUI 10 compatibility proxy, and singleton semantics) and
 `dialogs` (real Page action sheet, prompt
-and alert completion with native-sheet screenshots). The existing AppKit workflow
-tests registration on MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110; native dialogs
-run at 10.0.70 with an exact missing-subscription baseline and bounded fixed run.
+and alert completion with native-sheet screenshots). The AppKit workflow
+runs every native scenario on the newest MAUI 10 (`$(MacOSMaui10Version)`) and
+MAUI 11 (`$(MacOSMaui11Version)`) releases; native dialogs use an exact
+missing-subscription baseline and bounded fixed run.
 
 ## Unit tests
 
