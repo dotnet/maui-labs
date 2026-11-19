@@ -522,13 +522,17 @@ public partial class InspectorLayoutWorkspaceTests
     {
         var socketOpened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await _page.RouteWebSocketAsync("**/ws/events", _ => socketOpened.TrySetResult());
-        await PrepareLayoutWorkspaceAsync(eventsSupported: true);
-        await socketOpened.Task.WaitAsync(TimeSpan.FromSeconds(10));
         var stateRequests = 0;
         _page.Request += (_, request) =>
         {
             if (IsStateUrl(request.Url)) Interlocked.Increment(ref stateRequests);
         };
+        await PrepareLayoutWorkspaceAsync(eventsSupported: true);
+        await socketOpened.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await _page.RunAndWaitForResponseAsync(
+            () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
+            response => IsStateUrl(response.Url));
+        Interlocked.Exchange(ref stateRequests, 0);
         var overlay = _page.Locator("#df-disconnected-overlay");
 
         await _page.Clock.RunForAsync(6100);

@@ -39,6 +39,8 @@ internal sealed class XamlSourcePropertyEditor
 {
     private const long MaxSourceFileBytes = 5 * 1024 * 1024;
     private const int MaxPropertyValueLength = 64 * 1024;
+    private const string MauiGlobalXmlNamespace = "http://schemas.microsoft.com/dotnet/maui/global";
+    private const string XamlXmlNamespace = "http://schemas.microsoft.com/winfx/2009/xaml";
     private static readonly StringComparer PathComparer =
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
     private static readonly HashSet<string> SupportedPropertyNames = new(StringComparer.OrdinalIgnoreCase)
@@ -809,8 +811,12 @@ internal sealed class XamlSourcePropertyEditor
         elementStart = 0;
         try
         {
-            var buildDocument = XDocument.Parse(buildSource, LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
-            var currentDocument = XDocument.Parse(currentSource, LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
+            var buildDocument = ParseXaml(
+                buildSource,
+                LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
+            var currentDocument = ParseXaml(
+                currentSource,
+                LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
             if (buildDocument.Root is null || currentDocument.Root is null)
                 return false;
 
@@ -880,13 +886,46 @@ internal sealed class XamlSourcePropertyEditor
     {
         try
         {
-            XDocument.Parse(text, LoadOptions.PreserveWhitespace);
+            ParseXaml(text, LoadOptions.PreserveWhitespace);
             return true;
         }
         catch (XmlException)
         {
             return false;
         }
+    }
+
+    private static XDocument ParseXaml(string text, LoadOptions loadOptions)
+    {
+        var nameTable = new NameTable();
+        var namespaceManager = new ProjectWideNamespaceManager(nameTable);
+        namespaceManager.AddNamespace(string.Empty, MauiGlobalXmlNamespace);
+        namespaceManager.AddNamespace("x", XamlXmlNamespace);
+        var parserContext = new XmlParserContext(
+            nameTable,
+            namespaceManager,
+            null,
+            XmlSpace.None);
+        using var reader = XmlReader.Create(
+            new StringReader(text),
+            new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Parse,
+                XmlResolver = null
+            },
+            parserContext);
+        return XDocument.Load(reader, loadOptions);
+    }
+
+    // The editor only needs stable namespace identity to match element paths; it has no app compilation.
+    private sealed class ProjectWideNamespaceManager(NameTable nameTable)
+        : XmlNamespaceManager(nameTable)
+    {
+        public override string? LookupNamespace(string prefix)
+            => base.LookupNamespace(prefix)
+                ?? (string.IsNullOrEmpty(prefix)
+                    ? null
+                    : $"urn:devflow:unresolved-prefix:{Uri.EscapeDataString(prefix)}");
     }
 
     private static string EscapeAttributeValue(string value, char quote)
