@@ -62,6 +62,17 @@ public class XamlSourceMapGeneratorTests
         "    <helpers:SharedView />\n" +
         "</ContentPage>\n";
 
+    private const string XamlWithLocalTypeAndGlobalNamespace =
+        "<ContentPage x:Class=\"TestApp.MainPage\" xmlns:local=\"clr-namespace:TestControls\">\n" +
+        "    <local:Button />\n" +
+        "</ContentPage>\n";
+
+    private const string GlobalNamespaceAggregationSource =
+        "[assembly: Microsoft.Maui.Controls.XmlnsDefinitionAttribute("
+        + "\"http://schemas.microsoft.com/dotnet/maui/global\", "
+        + "\"http://schemas.microsoft.com/dotnet/2021/maui\")]\n"
+        + "namespace TestControls { public class Button { } }\n";
+
     private const string PrefixCollisionXaml =
         "<ContentPage x:Class=\"TestApp.MainPage\">\n" +
         "    <widgets:SharedView />\n" +
@@ -193,6 +204,36 @@ public class XamlSourceMapGeneratorTests
             Assert.Equal("TestControls.SharedView", widget.FullTypeName);
             Assert.True(map.TryGet("1", out var helper));
             Assert.Equal("TestHelpers.SharedView", helper.FullTypeName);
+        }
+        finally
+        {
+            XamlSourceMapRegistry.Instance.Reset();
+        }
+    }
+
+    [Fact]
+    public void GeneratedProvider_ResolvesLocalType_WhenAppAggregatesGlobalNamespace()
+    {
+        var (output, diagnostics, generated) =
+            Run(
+                ("MainPage.xaml", XamlWithLocalTypeAndGlobalNamespace, true, @"C:\proj\MainPage.xaml"),
+                GlobalNamespaceAggregationSource);
+
+        Assert.Empty(diagnostics);
+        Assert.NotNull(generated);
+        Assert.Contains("TestControls.Button", generated);
+        Assert.DoesNotContain("Microsoft.Maui.Controls.Button", generated);
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+
+        XamlSourceMapRegistry.Instance.Reset();
+        try
+        {
+            LoadAndRunModuleInitializer(output);
+
+            var map = Assert.IsType<XamlSourceMap>(
+                XamlSourceMapRegistry.Instance.GetMap("TestApp.MainPage"));
+            Assert.True(map.TryGet("0", out var localButton));
+            Assert.Equal("TestControls.Button", localButton.FullTypeName);
         }
         finally
         {

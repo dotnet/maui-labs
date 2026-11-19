@@ -400,6 +400,10 @@ public sealed class XamlSourceMapGenerator : IIncrementalGenerator
 
             if (definition.IsCurrentAssembly
                 && string.Equals(
+                    element.XmlNamespace,
+                    MauiGlobalXmlNamespace,
+                    StringComparison.Ordinal)
+                && string.Equals(
                     definition.XmlNamespace,
                     MauiGlobalXmlNamespace,
                     StringComparison.Ordinal))
