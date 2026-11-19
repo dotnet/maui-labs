@@ -10,6 +10,8 @@ A command-line tool for .NET MAUI development environment setup and device manag
 |---------|-------------|
 | **Microsoft.Maui.Cli** | Global CLI tool (`maui`) for environment setup, device management, and diagnostics. |
 
+The .NET 10 SDK is required to install the tool. It selects a NativeAOT build on `win-x64`, `linux-x64`, and `osx-arm64`; other platforms use the framework-dependent fallback package.
+
 ## Quick Start
 
 ### 1. Install the CLI tool
