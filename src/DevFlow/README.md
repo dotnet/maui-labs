@@ -671,6 +671,8 @@ and XAML text and should normally remain disabled for Release/store builds.
 Source maps reuse MAUI's prepared XAML items regardless of target framework,
 including plain .NET GTK heads and macOS AppKit heads. Projects without the MAUI
 Controls build targets can still supply `MauiXaml` items for source mapping.
+Project-wide XAML prefixes declared with `XmlnsPrefix` in the app or referenced
+assemblies are supported.
 
 The request privacy modes are:
 

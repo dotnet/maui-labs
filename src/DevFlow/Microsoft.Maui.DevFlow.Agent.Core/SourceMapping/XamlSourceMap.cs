@@ -21,6 +21,9 @@ public readonly record struct XamlSourceEntry(
 
 public sealed class XamlSourceMap
 {
+    private const string MauiGlobalXmlNamespace = "http://schemas.microsoft.com/dotnet/maui/global";
+    private const string XamlXmlNamespace = "http://schemas.microsoft.com/winfx/2009/xaml";
+
     private static readonly HashSet<string> s_contentProperties = new(StringComparer.Ordinal)
     {
         "Content",
@@ -57,6 +60,21 @@ public sealed class XamlSourceMap
         => Parse(xaml, file, contentHash: null);
 
     public static XamlSourceMap? Parse(string xaml, string file, string? contentHash)
+        => Parse(xaml, file, contentHash, namespaceMappings: null);
+
+    public static XamlSourceMap? Parse(
+        string xaml,
+        string file,
+        string? contentHash,
+        IReadOnlyDictionary<string, string>? namespaceMappings)
+        => Parse(xaml, file, contentHash, namespaceMappings, typeMappings: null);
+
+    public static XamlSourceMap? Parse(
+        string xaml,
+        string file,
+        string? contentHash,
+        IReadOnlyDictionary<string, string>? namespaceMappings,
+        IReadOnlyDictionary<string, string>? typeMappings)
     {
         if (string.IsNullOrWhiteSpace(xaml))
             return null;
@@ -64,7 +82,29 @@ public sealed class XamlSourceMap
         XDocument document;
         try
         {
-            document = XDocument.Parse(xaml, LoadOptions.SetLineInfo);
+            var nameTable = new NameTable();
+            var namespaceManager = new XmlNamespaceManager(nameTable);
+            namespaceManager.AddNamespace(string.Empty, MauiGlobalXmlNamespace);
+            namespaceManager.AddNamespace("x", XamlXmlNamespace);
+            if (namespaceMappings is not null)
+            {
+                foreach (var mapping in namespaceMappings)
+                    namespaceManager.AddNamespace(mapping.Key, mapping.Value);
+            }
+            var parserContext = new XmlParserContext(
+                nameTable,
+                namespaceManager,
+                null,
+                XmlSpace.None);
+            using var reader = XmlReader.Create(
+                new StringReader(xaml),
+                new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Parse,
+                    XmlResolver = null
+                },
+                parserContext);
+            document = XDocument.Load(reader, LoadOptions.SetLineInfo);
         }
         catch (XmlException)
         {
@@ -75,7 +115,12 @@ public sealed class XamlSourceMap
             return null;
 
         var map = new Dictionary<string, XamlSourceEntry>(StringComparer.Ordinal);
-        Visit(root, string.Empty, map, root.Attribute("AutomationId")?.Value);
+        Visit(
+            root,
+            string.Empty,
+            map,
+            root.Attribute("AutomationId")?.Value,
+            typeMappings);
         return new XamlSourceMap(file, map, contentHash ?? ComputeContentHash(xaml));
     }
 
@@ -94,7 +139,8 @@ public sealed class XamlSourceMap
         XElement element,
         string path,
         Dictionary<string, XamlSourceEntry> map,
-        string? usableAutomationId)
+        string? usableAutomationId,
+        IReadOnlyDictionary<string, string>? typeMappings)
     {
         var children = ContentChildren(element).ToList();
         if (element is IXmlLineInfo lineInfo && lineInfo.HasLineInfo())
@@ -105,7 +151,7 @@ public sealed class XamlSourceMap
                 element.Name.LocalName,
                 children.Count,
                 usableAutomationId,
-                ResolveFullTypeName(element))
+                ResolveFullTypeName(element, typeMappings))
             {
                 Text = LiteralText(element)
             };
@@ -126,7 +172,7 @@ public sealed class XamlSourceMap
                 ? childId
                 : null;
             var childPath = path.Length == 0 ? index.ToString() : $"{path}/{index}";
-            Visit(children[index], childPath, map, uniqueId);
+            Visit(children[index], childPath, map, uniqueId, typeMappings);
         }
     }
 
@@ -137,8 +183,21 @@ public sealed class XamlSourceMap
         return text is null || text.TrimStart().StartsWith('{') ? null : text;
     }
 
-    private static string? ResolveFullTypeName(XElement element)
+    private static string? ResolveFullTypeName(
+        XElement element,
+        IReadOnlyDictionary<string, string>? typeMappings)
     {
+        if (typeMappings is not null
+            && typeMappings.TryGetValue(
+                element.Name.NamespaceName + '\0' + element.Name.LocalName,
+                out var fullTypeName))
+        {
+            return fullTypeName;
+        }
+
+        if (typeMappings is not null)
+            return null;
+
         const string prefix = "clr-namespace:";
         var xmlNamespace = element.Name.NamespaceName;
         if (!xmlNamespace.StartsWith(prefix, StringComparison.Ordinal))
