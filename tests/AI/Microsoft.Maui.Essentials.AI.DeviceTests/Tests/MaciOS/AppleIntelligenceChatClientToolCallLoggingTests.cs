@@ -1,5 +1,6 @@
 #if IOS || MACCATALYST
 using System.Diagnostics;
+using Foundation;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -322,29 +323,62 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// ====================================================================
 	// Tool failure — exactly 2 entries: Invoking (Debug) + failed (Error)
 	// ====================================================================
-	// Apple's callback logger emits these Debug/Error messages even when the native framework propagates an NSError failure.
+	// Apple's native invocation policy faults the chat request rather than returning an error tool result to the model.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_ToolFailure_Produces2EntriesWithErrorLevel()
-	{
-		var logCollector = new DeviceTestLogCollector(LogLevel.Debug);
-		var client = new AppleIntelligenceChatClient(logCollector);
+	public Task GetResponseAsync_ToolFailure_Produces2EntriesWithErrorLevel() =>
+		AssertNativeToolFailureAsync(streaming: false, wrapWithFunctionInvocation: false);
 
+	[Theory]
+	[InlineData(false, true)]
+	[InlineData(true, false)]
+	[InlineData(true, true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public Task NativeToolFailure_WithOrWithoutFunctionInvocation_FaultsRequest(
+		bool streaming, bool wrapWithFunctionInvocation) =>
+		AssertNativeToolFailureAsync(streaming, wrapWithFunctionInvocation);
+
+	private static async Task AssertNativeToolFailureAsync(bool streaming, bool wrapWithFunctionInvocation)
+	{
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+		var logCollector = new DeviceTestLogCollector(LogLevel.Debug);
+		var native = new AppleIntelligenceChatClient(logCollector);
+		using IChatClient client = wrapWithFunctionInvocation
+			? native.AsBuilder().UseFunctionInvocation().Build()
+			: native;
+		var calls = 0;
 		var failingTool = AIFunctionFactory.Create(
-			string (string location) => throw new InvalidOperationException("API is down"),
+			string (string location) =>
+			{
+				Interlocked.Increment(ref calls);
+				throw new InvalidOperationException("API is down");
+			},
 			name: "GetWeather",
 			description: "Gets the weather for a location");
 
 		var options = new ChatOptions { Tools = [failingTool] };
-		// Native framework propagates tool errors as NSErrorException
-		try
+		ChatMessage[] messages = [new(ChatRole.User, "Call GetWeather for Seattle.")];
+		var updates = new List<ChatResponseUpdate>();
+		var error = await Assert.ThrowsAsync<NSErrorException>(async () =>
 		{
-			await client.GetResponseAsync(
-				[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options);
-		}
-		catch
+			if (streaming)
+			{
+				await foreach (var update in client.GetStreamingResponseAsync(messages, options, timeout.Token))
+					updates.Add(update);
+			}
+			else
+			{
+				await client.GetResponseAsync(messages, options, timeout.Token);
+			}
+		});
+		Assert.Equal("ChatClientNative", error.Error.Domain);
+		Assert.Equal(1, calls);
+		if (streaming)
 		{
-			// Expected — native framework may propagate tool errors
+			var call = Assert.Single(updates.SelectMany(update => update.Contents).OfType<FunctionCallContent>());
+			Assert.True(call.InformationalOnly);
+			Assert.DoesNotContain(updates.SelectMany(update => update.Contents), content => content is FunctionResultContent);
+			Assert.DoesNotContain(updates, update => update.FinishReason is not null);
 		}
 
 		var logs = logCollector.Entries;

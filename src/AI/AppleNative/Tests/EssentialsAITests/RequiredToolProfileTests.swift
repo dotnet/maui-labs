@@ -3,12 +3,12 @@ import FoundationModels
 import XCTest
 @testable import EssentialsAI
 
-final class RequiredToolProfileTests: XCTestCase {
+final class ToolCallProfileTests: XCTestCase {
     func testModeBecomesAllowedAfterFirstCallAndStaysAllowed() {
         guard #available(macOS 27.0, *) else { return }
-        XCTAssertEqual(RequiredToolProfile.toolCallingMode(for: 0), .required)
+        XCTAssertEqual(ToolCallProfile.toolCallingMode(for: 0), .required)
         for count in [1, 2, Int.max] {
-            XCTAssertEqual(RequiredToolProfile.toolCallingMode(for: count), .allowed)
+            XCTAssertEqual(ToolCallProfile.toolCallingMode(for: count), .allowed)
         }
     }
 
@@ -16,7 +16,7 @@ final class RequiredToolProfileTests: XCTestCase {
         guard #available(macOS 27.0, *) else { return }
         let tools = try [ToolNative(CountingTool(name: "first"), nil, nil),
                      ToolNative(CountingTool(name: "second"), nil, nil)]
-        let profile = RequiredToolProfile(model: .default, tools: tools)
+        let profile = ToolCallProfile(model: .default, tools: tools)
         XCTAssertEqual(profile.tools.map(\.name), ["first", "second"])
         XCTAssertTrue(profile.tools[0] as? ToolNative === tools[0])
         XCTAssertTrue(profile.tools[1] as? ToolNative === tools[1])
@@ -27,7 +27,7 @@ final class RequiredToolProfileTests: XCTestCase {
                                                  toolCallingMode: .required)
         XCTAssertEqual(first.properties.essentialsAIRequiredToolCallCount, 0)
         first.properties.essentialsAIRequiredToolCallCount += 1
-        XCTAssertEqual(RequiredToolProfile.toolCallingMode(for: first.properties.essentialsAIRequiredToolCallCount), .allowed)
+        XCTAssertEqual(ToolCallProfile.toolCallingMode(for: first.properties.essentialsAIRequiredToolCallCount), .allowed)
         XCTAssertEqual(second.properties.essentialsAIRequiredToolCallCount, 0)
     }
 
@@ -154,7 +154,7 @@ final class RequiredToolProfileTests: XCTestCase {
         func call(arguments: String) async throws -> String {
             let count = lock.withLock { calls += 1; self.arguments.append(arguments); return calls }
             guard count <= 3 else {
-                throw NSError(domain: "RequiredToolProfileTests", code: 1,
+                throw NSError(domain: "ToolCallProfileTests", code: 1,
                               userInfo: [NSLocalizedDescriptionKey: "Required mode exceeded the bounded tool-call budget."])
             }
             return #""REQUIRED_VALUE_42""#

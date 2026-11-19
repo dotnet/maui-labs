@@ -47,7 +47,14 @@ internal sealed class StreamingResponseHandler
 	/// <summary>
 	/// Processes a tool call update.
 	/// </summary>
-	public void ProcessToolCall(string? toolCallId, string? toolCallName, string? toolCallArguments)
+	/// <param name="toolCallId">The provider's identifier for the tool call.</param>
+	/// <param name="toolCallName">The name of the tool to invoke.</param>
+	/// <param name="toolCallArguments">The serialized arguments for the tool call.</param>
+	/// <param name="informationalOnly">
+	/// <see langword="true"/> when the provider already ran the tool; <see langword="false"/> when the
+	/// caller (for example <c>FunctionInvokingChatClient</c>) must invoke it.
+	/// </param>
+	public void ProcessToolCall(string? toolCallId, string? toolCallName, string? toolCallArguments, bool informationalOnly = true)
 	{
 		var args = toolCallArguments is null
 			? null
@@ -59,7 +66,7 @@ internal sealed class StreamingResponseHandler
 		{
 			Role = ChatRole.Assistant,
 			ModelId = _modelId,
-			Contents = { new FunctionCallContent(toolCallId!, toolCallName!, args) { InformationalOnly = true } }
+			Contents = { new FunctionCallContent(toolCallId!, toolCallName!, args) { InformationalOnly = informationalOnly } }
 		});
 	}
 
@@ -77,17 +84,16 @@ internal sealed class StreamingResponseHandler
 	}
 
 	/// <summary>
-	/// Emits usage and completes the channel successfully.
+	/// Emits usage and the finish reason, then completes the channel successfully.
 	/// </summary>
-	public void Complete(UsageDetails? usage = null)
+	public void Complete(UsageDetails? usage = null, ChatFinishReason? finishReason = null)
 	{
-		if (usage is not null)
+		if (usage is not null || finishReason is not null)
 		{
-			_channel.Writer.TryWrite(new ChatResponseUpdate
-			{
-				ModelId = _modelId,
-				Contents = { new UsageContent(usage) }
-			});
+			var update = new ChatResponseUpdate { ModelId = _modelId, FinishReason = finishReason };
+			if (usage is not null)
+				update.Contents.Add(new UsageContent(usage));
+			_channel.Writer.TryWrite(update);
 		}
 
 		_channel.Writer.TryComplete();
