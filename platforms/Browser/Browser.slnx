@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Browser.Essentials/Browser.Essentials.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Browser.Essentials.Sample.Blazor/Browser.Essentials.Sample.Blazor.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Browser.Essentials.TestApp/Browser.Essentials.TestApp.csproj" />
+    <Project Path="tests/Browser.Essentials.Tests/Browser.Essentials.Tests.csproj" />
+  </Folder>
+</Solution>
