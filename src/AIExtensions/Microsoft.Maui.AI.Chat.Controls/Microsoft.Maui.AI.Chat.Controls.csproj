@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A plain net10.0 class library that references Microsoft.Maui.Controls as a package, like
+    Microsoft.Maui.DevFlow.Agent.Core. UseMaui is deliberately not set: on net10.0 it imports the
+    Microsoft.Maui.Sdk workload SDK (NETSDK1147 without the maui workload).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.Maui.AI.Chat.Controls</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <PackageId>Microsoft.Maui.AI.Chat.Controls</PackageId>
+    <Description>XAML block templates for the Microsoft.Maui.AI.Chat engine: show each content block of an AI conversation (text, tool calls, approvals, your own [ToolBlock] cards) with the view you choose, in any CollectionView or BindableLayout.</Description>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);MEAI001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Controls.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

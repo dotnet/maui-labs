@@ -18,13 +18,13 @@ internal static class ChatServiceCollectionExtensions
         services.AddSingleton<ConnectionStatusService>();
         services.AddSingleton(serviceProvider => new PlaygroundTools(
             serviceProvider.GetRequiredService<ConnectionStatusService>().GetStatus));
-        services.AddSingleton(serviceProvider => new ChatSessionService(
-            serviceProvider.GetRequiredService<ILogger<ChatSessionService>>(),
-            FileSystem.AppDataDirectory,
-            FileSystem.CacheDirectory));
-        services.AddSingleton<IChatRecordingSession>(provider => provider.GetRequiredService<ChatSessionService>());
+
+        // The engine's conversation thread saves each committed turn, so the chat comes back when the app starts. The
+        // shared notes are saved next to it.
+        var folder = Path.Combine(FileSystem.AppDataDirectory, "chat-playground");
+        services.AddSingleton(_ => new FileConversationThread(Path.Combine(folder, "conversation.json")));
+        services.AddSingleton(_ => new NotesFile(Path.Combine(folder, "notes.txt")));
         services.AddSingleton<SettingsPaneViewModel>();
-        services.AddSingleton<ChatAreaViewModel>();
         services.AddSingleton<ModelReadinessViewModel>();
         services.AddSingleton<ChatViewModel>();
         services.AddTransient<Page, ChatPage>();
@@ -45,8 +45,6 @@ internal static class ChatServiceCollectionExtensions
         if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
             services.AddSingleton<IChatClient>(serviceProvider => CreateAzureChatClient(serviceProvider, settings));
 
-        services.AddSingleton<IChatClient>(CreateReplayChatClient);
-
         return services;
     }
 
@@ -55,7 +53,6 @@ internal static class ChatServiceCollectionExtensions
     private static IChatClient CreateWindowsChatClient(IServiceProvider serviceProvider) =>
         new WindowsAIChatClient()
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "windows-ai-chat",
                 "Windows AI",
@@ -64,6 +61,9 @@ internal static class ChatServiceCollectionExtensions
                 PrepareModelAsync: (_, _, cancellationToken) => WindowsAIChatClient.EnsureReadyAsync(cancellationToken)))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
+
+            // The model cannot call tools, but the chat's set_theme action can ask for approval, which needs this.
+            .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
 #endif
 
@@ -73,14 +73,16 @@ internal static class ChatServiceCollectionExtensions
     private static IChatClient CreateAppleChatClient(IServiceProvider serviceProvider) =>
         new AppleIntelligenceChatClient(serviceProvider.GetRequiredService<ILoggerFactory>())
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "apple-intelligence-chat",
                 "Apple Intelligence",
-                "Model readiness is checked above the composer. Apple manages model preparation in system settings.",
+                "Model readiness is checked above the composer. Apple manages model preparation in system settings. " +
+                    "Apple runs the tools itself, so it can't ask before running them, and the theme switch and notes " +
+                    "proposals are unavailable.",
                 SupportsImageInput: OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27),
                 SupportsToolCalling: true,
-                GetModelStatusAsync: (_, cancellationToken) => AppleIntelligenceChatClient.GetModelStatusAsync(cancellationToken)))
+                GetModelStatusAsync: (_, cancellationToken) => AppleIntelligenceChatClient.GetModelStatusAsync(cancellationToken),
+                HandsBackToolCalls: false))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
@@ -92,7 +94,6 @@ internal static class ChatServiceCollectionExtensions
     private static IChatClient CreateGeminiChatClient(IServiceProvider serviceProvider) =>
         new GeminiNanoChatClient()
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "gemini-nano-chat",
                 "Gemini Nano",
@@ -150,11 +151,9 @@ internal static class ChatServiceCollectionExtensions
             ? null
             : serviceProvider.GetRequiredService<IImageGenerator>();
 
-        // Recording wraps the tool and image middleware so the saved response is the one shown in chat.
         var builder = openAIClient.GetResponsesClient()
             .AsIChatClient(deploymentName)
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "azure-openai-chat",
                 "Azure OpenAI",
@@ -170,19 +169,6 @@ internal static class ChatServiceCollectionExtensions
             builder.UseImageGenerationPreservingInputs(imageGenerator);
         return builder.UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>()).Build();
     }
-
-    private static IChatClient CreateReplayChatClient(IServiceProvider serviceProvider) =>
-        new ReplayChatClient(serviceProvider.GetRequiredService<IChatRecordingSession>())
-            .AsBuilder()
-            .UseDescriptor(new ChatClientDescriptor(
-                "replay",
-                "Replay",
-                "Play the saved chat without contacting a model. Switch to a live client after playback to continue.",
-                IsReplay: true))
-            .Build();
-
-    private static ChatClientBuilder UseRecording(this ChatClientBuilder builder, IChatRecordingSession recording) =>
-        builder.Use(inner => new RecordingChatClient(inner, recording));
 
     private static ChatClientBuilder UseDescriptor(this ChatClientBuilder builder, ChatClientDescriptor descriptor) =>
         builder.Use(inner => new DescribedChatClient(inner, descriptor));

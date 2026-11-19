@@ -2,7 +2,11 @@ using Microsoft.Maui.Essentials.AI;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Metadata exposed by a configured chat-client slot.</summary>
+/// <summary>
+/// Metadata exposed by a configured chat-client slot. <see cref="HandsBackToolCalls"/> is false for a client that runs
+/// tools in its own session instead of handing the calls back to the app, so the app can neither ask before a tool runs
+/// nor run the chat's UI actions.
+/// </summary>
 public sealed record ChatClientDescriptor(
     string Id,
     string DisplayName,
@@ -10,14 +14,14 @@ public sealed record ChatClientDescriptor(
     bool SupportsImageInput = false,
     bool SupportsReasoningSummary = false,
     bool SupportsImageGeneration = false,
-    bool IsReplay = false,
     bool SupportsToolCalling = false,
     bool SupportsStructuredOutput = true,
     Func<string?, CancellationToken, Task<ChatModelStatus>>? GetModelStatusAsync = null,
     Func<string?, IProgress<ModelPreparationProgress>, CancellationToken, Task>? PrepareModelAsync = null,
     string PreparationActionLabel = "Prepare",
     IReadOnlyList<ChatModelOption>? Models = null,
-    bool SupportsRequiredToolMode = true);
+    bool SupportsRequiredToolMode = true,
+    bool HandsBackToolCalls = true);
 
 public sealed record ChatModelOption(string Id, string DisplayName)
 {

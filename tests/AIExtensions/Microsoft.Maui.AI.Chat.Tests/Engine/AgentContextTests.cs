@@ -1,0 +1,422 @@
+// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+
+using System.Collections.Specialized;
+using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
+using Microsoft.Extensions.AI;
+
+namespace Microsoft.Maui.AI.Chat.Tests.Engine;
+
+public class AgentContextTests
+{
+    private static (UIAgent agent, DelegatingStreamingChatClient client) CreateAgent()
+    {
+        var client = new DelegatingStreamingChatClient();
+        var agent = new UIAgent(client);
+        return (agent, client);
+    }
+
+    // ---- Turn Assembly ----
+
+    [Fact]
+    public async Task SendMessageAsync_CreatesTurnWithUserAndAssistantBlocks()
+    {
+        var (agent, client) = CreateAgent();
+        client.SetHandler((msgs, opts, ct) =>
+            ResponseEmitters.EmitTextResponse("Hi!"));
+        var context = new AgentContext(agent);
+
+        await context.SendMessageAsync("Hello");
+
+        Assert.Single(context.Turns);
+        var turn = context.Turns[0];
+        Assert.NotEmpty(turn.RequestBlocks);
+        Assert.All(turn.RequestBlocks, b => Assert.Equal(ChatRole.User, b.Role));
+        Assert.NotEmpty(turn.ResponseBlocks);
+        Assert.All(turn.ResponseBlocks, b => Assert.Equal(ChatRole.Assistant, b.Role));
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_MultipleCalls_CreatesMultipleTurns()
+    {
+        var (agent, client) = CreateAgent();
+        var callCount = 0;
+        client.SetHandler((msgs, opts, ct) =>
+        {
+            callCount++;
+            return ResponseEmitters.EmitTextResponse($"Response {callCount}");
+        });
+        var context = new AgentContext(agent);
+
+        await context.SendMessageAsync("First");
+        await context.SendMessageAsync("Second");
+
+        Assert.Equal(2, context.Turns.Count);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_RequestBlocksContainUserText()
+    {
+        var (agent, client) = CreateAgent();
+        client.SetHandler((msgs, opts, ct) =>
+            ResponseEmitters.EmitTextResponse("Reply"));
+        var context = new AgentContext(agent);
+
+        await context.SendMessageAsync("My message");
+
+        var userBlock = Assert.IsType<TextContentBlock>(context.Turns[0].RequestBlocks[0]);
+        Assert.Equal("My message", userBlock.RawText);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_NullMessage_ThrowsArgumentNullException()
+    {
+        var (agent, _) = CreateAgent();
+        var context = new AgentContext(agent);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => context.SendMessageAsync((ChatMessage)null!));
+    }
+
+    // ---- Status Transitions ----
+
+    [Fact]
+    public async Task Status_StartsAsIdle()
+    {
+        var (agent, _) = CreateAgent();
+        var context = new AgentContext(agent);
+
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Null(context.Error);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_StatusTransitions_IdleToStreamingToIdle()
+    {
+        var (agent, client) = CreateAgent();
+        client.SetHandler((msgs, opts, ct) =>
+            ResponseEmitters.EmitTextResponse("ok"));
+        var context = new AgentContext(agent);
+
+        var statuses = new List<ConversationStatus>();
+        context.OnStatusChanged(s => statuses.Add(s));
+
+        await context.SendMessageAsync("hi");
+
+        Assert.Equal(new[] { ConversationStatus.Streaming, ConversationStatus.Idle }, statuses);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_OnException_StatusIsError()
+    {
+        var (agent, client) = CreateAgent();
+        client.SetHandler((msgs, opts, ct) =>
+            ResponseEmitters.EmitErrorAfterTokens([], new InvalidOperationException("boom")));
+        var context = new AgentContext(agent);
+
+        await context.SendMessageAsync("hi");
+
+        Assert.Equal(ConversationStatus.Error, context.Status);
+        Assert.NotNull(context.Error);
+        Assert.Equal("boom", context.Error!.Message);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_OnException_StatusTransitions_IdleToStreamingToError()
+    {
+        var (agent, client) = CreateAgent();
+        client.SetHandler((msgs, opts, ct) =>
+            ResponseEmitters.EmitErrorAfterTokens(["partial"], new Exception("fail")));
+        var context = new AgentContext(agent);
+
+        var statuses = new List<ConversationStatus>();
+        context.OnStatusChanged(s => statuses.Add(s));
+
+        await context.SendMessageAsync("hi");
+
+        Assert.Equal(
+            new[] { ConversationStatus.Streaming, ConversationStatus.Error },
+            statuses);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_AsynchronousStreamingAndUIActionContinuation_PreserveSynchronizationContext()
+    {
+        var synchronizationContext = new RecordingSynchronizationContext();
+        var previousSynchronizationContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(synchronizationContext);
+
+        try
+        {
+            var observedContexts = new List<SynchronizationContext?>();
+            var tool = AIFunctionFactory.Create(
+                async () =>
+                {
+                    await Task.Yield();
+                    observedContexts.Add(SynchronizationContext.Current);
+                    return "tool result";
+                },
+                "GetValue",
+                "Gets a value");
+            var callCount = 0;
+            var client = new DelegatingStreamingChatClient();
+            client.SetHandler((_, _, cancellationToken) =>
+                EmitAsyncResponse(
+                    ++callCount,
+                    observedContexts,
+                    cancellationToken));
+            var context = new AgentContext(
+                new UIAgent(client, options => options.RegisterUIAction(tool)));
+            context.OnStatusChanged(_ =>
+                observedContexts.Add(SynchronizationContext.Current));
+            context.OnBlockAdded((_, _) =>
+                observedContexts.Add(SynchronizationContext.Current));
+
+            await context.SendMessageAsync("Get a value");
+
+            Assert.Equal(2, callCount);
+            Assert.True(Assert.Single(context.Turns[0].ResponseBlocks.OfType<UIActionBlock>()).HasResult);
+            Assert.NotEmpty(observedContexts);
+            Assert.All(observedContexts, observed => Assert.Same(synchronizationContext, observed));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousSynchronizationContext);
+        }
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_Failure_LogsException()
+    {
+        var exception = new InvalidOperationException("boom");
+        var loggerFactory = new CapturingLoggerFactory();
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+            ResponseEmitters.EmitErrorAfterTokens(["partial"], exception, cancellationToken));
+        using var agent = new UIAgent(client, configure: null, loggerFactory);
+        using var context = new AgentContext(agent);
+
+        await context.SendMessageAsync("Hello");
+
+        Assert.Equal(ConversationStatus.Error, context.Status);
+        Assert.Same(exception, context.Error);
+        var log = Assert.Single(
+            loggerFactory.Entries,
+            entry => entry.Level == Microsoft.Extensions.Logging.LogLevel.Error);
+        Assert.Equal(104, log.EventId.Id);
+        Assert.Same(exception, log.Exception);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_LoggingFailure_PropagatesException()
+    {
+        var processingException = new InvalidOperationException("processing failed");
+        var loggerFactory = new CapturingLoggerFactory
+        {
+            ThrowAtLevel = Microsoft.Extensions.Logging.LogLevel.Error,
+        };
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+            ResponseEmitters.EmitErrorAfterTokens(
+                ["partial"],
+                processingException,
+                cancellationToken));
+        using var agent = new UIAgent(client, configure: null, loggerFactory);
+        using var context = new AgentContext(agent);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => context.SendMessageAsync("Hello"));
+
+        Assert.Same(loggerFactory.LoggingException, exception);
+        Assert.Equal(ConversationStatus.Error, context.Status);
+        Assert.Same(processingException, context.Error);
+    }
+
+    [Fact]
+    public void Constructor_NullAgentThrows()
+    {
+        Assert.Throws<ArgumentNullException>(() => new AgentContext(null!));
+    }
+
+    // ---- Notifications ----
+
+    [Fact]
+    public async Task Turns_RaiseAnAddWhenATurnIsCreated()
+    {
+        var (agent, client) = CreateAgent();
+        client.SetHandler((msgs, opts, ct) =>
+            ResponseEmitters.EmitTextResponse("ok"));
+        var context = new AgentContext(agent);
+
+        var changes = new List<NotifyCollectionChangedEventArgs>();
+        ChangeEvents.Observe(context.Turns).CollectionChanged += (_, e) => changes.Add(e);
+
+        await context.SendMessageAsync("hi");
+
+        var added = Assert.Single(changes);
+        Assert.Equal(NotifyCollectionChangedAction.Add, added.Action);
+        Assert.Equal(0, added.NewStartingIndex);
+        Assert.Same(context.Turns[0], Assert.Single(added.NewItems!));
+    }
+
+    [Fact]
+    public async Task BlockCollections_RaiseAnAddForEachBlock()
+    {
+        var (agent, client) = CreateAgent();
+        client.SetHandler((msgs, opts, ct) =>
+            ResponseEmitters.EmitTextResponse("ok"));
+        var context = new AgentContext(agent);
+
+        var receivedBlocks = new List<(ConversationTurn turn, ContentBlock block)>();
+        context.OnBlockAdded((t, b) => receivedBlocks.Add((t, b)));
+
+        await context.SendMessageAsync("hi");
+
+        Assert.True(receivedBlocks.Count >= 2);
+        Assert.All(receivedBlocks, x => Assert.Same(context.Turns[0], x.turn));
+    }
+
+    [Fact]
+    public async Task StatusChange_ReachesEveryHandler()
+    {
+        var (agent, client) = CreateAgent();
+        client.SetHandler((msgs, opts, ct) =>
+            ResponseEmitters.EmitTextResponse("ok"));
+        var context = new AgentContext(agent);
+
+        var count1 = 0;
+        var count2 = 0;
+        context.OnStatusChanged(_ => count1++);
+        context.OnStatusChanged(_ => count2++);
+
+        await context.SendMessageAsync("hi");
+
+        Assert.Equal(count1, count2);
+        Assert.True(count1 > 0);
+    }
+
+    // ---- Notification Ordering ----
+
+    [Fact]
+    public async Task Notifications_FireInCorrectOrder()
+    {
+        var (agent, client) = CreateAgent();
+        client.SetHandler((msgs, opts, ct) =>
+            ResponseEmitters.EmitTextResponse("ok"));
+        var context = new AgentContext(agent);
+
+        var events = new List<string>();
+        context.OnStatusChanged(s => events.Add($"status:{s}"));
+        context.OnTurnAdded(_ => events.Add("turn-added"));
+        context.OnBlockAdded((_, b) => events.Add($"block:{b.Role}"));
+
+        await context.SendMessageAsync("hi");
+
+        Assert.Equal("turn-added", events[0]);
+        Assert.Equal("status:Streaming", events[1]);
+        Assert.Equal("status:Idle", events[^1]);
+
+        var blockEvents = events.Where(e => e.StartsWith("block:", StringComparison.Ordinal)).ToList();
+        Assert.True(blockEvents.Count >= 2);
+    }
+
+    // ---- String overload ----
+
+    [Fact]
+    public async Task SendMessageAsync_StringOverload_CreatesProperChatMessage()
+    {
+        var (agent, client) = CreateAgent();
+        client.SetHandler((msgs, opts, ct) =>
+            ResponseEmitters.EmitTextResponse("ok"));
+        var context = new AgentContext(agent);
+
+        await context.SendMessageAsync("Hello world");
+
+        var userBlock = Assert.IsType<TextContentBlock>(context.Turns[0].RequestBlocks[0]);
+        Assert.Equal("Hello world", userBlock.RawText);
+    }
+
+    [Fact]
+    public async Task Clear_RemovesTurnsHistoryAndError_AndReturnsToIdle()
+    {
+        var (agent, client) = CreateAgent();
+        var callCount = 0;
+        var messageCounts = new List<int>();
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            callCount++;
+            messageCounts.Add(messages.Count());
+            return callCount == 1
+                ? ResponseEmitters.EmitErrorAfterTokens(
+                    ["partial"],
+                    new InvalidOperationException("diagnostic"),
+                    cancellationToken)
+                : ResponseEmitters.EmitTextResponse("fresh", cancellationToken);
+        });
+        var context = new AgentContext(agent);
+        var statuses = new List<ConversationStatus>();
+        context.OnStatusChanged(status => statuses.Add(status));
+
+        await context.SendMessageAsync("first");
+        Assert.Equal(ConversationStatus.Error, context.Status);
+        Assert.NotNull(context.Error);
+        Assert.Single(context.Turns);
+
+        await context.ClearAsync();
+
+        Assert.Empty(context.Turns);
+        Assert.Null(context.Error);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Equal(ConversationStatus.Idle, statuses[^1]);
+
+        await context.SendMessageAsync("second");
+
+        Assert.Single(context.Turns);
+        Assert.Equal(new[] { 1, 1 }, messageCounts);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> EmitAsyncResponse(
+        int callCount,
+        List<SynchronizationContext?> observedContexts,
+        [System.Runtime.CompilerServices.EnumeratorCancellation]
+        CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        observedContexts.Add(SynchronizationContext.Current);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (callCount == 1)
+        {
+            yield return new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents = [new FunctionCallContent("value-1", "GetValue")],
+            };
+            yield break;
+        }
+
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new TextContent("Done")],
+        };
+    }
+
+    private sealed class RecordingSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback callback, object? state)
+        {
+            var previous = Current;
+            SetSynchronizationContext(this);
+            try
+            {
+                callback(state);
+            }
+            finally
+            {
+                SetSynchronizationContext(previous);
+            }
+        }
+    }
+}

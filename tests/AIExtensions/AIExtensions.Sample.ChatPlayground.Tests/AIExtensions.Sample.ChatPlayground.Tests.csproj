@@ -1,0 +1,137 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Tests for the ChatPlayground sample (samples/AIExtensions.Sample.ChatPlayground). The sample is a MAUI app, so
+    its MAUI-free sources are linked here and run against the real chat engine and controls.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>AIExtensions.Sample.ChatPlayground.Tests</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);MEAI001;OPENAI001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="xunit" />
+    <Using Include="Xunit" />
+    <!-- The controls bring MAUI's implicit usings; its Size would clash with System.Drawing.Size in image tests. -->
+    <Using Remove="Microsoft.Maui.Graphics" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Controls\Microsoft.Maui.AI.Chat.Controls.csproj" />
+    <!-- Writes the handler of the linked connection status card, a [ToolBlock], and AddGeneratedToolBlocks(). -->
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Generators\Microsoft.Maui.AI.Chat.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\ChatModelAvailability.cs"
+             Link="Models\ChatModelAvailability.cs" />
+    <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\ChatModelCapability.cs"
+             Link="Models\ChatModelCapability.cs" />
+    <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\ChatModelStatus.cs"
+             Link="Models\ChatModelStatus.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\ViewModels\ModelReadinessViewModel.cs"
+             Link="Chat\ViewModels\ModelReadinessViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\ViewModels\SettingsPaneViewModel.cs"
+             Link="Chat\ViewModels\SettingsPaneViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Views\PlaygroundLayoutMetrics.cs"
+             Link="Views\PlaygroundLayoutMetrics.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ChatDiagnostics.cs"
+             Link="Services\ChatDiagnostics.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ChatDiagnosticsExtensions.cs"
+             Link="Services\ChatDiagnosticsExtensions.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\ChatDiagnosticGroups.cs"
+             Link="ViewModels\ChatDiagnosticGroups.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\DiagnosticsViewModel.cs"
+             Link="ViewModels\DiagnosticsViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Notes\NotesFile.cs"
+             Link="Chat\Notes\NotesFile.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Notes\SharedNotes.cs"
+             Link="Chat\Notes\SharedNotes.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Notes\TextDiff.cs"
+             Link="Chat\Notes\TextDiff.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\ViewModels\NotesViewModel.cs"
+             Link="Chat\ViewModels\NotesViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\Blocks\CalculatorDisplay.cs"
+             Link="Chat\Services\Blocks\CalculatorDisplay.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\Blocks\CalculatorWorksheet.cs"
+             Link="Chat\Services\Blocks\CalculatorWorksheet.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatClientDescriptor.cs"
+             Link="Chat\Services\ChatClientDescriptor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\Blocks\ConnectionStatusBlock.cs"
+             Link="Chat\Services\Blocks\ConnectionStatusBlock.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ConnectionStatusResult.cs"
+             Link="Chat\Services\ConnectionStatusResult.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\DescribedChatClient.cs"
+             Link="Chat\Services\DescribedChatClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\FileConversationThread.cs"
+             Link="Chat\Services\FileConversationThread.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\PlaygroundChatClient.cs"
+             Link="Chat\Services\PlaygroundChatClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\PlaygroundResponse.cs"
+             Link="Chat\Services\PlaygroundResponse.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\PlaygroundTools.cs"
+             Link="Chat\Services\PlaygroundTools.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\SavedChat.cs"
+             Link="Chat\Services\SavedChat.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\StructuredResponseFormatter.cs"
+             Link="Chat\Services\StructuredResponseFormatter.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ThemeAction.cs"
+             Link="Chat\Services\ThemeAction.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\ChatConverters.cs"
+             Link="Chat\Views\ChatConverters.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\Templates\StructuredResponseMatch.cs"
+             Link="Chat\Views\Templates\StructuredResponseMatch.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\ScrollAnchorTracker.cs"
+             Link="Chat\Views\ScrollAnchorTracker.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\TurnFooterConverter.cs"
+             Link="Chat\Views\TurnFooterConverter.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentModels.cs"
+             Link="Embeddings\Services\DocumentModels.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentSearchService.cs"
+             Link="Embeddings\Services\DocumentSearchService.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentStore.cs"
+             Link="Embeddings\Services\DocumentStore.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DescribedEmbeddingGenerator.cs"
+             Link="Embeddings\Services\DescribedEmbeddingGenerator.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\EmbeddingGeneratorDescriptor.cs"
+             Link="Embeddings\Services\EmbeddingGeneratorDescriptor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\ViewModels\EmbeddingPlaygroundViewModel.cs"
+             Link="Embeddings\ViewModels\EmbeddingPlaygroundViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\ViewModels\EmbeddingSettingsViewModel.cs"
+             Link="Embeddings\ViewModels\EmbeddingSettingsViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\Services\GeneratedImage.cs"
+             Link="Images\Services\GeneratedImage.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\Services\ImageGenerationService.cs"
+             Link="Images\Services\ImageGenerationService.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\Services\DescribedImageGenerator.cs"
+             Link="Images\Services\DescribedImageGenerator.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\Services\ImageGeneratorDescriptor.cs"
+             Link="Images\Services\ImageGeneratorDescriptor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\ViewModels\ImageSettingsViewModel.cs"
+             Link="Images\ViewModels\ImageSettingsViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AISettings.cs"
+             Link="Services\AISettings.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AtomicFile.cs"
+             Link="Services\AtomicFile.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ImageAttachment.cs"
+             Link="Services\ImageAttachment.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Resources\Raw\playground_sample.png"
+             Link="TestData\playground_sample.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

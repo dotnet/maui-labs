@@ -1,83 +1,54 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+    The conversation: a CollectionView over the conversation's rows (ConversationItems), so it creates, measures and
+    recycles the view of each block on its own, and a long conversation costs only the rows on screen. Each turn is its
+    request and response blocks, then a row of its own once it ended, which says whether it was stopped, or why it
+    failed with Retry. The templates of all of them are in ChatTemplates.xaml.
+
+    ChatArea.xaml.cs keeps the end of the list in view while turns are added or stream in, and stops following when the
+    user scrolls up to read (replacing ItemsUpdatingScrollMode="KeepLastItemInView", which is broken in MAUI 10.0.41 per
+    dotnet/maui#35802 and does not follow growing items; upstream proposal: dotnet/maui#40211).
+-->
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:chat="http://schemas.microsoft.com/dotnet/2026/maui/ai/chat"
              xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
              x:Class="AIExtensions.Sample.ChatPlayground.ChatArea"
-             x:DataType="local:ChatAreaViewModel">
-    <Grid>
-        <Grid>
-            <CollectionView x:Name="MessagesView"
-                            ItemsSource="{Binding Messages}"
-                            ItemSizingStrategy="MeasureAllItems"
-                            ItemsUpdatingScrollMode="KeepLastItemInView"
-                            AutomationId="ChatMessages">
-                <CollectionView.ItemTemplate>
-                    <DataTemplate x:DataType="local:ChatMessageViewModel">
-                        <!-- Keep recycled rows full-width; only the bubble should size to its content. -->
-                        <Grid Padding="6,6"
-                              WidthRequest="{Binding Width, Source={x:Reference MessagesView}, x:DataType=CollectionView}"
-                              AutomationId="ChatMessageRow">
-                                <local:MessageBubble Padding="12"
-                                                     MaximumWidthRequest="640"
-                                                     Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
-                                                     StrokeShape="RoundRectangle 12"
-                                                     HorizontalOptions="Start"
-                                                     AutomationId="ChatMessageBubble"
-                                                     BackgroundColor="{AppThemeBinding Light={StaticResource AssistantBubble}, Dark={StaticResource AssistantBubbleDark}}">
-                                    <Border.Triggers>
-                                        <DataTrigger TargetType="Border" Binding="{Binding IsUser}" Value="True">
-                                            <Setter Property="HorizontalOptions" Value="End" />
-                                            <Setter Property="BackgroundColor"
-                                                    Value="{AppThemeBinding Light={StaticResource UserBubble}, Dark={StaticResource UserBubbleDark}}" />
-                                        </DataTrigger>
-                                        <DataTrigger TargetType="Border" Binding="{Binding IsError}" Value="True">
-                                            <Setter Property="BackgroundColor"
-                                                    Value="{AppThemeBinding Light={StaticResource ErrorBubble}, Dark={StaticResource ErrorBubbleDark}}" />
-                                        </DataTrigger>
-                                        <DataTrigger TargetType="Border" Binding="{Binding IsSystem}" Value="True">
-                                            <Setter Property="HorizontalOptions" Value="Center" />
-                                            <Setter Property="BackgroundColor"
-                                                    Value="{AppThemeBinding Light={StaticResource SystemBubble}, Dark={StaticResource SystemBubbleDark}}" />
-                                        </DataTrigger>
-                                        <DataTrigger TargetType="Border" Binding="{Binding IsTool}" Value="True">
-                                            <Setter Property="BackgroundColor"
-                                                    Value="{AppThemeBinding Light={StaticResource ToolBubble}, Dark={StaticResource ToolBubbleDark}}" />
-                                        </DataTrigger>
-                                    </Border.Triggers>
-                                    <VerticalStackLayout Spacing="6">
-                                        <Label Text="{Binding Label}" FontAttributes="Bold" FontSize="11"
-                                               Style="{StaticResource MutedLabel}"
-                                               AutomationId="ChatMessageRole" />
-                                        <Label Text="{Binding ModelId, StringFormat='Model: {0}'}"
-                                               IsVisible="{Binding HasModelId}"
-                                               Style="{StaticResource MutedLabel}"
-                                               AutomationId="MessageModelId" />
-                                        <Label Text="{Binding Text}" LineBreakMode="WordWrap"
-                                               AutomationId="ChatMessageText" />
-                                        <Image Source="{Binding ImageSource}"
-                                               IsVisible="{Binding HasImage}"
-                                               WidthRequest="220"
-                                               MaximumHeightRequest="240"
-                                               Aspect="AspectFit"
-                                               HorizontalOptions="End"
-                                               AutomationId="MessageImage" />
-                                        <Label Text="{Binding DetailText}" IsVisible="{Binding HasDetails}"
-                                               FontSize="12" LineBreakMode="WordWrap" />
-                                    </VerticalStackLayout>
-                            </local:MessageBubble>
-                        </Grid>
-                    </DataTemplate>
-                </CollectionView.ItemTemplate>
-            </CollectionView>
-            <VerticalStackLayout IsVisible="{Binding IsEmpty}"
-                                 Padding="28"
-                                 HorizontalOptions="Center"
-                                 VerticalOptions="Center">
-                <Label Text="{Binding EmptyTitle}" FontSize="18" HorizontalTextAlignment="Center" />
-                <Label Text="{Binding EmptySubtitle}" Style="{StaticResource MutedLabel}"
-                       HorizontalTextAlignment="Center" />
-            </VerticalStackLayout>
-        </Grid>
+             x:DataType="local:ChatViewModel">
+    <ContentView.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <local:ChatTemplates />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </ContentView.Resources>
 
-    </Grid>
+    <CollectionView x:Name="ConversationView"
+                    ItemsSource="{Binding Items}"
+                    ItemTemplate="{StaticResource BlockTemplates}"
+                    SelectionMode="None"
+                    Margin="16,0"
+                    AutomationId="Conversation">
+
+        <!-- Before the first message: what to do, and prompts to try. -->
+        <CollectionView.EmptyView>
+            <VerticalStackLayout Padding="28" Spacing="8" VerticalOptions="Center" HorizontalOptions="Center"
+                                 MaximumWidthRequest="560" AutomationId="ChatWelcome">
+                <Label Text="{Binding WelcomeTitle}" FontSize="18" HorizontalTextAlignment="Center" />
+                <Label Text="{Binding WelcomeMessage}" Style="{StaticResource MutedLabel}"
+                       HorizontalTextAlignment="Center" />
+                <FlexLayout BindableLayout.ItemsSource="{Binding Suggestions}" Wrap="Wrap"
+                            JustifyContent="Center" Margin="0,8,0,0">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <Button Text="{Binding .}" Style="{StaticResource SecondaryButtonStyle}" Margin="4"
+                                    Command="{Binding SendSuggestionAction, Source={RelativeSource AncestorType={x:Type local:ChatViewModel}}, x:DataType=local:ChatViewModel}"
+                                    CommandParameter="{Binding .}"
+                                    AutomationId="ChatSuggestion" />
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </FlexLayout>
+            </VerticalStackLayout>
+        </CollectionView.EmptyView>
+    </CollectionView>
 </ContentView>

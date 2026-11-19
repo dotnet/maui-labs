@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    The notes that the user and the chat share. On a narrow screen it is a bar between the messages and the composer:
+    collapsed it shows the first line, and a tap expands it to a short editor. On a wide screen it is a column beside the
+    messages. While the chat's proposal waits, the notes show it with the changes marked, with Accept and Reject.
+-->
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.NotesView"
+             x:Name="Self"
+             x:DataType="local:NotesViewModel"
+             IsVisible="{Binding IsShown}">
+    <ContentView.Resources>
+        <local:DiffFormattedStringConverter x:Key="DiffText" />
+    </ContentView.Resources>
+
+    <Border Style="{StaticResource PlaygroundPanel}" Padding="12,8" AutomationId="NotesBar">
+        <Grid RowDefinitions="Auto,*">
+            <!-- Tapping the header shows or hides the editor on a narrow screen. -->
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8"
+                  SemanticProperties.Hint="Shows or hides the notes editor" AutomationId="NotesHeader">
+                <Grid.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding ToggleExpandedAction}" />
+                </Grid.GestureRecognizers>
+                <Label Text="Notes" FontAttributes="Bold" VerticalOptions="Center" />
+                <Label Grid.Column="1" Text="{Binding Summary}" Style="{StaticResource MutedLabel}" FontSize="13"
+                       MaxLines="1" LineBreakMode="TailTruncation" VerticalOptions="Center" IsVisible="False"
+                       AutomationId="NotesSummary">
+                    <Label.Triggers>
+                        <MultiTrigger TargetType="Label">
+                            <MultiTrigger.Conditions>
+                                <BindingCondition Binding="{Binding IsCompact, Source={x:Reference Self}, x:DataType=local:NotesView}"
+                                                  Value="True" />
+                                <BindingCondition Binding="{Binding IsExpanded}" Value="False" />
+                            </MultiTrigger.Conditions>
+                            <Setter Property="IsVisible" Value="True" />
+                        </MultiTrigger>
+                    </Label.Triggers>
+                </Label>
+                <Button Grid.Column="2" Text="Hide" Style="{StaticResource SecondaryButtonStyle}"
+                        HeightRequest="32" Padding="12,0" FontSize="12"
+                        Command="{Binding ToggleShownAction}"
+                        SemanticProperties.Description="Hide the notes"
+                        AutomationId="HideNotesButton" />
+            </Grid>
+
+            <Grid Grid.Row="1" Margin="0,8,0,0">
+                <Grid.Triggers>
+                    <MultiTrigger TargetType="Grid">
+                        <MultiTrigger.Conditions>
+                            <BindingCondition Binding="{Binding IsCompact, Source={x:Reference Self}, x:DataType=local:NotesView}"
+                                              Value="True" />
+                            <BindingCondition Binding="{Binding IsExpanded}" Value="False" />
+                        </MultiTrigger.Conditions>
+                        <Setter Property="IsVisible" Value="False" />
+                    </MultiTrigger>
+                </Grid.Triggers>
+
+                <!-- About four lines on a narrow screen; the editor scrolls beyond that. -->
+                <Editor Text="{Binding Text}" IsReadOnly="{Binding IsReadOnly}"
+                        Placeholder="Notes that the chat reads with every message and can propose changes to"
+                        FontSize="14" AutomationId="NotesEditor">
+                    <Editor.Triggers>
+                        <DataTrigger TargetType="Editor" Value="True"
+                                     Binding="{Binding IsCompact, Source={x:Reference Self}, x:DataType=local:NotesView}">
+                            <Setter Property="HeightRequest" Value="100" />
+                        </DataTrigger>
+                        <DataTrigger TargetType="Editor" Binding="{Binding HasProposal}" Value="True">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Editor.Triggers>
+                </Editor>
+
+                <!--
+                    A proposal: the notes with its changes marked, as tall as the text up to about five lines on a narrow
+                    screen, scrolling beyond that, with Accept and Reject right under it.
+                -->
+                <VerticalStackLayout Spacing="8" VerticalOptions="Start" IsVisible="{Binding HasProposal}">
+                    <ScrollView MaximumHeightRequest="320">
+                        <ScrollView.Triggers>
+                            <DataTrigger TargetType="ScrollView" Value="True"
+                                         Binding="{Binding IsCompact, Source={x:Reference Self}, x:DataType=local:NotesView}">
+                                <Setter Property="MaximumHeightRequest" Value="100" />
+                            </DataTrigger>
+                        </ScrollView.Triggers>
+                        <Label FormattedText="{Binding Changes, Converter={StaticResource DiffText}}"
+                               FontSize="14" LineBreakMode="WordWrap" AutomationId="NotesProposal" />
+                    </ScrollView>
+                    <HorizontalStackLayout Spacing="8">
+                        <Button Text="Accept" HeightRequest="36" Padding="14,0"
+                                Command="{Binding AcceptProposalAction}"
+                                AutomationId="NotesAcceptButton" />
+                        <Button Text="Reject" Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding RejectProposalAction}"
+                                AutomationId="NotesRejectButton" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Grid>
+        </Grid>
+    </Border>
+</ContentView>

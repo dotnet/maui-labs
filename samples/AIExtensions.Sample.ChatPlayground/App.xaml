@@ -36,6 +36,8 @@
             <Color x:Key="ModelWarningBackgroundDark">#422F0D</Color>
             <Color x:Key="ModelWarningText">#713F12</Color>
             <Color x:Key="ModelWarningTextDark">#FDE68A</Color>
+            <Color x:Key="ErrorText">#B91C1C</Color>
+            <Color x:Key="ErrorTextDark">#FCA5A5</Color>
             <Style TargetType="Label">
                 <Setter Property="TextColor"
                         Value="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
@@ -103,10 +105,6 @@
             <Style TargetType="CheckBox">
                 <Setter Property="MinimumWidthRequest" Value="{OnPlatform -1, WinUI=0}" />
             </Style>
-            <Style x:Key="ReplayActionButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
-                <Setter Property="WidthRequest" Value="136" />
-                <Setter Property="HeightRequest" Value="44" />
-            </Style>
             <Style TargetType="RadioButton">
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="MinimumWidthRequest" Value="{OnPlatform -1, WinUI=0}" />
@@ -139,6 +137,54 @@
             <Style x:Key="ChatActionLabel" TargetType="Label" BasedOn="{StaticResource MutedLabel}">
                 <Setter Property="FontSize" Value="11" />
                 <Setter Property="HorizontalTextAlignment" Value="Center" />
+            </Style>
+
+            <!-- The chat's blocks: see Chat/Views/ChatTemplates.xaml and the cards beside it. -->
+            <Style x:Key="UserBubbleStyle" TargetType="Border">
+                <Setter Property="BackgroundColor"
+                        Value="{AppThemeBinding Light={StaticResource UserBubble}, Dark={StaticResource UserBubbleDark}}" />
+                <Setter Property="StrokeThickness" Value="0" />
+                <Setter Property="StrokeShape" Value="RoundRectangle 16" />
+                <Setter Property="Padding" Value="12,8" />
+                <Setter Property="Margin" Value="48,4,0,4" />
+                <Setter Property="HorizontalOptions" Value="End" />
+                <Setter Property="MaximumWidthRequest" Value="560" />
+            </Style>
+            <Style x:Key="ToolCardStyle" TargetType="Border">
+                <Setter Property="BackgroundColor"
+                        Value="{AppThemeBinding Light={StaticResource ToolBubble}, Dark={StaticResource ToolBubbleDark}}" />
+                <Setter Property="Stroke"
+                        Value="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
+                <Setter Property="StrokeShape" Value="RoundRectangle 12" />
+                <Setter Property="Padding" Value="12,10" />
+                <Setter Property="Margin" Value="0,4" />
+                <Setter Property="HorizontalOptions" Value="Start" />
+                <Setter Property="MinimumWidthRequest" Value="220" />
+                <Setter Property="MaximumWidthRequest" Value="560" />
+            </Style>
+            <Style x:Key="ErrorCardStyle" TargetType="Border" BasedOn="{StaticResource ToolCardStyle}">
+                <Setter Property="BackgroundColor"
+                        Value="{AppThemeBinding Light={StaticResource ErrorBubble}, Dark={StaticResource ErrorBubbleDark}}" />
+            </Style>
+            <Style x:Key="CardCaption" TargetType="Label" BasedOn="{StaticResource MutedLabel}">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="FontAttributes" Value="Bold" />
+                <Setter Property="CharacterSpacing" Value="0.6" />
+            </Style>
+            <Style x:Key="CardDetail" TargetType="Label" BasedOn="{StaticResource MutedLabel}">
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="LineBreakMode" Value="WordWrap" />
+            </Style>
+            <Style x:Key="CodeBlock" TargetType="Border">
+                <Setter Property="BackgroundColor"
+                        Value="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}" />
+                <Setter Property="StrokeThickness" Value="0" />
+                <Setter Property="StrokeShape" Value="RoundRectangle 8" />
+                <Setter Property="Padding" Value="10,8" />
+            </Style>
+            <Style x:Key="CodeText" TargetType="Label">
+                <Setter Property="FontFamily" Value="{OnPlatform Menlo, Android=monospace, WinUI=Consolas}" />
+                <Setter Property="FontSize" Value="12" />
             </Style>
         </ResourceDictionary>
     </Application.Resources>
