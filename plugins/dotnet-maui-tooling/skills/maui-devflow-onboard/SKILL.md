@@ -39,10 +39,38 @@ feedback. Do not run it automatically.
 7. Verify with:
 
    ```bash
-   maui devflow diagnose
-   maui devflow wait
-   maui devflow ui tree --depth 1
+   maui doctor --json
+   maui devflow diagnose --json
+   maui devflow wait --json
+   maui devflow ui tree --depth 1 --json
    ```
+
+   The environment and connectivity reports have different schemas:
+   - `maui doctor --json` emits a `DoctorReport`: read the top-level `status`
+     (`Healthy`/`Degraded`/`Unhealthy`) and iterate `checks[]`. Inspect
+     `fix.command` when `fix.auto_fixable` is true and obtain any required
+     approval before running it.
+     Key off `fix.auto_fixable`, **not** `status`: auto-fixable fixes appear on
+     both `Error` and `Warning` checks (e.g. Android SDK licenses surface as a
+     `Warning` with an auto-fixable `maui android sdk accept-licenses`). Doctor
+     check status enums are PascalCase (`Ok`/`Warning`/`Error`/`Skipped`/
+     `NotApplicable`), distinct from the lowercase error envelope below.
+     An auto-fixable flag does not imply non-interactive execution:
+     `maui android sdk accept-licenses --json` only returns the interactive
+     acceptance command when licenses are pending. With authorization to accept
+     the terms, use `maui android install --accept-licenses --ci --json` for
+     unattended **full environment setup**, not a licenses-only operation.
+   - `maui devflow diagnose --json` writes a health report to **stdout** on
+     success — `cli_version`, `broker_running`, `agent_count`, `agents`,
+     `projects`, plus optional `broker_port` (when the broker is up) and
+     `android` (emulator forwarding status). Broker or agent unavailability is
+     represented in that report rather than as a structured stderr error.
+
+   Most failures in the other `maui` groups (`android`, `apple`, `device`) use
+   the flat `code` / `remediation` envelope (no `error` wrapper; `snake_case`;
+   lowercase `remediation.type`, e.g. `autofixable`), though some commands
+   return command-specific warning/result shapes. See `maui-devflow-debug`
+   references/troubleshooting.md for details.
 
 If verification fails after integration, switch to `maui-devflow-debug` for connectivity recovery.
 

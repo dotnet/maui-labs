@@ -7,7 +7,7 @@ Use this when a project already has DevFlow package references and `builder.AddM
 1. Run the built-in diagnostic:
 
    ```bash
-   maui devflow diagnose
+   maui devflow diagnose --json
    ```
 
    Use the result to separate broker startup, missing project integration, no running app, and target-device networking issues.
@@ -24,17 +24,17 @@ Use this when a project already has DevFlow package references and `builder.AddM
 3. Check broker health:
 
    ```bash
-   maui devflow broker status
-   maui devflow broker start
+   maui devflow broker status --json
+   maui devflow broker start --json
    ```
 
 4. List and wait for agents:
 
    ```bash
-   maui devflow list
-   maui devflow wait
-   maui devflow agent status
-   maui devflow ui tree --depth 1
+   maui devflow list --json
+   maui devflow wait --json
+   maui devflow agent status --json
+   maui devflow ui tree --depth 1 --json
    ```
 
    A successful `agent status` proves the CLI can reach the running app and
@@ -45,30 +45,47 @@ Use this when a project already has DevFlow package references and `builder.AddM
 
 ### Android emulator
 
-Android emulators run in a separate network namespace. Broker registration and CLI-to-agent traffic need opposite forwarding directions:
+Android emulators run in a separate network namespace, so broker registration
+and CLI-to-agent traffic need opposite forwarding directions. `maui devflow
+wait` establishes the broker `reverse` before polling and the agent `forward`
+once the agent registers; `list` repairs mappings for registered agents.
+`wait`, `list`, and `diagnose` honor `--device <serial>`. Agent/UI status
+commands also attempt forwarding repair for broker-registered agents, but do
+not pass that selector to the repair path. With multiple devices, repair
+explicitly with `maui android port` and target the intended `--agent-port`.
+`--device` selects ADB forwarding, not the agent returned by `wait`; use
+`--project <csproj-path>` to constrain that wait when multiple projects run.
 
 ```bash
-maui devflow diagnose             # reports Android forwarding state
-maui devflow list                 # checks/repairs forwarding when one device is online
-adb reverse tcp:19223 tcp:19223   # app in emulator -> host broker
-adb forward tcp:<port> tcp:<port> # host CLI -> app agent
-adb reverse --list
-adb forward --list
+maui devflow wait --wait-platform android --json  # broker reverse + agent forward
+maui devflow list --json                          # repairs forward + lists agent ports
+maui device list --platform android --json
+maui devflow diagnose --json                      # reports mapping status
+```
+
+Inspect or manually repair mappings with `maui android port`. Use the serial
+from `maui device list --platform android --json` and the agent port from
+`maui devflow list --json`:
+
+```bash
+maui android port list --device <serial> --json
+maui android port reverse 19223 --device <serial> --json   # app -> host broker
+maui android port forward <port> --device <serial> --json  # host CLI -> app agent
 ```
 
 When multiple Android devices/emulators are connected, use the same serial selection the CLI supports:
 
 ```bash
-maui devflow diagnose --device <serial>
-maui devflow list --device <serial>
+maui devflow diagnose --device <serial> --json
+maui devflow list --device <serial> --json
 ```
 
-If no broker is available and the app uses a direct `.mauidevflow` port, forward that port instead:
+If no broker is available and the app uses a direct `.mauidevflow` port, forward that port instead — this direct-port forward is the one mapping the CLI does **not** set up automatically (it only auto-forwards broker-registered agents):
 
 ```bash
-adb devices
-adb forward tcp:9223 tcp:9223
-maui devflow agent status --agent-host localhost --agent-port 9223
+maui device list --platform android --json
+maui android port forward 9223 --device <serial> --json
+maui devflow agent status --agent-host localhost --agent-port 9223 --json
 ```
 
 Use this direct status check before declaring Android connectivity broken. It is
@@ -81,7 +98,7 @@ and `--agent-port <port>` until broker registration is restored.
 No forwarding is normally needed because simulators share host networking:
 
 ```bash
-xcrun simctl list devices booted
+maui apple simulator list --json
 ```
 
 ### Mac Catalyst and macOS
@@ -96,7 +113,7 @@ Mac Catalyst needs Debug entitlements that allow the agent and CDP servers to bi
 macOS AppKit and Mac Catalyst otherwise use direct localhost access. Check for explicit port conflicts only after confirming broker discovery:
 
 ```bash
-lsof -i :9223
+maui port check 9223 --json
 ```
 
 ### Windows and Linux/GTK
@@ -107,16 +124,80 @@ These use direct localhost access. On Linux, verify the app process started:
 pgrep -f "YourApp"
 ```
 
+## Reading errors from the CLI
+
+`maui` commands accept `--json` to emit structured output that an AI agent can
+parse. Most non-DevFlow failures use error fields at the **top level** of
+stdout (no `"error"` wrapper) with `snake_case` property names:
+
+```json
+{
+  "code": "E2106",
+  "category": "platform",
+  "severity": "error",
+  "message": "Android emulator not installed",
+  "remediation": {
+    "type": "autofixable",
+    "command": "maui android sdk install emulator"
+  }
+}
+```
+
+Note: the same `E2106` code is also thrown for "no AVD with that name" — that
+throw site emits the code **without** a `remediation` block. Always treat
+`remediation` as optional and fall back to surfacing `message`.
+
+Common code prefixes (see [troubleshooting.md](troubleshooting.md#reading-machine-readable-output-and-errors) for the full taxonomy):
+
+| Prefix | Meaning |
+|--------|---------|
+| `E1xxx` | Tool error (likely a bug) |
+| `E2xxx` | Platform / SDK (Android, Apple, .NET) |
+| `E3xxx` | User action required |
+| `E4xxx` | Network |
+| `E5xxx` | Permission |
+
+Branch on `code`. When `remediation.type` is `autofixable` (lowercase), inspect
+`remediation.command`, obtain any required approval, then run it and retry.
+For `useraction`, present
+`remediation.manual_steps`. If `remediation` is absent, surface `message`
+and stop retrying.
+
+> **Output exceptions.** Some non-DevFlow commands return command-specific
+> warning/result objects instead of the flat error envelope. `maui devflow`
+> keeps data on stdout and errors on stderr, but its error format varies:
+> action commands generally emit `{ "error", "type", "retryable",
+> "suggestions" }`, `wait` writes plain-text broker/timeout errors, and
+> `diagnose --json` reports broker/agent availability in its stdout report.
+
+## Extension tools registered by the app
+
+Apps can register custom DevFlow extension tools that the CLI surfaces dynamically.
+When a tool the agent expects is missing or behaving unexpectedly, list and
+inspect what the running app actually advertises:
+
+```bash
+maui devflow extensions list --json
+maui devflow extensions describe <namespace> --json
+maui devflow extensions call <namespace> <tool> '{"key":"value"}' --json
+```
+
+For `call`, replace the example JSON with arguments matching the discovered
+schema, or omit the positional JSON argument for a tool with no parameters.
+
+Use this before assuming a custom DevFlow Action is unimplemented — it may simply
+not be registered with the connected agent.
+
 ## Common symptoms
 
 | Symptom | Fix |
 |---------|-----|
 | `maui devflow list` shows no agents | Verify app is running in Debug, package references exist, and `AddMauiDevFlowAgent()` executes |
-| Android agent never registers | Run `maui devflow diagnose --device <serial>` or manually set `adb reverse tcp:19223 tcp:19223` for broker registration |
-| Android connection refused after registration | Run `maui devflow diagnose --device <serial>` or manually set `adb forward tcp:<port> tcp:<port>` using the port from `maui devflow list` |
+| Android agent never registers | Run `maui devflow wait --wait-platform android --device <serial> --json`; if needed, repair with `maui android port reverse 19223 --device <serial> --json` |
+| Android connection refused after registration | Run `maui devflow list --device <serial> --json`; if needed, use `maui android port forward <port> --device <serial> --json` with the listed agent port |
 | Android broker list is empty but app is running | Forward the direct `.mauidevflow` port and run `maui devflow agent status --agent-host localhost --agent-port <port>` |
 | Broker unavailable | `maui devflow broker start`; retry the command |
-| Port already in use | Identify the owner with `lsof -i :<port>` before killing a PID |
+| Port already in use | Identify the owner with `maui port check <port> --json` before killing a PID |
 | Multiple agents connected | Ask which app/device/agent port to target; use `--agent-port` |
 
 ## Stop signals
@@ -130,5 +211,5 @@ pgrep -f "YourApp"
 
 - Do not treat an empty `maui devflow list` as proof the project is not integrated. It only means no runtime agent is connected.
 - Do not treat an empty broker/list result as final on Android until direct forwarded `agent status` has also failed.
-- Do not use `adb reverse` for the agent HTTP port when the host CLI must connect into the emulator. Use `adb forward tcp:<port> tcp:<port>` for that direction.
+- Do not reverse the agent HTTP port when the host CLI must connect into the emulator. Use `maui android port forward <port> --device <serial> --json` for that direction.
 - Do not kill random processes by name. Identify the owning PID first.
