@@ -35,11 +35,11 @@ public class FileLogWriter : IDisposable
         {
             try
             {
-                var entry = JsonSerializer.Deserialize<FileLogEntry>(json);
+                var entry = JsonSerializer.Deserialize(json, FileLogJsonContext.Default.FileLogEntry);
                 if (entry != null)
                     entries.Add(entry);
             }
-            catch { }
+            catch (JsonException) { }
         }
         return entries;
     }
@@ -58,7 +58,7 @@ public class FileLogWriter : IDisposable
     public void Write(FileLogEntry entry)
     {
         if (_disposed) return;
-        var json = JsonSerializer.Serialize(entry);
+        var json = JsonSerializer.Serialize(entry, FileLogJsonContext.Default.FileLogEntry);
         _buffer.Enqueue(json);
         OnLogWritten?.Invoke(entry);
     }

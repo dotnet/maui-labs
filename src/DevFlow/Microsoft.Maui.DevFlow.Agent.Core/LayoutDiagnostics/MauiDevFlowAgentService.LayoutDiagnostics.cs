@@ -181,7 +181,8 @@ public partial class MauiDevFlowAgentService
             result.Summary = LayoutDiagnosticsEngine.Summarize(
                 result.Findings,
                 result.Summary.Passes,
-                result.Summary.NotApplicable);
+                result.Summary.NotApplicable,
+                result.Summary.Filtered);
             if (!stable)
                 result.Summary.Incomplete++;
             result.Summary.Incomplete += lastCapture.IncompleteReasons
@@ -371,7 +372,7 @@ public partial class MauiDevFlowAgentService
             cancellationToken);
         _treeWalker.ApplyLayoutScope(capture, request.Scope);
         ApplyLayoutCaptureLimits(capture);
-        capture.HasActiveAnimations = capture.Nodes.Any(node => node.HasActiveAnimation);
+        capture.HasActiveAnimations = capture.AnalysisNodes.Any(node => node.HasActiveAnimation);
         return (pendingNativeCapture, nativeCaptureUnavailable);
     }
 

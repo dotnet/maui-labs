@@ -326,11 +326,13 @@ internal static class GoFileBasedDetector
 	public static (GoUpgradeDetection? detection, IList<string> errors) Detect(string cwd, bool force)
 	{
 		var errors = new List<string>();
+		var dirName = new DirectoryInfo(cwd).Name;
+		var hasProject = Directory.EnumerateFiles(cwd, "*.csproj", SearchOption.TopDirectoryOnly).Any();
 
 		// 1. Reject if csproj / Platforms / MauiProgram.cs already present (unless --force).
 		if (!force)
 		{
-			if (Directory.EnumerateFiles(cwd, "*.csproj", SearchOption.TopDirectoryOnly).Any())
+			if (hasProject)
 			{
 				errors.Add("Refusing to upgrade: a .csproj already exists here. Use --force to re-run.");
 				return (null, errors);
@@ -345,6 +347,13 @@ internal static class GoFileBasedDetector
 				errors.Add("Refusing to upgrade: MauiProgram.cs already exists here. Use --force to re-run.");
 				return (null, errors);
 			}
+		}
+
+		// Do not replace a persisted identity with the new fallback, even under --force.
+		if (hasProject && !dirName.Any(char.IsAsciiLetterOrDigit))
+		{
+			errors.Add("Refusing to overwrite an existing .csproj for a directory name without ASCII letters or digits, even with --force. Keep the existing project and its ApplicationId; new fallback IDs use SHA-256 and could change the app identity.");
+			return (null, errors);
 		}
 
 		// 2. Find candidate .cs files at top level.
@@ -396,7 +405,6 @@ internal static class GoFileBasedDetector
 
 		// 6. App-class collision check.
 		var collisions = ScanCollisions(sourceWithoutDirectives);
-		var dirName = new DirectoryInfo(cwd).Name;
 		var safeName = ToSafeName(dirName);
 		var appClassName = $"{safeName}CometApp";
 		var generatedTypes = new HashSet<string>(StringComparer.Ordinal) { "MauiProgram", appClassName, "AppDelegate", "MainActivity", "MainApplication", "Program" };
@@ -622,9 +630,9 @@ internal static class GoFileBasedDetector
 		var slug = sb.ToString();
 		if (string.IsNullOrEmpty(slug))
 		{
-			// Stable fallback hash
-			var hash = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(Encoding.UTF8.GetBytes(dirName)))
-				.ToLowerInvariant().Substring(0, 8);
+			// Retain 128 bits of SHA-256 for the stable fallback.
+			var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(dirName)))
+				.ToLowerInvariant().Substring(0, 32);
 			return $"com.cometgo.app{hash}";
 		}
 		if (char.IsDigit(slug[0])) slug = "app" + slug;

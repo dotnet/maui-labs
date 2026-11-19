@@ -54,8 +54,7 @@ public partial class ImageButtonHandler : MacOSViewHandler<IImageButton, NSButto
     {
         if (imageButton.Source is IFileImageSource fileSource)
         {
-            var image = new NSImage(fileSource.File);
-            handler.PlatformView.Image = image;
+            handler.PlatformView.Image = ImageHandler.FindBundleImage(fileSource.File);
         }
         else if (imageButton.Source is IUriImageSource uriSource)
         {
@@ -100,6 +99,8 @@ public partial class ImageButtonHandler : MacOSViewHandler<IImageButton, NSButto
         else
         {
             handler.PlatformView.Bordered = true;
+            if (handler.PlatformView.Layer is { } layer)
+                layer.BackgroundColor = null;
         }
     }
 

@@ -1,9 +1,12 @@
 using Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
+using System.Runtime.CompilerServices;
 
 namespace Microsoft.Maui.DevFlow.Agent.Core;
 
 public partial class VisualTreeWalker
 {
+    private readonly ConditionalWeakTable<object, SourceTextEdit> _sourceTextEdits = new();
+
     public IXamlSourceMapProvider? SourceMapProvider { get; set; }
 
     internal bool HasActiveSourceMaps => SourceMapProvider switch
@@ -12,6 +15,24 @@ public partial class VisualTreeWalker
         XamlSourceMapRegistry registry => registry.HasProviders,
         _ => true
     };
+
+    internal void RetainSourceForTextEdit(object element, ElementInfo? source)
+    {
+        if (source?.IdentityToken is not { } identity
+            || !ReferenceEquals(identity, GetElementIdentity(element))
+            || source.SourceFile is not { } file
+            || source.SourceLine is not { } line
+            || source.SourceColumn is not { } column
+            || source.SourceHash is not { Length: > 0 } hash
+            || ExtractText(element) is not { } text
+            || string.Equals(text, SensitiveValueRedactor.RedactedValue, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _sourceTextEdits.Remove(identity);
+        _sourceTextEdits.Add(identity, new SourceTextEdit(file, line, column, hash, text));
+    }
 
     internal static Dictionary<string, (string File, int Line, int Column, string? Hash)>
         CollectSourceById(IReadOnlyList<ElementInfo> roots)
@@ -122,7 +143,7 @@ public partial class VisualTreeWalker
                 expectedChildCount);
     }
 
-    private static int[]? AlignSourceChildren(
+    private int[]? AlignSourceChildren(
         IReadOnlyList<ElementInfo> children,
         XamlSourceContext context)
     {
@@ -134,18 +155,6 @@ public partial class VisualTreeWalker
         {
             if (!context.Map.TryGet(context.ChildPath(index), out expected[index]))
                 return null;
-        }
-
-        var ambiguousExpected = new bool[expected.Length];
-        for (var first = 0; first < expected.Length; first++)
-        {
-            for (var second = first + 1; second < expected.Length; second++)
-            {
-                if (!HasSameStaticIdentity(expected[first], expected[second]))
-                    continue;
-                ambiguousExpected[first] = true;
-                ambiguousExpected[second] = true;
-            }
         }
 
         var runtime = new List<(int OriginalIndex, ElementInfo Info)>();
@@ -194,8 +203,14 @@ public partial class VisualTreeWalker
 
             if (takeWays == 1 && skipWays == 0)
             {
-                if (!ambiguousExpected[expectedPosition])
+                if (CanAttachToAlignedChild(
+                    context.Map,
+                    expected,
+                    expectedPosition,
+                    runtime[runtimePosition].Info))
+                {
                     alignment[runtime[runtimePosition].OriginalIndex] = expectedPosition;
+                }
                 expectedPosition++;
                 runtimePosition++;
             }
@@ -212,11 +227,63 @@ public partial class VisualTreeWalker
         return alignment;
     }
 
+    // Same-type siblings are interchangeable by type alone and code-behind may reorder them, so an
+    // entry that shares its static identity is only attached when its literal Text is unique among
+    // those siblings and the aligned runtime element still shows it (or its verified agent edit).
+    // Anything unverifiable stays unmapped: a wrong line would edit a different element.
+    private bool CanAttachToAlignedChild(
+        XamlSourceMap map,
+        XamlSourceEntry[] expected,
+        int index,
+        ElementInfo runtime)
+    {
+        var entry = expected[index];
+        var hasSameTypeSibling = false;
+        for (var other = 0; other < expected.Length; other++)
+        {
+            if (other == index || !HasSameStaticIdentity(entry, expected[other]))
+                continue;
+
+            hasSameTypeSibling = true;
+            // A bound or missing Text can show anything at runtime, including this entry's text.
+            if (entry.Text is null
+                || expected[other].Text is null
+                || string.Equals(entry.Text, expected[other].Text, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        if (!hasSameTypeSibling)
+            return true;
+
+        // Every password Entry reports the redaction marker whatever it holds, so it proves nothing.
+        if (string.Equals(runtime.Text, SensitiveValueRedactor.RedactedValue, StringComparison.Ordinal))
+            return false;
+
+        if (runtime.IdentityToken is { } identity && _sourceTextEdits.TryGetValue(identity, out var edit))
+        {
+            // An edited value can equal another sibling's literal; never let it claim that line.
+            return string.Equals(edit.File, NormalizeSourceFile(map.File), StringComparison.Ordinal)
+                && edit.Line == entry.Line
+                && edit.Column == entry.Column
+                && string.Equals(edit.Hash, map.ContentHash, StringComparison.Ordinal)
+                && (string.Equals(edit.Text, runtime.Text, StringComparison.Ordinal)
+                    || string.Equals(entry.Text, runtime.Text, StringComparison.Ordinal));
+        }
+
+        return string.Equals(entry.Text, runtime.Text, StringComparison.Ordinal);
+    }
+
+    // An unresolved FullTypeName (default xmlns) matches any runtime type with that short name, so
+    // it may describe the same element as a resolved one.
     private static bool HasSameStaticIdentity(
         XamlSourceEntry left,
         XamlSourceEntry right)
         => string.Equals(left.TypeName, right.TypeName, StringComparison.Ordinal)
-            && string.Equals(left.FullTypeName, right.FullTypeName, StringComparison.Ordinal)
+            && (string.IsNullOrEmpty(left.FullTypeName)
+                || string.IsNullOrEmpty(right.FullTypeName)
+                || string.Equals(left.FullTypeName, right.FullTypeName, StringComparison.Ordinal))
             && string.Equals(left.AutomationId, right.AutomationId, StringComparison.Ordinal);
 
     private static void AttachLocation(
@@ -267,6 +334,8 @@ public partial class VisualTreeWalker
         => info.FullType.StartsWith(
             "Microsoft.Maui.DevFlow.Agent.Core.",
             StringComparison.Ordinal);
+
+    private sealed record SourceTextEdit(string File, int Line, int Column, string Hash, string Text);
 
     private readonly struct XamlSourceContext
     {

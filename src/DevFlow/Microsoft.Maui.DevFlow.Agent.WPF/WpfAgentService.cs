@@ -38,6 +38,21 @@ public class WpfAgentService : MauiDevFlowAgentService
     protected override string IdiomName => "Desktop";
     protected override bool SupportsNativeElementScreenshots => true;
 
+    protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
+    {
+        // Guard against path traversal: sharedName becomes part of a file name.
+        if (!string.IsNullOrEmpty(sharedName) &&
+            (sharedName.Contains('/') || sharedName.Contains('\\') || sharedName.Contains("..")))
+            throw new ArgumentException("sharedName must not contain path separators or '..'.", nameof(sharedName));
+
+        // Mirror WPFPreferences' on-disk layout:
+        // LocalApplicationData / {FriendlyName} / preferences / {shared|default}.json
+        var prefsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            AppDomain.CurrentDomain.FriendlyName, "preferences");
+        return ReadPreferenceFileKeys(Path.Combine(prefsDir, (sharedName ?? "default") + ".json"));
+    }
+
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
         try
@@ -66,27 +81,24 @@ public class WpfAgentService : MauiDevFlowAgentService
 
     protected override Task<bool> TryNativeScroll(VisualElement element, double deltaX, double deltaY)
     {
-        try
+        var target = element;
+        while (target != null)
         {
-            var target = element;
-            while (target != null)
+            if (target.Handler?.PlatformView is DependencyObject d)
             {
-                if (target.Handler?.PlatformView is DependencyObject d)
+                var scroll = ReferenceEquals(target, element) ? FindDescendant<ScrollViewer>(d) : null;
+                scroll ??= FindAncestor<ScrollViewer>(d);
+                if (scroll != null)
                 {
-                    var scroll = FindAncestor<ScrollViewer>(d);
-                    if (scroll != null)
-                    {
-                        if (deltaX != 0)
-                            scroll.ScrollToHorizontalOffset(Math.Max(0, scroll.HorizontalOffset + deltaX));
-                        if (deltaY != 0)
-                            scroll.ScrollToVerticalOffset(Math.Max(0, scroll.VerticalOffset - deltaY));
-                        return Task.FromResult(true);
-                    }
+                    if (deltaX != 0)
+                        scroll.ScrollToHorizontalOffset(Math.Max(0, scroll.HorizontalOffset + deltaX));
+                    if (deltaY != 0)
+                        scroll.ScrollToVerticalOffset(Math.Max(0, scroll.VerticalOffset - deltaY));
+                    return Task.FromResult(true);
                 }
-                target = target.Parent as VisualElement;
             }
+            target = target.Parent as VisualElement;
         }
-        catch { }
         return Task.FromResult(false);
     }
 
@@ -352,6 +364,17 @@ public class WpfAgentService : MauiDevFlowAgentService
         {
             return null;
         }
+    }
+
+    private static T? FindDescendant<T>(DependencyObject start) where T : DependencyObject
+    {
+        if (start is T match) return match;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(start); i++)
+        {
+            var matchInChild = FindDescendant<T>(VisualTreeHelper.GetChild(start, i));
+            if (matchInChild != null) return matchInChild;
+        }
+        return null;
     }
 
     private static T? FindAncestor<T>(DependencyObject start) where T : DependencyObject

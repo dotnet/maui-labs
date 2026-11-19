@@ -14,7 +14,16 @@ public partial class LayoutHandler : MacOSViewHandler<ILayout, MacOSContainerVie
             [nameof(ILayout.ClipsToBounds)] = MapClipsToBounds,
         };
 
-    public LayoutHandler() : base(Mapper)
+    public static readonly CommandMapper<ILayout, LayoutHandler> CommandMapper = new(ViewCommandMapper)
+    {
+        [nameof(ILayoutHandler.Add)] = MapAdd,
+        [nameof(ILayoutHandler.Insert)] = MapInsert,
+        [nameof(ILayoutHandler.Update)] = MapUpdate,
+        [nameof(ILayoutHandler.Remove)] = MapRemove,
+        [nameof(ILayoutHandler.Clear)] = MapClear,
+    };
+
+    public LayoutHandler() : base(Mapper, CommandMapper)
     {
     }
 
@@ -134,6 +143,33 @@ public partial class LayoutHandler : MacOSViewHandler<ILayout, MacOSContainerVie
         PlatformView.NeedsLayout = true;
     }
 
+    public static void MapAdd(LayoutHandler handler, ILayout layout, object? arg)
+    {
+        if (arg is LayoutHandlerUpdate update)
+            handler.Add(update.View);
+    }
+
+    public static void MapInsert(LayoutHandler handler, ILayout layout, object? arg)
+    {
+        if (arg is LayoutHandlerUpdate update)
+            handler.Insert(update.Index, update.View);
+    }
+
+    public static void MapUpdate(LayoutHandler handler, ILayout layout, object? arg)
+    {
+        if (arg is LayoutHandlerUpdate update)
+            handler.Update(update.Index, update.View);
+    }
+
+    public static void MapRemove(LayoutHandler handler, ILayout layout, object? arg)
+    {
+        if (arg is LayoutHandlerUpdate update)
+            handler.Remove(update.View);
+    }
+
+    public static void MapClear(LayoutHandler handler, ILayout layout, object? arg)
+        => handler.Clear();
+
     public static void MapBackground(LayoutHandler handler, ILayout layout)
     {
         if (handler.PlatformView.Layer == null)
@@ -141,6 +177,8 @@ public partial class LayoutHandler : MacOSViewHandler<ILayout, MacOSContainerVie
 
         if (layout.Background is Graphics.SolidPaint solidPaint && solidPaint.Color != null)
             handler.PlatformView.Layer.BackgroundColor = solidPaint.Color.ToPlatformColor().CGColor;
+        else
+            handler.PlatformView.Layer.BackgroundColor = null;
     }
 
     public static void MapClipsToBounds(LayoutHandler handler, ILayout layout)

@@ -15,13 +15,15 @@ public class AlertManagerSubscription : DispatchProxy
     static readonly Type? AlertManagerType = typeof(Window).Assembly
         .GetType("Microsoft.Maui.Controls.Platform.AlertManager");
 
-    static readonly Type? IAlertManagerSubscriptionType = AlertManagerType?
-        .GetNestedType("IAlertManagerSubscription", BindingFlags.Public | BindingFlags.NonPublic);
+    // MAUI 10.0.70 moved the interface out of AlertManager.
+    static readonly Type? IAlertManagerSubscriptionType = typeof(Window).Assembly
+        .GetType("Microsoft.Maui.Controls.Platform.IAlertManagerSubscription")
+        ?? AlertManagerType?.GetNestedType("IAlertManagerSubscription", BindingFlags.Public | BindingFlags.NonPublic);
 
     public static void Register(IServiceCollection services)
     {
         if (IAlertManagerSubscriptionType == null)
-            return;
+            throw new NotSupportedException($"Cannot register AppKit dialogs: IAlertManagerSubscription was not found in {typeof(Window).Assembly.FullName}.");
 
         var proxyType = typeof(AlertManagerSubscription<>).MakeGenericType(IAlertManagerSubscriptionType);
         var createMethod = typeof(DispatchProxy)

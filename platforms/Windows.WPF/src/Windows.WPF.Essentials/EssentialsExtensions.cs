@@ -67,6 +67,9 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 			// App Actions
 			builder.Services.TryAddSingleton<IAppActions, WPFAppActions>();
 
+			builder.Services.TryAddEnumerable(
+				ServiceDescriptor.Singleton<IMauiInitializeService, EssentialsInitializer>());
+
 			return builder;
 		}
 	}

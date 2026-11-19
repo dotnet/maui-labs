@@ -89,6 +89,12 @@ public class DevFlowAgentServiceLifecycleTests
         var capabilityMap = capabilities.GetProperty("capabilities");
         Assert.Contains("property-descriptors", capabilityMap.GetProperty("ui.actions").GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
         Assert.Contains("subscribe", capabilityMap.GetProperty("ui.events").GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
+        Assert.Contains("action-lifecycle", capabilityMap.GetProperty("ui.events").GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
+        var screenshotCapabilities = capabilityMap.GetProperty("ui.screenshot");
+        Assert.Equal(3, screenshotCapabilities.GetProperty("version").GetInt32());
+        Assert.Contains(
+            "resolution-hints",
+            screenshotCapabilities.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
         var jobsCapabilities = capabilityMap.GetProperty("device.jobs");
         Assert.False(jobsCapabilities.GetProperty("supported").GetBoolean());
         Assert.Empty(jobsCapabilities.GetProperty("features").EnumerateArray());
@@ -489,6 +495,200 @@ public class DevFlowAgentServiceLifecycleTests
     }
 
     [Fact]
+    public async Task PointerStart_PreCommitRejectionPreservesCaptureForFallback()
+    {
+        var port = GetFreePort();
+        using var service = new RejectingPointerAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invocationCount = 0;
+        var button = new Button
+        {
+            AutomationId = "PointerFallbackCaptureButton",
+            Text = "Invoke"
+        };
+        button.Clicked += (_, _) => invocationCount++;
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = button });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var capture = Assert.Single(
+            Flatten(await client.GetTreeAsync()),
+            element => element.AutomationId == "PointerFallbackCaptureButton");
+        var start = await client.StartPointerSessionAsync(new PointerSessionStartRequest
+        {
+            SessionId = "precommit-rejection",
+            PointerId = 1,
+            PointerType = "touch",
+            CoordinateSpace = "windowLogical",
+            X = 1,
+            Y = 1,
+            ElapsedMs = 0,
+            CaptureEpoch = capture.CaptureEpoch,
+            RegistryGeneration = capture.RegistryGeneration
+        });
+
+        Assert.False(start.Success);
+        Assert.Equal("pointer-target-unsupported", start.Reason);
+
+        var fallback = await client.TapResultAsync(
+            capture.Id,
+            capture.CaptureEpoch,
+            capture.RegistryGeneration);
+        Assert.True(fallback.Success, $"Fallback tap failed: {fallback.Error}; reason={fallback.Reason}");
+        Assert.Equal(1, invocationCount);
+    }
+
+    [Fact]
+    public async Task PointerCancel_InvalidatesCaptureTakenDuringActiveSession()
+    {
+        var port = GetFreePort();
+        using var service = new CapturePointerAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var button = new Button
+        {
+            AutomationId = "PointerCancelCaptureButton",
+            Text = "Invoke"
+        };
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = button });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+        Assert.True((await client.StartPointerSessionAsync(new PointerSessionStartRequest
+        {
+            SessionId = "capture-during-pointer",
+            PointerId = 1,
+            PointerType = "touch",
+            CoordinateSpace = "windowLogical",
+            X = 1,
+            Y = 1,
+            ElapsedMs = 0
+        })).Success);
+
+        var capture = Assert.Single(
+            Flatten(await client.GetTreeAsync()),
+            element => element.AutomationId == "PointerCancelCaptureButton");
+        Assert.True((await client.CancelPointerSessionAsync(
+            "capture-during-pointer",
+            "pointercancel")).Success);
+
+        var stale = await client.TapResultAsync(
+            capture.Id,
+            capture.CaptureEpoch,
+            capture.RegistryGeneration);
+        Assert.False(stale.Success);
+        Assert.Equal("stale-capture-epoch", stale.Reason);
+    }
+
+    [Fact]
+    public async Task PointerStart_DefaultsWindowIdFromCapture()
+    {
+        var port = GetFreePort();
+        using var service = new CapturePointerAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var app = new Application();
+        var addWindow = typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        addWindow.Invoke(app,
+        [
+            new Window(new ContentPage
+            {
+                Content = new Label { AutomationId = "FirstPointerWindow" }
+            })
+        ]);
+        addWindow.Invoke(app,
+        [
+            new Window(new ContentPage
+            {
+                Content = new Label { AutomationId = "SecondPointerWindow" }
+            })
+        ]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+        var capture = Assert.Single(
+            Flatten(await client.GetTreeAsync(window: 1)),
+            element => element.AutomationId == "SecondPointerWindow");
+        Assert.Equal(1, capture.WindowId);
+
+        var start = await client.StartPointerSessionAsync(new PointerSessionStartRequest
+        {
+            SessionId = "captured-window",
+            PointerId = 1,
+            PointerType = "touch",
+            CoordinateSpace = "windowLogical",
+            X = 1,
+            Y = 1,
+            ElapsedMs = 0,
+            CaptureEpoch = capture.CaptureEpoch,
+            RegistryGeneration = capture.RegistryGeneration
+        });
+
+        Assert.True(start.Success);
+        Assert.Equal(1, service.StartedWindowId);
+        await client.CancelPointerSessionAsync("captured-window", "test-complete");
+    }
+
+    [Theory]
+    [InlineData("Entry", true)]
+    [InlineData("Entry", false)]
+    [InlineData("Editor", true)]
+    [InlineData("Editor", false)]
+    [InlineData("SearchBar", true)]
+    [InlineData("SearchBar", false)]
+    public async Task Tap_InputViewWithGesture_InvokesGestureInsteadOfFocusing(string type, bool useCommand)
+    {
+        InputView input = type switch
+        {
+            "Entry" => new Entry(),
+            "Editor" => new Editor(),
+            "SearchBar" => new SearchBar(),
+            _ => throw new ArgumentOutOfRangeException(nameof(type))
+        };
+        input.AutomationId = "TapInput";
+        input.IsReadOnly = true;
+        var invocationCount = 0;
+        var gesture = new TapGestureRecognizer();
+        if (useCommand)
+            gesture.Command = new Command(() => invocationCount++);
+        else
+            gesture.Tapped += (_, _) => invocationCount++;
+        input.GestureRecognizers.Add(gesture);
+
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = input });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var captured = Assert.Single(
+            Flatten(await client.GetTreeAsync()),
+            element => element.AutomationId == "TapInput");
+        Assert.Equal(bool.TrueString, captured.FrameworkProperties![nameof(InputView.IsReadOnly)]);
+        var result = await client.TapResultAsync(captured.Id, captured.CaptureEpoch, captured.RegistryGeneration);
+
+        Assert.True(result.Success, $"Tap failed: {result.Error}; reason={result.Reason}");
+        Assert.Equal(1, invocationCount);
+    }
+
+    [Fact]
     public async Task CaptureEpoch_ExpiresAfterExternalElementPropertyChange()
     {
         var port = GetFreePort();
@@ -848,6 +1048,233 @@ public class DevFlowAgentServiceLifecycleTests
             secondCapture.CaptureEpoch,
             secondCapture.RegistryGeneration));
         Assert.Equal(1, secondInvocations);
+    }
+
+    [Theory]
+    [InlineData("tree", false)]
+    [InlineData("tree", true)]
+    [InlineData("managed-tree", false)]
+    [InlineData("managed-tree", true)]
+    [InlineData("envelope", false)]
+    [InlineData("envelope", true)]
+    [InlineData("query", false)]
+    [InlineData("query", true)]
+    [InlineData("css-query", false)]
+    [InlineData("css-query", true)]
+    [InlineData("element", false)]
+    [InlineData("element", true)]
+    [InlineData("registered-element", false)]
+    [InlineData("registered-element", true)]
+    public async Task ManagedCapture_ChangesOutsideUiCallback_DoNotRejectRead(
+        string surface,
+        bool changeAfterCallback)
+    {
+        var port = GetFreePort();
+        var registry = new RegisteredNativeElementRegistry();
+        using var service = new ManagedCaptureAgentService(new AgentOptions { Port = port }, registry);
+        using var client = new AgentClient("localhost", port);
+        var button = new Button { AutomationId = "CaptureTarget", Text = "Before" };
+        var action = new MenuItem { Text = "Before" };
+        var window = new Window(new ContentPage { Content = button });
+        var app = new Application();
+        typeof(Application).GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+        var registeredId = registry.Register(window, action, "DialogAction");
+        var dispatcher = new ControlledCaptureDispatcher();
+        service.StartServerOnly(dispatcher);
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+        Assert.Equal(200, (await service.ReadAsync("tree", registeredId)).StatusCode);
+
+        var continuations = new CaptureContinuationContext();
+        dispatcher.IsDispatchRequired = true;
+        var read = continuations.Run(() => service.ReadAsync(surface, registeredId));
+        Assert.True(dispatcher.HasPendingDispatch);
+
+        void ChangeUi()
+        {
+            button.Text = "After";
+            action.Text = "After";
+            registry.Register(window, action, "DialogAction", "Updated");
+        }
+
+        if (!changeAfterCallback)
+            ChangeUi();
+        dispatcher.RunPendingDispatch();
+        if (changeAfterCallback)
+            ChangeUi();
+        dispatcher.IsDispatchRequired = false;
+        await continuations.CompleteAsync(read);
+
+        var response = await read;
+        Assert.Equal(200, response.StatusCode);
+        var targetId = surface == "registered-element" ? registeredId : button.AutomationId;
+        var captured = ReadCapturedElement(response, targetId);
+        Assert.Equal(changeAfterCallback ? "Before" : "After", captured.Text);
+        Assert.True(captured.CaptureEpoch > 0);
+        Assert.Equal(changeAfterCallback ? registry.Generation - 1 : registry.Generation, captured.RegistryGeneration);
+        Assert.Equal(0, captured.WindowId);
+
+        var tap = await client.TapResultAsync(
+            captured.Id,
+            captured.CaptureEpoch,
+            captured.RegistryGeneration);
+        if (changeAfterCallback)
+        {
+            Assert.False(tap.Success);
+            Assert.Equal("stale-capture-epoch", tap.Reason);
+        }
+        else
+        {
+            Assert.True(tap.Success, $"Tap failed: {tap.Error}; reason={tap.Reason}");
+        }
+
+        var fresh = await service.ReadAsync(surface, registeredId);
+        var unchanged = await service.ReadAsync(surface, registeredId);
+        Assert.Equal(200, fresh.StatusCode);
+        Assert.Equal(200, unchanged.StatusCode);
+        var first = ReadCapturedElement(fresh, targetId);
+        var second = ReadCapturedElement(unchanged, targetId);
+        Assert.Equal(first.Text, second.Text);
+        Assert.Equal(first.RegistryGeneration, second.RegistryGeneration);
+        Assert.True(second.CaptureEpoch > first.CaptureEpoch);
+    }
+
+    [Theory]
+    [InlineData("tree", false)]
+    [InlineData("tree", true)]
+    [InlineData("managed-tree", false)]
+    [InlineData("managed-tree", true)]
+    [InlineData("envelope", false)]
+    [InlineData("envelope", true)]
+    [InlineData("query", false)]
+    [InlineData("query", true)]
+    [InlineData("css-query", false)]
+    [InlineData("css-query", true)]
+    [InlineData("element", false)]
+    [InlineData("element", true)]
+    public async Task ManagedCapture_ChangeDuringWalk_ReturnsConflict(string surface, bool registryChange)
+    {
+        var registry = new RegisteredNativeElementRegistry();
+        using var service = new ManagedCaptureAgentService(
+            new AgentOptions { Port = GetFreePort() },
+            registry);
+        var button = new CaptureChangingButton { AutomationId = "CaptureTarget", Text = "Before" };
+        var window = new Window(new ContentPage { Content = button });
+        var app = new Application();
+        typeof(Application).GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+        var native = new object();
+        var registeredId = registry.Register(window, native, "Dialog");
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.Equal(200, (await service.ReadAsync("tree", registeredId)).StatusCode);
+
+        button.OnRead = () =>
+        {
+            if (registryChange)
+                registry.Register(window, native, "Dialog", "Updated");
+            else
+                button.Text = "During";
+        };
+
+        var response = await service.ReadAsync(surface, registeredId);
+        Assert.Equal(409, response.StatusCode);
+        using var error = JsonDocument.Parse(response.Body!);
+        Assert.Equal("capture-changed-during-read", error.RootElement.GetProperty("reason").GetString());
+        var details = error.RootElement.GetProperty("details");
+        var generation = registryChange ? "RegistryGeneration" : "ExternalMutationGeneration";
+        Assert.True(
+            details.GetProperty("current" + generation).GetInt64()
+                > details.GetProperty("captured" + generation).GetInt64());
+        Assert.Equal(200, (await service.ReadAsync(surface, registeredId)).StatusCode);
+    }
+
+    [Fact]
+    public async Task ManagedCapture_MissingElement_ReturnsNotFound()
+    {
+        using var service = new ManagedCaptureAgentService(
+            new AgentOptions { Port = GetFreePort() },
+            new RegisteredNativeElementRegistry());
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(new Application());
+
+        Assert.Equal(404, (await service.ReadAsync("element", "missing")).StatusCode);
+        Assert.Equal(404, (await service.ReadAsync("registered-element", "native:registered:missing")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TreeSnapshot_SizingOnlyChanges_AdvanceDiagnosticInputsWithoutChangingGeometry(bool includeNative)
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var label = new MeasureInvalidatingLabel
+        {
+            AutomationId = "SizingTarget",
+            Text = "Unchanged",
+            Frame = new Microsoft.Maui.Graphics.Rect(0, 0, 100, 40)
+        };
+        var app = new Application();
+        typeof(Application).GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [new Window(new ContentPage { Content = label })]);
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var initial = await client.GetTreeSnapshotAsync(includeNative: includeNative);
+        var unchanged = await client.GetTreeSnapshotAsync(includeNative: includeNative);
+        Assert.NotNull(initial);
+        Assert.NotNull(unchanged);
+        Assert.NotEmpty(initial.DiagnosticInputsRevision!);
+        Assert.Equal(initial.DiagnosticInputsRevision, unchanged.DiagnosticInputsRevision);
+        Assert.NotEqual(initial.Elements[0].CaptureEpoch, unchanged.Elements[0].CaptureEpoch);
+
+        label.MinimumWidthRequest = 120;
+        var constrained = await client.GetTreeSnapshotAsync(includeNative: includeNative);
+        Assert.NotNull(constrained);
+        Assert.Equal(initial.Revision, constrained.Revision);
+        Assert.NotEqual(initial.DiagnosticInputsRevision, constrained.DiagnosticInputsRevision);
+
+        label.InvalidateContentMeasurement();
+        var invalidated = await client.GetTreeSnapshotAsync(includeNative: includeNative);
+        Assert.NotNull(invalidated);
+        Assert.Equal(constrained.Revision, invalidated.Revision);
+        Assert.NotEqual(constrained.DiagnosticInputsRevision, invalidated.DiagnosticInputsRevision);
+        var settled = await client.GetTreeSnapshotAsync(includeNative: includeNative);
+        Assert.NotNull(settled);
+        Assert.Equal(invalidated.DiagnosticInputsRevision, settled.DiagnosticInputsRevision);
+    }
+
+    [Fact]
+    public async Task TreeSnapshot_DiagnosticInputsRevision_IsWindowScoped()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var first = new Label { AutomationId = "FirstSizingTarget" };
+        var second = new Label { AutomationId = "SecondSizingTarget" };
+        var app = new Application();
+        var addWindow = typeof(Application).GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        addWindow.Invoke(app, [new Window(new ContentPage { Content = first })]);
+        addWindow.Invoke(app, [new Window(new ContentPage { Content = second })]);
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+        await client.GetTreeSnapshotAsync();
+        var before = await client.GetTreeSnapshotAsync(window: 0);
+        Assert.NotNull(before);
+
+        second.MaximumWidthRequest = 50;
+        var after = await client.GetTreeSnapshotAsync(window: 0);
+        Assert.NotNull(after);
+        Assert.Equal(before.DiagnosticInputsRevision, after.DiagnosticInputsRevision);
+        first.MinimumWidthRequest = 100;
+        var changed = await client.GetTreeSnapshotAsync(window: 0);
+        Assert.NotNull(changed);
+        Assert.NotEqual(after.DiagnosticInputsRevision, changed.DiagnosticInputsRevision);
     }
 
     [Fact]
@@ -1423,6 +1850,193 @@ public class DevFlowAgentServiceLifecycleTests
         }
     }
 
+    [Fact]
+    public async Task BaseAgent_ReportsSyntheticTouchUnsupportedEvenWhenTheOptionIsSet()
+    {
+        // The option only means something to a backend that implements the tier (iOS and
+        // Mac Catalyst); everywhere else the status must not simply echo it.
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port, EnableSyntheticTouch = true });
+        using var client = new AgentClient("localhost", port);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+
+        var status = await WaitForStatusAsync(client);
+        Assert.NotNull(status?.Capabilities);
+        Assert.False(status!.Capabilities!.SyntheticTouch);
+    }
+
+    [Fact]
+    public async Task Agent_ReportsSyntheticTouchFromTheBackend()
+    {
+        var port = GetFreePort();
+        using var service = new SyntheticTouchAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+
+        var status = await WaitForStatusAsync(client);
+        Assert.NotNull(status?.Capabilities);
+        Assert.True(status!.Capabilities!.SyntheticTouch);
+    }
+
+    private sealed class SyntheticTouchAgentService(AgentOptions options) : MauiDevFlowAgentService(options)
+    {
+        protected override bool IsSyntheticTouchSupported => true;
+    }
+
+    private sealed class RejectingPointerAgentService(AgentOptions options)
+        : MauiDevFlowAgentService(options)
+    {
+        protected override PointerStreamSupport GetPointerStreamSupport()
+            => new(
+                Supported: true,
+                Fidelity: "test",
+                RequiresOptIn: false,
+                Reason: null);
+
+        protected override Task<PointerSessionBackendStartResult> StartPointerSessionBackendAsync(
+            PointerSessionStartRequest request,
+            CancellationToken cancellationToken)
+            => Task.FromResult(PointerSessionBackendStartResult.Failed(
+                "The target cannot safely accept a persistent pointer.",
+                422,
+                "pointer-target-unsupported"));
+    }
+
+    private sealed class CapturePointerAgentService(AgentOptions options)
+        : MauiDevFlowAgentService(options)
+    {
+        public int? StartedWindowId { get; private set; }
+
+        protected override PointerStreamSupport GetPointerStreamSupport()
+            => new(
+                Supported: true,
+                Fidelity: "test",
+                RequiresOptIn: false,
+                Reason: null);
+
+        protected override Task<PointerSessionBackendStartResult> StartPointerSessionBackendAsync(
+            PointerSessionStartRequest request,
+            CancellationToken cancellationToken)
+        {
+            StartedWindowId = request.WindowId;
+            return Task.FromResult(PointerSessionBackendStartResult.Started(
+                new object(),
+                "test start"));
+        }
+
+        protected override Task<PointerSessionBackendResult> CancelPointerSessionBackendAsync(
+            object state,
+            string reason)
+            => Task.FromResult(PointerSessionBackendResult.Applied());
+    }
+
+    private static DriverElementInfo ReadCapturedElement(HttpResponse response, string id)
+    {
+        using var document = JsonDocument.Parse(response.Body!);
+        var root = document.RootElement;
+        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("elements", out var elements))
+            root = elements;
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var captures = root.ValueKind == JsonValueKind.Array
+            ? JsonSerializer.Deserialize<List<DriverElementInfo>>(root.GetRawText(), options)!
+            : [JsonSerializer.Deserialize<DriverElementInfo>(root.GetRawText(), options)!];
+        return Assert.Single(Flatten(captures), element => element.Id == id);
+    }
+
+    private sealed class ManagedCaptureAgentService(
+        AgentOptions options,
+        RegisteredNativeElementRegistry registry)
+        : MauiDevFlowAgentService(options, registry, nativeElementSubscription: null)
+    {
+        protected override VisualTreeWalker CreateTreeWalker() => new(NativeElementRegistry!);
+
+        public Task<HttpResponse> ReadAsync(string surface, string registeredId)
+            => surface switch
+            {
+                "tree" => HandleTree(new HttpRequest()),
+                "managed-tree" => HandleTree(new HttpRequest { QueryParams = { ["native"] = "false" } }),
+                "envelope" => HandleTree(new HttpRequest { QueryParams = { ["envelope"] = "true" } }),
+                "query" => HandleQuery(new HttpRequest { QueryParams = { ["automationId"] = "CaptureTarget" } }),
+                "css-query" => HandleQuery(new HttpRequest { QueryParams = { ["selector"] = "#CaptureTarget" } }),
+                "element" => HandleElement(new HttpRequest { RouteParams = { ["id"] = "CaptureTarget" } }),
+                "registered-element" => HandleElement(new HttpRequest { RouteParams = { ["id"] = registeredId } }),
+                _ => throw new ArgumentOutOfRangeException(nameof(surface))
+            };
+    }
+
+    private sealed class CaptureChangingButton : Button, IVisualTreeElement
+    {
+        public Action? OnRead { get; set; }
+
+        IReadOnlyList<IVisualTreeElement> IVisualTreeElement.GetVisualChildren()
+        {
+            var onRead = OnRead;
+            OnRead = null;
+            onRead?.Invoke();
+            return [];
+        }
+
+        IVisualTreeElement? IVisualTreeElement.GetVisualParent() => Parent;
+    }
+
+    private sealed class ControlledCaptureDispatcher : IDispatcher
+    {
+        private Action? _pending;
+        public bool IsDispatchRequired { get; set; }
+        public bool HasPendingDispatch => _pending != null;
+
+        public bool Dispatch(Action action)
+        {
+            Assert.Null(_pending);
+            _pending = action;
+            return true;
+        }
+
+        public void RunPendingDispatch()
+        {
+            var action = _pending;
+            _pending = null;
+            Assert.NotNull(action);
+            action();
+        }
+
+        public bool DispatchDelayed(TimeSpan delay, Action action) => Dispatch(action);
+        public IDispatcherTimer CreateTimer() => new ImmediateDispatcherTimer();
+    }
+
+    private sealed class CaptureContinuationContext : SynchronizationContext
+    {
+        private readonly System.Threading.Channels.Channel<Action> _continuations =
+            System.Threading.Channels.Channel.CreateUnbounded<Action>();
+
+        public override void Post(SendOrPostCallback callback, object? state)
+            => _continuations.Writer.TryWrite(() => callback(state));
+
+        public T Run<T>(Func<T> action)
+        {
+            var previous = Current;
+            SetSynchronizationContext(this);
+            try { return action(); }
+            finally { SetSynchronizationContext(previous); }
+        }
+
+        public async Task CompleteAsync(Task task)
+        {
+            while (!task.IsCompleted)
+            {
+                var continuation = await _continuations.Reader.ReadAsync().AsTask()
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+                Run(() =>
+                {
+                    continuation();
+                    return true;
+                });
+            }
+        }
+    }
+
     private sealed class ListOnlyJobsAgentService(AgentOptions options) : MauiDevFlowAgentService(options)
     {
         protected override bool IsJobsSupported => true;
@@ -1679,6 +2293,11 @@ public class DevFlowAgentServiceLifecycleTests
                 IsInsideMainThreadFallback = wasInsideMainThreadFallback;
             }
         }
+    }
+
+    private sealed class MeasureInvalidatingLabel : Label
+    {
+        public void InvalidateContentMeasurement() => InvalidateMeasure();
     }
 
     private sealed class ImmediateDispatcher : IDispatcher

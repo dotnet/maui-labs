@@ -18,6 +18,7 @@ namespace Comet
 			public const string Size = "Font.Size";
 			public const string Weight = "Font.Weight";
 			public const string Family = "Font.Family";
+			public const string LineHeight = "Font.LineHeight";
 			public const string Slant = "Font.Slant";
 			//public const string Attributes = "Font.Attributes";
 		}
@@ -47,6 +48,8 @@ namespace Comet
 			public const string VerticalLayoutAlignment = "Layout.VerticalSizing";
 			public const string FrameConstraints = "Layout.FrameConstraints";
 			public const string IgnoreSafeArea = "Layout.IgnoreSafeArea";
+			public const string BaselineAlign = "Layout.BaselineAlign";
+			public const string BaselineHeight = "Layout.BaselineHeight";
 		}
 
 		public static class View
@@ -81,6 +84,8 @@ namespace Comet
 
 		public static class Text
 		{
+			public const string MaxLines = "Comet.Text.MaxLines";
+			public const string LineBreak = "Comet.Text.LineBreak";
 			public const string HorizontalAlignment = nameof(Microsoft.Maui.ITextAlignment.HorizontalTextAlignment);
 			public const string VerticalAlignment = nameof(Microsoft.Maui.ITextAlignment.VerticalTextAlignment);
 			public static class Style

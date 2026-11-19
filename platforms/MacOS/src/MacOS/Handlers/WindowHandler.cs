@@ -131,6 +131,8 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
     MacOSToolbarManager? _toolbarManager;
     MacOSModalManager? _modalManager;
     MacOSWindowDelegate? _windowDelegate;
+    MacOSFocusTracker? _focusTracker;
+    readonly WindowCloseCoordinator _closeCoordinator = new();
     static int _windowCascadeOffset;
 
     public WindowHandler() : base(Mapper)
@@ -138,19 +140,19 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
     }
 
     /// <summary>
-    /// Called by MacOSWindowDelegate when the NSWindow is closed (red button or programmatically).
+    /// Called when the NSWindow is closed or the application terminates.
     /// Fires IWindow.Destroying() and removes the window from the tracked list.
     /// </summary>
     internal void OnWindowClosed(NSWindow? closedNsWindow)
     {
-        if (VirtualView is IWindow window)
+        if (!_closeCoordinator.ShouldHandleClose(this, closedNsWindow))
+            return;
+
+        var macApp = IPlatformApplication.Current as MacOSMauiApplication;
+        if (_closeCoordinator.Close(this, window => macApp?.RemoveWindow(window)))
         {
-            window.Destroying();
-
-            if (IPlatformApplication.Current is MacOSMauiApplication macApp)
+            if (macApp is { IsTerminating: false })
             {
-                macApp.RemoveWindow(window);
-
                 // Re-activate the next remaining window so it regains key status
                 foreach (var w in macApp.Windows)
                 {
@@ -165,6 +167,28 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
 
         UnsubscribeModalEvents();
         UnsubscribePageChanges();
+    }
+
+    protected override void DisconnectHandler(NSWindow platformView)
+    {
+        _focusTracker?.Dispose();
+        _focusTracker = null;
+
+        if (platformView.Delegate == _windowDelegate)
+            platformView.Delegate = null;
+        _windowDelegate = null;
+
+        UnsubscribeModalEvents();
+        UnsubscribePageChanges();
+        _observedContent = null;
+        if (_contentContainer != null)
+            _contentContainer.ContentView = null;
+
+        if (((IElementHandler)this).VirtualView is IWindow window &&
+            IPlatformApplication.Current is MacOSMauiApplication macApp)
+            macApp.RemoveWindow(window);
+
+        base.DisconnectHandler(platformView);
     }
 
     protected override NSWindow CreatePlatformElement()
@@ -186,7 +210,7 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
             false);
 
         window.Center();
-        window.ReleasedWhenClosed = false;
+        window.ReleaseWhenClosed(false);
 
         // Cascade additional windows so they don't stack on top of each other
         if (_windowCascadeOffset > 0)
@@ -210,6 +234,9 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
 
         // Create the modal manager
         _modalManager = new MacOSModalManager(_contentContainer, window);
+
+        // Keep IView.IsFocused (Focused/Unfocused events, Focused visual state) in step with the first responder
+        _focusTracker = new MacOSFocusTracker(window);
 
         // Set the window delegate to handle close events
         _windowDelegate = new MacOSWindowDelegate(this);
@@ -277,7 +304,10 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
             // Recreate modal manager with the new content view
             var contentView = handler.PlatformView.ContentView;
             if (contentView != null)
+            {
+                handler._modalManager?.ClearModalStack();
                 handler._modalManager = new MacOSModalManager(contentView, handler.PlatformView);
+            }
 
             handler.SubscribeModalEvents(window);
             handler.ObservePageChanges(page);
@@ -290,7 +320,7 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
             foreach (var subview in handler._contentContainer.Subviews)
                 subview.RemoveFromSuperview();
 
-            pageView.Frame = handler._contentContainer.Bounds;
+            pageView.SetLayoutFrame(handler._contentContainer.Bounds);
             pageView.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
             handler._contentContainer.AddSubview(pageView);
             handler._contentContainer.ContentView = new WeakReference<IView>(page);

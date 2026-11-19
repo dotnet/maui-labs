@@ -49,8 +49,7 @@ namespace Comet.Benchmarks
 
 			MauiHotReloadHelper.IsEnabled = false; // Disable for benchmarks
 
-			var style = new Styles.Style();
-			style.Apply();
+			// Legacy Styles.Style was removed; ThemeManager lazily provides the default theme.
 		}
 
 		public static void InitializeHandlers(View view)

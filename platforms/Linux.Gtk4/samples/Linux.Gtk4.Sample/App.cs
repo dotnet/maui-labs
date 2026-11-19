@@ -9,6 +9,8 @@ class App : Application
 {
 	protected override Window CreateWindow(IActivationState? activationState)
 	{
+		if (Environment.GetEnvironmentVariable("MAUI_SAMPLE_COLLECTIONVIEW") == "1")
+			return new Window(new CollectionViewPage());
 		return new Window(new MainShell());
 	}
 }
@@ -43,7 +45,8 @@ class MainShell : FlyoutPage
 		("📱 Device & App Info", () => new DeviceInfoPage()),
 		("🔋 Battery & Network", () => new BatteryNetworkPage()),
 		("📋 Clipboard & Storage", () => new ClipboardPrefsPage()),
-		("🚀 Launch & Share", () => new LaunchSharePage()),
+        ("📧 Communication (Email / SMS / Tel)",  () => new CommunicationPage()),
+        ("🚀 Launch & Share", () => new LaunchSharePage()),
 		("🌐 Blazor Hybrid", () => new BlazorPage()),
 		("🧭 Navigation", () => new NavigationPage(new NavigationDemoPage())),
 		("📑 TabbedPage", () => new TabbedPageDemo()),
@@ -52,8 +55,8 @@ class MainShell : FlyoutPage
 		("🧬 ControlTemplate", () => new ControlTemplatePage()),
 		("🪟 Modal Pages", () => new ModalDemoPage()),
 		("🪟 Multi-Window", () => new MultiWindowPage()),
-		("🎨 Theme", () => new ThemePage()),
-	];
+		("🎨 Theme", () => new ThemePage())
+    ];
 
 	public MainShell()
 	{

@@ -8,52 +8,41 @@
       "type": "object",
       "description": "A single log entry from the application.",
       "required": [
-        "timestamp",
-        "level",
-        "category",
-        "message",
-        "source"
+        "t",
+        "l",
+        "c",
+        "m"
       ],
       "properties": {
-        "timestamp": {
+        "t": {
           "$ref": "common.json#/$defs/Timestamp",
           "description": "UTC timestamp when the log entry was recorded."
         },
-        "level": {
+        "l": {
           "type": "string",
-          "enum": [
-            "trace",
-            "debug",
-            "info",
-            "warning",
-            "error",
-            "critical"
-          ],
-          "description": "Severity level of the log entry."
+          "description": "Severity string supplied by the producer. ILogger uses Trace, Debug, Information, Warning, Error, and Critical; WebView console levels may use other casing or names."
         },
-        "category": {
+        "c": {
           "type": "string",
           "description": "Log category or logger name (e.g. 'Microsoft.Maui.Controls', 'HttpClient', 'App')."
         },
-        "message": {
+        "m": {
           "type": "string",
           "description": "The log message text."
         },
-        "exception": {
+        "e": {
           "type": [
             "string",
             "null"
           ],
           "description": "Exception details if the log entry is associated with an error."
         },
-        "source": {
-          "type": "string",
-          "enum": [
-            "native",
-            "webview",
-            "framework"
+        "s": {
+          "type": [
+            "string",
+            "null"
           ],
-          "description": "Origin of the log entry."
+          "description": "Producer-defined source, for example native, webview, console, console.error, or trace. May be null."
         }
       }
     }

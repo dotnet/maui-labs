@@ -20,10 +20,7 @@ public static class MauiProgram
 				options.EnableFileLogging = false;
 			});
 
-		builder.ConfigureFonts(fonts =>
-		{
-			fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-		});
+		builder.ConfigureFonts(SampleFontRegistration.Configure);
 
 		// Blazor hybrid
 		builder.Services.AddMauiBlazorWebView();

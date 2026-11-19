@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Maui.Hosting;
-using System.Reflection;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.AppModel;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Communication;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.DataTransfer;
@@ -40,7 +39,6 @@ public static class EssentialsHostBuilderExtensions
 		// Tier 3 — DBus
 		builder.Services.TryAddSingleton<Microsoft.Maui.Devices.IBattery, LinuxBattery>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Networking.IConnectivity, LinuxConnectivity>();
-		builder.Services.TryAddSingleton<Microsoft.Maui.Storage.ISecureStorage, LinuxSecureStorage>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Devices.Sensors.IGeolocation, LinuxGeolocation>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Media.ITextToSpeech, LinuxTextToSpeech>();
 
@@ -50,6 +48,7 @@ public static class EssentialsHostBuilderExtensions
 		builder.Services.TryAddSingleton<Microsoft.Maui.Authentication.IWebAuthenticator, LinuxWebAuthenticator>();
 
 		// Tier 5 — Stubs
+		builder.Services.TryAddSingleton<Microsoft.Maui.Storage.ISecureStorage, LinuxSecureStorage>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Devices.IFlashlight, LinuxFlashlight>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Devices.IHapticFeedback, LinuxHapticFeedback>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Devices.IVibration, LinuxVibration>();
@@ -65,24 +64,9 @@ public static class EssentialsHostBuilderExtensions
 		builder.Services.TryAddSingleton<Microsoft.Maui.Devices.Sensors.IGeocoding, LinuxGeocoding>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Accessibility.ISemanticScreenReader, LinuxSemanticScreenReader>();
 
-		// Wire static Essentials APIs (Preferences.Default, FilePicker.Default, etc.)
-		SetEssentialsDefaults();
+		builder.Services.TryAddEnumerable(
+			ServiceDescriptor.Singleton<IMauiInitializeService, EssentialsInitializer>());
 
 		return builder;
-	}
-
-	private static void SetEssentialsDefaults()
-	{
-		SetDefault(typeof(Microsoft.Maui.Storage.Preferences), new LinuxPreferences());
-		SetDefault(typeof(Microsoft.Maui.Storage.FilePicker), new LinuxFilePicker());
-		SetDefault(typeof(Microsoft.Maui.Storage.SecureStorage), new LinuxSecureStorage());
-		SetDefault(typeof(Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard), new LinuxClipboard());
-		SetDefault(typeof(Microsoft.Maui.Media.MediaPicker), new LinuxMediaPicker());
-	}
-
-	private static void SetDefault(Type essentialsType, object implementation)
-	{
-		var setDefault = essentialsType.GetMethod("SetDefault", BindingFlags.Static | BindingFlags.NonPublic);
-		setDefault?.Invoke(null, new[] { implementation });
 	}
 }

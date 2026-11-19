@@ -39,6 +39,8 @@ internal sealed class XamlSourcePropertyEditor
 {
     private const long MaxSourceFileBytes = 5 * 1024 * 1024;
     private const int MaxPropertyValueLength = 64 * 1024;
+    private const string MauiGlobalXmlNamespace = "http://schemas.microsoft.com/dotnet/maui/global";
+    private const string XamlXmlNamespace = "http://schemas.microsoft.com/winfx/2009/xaml";
     private static readonly StringComparer PathComparer =
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
     private static readonly HashSet<string> SupportedPropertyNames = new(StringComparer.OrdinalIgnoreCase)
@@ -71,11 +73,21 @@ internal sealed class XamlSourcePropertyEditor
 
     private readonly string? _project;
     private readonly string? _sessionId;
+    private readonly string? _appExecutablePath;
+    private readonly XamlSourceWorkspace _workspace;
 
-    public XamlSourcePropertyEditor(string? project, string? sessionId = null)
+    public XamlSourcePropertyEditor(
+        string? project,
+        string? sessionId = null,
+        string? appExecutablePath = null,
+        XamlSourceWorkspace? workspace = null)
     {
         _project = string.IsNullOrWhiteSpace(project) ? null : project;
         _sessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId;
+        _appExecutablePath = string.IsNullOrWhiteSpace(appExecutablePath)
+            ? null
+            : appExecutablePath;
+        _workspace = workspace ?? XamlSourceWorkspace.Capture();
     }
 
     public Task<XamlSourceEditResult> ValidateAsync(
@@ -124,7 +136,7 @@ internal sealed class XamlSourcePropertyEditor
         {
             return new(
                 XamlSourceEditStatus.SourceUnavailable,
-                "This element does not have writable Debug XAML source metadata.");
+                "This element does not have writable Debug XAML source metadata. Rebuild the app with the current DevFlow agent.");
         }
 
         var pathValidation = ValidateSourcePath(element.SourceFile!);
@@ -241,31 +253,57 @@ internal sealed class XamlSourcePropertyEditor
     }
 
     internal static string ComputeSourceHash(string text)
-        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)), 0, 8).ToLowerInvariant();
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)), 0, 16).ToLowerInvariant();
 
     internal static bool IsSupportedPropertyName(string propertyName)
         => IsValidPropertyName(propertyName) && SupportedPropertyNames.Contains(propertyName);
+
+    internal string? ResolveSourcePath(string sourceFile, out string? error)
+    {
+        var result = ValidateSourcePath(sourceFile, requireWritable: false);
+        error = result.Error;
+        return result.Success ? result.Path : null;
+    }
 
     private static string ComputeContentHash(ReadOnlySpan<byte> bytes)
         => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
     private SourcePathValidation ValidateSourcePath(string sourceFile)
+        => ValidateSourcePath(sourceFile, requireWritable: true);
+
+    private SourcePathValidation ValidateSourcePath(string sourceFile, bool requireWritable)
     {
         if (_project is null)
-            return new(false, Error: "Source writing requires a broker-registered project identity.");
+            return new(
+                false,
+                Error: requireWritable
+                    ? "Source writing requires a broker-registered project identity."
+                    : "Source resolution requires a broker-registered project identity.");
 
+        var sourceWasRelative = !Path.IsPathFullyQualified(sourceFile);
         string sourcePath;
+        string? projectRoot = null;
         try
         {
             // The build-time generator emits project-relative paths so shipped assemblies do not
             // embed developer-machine paths. Resolve them against the registered project before
             // validating; the containment check below still confines writes to that project.
-            if (!Path.IsPathFullyQualified(sourceFile))
+            if (sourceWasRelative)
             {
-                var projectDirectory = Path.GetDirectoryName(Path.GetFullPath(_project));
-                if (string.IsNullOrEmpty(projectDirectory))
-                    return new(false, Error: "The mapped XAML source path is invalid.");
-                sourcePath = Path.GetFullPath(Path.Combine(projectDirectory, sourceFile));
+                var search = FindRelativeProjectRoot(
+                    _project,
+                    _sessionId,
+                    sourceFile,
+                    _appExecutablePath,
+                    _workspace.StartPath);
+                projectRoot = search.ProjectRoot;
+                if (projectRoot is null)
+                {
+                    // The workspace capture error explains only a failure the workspace decided.
+                    var workspaceError = search.FromWorkspace ? _workspace.Error : null;
+                    return new(false, Error: workspaceError ?? DescribeUnresolvedProject(_project, search));
+                }
+                sourcePath = Path.GetFullPath(Path.Combine(projectRoot, sourceFile));
             }
             else
             {
@@ -277,6 +315,9 @@ internal sealed class XamlSourcePropertyEditor
             return new(false, Error: "The mapped XAML source path is invalid.");
         }
 
+        if (IsUnsafeAbsoluteSourcePath(sourcePath))
+            return new(false, Error: "UNC, network, and Windows device source paths are not supported.");
+
         try
         {
             if (!File.Exists(sourcePath) ||
@@ -287,8 +328,12 @@ internal sealed class XamlSourcePropertyEditor
 
             var attributes = File.GetAttributes(sourcePath);
             if ((attributes & FileAttributes.ReparsePoint) != 0)
-                return new(false, Error: "Symbolic-link and reparse-point XAML files are not writable.");
-            if ((attributes & FileAttributes.ReadOnly) != 0)
+                return new(
+                    false,
+                    Error: requireWritable
+                        ? "Symbolic-link and reparse-point XAML files are not writable."
+                        : "Symbolic-link and reparse-point XAML files cannot be opened safely.");
+            if (requireWritable && (attributes & FileAttributes.ReadOnly) != 0)
                 return new(false, Error: "Read-only XAML source files are not writable.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -296,19 +341,26 @@ internal sealed class XamlSourcePropertyEditor
             return new(false, Error: "The mapped XAML source file is not accessible.");
         }
 
-        var projectRoot = FindProjectRoot(sourcePath, _project, _sessionId);
+        if (!requireWritable && !sourceWasRelative)
+            return new(true, sourcePath);
+
+        projectRoot ??= FindProjectRoot(sourcePath, _project, _sessionId);
         if (projectRoot is null || !IsUnderRoot(sourcePath, projectRoot))
         {
             return new(
                 false,
-                Error: "Only XAML files under the registered app project are writable.");
+                Error: requireWritable
+                    ? "Only XAML files under the registered app project are writable."
+                    : "Only XAML files under the registered app project can be opened.");
         }
 
         if (PathContainsReparsePoint(projectRoot, sourcePath))
         {
             return new(
                 false,
-                Error: "XAML files reached through symbolic links, junctions, or reparse points are not writable.");
+                Error: requireWritable
+                    ? "XAML files reached through symbolic links, junctions, or reparse points are not writable."
+                    : "XAML files reached through symbolic links, junctions, or reparse points cannot be opened safely.");
         }
 
         return new(true, sourcePath);
@@ -349,6 +401,214 @@ internal sealed class XamlSourcePropertyEditor
         return null;
     }
 
+    internal static ProjectRootSearchResult FindRelativeProjectRoot(
+        string project,
+        string? sessionId,
+        string sourceFile,
+        string? appExecutablePath,
+        string? currentDirectory = null)
+    {
+        if (Path.IsPathFullyQualified(project))
+        {
+            var fullProjectPath = Path.GetFullPath(project);
+            return File.Exists(fullProjectPath)
+                ? new(ProjectRootSearchStatus.Found, Path.GetDirectoryName(fullProjectPath))
+                : new(ProjectRootSearchStatus.NotFound, Reason: $"the registered project file '{fullProjectPath}' does not exist");
+        }
+
+        var projectName = Path.GetFileName(project);
+        var normalizedSessionId = SanitizeIdentity(sessionId);
+        if (string.IsNullOrWhiteSpace(projectName) || normalizedSessionId.Length == 0)
+            return new(ProjectRootSearchStatus.NotFound, Reason: "the app registered no project name or session identity");
+
+        var appSearch = FindProjectRootFromStart(
+            appExecutablePath,
+            projectName,
+            normalizedSessionId,
+            sourceFile,
+            searchWorkspace: true);
+        if (appSearch.Status != ProjectRootSearchStatus.NotFound)
+            return appSearch;
+
+        if (string.IsNullOrWhiteSpace(currentDirectory) ||
+            IsUnsafeAbsoluteSourcePath(currentDirectory) || !Directory.Exists(currentDirectory))
+            return new(
+                ProjectRootSearchStatus.NotFound,
+                Reason: $"the source workspace '{currentDirectory}' is not an existing local directory",
+                FromWorkspace: true);
+
+        return FindProjectRootFromStart(
+            currentDirectory,
+            projectName,
+            normalizedSessionId,
+            sourceFile,
+            searchWorkspace: true) with { FromWorkspace = true };
+    }
+
+    // A running broker keeps the workspace it started in, so the remedy has to include stopping it.
+    // Failures decided before the workspace is consulted are not fixed by restarting the broker.
+    private static string DescribeUnresolvedProject(string project, ProjectRootSearchResult search)
+    {
+        var message = $"Could not resolve the local source for '{project}': {search.Reason}.";
+        return search.FromWorkspace
+            ? $"{message} Run 'maui devflow broker stop', then start the broker from the app workspace, or set MAUI_DEVFLOW_PROJECT_ROOT to the app workspace or project folder before starting it."
+            : message;
+    }
+
+    private static ProjectRootSearchResult FindProjectRootFromStart(
+        string? startPath,
+        string projectName,
+        string normalizedSessionId,
+        string sourceFile,
+        bool searchWorkspace)
+    {
+        if (string.IsNullOrWhiteSpace(startPath))
+            return new(ProjectRootSearchStatus.NotFound);
+
+        var startDirectory = Directory.Exists(startPath)
+            ? startPath
+            : Path.GetDirectoryName(startPath);
+        if (string.IsNullOrWhiteSpace(startDirectory))
+            return new(ProjectRootSearchStatus.NotFound);
+
+        var start = Path.GetFullPath(startDirectory);
+        var directory = new DirectoryInfo(start);
+        while (directory is not null)
+        {
+            if (IsMatchingProjectRoot(
+                directory.FullName,
+                projectName,
+                normalizedSessionId,
+                sourceFile))
+            {
+                return new(ProjectRootSearchStatus.Found, directory.FullName);
+            }
+
+            if (searchWorkspace && IsWorkspaceRoot(directory.FullName))
+            {
+                return FindUniqueProjectRoot(
+                    directory.FullName,
+                    projectName,
+                    normalizedSessionId,
+                    sourceFile);
+            }
+
+            directory = directory.Parent;
+        }
+
+        return new(ProjectRootSearchStatus.NotFound, Reason: $"no .git or global.json found at or above '{start}'");
+    }
+
+    private static bool IsMatchingProjectRoot(
+        string directory,
+        string projectName,
+        string normalizedSessionId,
+        string sourceFile)
+    {
+        var projectPath = Path.Combine(directory, projectName);
+        if (!File.Exists(projectPath) ||
+            !string.Equals(
+                ComputeDefaultSessionId(projectPath),
+                normalizedSessionId,
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            return File.Exists(Path.GetFullPath(Path.Combine(directory, sourceFile)));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    private static ProjectRootSearchResult FindUniqueProjectRoot(
+        string workspaceRoot,
+        string projectName,
+        string normalizedSessionId,
+        string sourceFile)
+    {
+        const int maxDirectories = 4096;
+        var pending = new Stack<string>();
+        pending.Push(workspaceRoot);
+        string? match = null;
+        var visited = 0;
+
+        while (pending.Count > 0 && visited++ < maxDirectories)
+        {
+            var directory = pending.Pop();
+            if (IsMatchingProjectRoot(directory, projectName, normalizedSessionId, sourceFile))
+            {
+                if (match is not null && !PathComparer.Equals(match, directory))
+                    return new(
+                        ProjectRootSearchStatus.Unsafe,
+                        Reason: $"more than one '{projectName}' for this app found under '{workspaceRoot}'");
+                match = directory;
+            }
+
+            try
+            {
+                var children = Directory.GetDirectories(directory);
+                foreach (var child in children)
+                {
+                    var name = Path.GetFileName(child);
+                    if (name is ".git" or ".vs" or "artifacts" or "bin" or "obj" or "node_modules")
+                        continue;
+                    FileAttributes attributes;
+                    try
+                    {
+                        attributes = File.GetAttributes(child);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        return new(
+                            ProjectRootSearchStatus.Unsafe,
+                            Reason: $"'{child}' could not be read while searching '{workspaceRoot}'");
+                    }
+                    if ((attributes & FileAttributes.ReparsePoint) != 0)
+                        continue;
+                    pending.Push(child);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return new(
+                    ProjectRootSearchStatus.Unsafe,
+                    Reason: $"'{directory}' could not be read while searching '{workspaceRoot}'");
+            }
+        }
+
+        if (pending.Count > 0)
+            return new(
+                ProjectRootSearchStatus.Unsafe,
+                Reason: $"searching '{workspaceRoot}' stopped after {maxDirectories} directories");
+        return match is null
+            ? new(ProjectRootSearchStatus.NotFound, Reason: $"no '{projectName}' for this app found under '{workspaceRoot}'")
+            : new(ProjectRootSearchStatus.Found, match);
+    }
+
+    internal static bool IsWorkspaceRoot(string directory)
+        => Directory.Exists(Path.Combine(directory, ".git")) ||
+           File.Exists(Path.Combine(directory, ".git")) ||
+           File.Exists(Path.Combine(directory, "global.json"));
+
+    internal enum ProjectRootSearchStatus
+    {
+        NotFound,
+        Found,
+        Unsafe,
+    }
+
+    // FromWorkspace: the outcome came from searching the broker's source workspace, so a different workspace could change it.
+    internal readonly record struct ProjectRootSearchResult(
+        ProjectRootSearchStatus Status,
+        string? ProjectRoot = null,
+        string? Reason = null,
+        bool FromWorkspace = false);
+
     internal static string ComputeDefaultSessionId(string projectPath)
     {
         var sanitized = SanitizeIdentity(Path.GetFullPath(projectPath));
@@ -380,6 +640,12 @@ internal sealed class XamlSourcePropertyEditor
             !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) &&
             !relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal);
     }
+
+    internal static bool IsUnsafeAbsoluteSourcePath(string path)
+        => OperatingSystem.IsWindows() &&
+            (path.StartsWith(@"\\", StringComparison.Ordinal) ||
+             path.StartsWith("//", StringComparison.Ordinal) ||
+             path.StartsWith(@"\??\", StringComparison.Ordinal));
 
     internal static bool PathContainsReparsePoint(string root, string path)
     {
@@ -434,7 +700,7 @@ internal sealed class XamlSourcePropertyEditor
     }
 
     private static bool IsValidSourceHash(string? sourceHash)
-        => sourceHash is { Length: 16 } && sourceHash.All(Uri.IsHexDigit);
+        => sourceHash is { Length: 32 } && sourceHash.All(Uri.IsHexDigit);
 
     private static LiteralAttributeEdit TryReplaceLiteralAttribute(
         string buildSource,
@@ -545,8 +811,12 @@ internal sealed class XamlSourcePropertyEditor
         elementStart = 0;
         try
         {
-            var buildDocument = XDocument.Parse(buildSource, LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
-            var currentDocument = XDocument.Parse(currentSource, LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
+            var buildDocument = ParseXaml(
+                buildSource,
+                LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
+            var currentDocument = ParseXaml(
+                currentSource,
+                LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
             if (buildDocument.Root is null || currentDocument.Root is null)
                 return false;
 
@@ -616,13 +886,46 @@ internal sealed class XamlSourcePropertyEditor
     {
         try
         {
-            XDocument.Parse(text, LoadOptions.PreserveWhitespace);
+            ParseXaml(text, LoadOptions.PreserveWhitespace);
             return true;
         }
         catch (XmlException)
         {
             return false;
         }
+    }
+
+    private static XDocument ParseXaml(string text, LoadOptions loadOptions)
+    {
+        var nameTable = new NameTable();
+        var namespaceManager = new ProjectWideNamespaceManager(nameTable);
+        namespaceManager.AddNamespace(string.Empty, MauiGlobalXmlNamespace);
+        namespaceManager.AddNamespace("x", XamlXmlNamespace);
+        var parserContext = new XmlParserContext(
+            nameTable,
+            namespaceManager,
+            null,
+            XmlSpace.None);
+        using var reader = XmlReader.Create(
+            new StringReader(text),
+            new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Parse,
+                XmlResolver = null
+            },
+            parserContext);
+        return XDocument.Load(reader, loadOptions);
+    }
+
+    // The editor only needs stable namespace identity to match element paths; it has no app compilation.
+    private sealed class ProjectWideNamespaceManager(NameTable nameTable)
+        : XmlNamespaceManager(nameTable)
+    {
+        public override string? LookupNamespace(string prefix)
+            => base.LookupNamespace(prefix)
+                ?? (string.IsNullOrEmpty(prefix)
+                    ? null
+                    : $"urn:devflow:unresolved-prefix:{Uri.EscapeDataString(prefix)}");
     }
 
     private static string EscapeAttributeValue(string value, char quote)

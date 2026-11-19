@@ -19,7 +19,11 @@ import { Recorder } from "./recorder.mjs";
 import { replayTest } from "./replay.mjs";
 import { renderShell, renderDisconnected } from "./shell.mjs";
 import { readJsonBody } from "./http.mjs";
+import { createTargetController } from "./target-controller.mjs";
 import { readBrokerState } from "@maui-devflow/client";
+
+const { selectTargetAgent, syncTargetAgent, resolveInspectorState } =
+  createTargetController({ readBrokerState, fetchBrokerAgents });
 
 // Device targeting is optional — the CLI auto-discovers the agent via the broker. Override
 // via env if you run multiple emulators/apps at once.
@@ -40,7 +44,7 @@ function deviceOpts(input = {}) {
   return o;
 }
 
-// instanceId -> { store, recorder, server, port, url, bridgeId }
+// instanceId -> host resources plus the stable identity of the explicitly selected app.
 const instances = new Map();
 
 // The joined Copilot session (assigned at the very bottom, after createCanvas).
@@ -50,9 +54,21 @@ let sharedSession = null;
 function ensure(instanceId, input = {}) {
   let st = instances.get(instanceId);
   if (!st) {
-    const store = new LiveStore(deviceOpts(input));
+    const options = deviceOpts(input);
+    const store = new LiveStore(options);
     const recorder = new Recorder();
-    st = { store, recorder, server: null, port: 0, url: null, bridgeId: randomToken() };
+    st = {
+      store,
+      recorder,
+      server: null,
+      port: 0,
+      url: null,
+      bridgeId: randomToken(),
+      targetAgentId: null,
+      targetIdentity: null,
+      targetPort: options.agentPort ?? null,
+      targetMutation: Promise.resolve(),
+    };
     instances.set(instanceId, st);
   }
   return st;
@@ -176,7 +192,11 @@ async function pushSelectionContext(instanceId, store, fallbackElement) {
     return { ok: false, error: "Nothing is selected — click an element in the canvas first." };
   }
   const title = `MAUI selection · ${sel.summary}`;
-  const payload = { ...sel, capturedAt: new Date().toISOString() };
+  const payload = {
+    ...sel,
+    mutationLeaseTools: ["maui_control_status", "maui_take_control", "maui_release_control"],
+    capturedAt: new Date().toISOString(),
+  };
   return pushContextPill(instanceId, {
     title,
     payload,
@@ -218,6 +238,7 @@ async function pushInspectorContext(instanceId, store, context, input) {
         markdown,
         truncated: payload.markdownTruncated === true,
       },
+      mutationLeaseTools: ["maui_control_status", "maui_take_control", "maui_release_control"],
       capturedAt: new Date().toISOString(),
     },
     pushKey: `inspector:${context}:${element?.id || ""}:${payload.workflowName || ""}:${markdown?.length || 0}`,
@@ -227,7 +248,7 @@ async function pushInspectorContext(instanceId, store, context, input) {
   });
 }
 
-const DATA_CONTEXT_SCOPES = new Set(["logs", "network", "preferences", "device", "sensors", "files", "alerts"]);
+const DATA_CONTEXT_SCOPES = new Set(["logs", "network", "preferences", "device", "sensors", "files", "alerts", "layout"]);
 
 async function pushDataContext(instanceId, snapshot) {
   if (!snapshot || snapshot.kind !== "dataSnapshot" || snapshot.redacted !== true
@@ -268,7 +289,8 @@ async function applyControl(st, body, instanceId) {
   case "resize":       return store.resize(Number(body.width), Number(body.height));
   case "setTheme":     return store.setTheme(body.theme || "light");
   case "listAgents":   return store.listAgents();
-  case "selectAgent":  return store.selectAgent({ platform: body.platform, port: body.port });
+  case "selectAgent":  return selectTargetAgent(st, { platform: body.platform, port: body.port });
+  case "syncTarget":   return syncTargetAgent(st, body.agentId);
   case "screenshot":   return store.refresh({ shot: true });
   case "logs":         return store.getLogs(body.limit || 100);
   case "attachSelection": return pushSelectionContext(instanceId, store, body.element);
@@ -317,63 +339,28 @@ async function applyControl(st, body, instanceId) {
 }
 }
 
-// Build the shared broker Inspector URL for this instance's resolved agent, or null when no
-// broker/agent is available yet (then the canvas falls back to the disconnected shell). The
-// ?embed={token} parameter proves this is a trusted local shell so the Inspector relaxes its
-// anti-framing headers and the iframe can load.
-function brokerInspectorUrl(st) {
-  try {
-    const state = readBrokerState();
-    const agent = st.store?.device?.resolvedAgent?.();
-    if (state?.port && agent?.id) {
-      // The broker's HttpListener is bound to `localhost`, so the iframe host MUST be localhost
-      // (a 127.0.0.1 Host header is rejected as "Invalid Hostname"). frame-ancestors covers both.
-      const base = `http://localhost:${state.port}/inspector/${encodeURIComponent(agent.id)}/`;
-      return state.embedToken ? `${base}?embed=${encodeURIComponent(state.embedToken)}` : base;
-    }
-  } catch {
-    // Broker state unreadable — fall back to the disconnected shell.
-  }
-  return null;
-}
-
 // Query the broker's live agent list. HTTP fallback used when the client's cached registration
 // went stale (e.g. after a broker restart the client reconnects to the app port but drops its
-// broker registration), so we can still resolve an agent id for the shared inspector URL.
+// broker registration), so we can still resolve an agent id for the shared inspector URL. Null
+// means the broker is unavailable; an empty array means the broker is reachable with no app.
 async function fetchBrokerAgents(port) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 2000);
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 2000);
     const r = await fetch(`http://localhost:${port}/api/agents`, { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (!r.ok) return [];
+    if (!r.ok) return null;
     const j = await r.json();
-    return Array.isArray(j) ? j : [];
+    return Array.isArray(j) ? j : null;
   } catch {
-    return [];
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-// Resilient variant: build the shared inspector URL even when resolvedAgent() is momentarily
-// stale, by matching the broker's live agent list on the app port we're connected to. This keeps
-// the canvas on the SHARED tool across broker restarts instead of dropping to the disconnected shell.
-async function resolveInspectorUrl(st) {
-  const direct = brokerInspectorUrl(st);
-  if (direct) return direct;
-  try {
-    const state = readBrokerState();
-    if (!state?.port) return null;
-    const port = st.store?.device?.whichPort?.();
-    const agents = await fetchBrokerAgents(state.port);
-    const match = (port && agents.find((a) => a.port === port)) || agents[0];
-    if (match?.id) {
-      const base = `http://localhost:${state.port}/inspector/${encodeURIComponent(match.id)}/`;
-      return state.embedToken ? `${base}?embed=${encodeURIComponent(state.embedToken)}` : base;
-    }
-  } catch {
-    // fall back to the disconnected shell
-  }
-  return null;
+async function inspectorReadiness(st) {
+  const { inspectorUrl: _, ...readiness } = await resolveInspectorState(st);
+  return readiness;
 }
 
 // 128-bit URL-safe token — the per-instance host-bridge nonce, safe in a URL fragment and in the
@@ -414,14 +401,15 @@ async function startServer(instanceId, input = {}) {
       // the lightweight disconnected shell. The canvas should always be the shared tool whenever a
       // broker + a running app are reachable; renderDisconnected is only a last resort (and self-
       // heals via /inspector-ready) when nothing resolves yet.
-      let inspectorUrl = await resolveInspectorUrl(st);
-      if (!inspectorUrl) {
-        try { await withTimeout(st.store.refresh(), 5000, "resolve-agent"); } catch { /* fall through to the disconnected shell */ }
-        inspectorUrl = await resolveInspectorUrl(st);
-      }
-      res.end(inspectorUrl
-        ? renderShell(inspectorUrl, st.store.snapshot()?.info?.appName, st.bridgeId)
-        : renderDisconnected(st.store.snapshot()?.info?.appName));
+      const readiness = await resolveInspectorState(st);
+      res.end(readiness.inspectorUrl
+        ? renderShell(
+            readiness.inspectorUrl,
+            readiness.appName,
+            st.bridgeId,
+            readiness.agentId,
+            readiness.generation)
+        : renderDisconnected(readiness.appName, readiness.state));
       return;
     }
 
@@ -432,11 +420,8 @@ async function startServer(instanceId, input = {}) {
     if (url.pathname === "/inspector-ready" && req.method === "GET") {
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Cache-Control", "no-store");
-      let ready = !!(await resolveInspectorUrl(st));
-      if (!ready) {
-        try { await withTimeout(st.store.refresh(), 2500, "ready-check"); ready = !!(await resolveInspectorUrl(st)); } catch { /* still not ready */ }
-      }
-      res.end(JSON.stringify({ ready }));
+      const readiness = await inspectorReadiness(st);
+      res.end(JSON.stringify(readiness));
       return;
     }
 
@@ -580,7 +565,8 @@ const canvas = createCanvas({
         },
       },
       handler: async (ctx) => {
-        const snap = await requireInstance(ctx).store.selectAgent({
+        const st = requireInstance(ctx);
+        const snap = await selectTargetAgent(st, {
           port: ctx.input?.port,
           platform: ctx.input?.platform,
         });

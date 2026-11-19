@@ -58,7 +58,11 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
                                     {
                                         if (value.StartsWith("\"") && value.EndsWith("\""))
                                         {
-                                            try { value = System.Text.Json.JsonSerializer.Deserialize<string>(value) ?? value; }
+                                            try
+                                            {
+                                                using var document = System.Text.Json.JsonDocument.Parse(value);
+                                                value = document.RootElement.GetString() ?? value;
+                                            }
                                             catch { value = value[1..^1]; }
                                         }
                                         tcs.TrySetResult(value);

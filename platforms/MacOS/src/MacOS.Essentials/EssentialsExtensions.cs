@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -101,7 +102,10 @@ public static class EssentialsExtensions
         VersionTracking.Track();
     }
 
-    static void SetStaticField(Type type, string fieldName, object value)
+    static void SetStaticField(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicFields)] Type type,
+        string fieldName,
+        object? value)
     {
         var field = type.GetField(fieldName, BindingFlags.Static | BindingFlags.NonPublic);
         field?.SetValue(null, value);

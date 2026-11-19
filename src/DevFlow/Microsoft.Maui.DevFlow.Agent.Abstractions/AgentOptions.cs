@@ -82,6 +82,24 @@ public class AgentOptions
     public bool EnableProfiler { get; set; } = false;
 
     /// <summary>
+    /// Allows gestures to be delivered as synthesised touches on iOS and Mac Catalyst when the
+    /// target owns no gesture recognizer and no scroll offset to move — MAUI's GraphicsView, and
+    /// any view named in <see cref="SyntheticTouchViewTypes"/>. Building such a touch requires
+    /// private UIKit ivars, so it is off by default and should only be enabled in development
+    /// builds. Has no effect on other platforms. Default: false.
+    /// </summary>
+    public bool EnableSyntheticTouch { get; set; } = false;
+
+    /// <summary>
+    /// Native view types, beyond MAUI's GraphicsView, that synthesised touches may be delivered to
+    /// when <see cref="EnableSyntheticTouch"/> is on. Match is by simple or full type name, and a
+    /// subclass of a listed type matches too. Only list views that take input by overriding
+    /// <c>touchesBegan:</c>: UIControl and UIScrollView subclasses, and views with an enabled
+    /// gesture recognizer (such as SkiaSharp's SKCanvasView), are refused whatever is listed here.
+    /// </summary>
+    public IList<string> SyntheticTouchViewTypes { get; } = new List<string>();
+
+    /// <summary>
     /// Enables the experimental layout diagnostics API and capability advertisement.
     /// Default: false until the cross-platform acceptance matrix is complete.
     /// </summary>
@@ -134,6 +152,30 @@ public class AgentOptions
     /// Default: 10 seconds.
     /// </summary>
     public int MutationLeaseTimeoutMs { get; set; } = 10_000;
+
+    /// <summary>
+    /// Maximum coalesced samples accepted by one pointer-session move request.
+    /// Default: 64.
+    /// </summary>
+    public int PointerSessionMaxSamplesPerMove { get; set; } = 64;
+
+    /// <summary>
+    /// Maximum UTF-8 request body size accepted by pointer-session endpoints.
+    /// Default: 16 KB.
+    /// </summary>
+    public int PointerSessionMaxRequestBytes { get; set; } = 16 * 1024;
+
+    /// <summary>
+    /// How long an active pointer session may remain idle before the backend receives a cancel.
+    /// Default: 5 seconds.
+    /// </summary>
+    public int PointerSessionIdleTimeoutMs { get; set; } = 5_000;
+
+    /// <summary>
+    /// Maximum lifetime of one pointer session before the backend receives a cancel.
+    /// Default: 60 seconds.
+    /// </summary>
+    public int PointerSessionMaxDurationMs { get; set; } = 60_000;
 
     /// <summary>
     /// Custom routes registered under /api/v1/ext/{namespace}/...

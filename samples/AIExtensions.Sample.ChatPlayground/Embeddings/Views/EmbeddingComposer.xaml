@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.EmbeddingComposer"
+             x:DataType="local:EmbeddingPlaygroundViewModel">
+    <Border Style="{StaticResource ComposerPanel}">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Entry Text="{Binding Query}" Placeholder="Search imported documents"
+                   ReturnCommand="{Binding Search}" ReturnType="Search"
+                   AutomationId="EmbeddingSearchEntry" />
+            <Grid Grid.Column="1" WidthRequest="44" HeightRequest="44">
+                <ImageButton Source="search.png" Command="{Binding Search}"
+                             IsVisible="{Binding IsIdle}"
+                             Style="{StaticResource AttachmentButton}"
+                             SemanticProperties.Description="Search documents"
+                             AutomationId="EmbeddingSearchButton" />
+                <ImageButton Source="stop.png" Command="{Binding CancelSearch}"
+                             IsVisible="{Binding IsBusy}"
+                             Style="{StaticResource CancelActionButton}"
+                             SemanticProperties.Description="Cancel document search"
+                             AutomationId="CancelEmbeddingButton" />
+            </Grid>
+        </Grid>
+    </Border>
+</ContentView>

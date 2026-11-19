@@ -4,6 +4,21 @@
   "title": "WebView Models",
   "description": "WebView interaction models for inspecting and controlling embedded web content.",
   "$defs": {
+    "WebViewContextsResponse": {
+      "type": "object",
+      "description": "Registered CDP WebViews, including inactive or not-yet-ready registrations.",
+      "required": [
+        "webviews"
+      ],
+      "properties": {
+        "webviews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WebViewContext"
+          }
+        }
+      }
+    },
     "WebViewContext": {
       "type": "object",
       "description": "Represents a discovered WebView context within the application.",
@@ -15,7 +30,23 @@
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for this WebView context."
+          "description": "Selection alias: AutomationId when nonblank, otherwise elementId when nonblank, otherwise the decimal registry index. Not guaranteed unique when aliases are reused."
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Registry index; its decimal string can select this registration."
+        },
+        "automationId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "AutomationId supplied when registering the CDP bridge."
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether the nonblank AutomationId is reported among the backend's active WebView AutomationIds."
         },
         "elementId": {
           "type": [
@@ -25,7 +56,10 @@
           "description": "Identifier linking this WebView to its corresponding element in the native UI tree."
         },
         "url": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "Current URL loaded in the WebView."
         },
         "title": {
@@ -33,74 +67,55 @@
             "string",
             "null"
           ],
-          "description": "Page title of the WebView content."
+          "description": "The current handler emits null; it does not query the page title."
         },
         "ready": {
           "type": "boolean",
-          "description": "Whether the WebView is ready for interaction (page loaded and DOM available)."
+          "description": "Readiness reported by the registered CDP bridge."
+        },
+        "isReady": {
+          "type": "boolean",
+          "description": "Alias of ready, emitted by the existing handler."
         }
       }
     },
     "EvaluateRequest": {
       "type": "object",
-      "description": "Request to evaluate a JavaScript expression in a WebView context.",
+      "description": "Raw CDP command forwarded unchanged to the selected bridge. To evaluate JavaScript, use method Runtime.evaluate and put expression and returnByValue in params.",
       "required": [
-        "expression"
+        "method"
       ],
       "properties": {
-        "expression": {
+        "id": {
+          "type": "integer",
+          "description": "Optional CDP command identifier."
+        },
+        "method": {
           "type": "string",
-          "description": "JavaScript expression to evaluate."
+          "description": "CDP method, for example Runtime.evaluate."
         },
-        "contextId": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Target WebView context identifier. If null, uses the default or only available context."
-        },
-        "returnByValue": {
-          "type": "boolean",
-          "description": "Whether to return the result by value (serialized) rather than by reference.",
-          "default": true
+        "params": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Method-specific CDP parameters. Context selection uses the webview query parameter, not the command body."
         }
       }
     },
     "EvaluateResponse": {
       "type": "object",
-      "description": "Response from evaluating a JavaScript expression.",
+      "description": "Raw CDP response returned unchanged by the bridge. For Runtime.evaluate, the remote object is nested under result.result and exceptionDetails, when present, is inside result.",
       "properties": {
-        "result": {
-          "description": "The result of the JavaScript evaluation as a JSON value."
+        "id": {
+          "type": "integer",
+          "description": "CDP command identifier when supplied by the bridge."
         },
-        "exceptionDetails": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "description": "Exception details if the evaluation threw an error.",
-          "properties": {
-            "text": {
-              "type": "string",
-              "description": "Exception message text."
-            },
-            "lineNumber": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "description": "Line number where the exception occurred.",
-              "minimum": 0
-            },
-            "columnNumber": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "description": "Column number where the exception occurred.",
-              "minimum": 0
-            }
-          }
+        "result": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Method-specific CDP result."
+        },
+        "error": {
+          "description": "CDP error returned by the bridge, without conversion to an HTTP error."
         }
       }
     },

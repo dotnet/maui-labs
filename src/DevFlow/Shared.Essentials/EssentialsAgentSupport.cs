@@ -69,19 +69,69 @@ internal sealed class EssentialsAgentSupport
             SaveKnownPreferenceKeys(keys, sharedName);
     }
 
-    public Task<HttpResponse> HandlePreferencesList(HttpRequest request)
+    public static IReadOnlyCollection<string> ReadPreferenceFileKeys(
+        string path, string? sharedName = null, bool nestedStore = false)
+    {
+        if (!File.Exists(path))
+            return Array.Empty<string>();
+
+        // A concurrent save can truncate the file before writing JSON. Treat
+        // blank or malformed content as a failed read, not a complete empty store.
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var store = document.RootElement;
+        if (store.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("The preference store must be a JSON object.");
+
+        if (nestedStore)
+        {
+            if (!store.TryGetProperty(sharedName ?? string.Empty, out var bucket))
+                return Array.Empty<string>();
+            if (bucket.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("The preference store bucket must be a JSON object.");
+            store = bucket;
+        }
+
+        return store.EnumerateObject().Select(property => property.Name).ToArray();
+    }
+
+    public Task<HttpResponse> HandlePreferencesList(
+        HttpRequest request,
+        Func<string?, IReadOnlyCollection<string>?>? enumerateNativeKeys = null)
     {
         try
         {
             request.QueryParams.TryGetValue("sharedName", out var sharedName);
-            var keys = GetKnownPreferenceKeys(sharedName);
+            var registryKeys = GetKnownPreferenceKeys(sharedName);
+            IReadOnlyCollection<string>? nativeKeys;
+            string? enumerationError = null;
+            try
+            {
+                nativeKeys = enumerateNativeKeys?.Invoke(sharedName);
+                if (nativeKeys is null)
+                    enumerationError = "Native preference enumeration is not available.";
+            }
+            catch (Exception ex)
+            {
+                nativeKeys = null;
+                enumerationError = $"Native preference enumeration failed: {ex.Message}";
+            }
+
+            var keys = PreferenceKeyMerger.Merge(
+                registryKeys, nativeKeys, excludeKeys: new[] { PreferencesKeyRegistryKey });
             var entries = new List<object>();
-            foreach (var key in keys.OrderBy(k => k))
+            foreach (var key in keys.Keys)
             {
                 var (value, type) = ReadPreferenceValue(key, sharedName);
-                entries.Add(new { key, value, type, sharedName });
+                entries.Add(new Dictionary<string, object?> { ["key"] = key, ["value"] = value, ["type"] = type, ["sharedName"] = sharedName });
             }
-            return Task.FromResult(HttpResponse.Json(new { keys = entries }));
+            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
+            {
+                ["keys"] = entries,
+                ["source"] = keys.Source,
+                ["complete"] = keys.Complete,
+                ["sharedName"] = sharedName,
+                ["enumerationError"] = enumerationError
+            }));
         }
         catch (Exception ex)
         {
@@ -191,7 +241,7 @@ internal sealed class EssentialsAgentSupport
             }
 
             var exists = sharedName != null ? Preferences.ContainsKey(key, sharedName) : Preferences.ContainsKey(key);
-            return Task.FromResult(HttpResponse.Json(new { key, value, type, exists, sharedName }));
+            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?> { ["key"] = key, ["value"] = value, ["type"] = type, ["exists"] = exists, ["sharedName"] = sharedName }));
         }
         catch (Exception ex)
         {
@@ -256,7 +306,7 @@ internal sealed class EssentialsAgentSupport
             }
 
             TrackPreferenceKey(key, sharedName);
-            return Task.FromResult(HttpResponse.Json(new { key, value = body.Value, type, sharedName }));
+            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?> { ["key"] = key, ["value"] = body.Value, ["type"] = type, ["sharedName"] = sharedName }));
         }
         catch (Exception ex)
         {
@@ -318,7 +368,7 @@ internal sealed class EssentialsAgentSupport
                 return HttpResponse.Error("key is required");
 
             var value = await SecureStorage.GetAsync(key);
-            return HttpResponse.Json(new { key, value, exists = value != null });
+            return HttpResponse.Json(new Dictionary<string, object?> { ["key"] = key, ["value"] = value, ["exists"] = value != null });
         }
         catch (Exception ex)
         {
@@ -338,7 +388,7 @@ internal sealed class EssentialsAgentSupport
                 return HttpResponse.Error("value is required");
 
             await SecureStorage.SetAsync(key, body.Value);
-            return HttpResponse.Json(new { key, value = body.Value });
+            return HttpResponse.Json(new Dictionary<string, object?> { ["key"] = key, ["value"] = body.Value });
         }
         catch (Exception ex)
         {
@@ -354,7 +404,7 @@ internal sealed class EssentialsAgentSupport
                 return Task.FromResult(HttpResponse.Error("key is required"));
 
             var removed = SecureStorage.Remove(key);
-            return Task.FromResult(HttpResponse.Json(new { key, removed }));
+            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?> { ["key"] = key, ["removed"] = removed }));
         }
         catch (Exception ex)
         {
@@ -388,14 +438,14 @@ internal sealed class EssentialsAgentSupport
             return await MainThread.InvokeOnMainThreadAsync(() =>
             {
                 var info = AppInfo.Current;
-                return HttpResponse.Json(new
+                return HttpResponse.Json(new Dictionary<string, object?>
                 {
-                    name = info.Name,
-                    packageName = info.PackageName,
-                    version = info.VersionString,
-                    buildNumber = info.BuildString,
-                    requestedTheme = info.RequestedTheme.ToString(),
-                    requestedLayoutDirection = info.RequestedLayoutDirection.ToString(),
+                    ["name"] = info.Name,
+                    ["packageName"] = info.PackageName,
+                    ["version"] = info.VersionString,
+                    ["buildNumber"] = info.BuildString,
+                    ["requestedTheme"] = info.RequestedTheme.ToString(),
+                    ["requestedLayoutDirection"] = info.RequestedLayoutDirection.ToString(),
                 });
             });
         }
@@ -410,15 +460,15 @@ internal sealed class EssentialsAgentSupport
         try
         {
             var info = DeviceInfo.Current;
-            return Task.FromResult(HttpResponse.Json(new
+            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
             {
-                manufacturer = info.Manufacturer,
-                model = info.Model,
-                name = info.Name,
-                platform = info.Platform.ToString(),
-                idiom = info.Idiom.ToString(),
-                deviceType = info.DeviceType.ToString(),
-                osVersion = info.VersionString,
+                ["manufacturer"] = info.Manufacturer,
+                ["model"] = info.Model,
+                ["name"] = info.Name,
+                ["platform"] = info.Platform.ToString(),
+                ["idiom"] = info.Idiom.ToString(),
+                ["deviceType"] = info.DeviceType.ToString(),
+                ["osVersion"] = info.VersionString,
             }));
         }
         catch (Exception ex)
@@ -434,14 +484,14 @@ internal sealed class EssentialsAgentSupport
             return await MainThread.InvokeOnMainThreadAsync(() =>
             {
                 var display = DeviceDisplay.MainDisplayInfo;
-                return HttpResponse.Json(new
+                return HttpResponse.Json(new Dictionary<string, object?>
                 {
-                    width = display.Width,
-                    height = display.Height,
-                    density = display.Density,
-                    orientation = display.Orientation.ToString(),
-                    rotation = display.Rotation.ToString(),
-                    refreshRate = display.RefreshRate,
+                    ["width"] = display.Width,
+                    ["height"] = display.Height,
+                    ["density"] = display.Density,
+                    ["orientation"] = display.Orientation.ToString(),
+                    ["rotation"] = display.Rotation.ToString(),
+                    ["refreshRate"] = display.RefreshRate,
                 });
             });
         }
@@ -469,12 +519,12 @@ internal sealed class EssentialsAgentSupport
         try
         {
             var battery = Battery.Default;
-            return Task.FromResult(HttpResponse.Json(new
+            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
             {
-                chargeLevel = battery.ChargeLevel,
-                state = battery.State.ToString(),
-                powerSource = battery.PowerSource.ToString(),
-                energySaverStatus = battery.EnergySaverStatus.ToString(),
+                ["chargeLevel"] = battery.ChargeLevel,
+                ["state"] = battery.State.ToString(),
+                ["powerSource"] = battery.PowerSource.ToString(),
+                ["energySaverStatus"] = battery.EnergySaverStatus.ToString(),
             }));
         }
         catch (Exception ex)
@@ -488,10 +538,10 @@ internal sealed class EssentialsAgentSupport
         try
         {
             var connectivity = Connectivity.Current;
-            return Task.FromResult(HttpResponse.Json(new
+            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
             {
-                networkAccess = connectivity.NetworkAccess.ToString(),
-                connectionProfiles = connectivity.ConnectionProfiles.Select(p => p.ToString()).ToList(),
+                ["networkAccess"] = connectivity.NetworkAccess.ToString(),
+                ["connectionProfiles"] = connectivity.ConnectionProfiles.Select(p => p.ToString()).ToList(),
             }));
         }
         catch (Exception ex)
@@ -505,19 +555,19 @@ internal sealed class EssentialsAgentSupport
         try
         {
             var vt = VersionTracking.Default;
-            return Task.FromResult(HttpResponse.Json(new
+            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
             {
-                currentVersion = vt.CurrentVersion,
-                currentBuild = vt.CurrentBuild,
-                previousVersion = vt.PreviousVersion,
-                previousBuild = vt.PreviousBuild,
-                firstInstalledVersion = vt.FirstInstalledVersion,
-                firstInstalledBuild = vt.FirstInstalledBuild,
-                isFirstLaunchEver = vt.IsFirstLaunchEver,
-                isFirstLaunchForCurrentVersion = vt.IsFirstLaunchForCurrentVersion,
-                isFirstLaunchForCurrentBuild = vt.IsFirstLaunchForCurrentBuild,
-                versionHistory = vt.VersionHistory.ToList(),
-                buildHistory = vt.BuildHistory.ToList(),
+                ["currentVersion"] = vt.CurrentVersion,
+                ["currentBuild"] = vt.CurrentBuild,
+                ["previousVersion"] = vt.PreviousVersion,
+                ["previousBuild"] = vt.PreviousBuild,
+                ["firstInstalledVersion"] = vt.FirstInstalledVersion,
+                ["firstInstalledBuild"] = vt.FirstInstalledBuild,
+                ["isFirstLaunchEver"] = vt.IsFirstLaunchEver,
+                ["isFirstLaunchForCurrentVersion"] = vt.IsFirstLaunchForCurrentVersion,
+                ["isFirstLaunchForCurrentBuild"] = vt.IsFirstLaunchForCurrentBuild,
+                ["versionHistory"] = vt.VersionHistory.ToList(),
+                ["buildHistory"] = vt.BuildHistory.ToList(),
             }));
         }
         catch (Exception ex)
@@ -560,14 +610,14 @@ internal sealed class EssentialsAgentSupport
                 {
                     var perm = factory();
                     var status = await perm.CheckStatusAsync();
-                    results.Add(new { permission = name, status = status.ToString() });
+                    results.Add(new Dictionary<string, object?> { ["permission"] = name, ["status"] = status.ToString() });
                 }
                 catch
                 {
-                    results.Add(new { permission = name, status = "unavailable" });
+                    results.Add(new Dictionary<string, object?> { ["permission"] = name, ["status"] = "unavailable" });
                 }
             }
-            return HttpResponse.Json(new { permissions = results });
+            return HttpResponse.Json(new Dictionary<string, object?> { ["permissions"] = results });
         }
         catch (Exception ex)
         {
@@ -593,7 +643,7 @@ internal sealed class EssentialsAgentSupport
 
             var perm = factory();
             var status = await perm.CheckStatusAsync();
-            return HttpResponse.Json(new { permission = permName, status = status.ToString() });
+            return HttpResponse.Json(new Dictionary<string, object?> { ["permission"] = permName, ["status"] = status.ToString() });
         }
         catch (Exception ex)
         {
@@ -623,16 +673,16 @@ internal sealed class EssentialsAgentSupport
             if (location == null)
                 return CreatePlatformError("Could not determine location", PlatformErrorReasonUnknown);
 
-            return HttpResponse.Json(new
+            return HttpResponse.Json(new Dictionary<string, object?>
             {
-                latitude = location.Latitude,
-                longitude = location.Longitude,
-                altitude = location.Altitude,
-                accuracy = location.Accuracy,
-                speed = location.Speed,
-                course = location.Course,
-                timestamp = location.Timestamp,
-                isFromMockProvider = location.IsFromMockProvider,
+                ["latitude"] = location.Latitude,
+                ["longitude"] = location.Longitude,
+                ["altitude"] = location.Altitude,
+                ["accuracy"] = location.Accuracy,
+                ["speed"] = location.Speed,
+                ["course"] = location.Course,
+                ["timestamp"] = location.Timestamp,
+                ["isFromMockProvider"] = location.IsFromMockProvider,
             });
         }
         catch (PermissionException)

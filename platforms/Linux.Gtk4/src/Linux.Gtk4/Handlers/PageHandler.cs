@@ -53,6 +53,7 @@ public class PageHandler : GtkViewHandler<IContentView, Gtk.Box>
 			}
 			current = current.GetParent();
 		}
+		handler.InvalidateNativeAllocation();
 	}
 
 	public override void SetVirtualView(IView view)

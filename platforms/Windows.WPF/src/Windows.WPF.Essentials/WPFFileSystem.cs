@@ -5,12 +5,26 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 {
 	public class WPFFileSystem : IFileSystem
 	{
-		public string AppDataDirectory =>
-			Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-				AppDomain.CurrentDomain.FriendlyName);
+		public string AppDataDirectory
+		{
+			get
+			{
+				var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+					AppDomain.CurrentDomain.FriendlyName);
+				Directory.CreateDirectory(path);
+				return path;
+			}
+		}
 
-		public string CacheDirectory =>
-			Path.Combine(Path.GetTempPath(), AppDomain.CurrentDomain.FriendlyName);
+		public string CacheDirectory
+		{
+			get
+			{
+				var path = Path.Combine(Path.GetTempPath(), AppDomain.CurrentDomain.FriendlyName);
+				Directory.CreateDirectory(path);
+				return path;
+			}
+		}
 
 		public Task<System.IO.Stream> OpenAppPackageFileAsync(string filename)
 		{

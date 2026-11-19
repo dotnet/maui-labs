@@ -1,0 +1,423 @@
+# MAUI DevFlow Inspector internals
+
+> **Contributor reference**: For app setup and browser, VS Code, GitHub Copilot desktop, and
+> Copilot CLI instructions, see the [MAUI DevFlow Inspector guide](inspector.md).
+
+The broker-hosted DevFlow Web Inspector mirrors a running app as a screenshot plus an interactive
+visual-tree overlay. The VS Code and GitHub Copilot Canvas hosts embed this same page and add
+host-specific source, workflow, and Copilot integrations.
+
+## Shared host model
+
+The browser page is served under `http://localhost:19223/inspector/`. VS Code and Canvas discover
+the same broker and embed its per-agent Inspector page instead of maintaining separate Inspector
+implementations.
+
+## Features
+
+- screenshot and visual-tree inspection with hover, selection, and searchable hierarchy;
+- a prominent disconnected-state overlay that preserves and clearly labels the last captured frame
+  while DevFlow waits for the app to reconnect;
+- tap, fill, scroll, named gestures (pinch, rotate, pan, swipe, double-tap, long-press, tap),
+  navigation, theme, and live property mutation, with explicit
+  **Apply to XAML** persistence for existing direct-literal attributes and runtime-owned property
+  editor metadata;
+- logs, live-updating network, preferences, device, sensor, native Alerts, read-only file browsing,
+  and WebView/CDP data docks;
+- click-to-XAML source navigation for Debug source maps;
+- one integrated Workflow panel for recording, loading project `maui-tests` files or local Markdown
+  files, replaying them, and reviewing per-step results;
+- an **Add to Copilot** context menu for the selected element, loaded workflow, both together, or
+  the current bounded and redacted Data snapshot, including alert metadata;
+- responsive light, dark, and high-contrast host theming.
+
+## Architecture
+
+```text
+Browser / VS Code / Canvas
+          |
+          v
+DevFlow broker-hosted inspector
+          |
+          v
+In-app DevFlow agent
+```
+
+The broker discovers agents and serves the HTML/CSS/JavaScript bundle. Inspector mutations are
+proxied to the selected in-app agent. VS Code and Canvas embed the same page and add an
+authenticated host bridge for source navigation, recording persistence, and Copilot context.
+
+## Connection recovery
+
+State requests time out after 10 seconds, including reading the response body. While disconnected,
+the visible Inspector checks again every 3 seconds even if the event WebSocket remains open.
+Polling pauses while the Inspector is hidden or replaying a workflow.
+
+The disconnected overlay marks active state checks with `aria-busy` and a spinning refresh icon.
+**Retry now** shows a checking label until its check settles, then becomes available again on
+failure. The icon does not animate when reduced motion is preferred.
+
+## Host-adaptive layout
+
+The shared inspector keeps one interaction model while adapting its chrome to the host viewport:
+
+- **Wide browser/editor:** tree, screenshot, and properties are docked as three panes.
+- **Compact editor:** the tree stays docked and properties dock beside the screenshot, so Fit
+  re-fits around them instead of a drawer covering the preview.
+- **Narrow Canvas/editor:** the screenshot is primary; tree and properties become coordinated
+  full-height drawers with a scrim.
+- **Short host:** drawers and overlay Data/timeline sheets protect the screenshot's vertical budget.
+
+The toolbar keeps interaction mode, tree, fit, and recording visible. Secondary actions remain
+inline for as long as they fit; only the non-fitting actions move into the **More** menu. More can
+open over an active Data or properties surface, and Copilot choices open as a nested submenu.
+Host bridges also supply their color palette, font metadata, contrast mode, and reduced-motion
+preference. VS Code placement is configurable with
+`mauiDevflow.openLocation` (`auto`, `beside`, or `active`).
+
+## Capability-driven command policy
+
+The browser, VS Code, and Copilot Canvas hosts share one pure command policy from
+`inspector-command-policy.js`. It combines the agent capability document with the Inspector's
+normalized Preview/control access, selection, workflow, and Data state to derive each toolbar
+command's `visible`, `enabled`, `availability`, and disabled reason.
+
+- Explicitly unsupported commands are hidden. Missing capability metadata from legacy agents stays
+  unknown and preserves the existing usable toolbar. Layout diagnostics is opt-in, so a known
+  capability document that omits `ui.layoutDiagnostics` hides that command and tab.
+- Temporarily unavailable, read-only, and disconnected commands remain visible and focusable with
+  distinct `aria-disabled`, tooltip, and screen-reader reasons.
+- Starting a recording requires a current writable Preview; stopping or discarding an active
+  recording requires control but remains available while the Preview capture is delayed.
+- The same button element moves between the inline toolbar and **More**, so state never diverges.
+  Hidden commands do not consume overflow space, empty groups collapse, and focus moves to the next
+  visible command when a capability refresh removes the focused action.
+- Capability presentation is not enforcement. The Inspector server and agent mutation lease remain
+  authoritative for every operation.
+
+## Viewport navigation
+
+The Preview has one Inspector-owned viewport transform containing a CSS scale and translation.
+Fit remains the default and never upscales past 100%. The preset control exposes Fit, 50%, 100%,
+and 200%; the adjacent buttons step through additional useful scales between 25% and 400%.
+The Fit control and `0` shortcut recenter the app.
+
+Zoom and pan change only browser presentation. They do not bypass the shared screenshot-resolution
+scheduler, acquire the mutation lease, add recording steps, or define another frame identity.
+The shared `inspector-frame.js` conversions map the transformed Preview back to app-logical
+coordinates so taps, hit testing, hover, selection, and app gestures target the committed frame.
+
+| Input | Owner |
+|---|---|
+| Click or ordinary drag | App tap or gesture |
+| Ordinary wheel | App scroll |
+| Ctrl/Cmd+wheel, including trackpad pinch represented as modified wheel | Inspector cursor-centered zoom |
+| Space+drag or middle-button drag | Inspector pan |
+| Direct touch gestures and pinch pointers | App interaction |
+
+The viewport region is keyboard focusable. Unmodified `+`/`-` change zoom, `0` returns to Fit,
+`1` selects 100%, and the arrow keys pan enlarged content (Shift uses a larger step). Browser and
+host Ctrl/Cmd keyboard shortcuts remain untouched. Space only arms pan while the Preview owns
+focus and no editable control owns the key. Pointer cancel, lost capture, window blur, and document
+hiding end Inspector pan without sending an app gesture. A dedicated polite announcement reports
+zoom changes without overwriting the Inspector's shared status line.
+
+Custom zoom preserves its visible app point across frame commits and host/pane resize. The wrapper
+does not maintain a native scroll offset; reveal and keyboard operations update the tracked
+transform instead. Translations are clamped so some or all of the app remains reachable, and Fit
+always recovers a centered view. Fit recomputes after app resize or rotation; custom zoom is
+preserved and clamped to the new logical dimensions.
+
+## Coordinated frames and coordinates
+
+Each Inspector refresh creates one immutable frame containing the visual tree, exact screenshot
+bytes, rendered overlay HTML, dimensions, offsets, and capture metadata. `/api/state` exposes the
+canonical descriptor under `frame`; the existing flat fields remain compatibility aliases.
+
+| Field | Meaning |
+|---|---|
+| `streamId` | Opaque identity for one `InspectorServer` lifetime. Revision ordering never crosses streams. |
+| `frameId` | Opaque GUID and the sole frame-cache identity used by `screenshot.png?frame=...`. |
+| `frameRevision` | Strictly increasing revision assigned only when a complete frame commits within `streamId`. |
+| `captureEpoch`, `registryGeneration`, `windowId` | Optional agent capture identity used for stale element rejection. |
+| `treeRevision`, `diagnosticInputsRevision` | Opaque tree and optional layout-input revisions. |
+| `logicalWidth`, `logicalHeight` | Captured app-root size in device-independent units. |
+| `pixelWidth`, `pixelHeight` | PNG dimensions from its IHDR chunk. |
+| `rootOffsetX`, `rootOffsetY` | Captured root origin in window-logical coordinates. |
+| `captureScale` | Nominal PNG pixels per logical unit. Exact conversions use the per-axis dimension ratios. |
+| `nativeScale` | Backend native pixels per logical unit before negotiated downsampling, when known. |
+| `requestedCaptureScale` | Stable scale bucket requested for the frame; part of cache reuse, not a new identity. |
+| `resolutionClamped` | Whether backend/native limits or pixel budgets bounded the request. |
+| `createdAt` | UTC time when the complete tree and screenshot frame was created. |
+
+`frameId` remains the only cache lookup key. `frameRevision` provides ordering, and an internal
+invalidation generation prevents pre-mutation coordinate frames from being reused. The initial
+HTML carries the same descriptor as `/api/state`, so actions before the first poll still reference
+the displayed frame. Identity-less compatibility payloads may refresh geometry in place without
+inheriting correlation or revision metadata; explicit frames commit only when their stream/revision
+ordering permits it.
+
+Browser refreshes use a monotonically increasing generation. A forced refresh aborts older state
+fetch or image-decode work; late completions are ignored, and cancellation never clears the last
+committed frame or pending tap feedback. Forced state requests also bypass the server's short
+frame-reuse window so post-action evidence cannot reuse a frame captured before the action.
+
+The server publishes only screenshots with a complete PNG chunk sequence and valid chunk CRCs.
+The browser then decodes a candidate screenshot before synchronously committing screenshot source,
+logical viewport size, offsets, element HTML, and descriptor. Expired screenshot lookups return
+`404`. Correlated coordinate actions referencing unknown frames return `410 frame-expired`;
+identity-bound actions treat missing cached correlation as advisory and still rely on the agent's
+capture epoch. Stream/revision or changed-geometry mismatches return `409 frame-mismatch` or
+`409 frame-superseded`. Coordinate actions are revalidated after live hit-testing and mutation
+dispatch is serialized against frame publication. `actionId` is a tracing identifier, not replay
+protection. A successful mutation invalidates prior coordinate frames until a complete post-mutation
+frame is captured; identity-bound actions still rely on the agent's capture-epoch validation.
+
+Coordinate conversions are centralized in `Web/inspector-frame.js`:
+
+```text
+windowLogical = appLogical + (rootOffsetX, rootOffsetY)
+appLogical = windowLogical - (rootOffsetX, rootOffsetY)
+screenshotPixel.x = appLogical.x * pixelWidth / logicalWidth
+screenshotPixel.y = appLogical.y * pixelHeight / logicalHeight
+inspectorCss = (transformedViewport - origin - translation) / scale
+```
+
+Inspector actions send `appLogical` coordinates plus optional correlation containing `actionId`,
+`source`, `streamId`, `frameId`, `frameRevision`, and `coordinateSpace`. Older callers may omit
+correlation and retain window-logical behavior. The Inspector proxy validates and converts
+correlated coordinates; direct `/api/v1` agent coordinate calls must already use `windowLogical`.
+
+Fit, presets, cursor zoom, and pan are transform values, not separate coordinate contracts. The
+viewport controller supplies its scale and translation to the same helpers without changing frame
+identity or action payloads.
+
+Resolution-only replacement frames remain coordinate-equivalent when the recursive element
+geometry, logical viewport, root offset, and window identity are unchanged; PNG pixel dimensions
+do not create a second coordinate contract.
+For pointer sessions, frame and action identity remain correlated through the Inspector proxy.
+The Inspector converts validated `appLogical` samples once to `windowLogical`, rewrites the
+correlation to declare `windowLogical`, and forwards the samples with the window, capture-epoch,
+and registry-generation guards. The agent publishes lifecycle geometry in that same coordinate
+space.
+
+### Continuous pointer sessions
+
+Interact-mode pointer input uses the `ui.pointerStream` capability when the connected backend can
+keep a native press active across requests. The browser sends the existing Inspector frame
+correlation plus `appLogical` (captured-root-local) samples. `InspectorServer` validates that
+cached frame and converts the samples once to agent `windowLogical` coordinates by adding the
+frame's root offset. It does not create another frame ID or screenshot cache.
+
+The browser keeps at most one move request in flight. DOM coalesced events are retained in a
+bounded queue, sent in batches of at most the agent-advertised limit, and the final `end` waits for
+that queue to drain. `pointercancel`, lost capture, a hidden/page-unloaded Inspector, an
+incompatible frame mapping (window, root offset, or logical size), lease loss, idle timeout, and
+agent shutdown all cancel the native pointer. Compatible refreshes may update the preview without
+interrupting the press. A response lost
+after a successful start is treated as ambiguous and cancelled; the path is never replayed as a
+legacy gesture because that could apply the interaction twice.
+
+Backend support is intentionally conservative:
+
+- MAUI Android and the plain .NET Android agent dispatch real `MotionEvent` down/move/up/cancel
+  sequences through the window.
+- MAUI iOS and Mac Catalyst support opt-in synthetic `UITouch` sessions for accepted raw-touch or
+  recognizer-backed views. UIKit controls, scroll views, and targets whose arbitration cannot be
+  reproduced safely are rejected before the press.
+- Windows/WinUI, WPF, GTK, macOS AppKit, and the plain .NET UIKit/AppKit agents report
+  `supported: false` with a reason.
+
+When the capability is absent/false, or start rejects the request before committing a press
+(`400`, `404`, `422`, or `501`), the Inspector keeps the existing first-to-last named swipe
+fallback. Transport failures and post-start failures are cancelled and never replayed.
+
+Elements the Agent reports as displayed can still lie wholly outside the frame (a closed Shell
+flyout is realized left of the window). The renderer marks those overlays `data-offscreen="true"`
+after the root offset is applied; the client dims their tree rows, does not draw or hover-highlight
+them on the Preview, and tags the selected element's status line `(off-screen)` while it stays
+outside the frame. `data-isVisible` keeps the Agent's value.
+
+## Global mutation lease
+
+All state-changing calls use one lease per running app. Browser tabs, VS Code, Canvas, MCP, and CLI
+therefore cannot drive the app concurrently.
+
+- The first mutating host claims the lease.
+- Read-only inspection remains available to other hosts.
+- A host can release or explicitly take over the lease.
+- Lease release or takeover hands an active app-scoped recording to the next valid lease holder.
+- Closing Canvas releases its lease; abandoned leases also expire automatically.
+
+The lease coordinates writers; it is not an authentication boundary.
+
+## Workflow recording
+
+Recording is owned by the broker and scoped to the current app. The current valid mutation lease
+holder controls it. The agent observes successful supported mutations from every host, so a
+workflow can begin in the browser, continue through Canvas or MCP after lease handoff, and stop in
+VS Code without separate local recorders.
+
+The Workflow panel can also load an existing test from the registered app project's top-level
+`maui-tests` directory or from an OS-selected `.md` file. Project files are confined to that
+directory, capped at 1 MB, and parsed and validated before Inspector makes them replayable.
+Replay results stay in the same Workflow panel instead of opening a separate report surface.
+
+Currently normalized actions include tap, fill, scroll, navigate, back, theme changes, and property
+changes. The result is a Markdown file with an authoritative `json maui-test` block for replay.
+Replay is blocked while recording is active.
+
+## Click-to-XAML
+
+The Agent.Core package supplies a build-transitive source generator. In Debug builds it maps XAML
+elements to source file, line, column, and a build-time content hash. VS Code compares the current
+file hash before opening the recorded line and warns when the file changed after the app was built.
+
+Source locations are emitted only when the runtime element can be matched conservatively to its
+XAML declaration. Repeated same-type siblings, such as the two `Label`s in the default template,
+are told apart by a sibling-unique `AutomationId`, or when every one of them declares a different
+literal `Text` that the runtime element still shows. Otherwise (bound, duplicated, or
+code-behind-changed text) their source actions are withheld rather than risk opening or editing
+the wrong declaration; give those elements a unique `AutomationId` to map them. A successful agent
+`setProperty` mutation of `Text` retains an already verified declaration for the same live object and value,
+so changing the identity literal in Inspector does not remove **Apply to XAML**. This does not
+bypass sibling alignment, literal uniqueness, or source-version checks.
+
+Source maps are disabled outside Debug by default because they embed XAML text and source paths.
+They can be disabled explicitly:
+
+```xml
+<DevFlowXamlSourceMapsEnabled>false</DevFlowXamlSourceMapsEnabled>
+```
+
+### Apply property values to XAML
+
+For source-mapped elements, each supported property row includes an **Apply to XAML** button. Live
+editing remains runtime-only until this button is selected. The broker then updates only an
+existing direct-literal attribute in the registered app project while preserving the rest of the
+file, its encoding, and line endings.
+
+The write is rejected when the property comes from a binding, resource, markup extension, style,
+property element, template, or code-created element. It is also rejected when the source changed
+outside Inspector after the app was built or after the previous Inspector write. Rebuild the app
+to refresh stale source maps.
+
+The property's presence in the runtime grid does not prove it has a direct XAML attribute.
+Supported style/default-backed properties can still offer **Apply to XAML**, but saving them
+reports that the property is not declared as a direct XAML attribute and leaves the file unchanged.
+Declare a direct literal explicitly in XAML and rebuild to make that property writable.
+
+The broker validates the value against the running element before writing and restricts edits to
+the agent-advertised property grid. Current agents describe editor kind, current value, writability,
+enum choices, and numeric constraints from the runtime control. It binds relative project names to the build's default path-derived
+DevFlow session identity; builds using a custom `MauiDevFlowSessionId` should also set
+`MauiDevFlowIncludeProjectPath=true` to provide an unambiguous project root.
+
+## Platform boundaries
+
+The WebView data tab lists attached Blazor WebViews, displays page source, and evaluates JavaScript
+through the existing CDP bridge. Every expression requires confirmation because arbitrary
+JavaScript can read or change live application data. A bundled Chrome DevTools frontend is
+intentionally outside the Inspector scope; use external browser platform tools when the
+full DOM, console, network, and debugger experience is required.
+
+System dialogs and MAUI alerts are outside the in-app MAUI visual tree. The **Alerts** data tab uses
+the existing platform drivers to detect and dismiss them without pretending they are selectable
+MAUI elements. Detection remains read-only. Dismissal requires the mutation lease and is blocked
+while workflow replay is driving the app.
+
+- Android actions target only the online device whose existing ADB forward owns the selected
+  agent port. Missing or ambiguous ownership is rejected.
+- Windows and Mac Catalyst actions refresh and use the exact app process ID reported by the agent.
+- Linux actions connect the platform driver to the exact selected agent.
+- iOS alert control remains CLI-only because Inspector registration does not carry a simulator
+  UDID. Use the platform alert driver explicitly:
+
+```bash
+maui devflow ui alert detect --udid <simulator-udid>
+maui devflow ui alert dismiss "OK" --udid <simulator-udid>
+```
+
+DevFlow Action request bodies are passed to the registered action. A generic
+`include: ["screenshot", "tree"]` field does not add post-action captures; use the CLI/MCP
+post-action options or request the screenshot and tree explicitly.
+
+## Compatibility
+
+Current clients remain read/write compatible with older agents that do not expose the lease
+endpoint. Older clients cannot mutate current agents because they do not send a lease identity.
+Inspector falls back to its legacy static property table when an older agent does not expose
+runtime descriptors. The Node client negotiates `ui.events`; unsupported agents enter a stable
+`polling-only` state and recheck the capability every 60 seconds so an in-place upgrade recovers
+without reconnect churn. Upgrade the agent packages and host tooling together.
+
+## Browser synchronization regressions
+
+The read-only property-filter and automatic Network refresh scenarios run against the real
+InspectorServer and embedded JavaScript in `InspectorLayoutWorkspaceTests`, without a live app.
+They use response gates to hold descriptor, legacy property, list, and detail requests pending
+until the corresponding UI state has been asserted. Playwright's clock advances the real polling
+intervals; no wall-clock sleeps or enlarged assertion timeouts are needed.
+
+The property filter is created only after property loading completes and remains usable without
+the mutation lease. Network detail loading clears the attachable Data snapshot, rejects late list
+responses, and pauses list polling until returning to the list. These are UI invariants, not
+promises that a native agent will respond within a browser assertion's default timeout.
+
+Run the self-contained suite after building the Inspector test project and installing its
+Playwright Chromium:
+
+```bash
+MAUI_INSPECTOR_BROWSER_TESTS=1 dotnet test \
+  src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests \
+  --filter "FullyQualifiedName~InspectorLayoutWorkspaceTests"
+```
+
+Windows CI runs the full browser fixture suite and repeats the three synchronization cases five
+times, failing immediately on any failure or skip. The Windows live integration job also includes
+these browser cases alongside the tests that genuinely require a native agent.
+
+The Android integration job preinstalls emulator-runner's SDK prerequisites before snapshot
+warm-up or test execution, using the pinned `AndroidSdk.Tool` .NET tool from
+`.config/dotnet-tools.json`. The Android job's `ANDROID_BUILD_TOOLS_VERSION` defines the build-tools
+version. `eng/scripts/Install-AndroidSdk.ps1` allows three installation attempts for recognized
+corrupt-ZIP or network-download errors, waiting 5 then 10 seconds.
+Unknown packages, rejected licenses, permissions, disk-space errors, and other non-transient
+failures are not retried. Exhausted attempts fail the step and report the tool's last exit code.
+The wrapper also checks error output and each requested package's `package.xml` identity because
+the pinned tool can return zero after a command error. PowerShell regressions cover recovery,
+exhaustion, permanent errors, and false-success prevention without Node.js.
+Emulator boot and integration-test failures are outside the retry scope.
+
+Portable client retry-budget tests inject transport failures at the HTTP handler boundary and
+assert exact send counts through the public tap API on modern .NET and .NET Framework. They do
+not infer retry counts from TCP resets, whose exception shape and wire-level retries depend on
+the platform HTTP stack. Separate real-socket tests retain delayed-listener and IPv4/IPv6
+loopback coverage. Cancellation, timeout, protocol, and trust failures remain non-retryable.
+The dedicated Windows Chromium job also repeats all 20 client retry regressions five times on
+each of `net472` and `net10.0`, failing immediately on any failure or skip.
+
+MAUI clipping/overlap integration cases scope their captures to MAUI elements; native accessibility
+and Blazor probes are separate capabilities and are not needed to assert those XAML findings.
+The hit-test envelope case waits only for the server's explicit retryable `409` read state to
+clear, within the existing fixture readiness budget, before checking every required envelope field.
+Other HTTP failures still fail immediately.
+
+Profiling resolver fixtures evaluate SDK-free MSBuild projects, including an imported-properties
+case, so workload discovery is not required to test framework-property parsing. The Windows DNX
+argument fixture disables persistent build/compiler servers for its generated helper. Cleanup
+allows bounded retries for that fixture's temporarily locked executable only; exhausted cleanup
+still fails, and the build and argument assertions are never retried.
+
+## Implementation
+
+| Area | Location |
+|---|---|
+| Inspector server and proxy | `src/Cli/Microsoft.Maui.Cli/DevFlow/Inspector/` |
+| Shared web UI | `src/Cli/Microsoft.Maui.Cli/DevFlow/Inspector/Web/` |
+| Broker routing and coordination | `src/Cli/Microsoft.Maui.Cli/DevFlow/Broker/` |
+| XAML source maps | `src/DevFlow/Microsoft.Maui.DevFlow.Agent.Core/SourceMapping/` |
+| Shared Node client | `src/DevFlow/js/devflow-client/` |
+| VS Code host | `src/DevFlow/js/vscode-inspector/` |
+| Copilot Canvas host | `.github/extensions/maui-devflow-canvas/` |
+| Playwright tests | `src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/` |

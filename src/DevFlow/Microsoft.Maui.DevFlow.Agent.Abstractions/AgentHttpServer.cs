@@ -29,6 +29,7 @@ public class AgentHttpServer : IDisposable
     public int Port => _port;
     public bool IsRunning => _listenTask != null && !_listenTask.IsCompleted;
     internal Func<HttpRequest, Task<MutationLeaseStatus>>? MutationLeaseValidator { get; set; }
+    internal Func<HttpRequest, HttpResponse?>? MutationAdmissionValidator { get; set; }
     internal Func<HttpRequest, HttpResponse, Task>? MutationObserver { get; set; }
     /// <summary>
     /// How long a mutation waits for the one ahead of it before giving up with a retryable 503.
@@ -46,14 +47,28 @@ public class AgentHttpServer : IDisposable
         => _getRoutes[path.TrimEnd('/')] = new RouteHandler(handler, RequiresMutationLease: false);
 
     public void MapPost(string path, Func<HttpRequest, Task<HttpResponse>> handler, bool requiresMutationLease = true)
-        => MapPost(path, handler, requiresMutationLease, mutationLeaseExemption: null);
+        => MapPost(path, handler, requiresMutationLease, mutationLeaseExemption: null, serializeMutation: true);
 
     public void MapPost(
         string path,
         Func<HttpRequest, Task<HttpResponse>> handler,
         bool requiresMutationLease,
         Func<HttpRequest, bool>? mutationLeaseExemption)
-        => _postRoutes[path.TrimEnd('/')] = new RouteHandler(handler, requiresMutationLease, mutationLeaseExemption);
+        => MapPost(path, handler, requiresMutationLease, mutationLeaseExemption, serializeMutation: true);
+
+    public void MapPost(
+        string path,
+        Func<HttpRequest, Task<HttpResponse>> handler,
+        bool requiresMutationLease,
+        Func<HttpRequest, bool>? mutationLeaseExemption,
+        bool serializeMutation,
+        Func<HttpRequest, Task>? beforeMutationAdmission = null)
+        => _postRoutes[path.TrimEnd('/')] = new RouteHandler(
+            handler,
+            requiresMutationLease,
+            mutationLeaseExemption,
+            serializeMutation,
+            beforeMutationAdmission);
 
     public void MapPut(string path, Func<HttpRequest, Task<HttpResponse>> handler, bool requiresMutationLease = true)
         => _putRoutes[path.TrimEnd('/')] = new RouteHandler(handler, requiresMutationLease);
@@ -184,8 +199,16 @@ public class AgentHttpServer : IDisposable
                     requestCts);
                 try
                 {
-                    var response = await RouteRequestAsync(request, requestCts.Token)
-                        .ConfigureAwait(false);
+                    HttpResponse response;
+                    try
+                    {
+                        response = await RouteRequestAsync(request, requestCts.Token).ConfigureAwait(false);
+                    }
+                    catch (NotSupportedException ex) when (AgentJson.IsUnsupportedJson(ex))
+                    {
+                        response = HttpResponse.Error(ex.Message, 500, AgentJson.IsMissingMetadata(ex)
+                            ? "json-metadata-missing" : "json-serialization-unsupported");
+                    }
                     if (!requestCts.IsCancellationRequested)
                     {
                         await WriteResponseAsync(
@@ -380,7 +403,8 @@ public class AgentHttpServer : IDisposable
                 if (routeParts[i].StartsWith('{') && routeParts[i].EndsWith('}'))
                 {
                     var paramName = routeParts[i][1..^1];
-                    request.RouteParams[paramName] = requestParts[i];
+                    // Decode captures only after splitting: an encoded slash is data, not a route separator.
+                    request.RouteParams[paramName] = Uri.UnescapeDataString(requestParts[i]);
                     continue;
                 }
                 if (!routeParts[i].Equals(requestParts[i], StringComparison.OrdinalIgnoreCase))
@@ -406,11 +430,24 @@ public class AgentHttpServer : IDisposable
         var requiresMutationLease = route.RequiresMutationLease &&
             !(route.MutationLeaseExemption?.Invoke(request) ?? false);
 
-        // Only mutations are admitted one at a time. Lease control (/api/v1/agent/lease) must
+        if (route.BeforeMutationAdmission is not null)
+        {
+            if (await ValidateMutationLeaseAsync(request, requiresMutationLease).ConfigureAwait(false)
+                is { } leaseFailure)
+            {
+                return leaseFailure;
+            }
+
+            await route.BeforeMutationAdmission(request).ConfigureAwait(false);
+        }
+
+        // Most mutations are admitted one at a time. A route may opt out while keeping lease
+        // validation when it exists to cancel the mutation currently holding this gate.
+        // Lease control (/api/v1/agent/lease) must
         // stay OUT of this gate: a forced takeover exists precisely to preempt a mutation that
         // is stuck — typically on a blocked UI dispatcher — so queueing it behind that mutation
         // would deadlock the one escape hatch. MutationLeaseCoordinator serializes itself.
-        if (!route.RequiresMutationLease)
+        if (!route.RequiresMutationLease || !route.SerializeMutation)
             return await RunRouteAsync(route, request, requiresMutationLease).ConfigureAwait(false);
 
         if (!await _mutationAdmissionGate.WaitAsync(MutationAdmissionTimeout, ct).ConfigureAwait(false))
@@ -428,7 +465,7 @@ public class AgentHttpServer : IDisposable
                 "The app is still applying another mutation. Retry shortly.",
                 statusCode: 503,
                 reason: "ui-mutation-busy",
-                details: new { retryable = true });
+                details: new Dictionary<string, object?> { ["retryable"] = true });
             busy.Headers["Retry-After"] = "1";
             return busy;
         }
@@ -448,24 +485,14 @@ public class AgentHttpServer : IDisposable
         HttpRequest request,
         bool requiresMutationLease)
     {
-        if (requiresMutationLease && MutationLeaseValidator is not null)
+        if (await ValidateMutationLeaseAsync(request, requiresMutationLease).ConfigureAwait(false)
+            is { } leaseFailure)
+            return leaseFailure;
+
+        if (requiresMutationLease
+            && MutationAdmissionValidator?.Invoke(request) is { } admissionFailure)
         {
-            var status = await MutationLeaseValidator(request).ConfigureAwait(false);
-            request.MutationLease = status;
-            if (!status.Allowed)
-            {
-                return HttpResponse.Error(
-                    "Another DevFlow session is driving this app. Take control before mutating it.",
-                    statusCode: 409,
-                    reason: "lease",
-                    details: new
-                    {
-                        status.HolderKind,
-                        status.Label,
-                        status.ExpiresInMs,
-                        status.Authority
-                    });
-            }
+            return admissionFailure;
         }
 
         var response = await route.Handler(request).ConfigureAwait(false);
@@ -477,6 +504,31 @@ public class AgentHttpServer : IDisposable
             catch { }
         }
         return response;
+    }
+
+    private async Task<HttpResponse?> ValidateMutationLeaseAsync(
+        HttpRequest request,
+        bool requiresMutationLease)
+    {
+        if (!requiresMutationLease || MutationLeaseValidator is null)
+            return null;
+
+        var status = await MutationLeaseValidator(request).ConfigureAwait(false);
+        request.MutationLease = status;
+        if (status.Allowed)
+            return null;
+
+        return HttpResponse.Error(
+            "Another DevFlow session is driving this app. Take control before mutating it.",
+            statusCode: 409,
+            reason: "lease",
+            details: new Dictionary<string, object?>
+            {
+                ["HolderKind"] = status.HolderKind,
+                ["Label"] = status.Label,
+                ["ExpiresInMs"] = status.ExpiresInMs,
+                ["Authority"] = status.Authority
+            }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value));
     }
 
     private static async Task WriteResponseAsync(
@@ -538,7 +590,9 @@ public class AgentHttpServer : IDisposable
     private sealed record RouteHandler(
         Func<HttpRequest, Task<HttpResponse>> Handler,
         bool RequiresMutationLease,
-        Func<HttpRequest, bool>? MutationLeaseExemption = null);
+        Func<HttpRequest, bool>? MutationLeaseExemption = null,
+        bool SerializeMutation = true,
+        Func<HttpRequest, Task>? BeforeMutationAdmission = null);
 
     private sealed class RequestBodyTooLargeException : Exception;
 
@@ -703,11 +757,17 @@ public class HttpRequest
     private static readonly JsonSerializerOptions _readOptions = new() { PropertyNameCaseInsensitive = true };
 
     public T? BodyAs<T>() where T : class
-        => Body != null ? JsonSerializer.Deserialize<T>(Body, _readOptions) : null;
+        => Body != null ? AgentJson.Deserialize<T>(Body, _readOptions) : null;
 }
 
 public class HttpResponse
 {
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions ErrorJsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     public int StatusCode { get; set; } = 200;
     public string StatusText { get; set; } = "OK";
     public string ContentType { get; set; } = "application/json";
@@ -717,14 +777,14 @@ public class HttpResponse
 
     public static HttpResponse Json(object data) => new()
     {
-        Body = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true })
+        Body = AgentJson.Serialize(data, JsonOptions)
     };
 
     public static HttpResponse Json(object data, int statusCode) => new()
     {
         StatusCode = statusCode,
         StatusText = StatusTextFor(statusCode),
-        Body = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true })
+        Body = AgentJson.Serialize(data, JsonOptions)
     };
 
     public static HttpResponse Png(byte[] data) => new()
@@ -751,7 +811,7 @@ public class HttpResponse
 
     public static HttpResponse Ok(string? message = null) => new()
     {
-        Body = JsonSerializer.Serialize(new { success = true, message })
+        Body = AgentJson.Serialize(new Dictionary<string, object?> { ["success"] = true, ["message"] = message })
     };
 
     public static HttpResponse Error(string message, int statusCode = 400, string? reason = null, object? details = null)
@@ -772,10 +832,7 @@ public class HttpResponse
         {
             StatusCode = statusCode,
             StatusText = StatusTextFor(statusCode),
-            Body = JsonSerializer.Serialize(body, new JsonSerializerOptions
-            {
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            })
+            Body = AgentJson.Serialize(body, ErrorJsonOptions)
         };
     }
 

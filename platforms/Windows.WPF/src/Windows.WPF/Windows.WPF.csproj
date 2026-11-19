@@ -26,6 +26,7 @@
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
     <None Include="build\Microsoft.Maui.Platforms.Windows.WPF.targets" Pack="true" PackagePath="build\" />
+    <None Include="build\Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets" Pack="true" PackagePath="build\Fonts\" />
   </ItemGroup>
 
 </Project>

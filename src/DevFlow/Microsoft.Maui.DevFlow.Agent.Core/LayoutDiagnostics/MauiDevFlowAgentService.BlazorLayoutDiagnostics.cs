@@ -339,15 +339,15 @@ public partial class MauiDevFlowAgentService
                             ? "true"
                             : "false",
                         StringComparison.Ordinal);
-                var command = JsonSerializer.Serialize(new
+                var command = AgentJson.Serialize(new Dictionary<string, object?>
                 {
-                    id = 73001 + webView.Index,
-                    method = "Runtime.evaluate",
-                    @params = new
+                    ["id"] = 73001 + webView.Index,
+                    ["method"] = "Runtime.evaluate",
+                    ["params"] = new Dictionary<string, object?>
                     {
-                        expression = $"JSON.stringify({expression})",
-                        returnByValue = true,
-                        awaitPromise = true
+                        ["expression"] = $"JSON.stringify({expression})",
+                        ["returnByValue"] = true,
+                        ["awaitPromise"] = true
                     }
                 });
                 if (!pendingCaptures.TryGetValue(webView.Index, out var commandTask))

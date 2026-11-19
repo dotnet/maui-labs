@@ -1,0 +1,32 @@
+<Project>
+  <Target Name="_PrepareBundleResourceAssertions">
+    <PropertyGroup>
+      <TargetPlatformIdentifier Condition="'$(ResourceAssertionPlatform)' != ''">$(ResourceAssertionPlatform)</TargetPlatformIdentifier>
+      <_ExpectMapping Condition="'$(TargetPlatformIdentifier)' == 'macos' and '$(EnableMacOSMauiResourceMapping)' != 'false'">true</_ExpectMapping>
+    </PropertyGroup>
+    <ItemGroup>
+      <MauiImage Remove="@(MauiImage)" />
+      <MauiFont Remove="@(MauiFont)" />
+      <MauiAsset Remove="@(MauiAsset)" />
+      <BundleResource Remove="@(BundleResource)" />
+      <MauiImage Include="..\Fixtures\Images\picture.svg" Link="Resources\Images\picture.svg" />
+      <MauiFont Include="..\Fixtures\Fonts\font.ttf" Link="Resources\Fonts\font.ttf" />
+      <MauiAsset Include="..\Fixtures\Raw\data.txt" LogicalName="Data\nested\renamed.txt" Link="Resources\Raw\data.txt" />
+      <MauiAsset Include="..\Fixtures\Raw\default.txt" />
+      <MauiAsset Include="..\Fixtures\Raw\with spaces.txt" LogicalName="Data with spaces/sample file.txt" />
+      <BundleResource Include="$(MSBuildProjectDirectory)\..\Fixtures\Raw\data.txt" LogicalName="Raw/data.txt" />
+      <BundleResource Include="unrelated.txt" LogicalName="unrelated.txt" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="AssertBundleResourceItems" DependsOnTargets="_PrepareBundleResourceAssertions;_MacOSCollectMauiResources">
+    <ItemGroup>
+      <_ActualResourceNames Include="@(BundleResource->'%(LogicalName)')" />
+    </ItemGroup>
+    <Error Condition="'$(_ExpectMapping)' == 'true' and '@(_ActualResourceNames)' != 'unrelated.txt;Images/picture.svg;Fonts/font.ttf;Data/nested/renamed.txt;default.txt;Data with spaces/sample file.txt'"
+           Text="Unexpected macOS bundle resources: @(_ActualResourceNames)" />
+    <Error Condition="'$(_ExpectMapping)' != 'true' and '@(_ActualResourceNames)' != 'Raw/data.txt;unrelated.txt'"
+           Text="Resource mapping ignored the platform guard or opt-out: @(_ActualResourceNames)" />
+    <Message Importance="high" Text="Bundle resource item assertions passed (@(_ActualResourceNames->Count()) items)." />
+  </Target>
+</Project>

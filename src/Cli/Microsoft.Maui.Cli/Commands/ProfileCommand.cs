@@ -26,7 +26,7 @@ public static class ProfileCommand
 	internal static readonly TimeSpan s_exitControlConnectTimeout = TimeSpan.FromSeconds(5);
 	internal static readonly TimeSpan s_exitControlCommandTimeout = TimeSpan.FromSeconds(10);
 	internal static readonly TimeSpan s_traceStopInterruptDelay = TimeSpan.FromSeconds(5);
-	internal static readonly TimeSpan s_traceStopTimeout = TimeSpan.FromSeconds(15);
+	internal static readonly TimeSpan s_defaultTraceStopTimeout = TimeSpan.FromMinutes(2);
 	internal const int DefaultDiagnosticPort = 9000;
 	internal const int ExitControlPortOffset = 1;
 	internal const string ProfilingHelperPackageId = "Microsoft.Maui.ProfilingHelper";
@@ -102,12 +102,17 @@ public static class ProfileCommand
 		};
 		var noBuildOption = new Option<bool>("--no-build")
 		{
-			Description = "Skip the build step and just deploy/run with the existing outputs"
+			Description = "Skip the build step (not supported because profiling sessions require isolated outputs)"
 		};
 		var diagnosticPortOption = new Option<int>("--diagnostic-port")
 		{
 			Description = "Preferred TCP port for the diagnostic connection. If it's busy, the next free port is used.",
 			DefaultValueFactory = _ => DefaultDiagnosticPort
+		};
+		var traceStopTimeoutOption = new Option<TimeSpan>("--trace-stop-timeout")
+		{
+			Description = "Maximum time to wait for dotnet-trace rundown, flush, and finalization after a stop request.",
+			DefaultValueFactory = _ => s_defaultTraceStopTimeout
 		};
 		var stoppingEventProviderOption = new Option<string?>("--stopping-event-provider-name")
 		{
@@ -136,6 +141,7 @@ public static class ProfileCommand
 			traceProfileOption,
 			noBuildOption,
 			diagnosticPortOption,
+			traceStopTimeoutOption,
 			stoppingEventProviderOption,
 			stoppingEventNameOption,
 			stoppingEventPayloadFilterOption
@@ -155,6 +161,7 @@ public static class ProfileCommand
 				traceProfileOption,
 				noBuildOption,
 				diagnosticPortOption,
+				traceStopTimeoutOption,
 				stoppingEventProviderOption,
 				stoppingEventNameOption,
 				stoppingEventPayloadFilterOption,
@@ -206,12 +213,17 @@ public static class ProfileCommand
 		};
 		var noBuildOption = new Option<bool>("--no-build")
 		{
-			Description = "Skip the build step and just deploy/run with the existing outputs"
+			Description = "Skip the build step (not supported because profiling sessions require isolated outputs)"
 		};
 		var diagnosticPortOption = new Option<int>("--diagnostic-port")
 		{
 			Description = "Preferred TCP port for the diagnostic connection. If it's busy, the next free port is used.",
 			DefaultValueFactory = _ => DefaultDiagnosticPort
+		};
+		var traceStopTimeoutOption = new Option<TimeSpan>("--trace-stop-timeout")
+		{
+			Description = "Maximum time to wait for dotnet-trace rundown, flush, and finalization after a stop request.",
+			DefaultValueFactory = _ => s_defaultTraceStopTimeout
 		};
 
 		var command = new Command(
@@ -230,7 +242,8 @@ public static class ProfileCommand
 			durationOption,
 			traceProfileOption,
 			noBuildOption,
-			diagnosticPortOption
+			diagnosticPortOption,
+			traceStopTimeoutOption
 		};
 
 		command.SetAction((ParseResult parseResult, CancellationToken cancellationToken) =>
@@ -247,6 +260,7 @@ public static class ProfileCommand
 				traceProfileOption,
 				noBuildOption,
 				diagnosticPortOption,
+				traceStopTimeoutOption,
 				cancellationToken));
 
 		return command;
@@ -265,6 +279,7 @@ public static class ProfileCommand
 		Option<string?> traceProfileOption,
 		Option<bool> noBuildOption,
 		Option<int> diagnosticPortOption,
+		Option<TimeSpan> traceStopTimeoutOption,
 		CancellationToken cancellationToken)
 	{
 		var formatter = Program.GetFormatter(parseResult);
@@ -274,6 +289,8 @@ public static class ProfileCommand
 
 		try
 		{
+			ProfileSessionSetup.ValidateBuildIsolationOptions(parseResult.GetValue(noBuildOption));
+
 			var requestedPlatform = Platforms.Normalize(parseResult.GetValue(platformOption));
 			var project = MauiProjectResolver.Resolve(parseResult.GetValue(projectOption));
 			var framework = ResolveTargetFramework(
@@ -297,6 +314,8 @@ public static class ProfileCommand
 			}
 
 			var duration = parseResult.GetValue(durationOption);
+			var traceStopTimeout = parseResult.GetValue(traceStopTimeoutOption);
+			ValidateTraceStopTimeout(traceStopTimeout);
 
 			ValidateDnxAvailable();
 
@@ -334,6 +353,7 @@ public static class ProfileCommand
 					parseResult.GetValue(traceProfileOption),
 					parseResult.GetValue(noBuildOption),
 					parseResult.GetValue(diagnosticPortOption),
+					traceStopTimeout,
 					duration,
 					StoppingEventProvider: null,
 					StoppingEventName: null,
@@ -378,6 +398,7 @@ public static class ProfileCommand
 		Option<string?> traceProfileOption,
 		Option<bool> noBuildOption,
 		Option<int> diagnosticPortOption,
+		Option<TimeSpan> traceStopTimeoutOption,
 		Option<string?> stoppingEventProviderOption,
 		Option<string?> stoppingEventNameOption,
 		Option<string?> stoppingEventPayloadFilterOption,
@@ -390,6 +411,8 @@ public static class ProfileCommand
 
 		try
 		{
+			ProfileSessionSetup.ValidateBuildIsolationOptions(parseResult.GetValue(noBuildOption));
+
 			var requestedPlatform = Platforms.Normalize(parseResult.GetValue(platformOption));
 			var project = MauiProjectResolver.Resolve(parseResult.GetValue(projectOption));
 			var framework = ResolveTargetFramework(
@@ -419,6 +442,8 @@ public static class ProfileCommand
 				parseResult.GetValue(stoppingEventPayloadFilterOption));
 
 			var duration = parseResult.GetValue(durationOption);
+			var traceStopTimeout = parseResult.GetValue(traceStopTimeoutOption);
+			ValidateTraceStopTimeout(traceStopTimeout);
 			var stoppingEvent = ResolveStoppingEventConfiguration(
 				duration,
 				parseResult.GetValue(stoppingEventProviderOption),
@@ -473,6 +498,7 @@ public static class ProfileCommand
 				parseResult.GetValue(traceProfileOption),
 				parseResult.GetValue(noBuildOption),
 				parseResult.GetValue(diagnosticPortOption),
+				traceStopTimeout,
 				duration,
 				stoppingEvent.ProviderName,
 				stoppingEvent.EventName,
@@ -571,6 +597,7 @@ public static class ProfileCommand
 		string? traceProfile,
 		bool noBuild,
 		int diagnosticPort,
+		TimeSpan traceStopTimeout,
 		TimeSpan? duration,
 		string? stoppingEventProvider,
 		string? stoppingEventName,
@@ -591,6 +618,7 @@ public static class ProfileCommand
 				traceProfile,
 				noBuild,
 				diagnosticPort,
+				traceStopTimeout,
 				duration,
 				stoppingEventProvider,
 				stoppingEventName,
@@ -601,18 +629,34 @@ public static class ProfileCommand
 				verbose),
 			cancellationToken);
 
+	internal static void ValidateTraceStopTimeout(TimeSpan timeout)
+	{
+		if (timeout <= TimeSpan.Zero)
+		{
+			throw new MauiToolException(
+				ErrorCodes.InvalidArgument,
+				"--trace-stop-timeout must be greater than zero.");
+		}
+	}
+
 	internal static string[] BuildCompileArguments(
 		string projectPath,
+		string artifactsPath,
+		string directoryBuildPropsPath,
+		string directoryBuildTargetsPath,
 		string framework,
 		string configuration,
 		ProfileTransportConfiguration transport,
 		int diagnosticPort,
 		ProfilingBuildInjection? buildInjection,
 		bool diagnosticSuspend = true)
-		=> ProfileCommandArguments.BuildCompileArguments(projectPath, framework, configuration, transport, diagnosticPort, buildInjection, diagnosticSuspend);
+		=> ProfileCommandArguments.BuildCompileArguments(projectPath, artifactsPath, directoryBuildPropsPath, directoryBuildTargetsPath, framework, configuration, transport, diagnosticPort, buildInjection, diagnosticSuspend);
 
 	internal static string[] BuildLaunchArguments(
 		string projectPath,
+		string artifactsPath,
+		string directoryBuildPropsPath,
+		string directoryBuildTargetsPath,
 		string framework,
 		string configuration,
 		Device device,
@@ -620,7 +664,7 @@ public static class ProfileCommand
 		int diagnosticPort,
 		ProfilingBuildInjection? buildInjection,
 		bool diagnosticSuspend = true)
-		=> ProfileCommandArguments.BuildLaunchArguments(projectPath, framework, configuration, device, transport, diagnosticPort, buildInjection, diagnosticSuspend);
+		=> ProfileCommandArguments.BuildLaunchArguments(projectPath, artifactsPath, directoryBuildPropsPath, directoryBuildTargetsPath, framework, configuration, device, transport, diagnosticPort, buildInjection, diagnosticSuspend);
 
 	internal static IEnumerable<string> BuildTraceArguments(
 		string outputPath,
@@ -630,7 +674,8 @@ public static class ProfileCommand
 		TimeSpan? duration,
 		string? stoppingEventProvider,
 		string? stoppingEventName,
-		string? stoppingEventPayloadFilter)
+		string? stoppingEventPayloadFilter,
+		string? diagnosticPortEndpoint = null)
 		=> DotnetTraceRunner.BuildTraceArguments(
 			outputPath,
 			outputFormat,
@@ -639,7 +684,8 @@ public static class ProfileCommand
 			duration,
 			stoppingEventProvider,
 			stoppingEventName,
-			stoppingEventPayloadFilter);
+			stoppingEventPayloadFilter,
+			diagnosticPortEndpoint);
 
 	internal static bool CanResolveDiagnosticsTool(string? installedToolPath, string? cachedToolDll)
 		=> ProfileCommandDiagnostics.CanResolveDiagnosticsTool(installedToolPath, cachedToolDll);
@@ -656,50 +702,43 @@ public static class ProfileCommand
 			: cancellationToken;
 
 	internal static async Task ConvertNetTraceToMibcAsync(
-		ResolvedMauiProject project,
-		string framework,
-		string configuration,
-		string netTracePath,
-		string mibcPath,
-		IOutputFormatter formatter,
-		bool useJson,
-		bool verbose,
+		ProfileSessionContext context,
 		CancellationToken cancellationToken)
 	{
-		if (!File.Exists(netTracePath))
+		if (!File.Exists(context.OutputPath))
 		{
 			throw new MauiToolException(
 				ErrorCodes.InternalError,
-				$"Raw trace '{netTracePath}' was not created, so MIBC conversion cannot continue.");
+				$"Raw trace '{context.OutputPath}' was not created, so MIBC conversion cannot continue.");
 		}
 
 		var dotnetPgoPath = DotnetPgoInstaller.ResolvePathOrThrow();
-		var referenceAssemblies = ResolveMibcReferenceAssemblies(project, framework, configuration);
+		var referenceAssemblies = await ProfileMibcReferenceResolver.ResolveAsync(context, cancellationToken);
 		if (referenceAssemblies.Count == 0)
 		{
 			throw MauiToolException.UserActionRequired(
 				ErrorCodes.DiagnosticsToolNotFound,
-				$"MIBC conversion could not find any reference assemblies for '{project.ProjectName}'.",
+				$"MIBC conversion could not find any reference assemblies for '{context.Project.ProjectName}' targeting '{context.Framework}'.",
 				[
-					$"Build the target '{framework}' first so its output assemblies exist.",
+					$"Check that the target '{context.Framework}' produces assemblies for the selected device.",
 					"Then run 'maui profile startup --format mibc' again."
 				]);
 		}
 
-		if (!useJson)
-			formatter.WriteInfo("Converting the raw trace to MIBC...");
+		if (!context.UseJson)
+			context.Formatter.WriteInfo("Converting the raw trace to MIBC...");
 
-		var args = BuildMibcArguments(netTracePath, mibcPath, referenceAssemblies).ToArray();
+		var args = BuildMibcArguments(context.OutputPath, context.PrimaryOutputPath, referenceAssemblies).ToArray();
 		ProfileCommandProcessHelpers.WriteVerbose(
-			formatter,
-			useJson,
-			verbose,
+			context.Formatter,
+			context.UseJson,
+			context.Verbose,
 			$"dotnet-pgo command: {ProfileCommandProcessHelpers.FormatCommandLine(dotnetPgoPath, args)}");
 
 		var result = await ProcessRunner.RunAsync(
 			dotnetPgoPath,
 			args,
-			project.ProjectDirectory,
+			context.Project.ProjectDirectory,
 			timeout: s_buildLaunchTimeout,
 			cancellationToken: cancellationToken);
 
@@ -730,55 +769,6 @@ public static class ProfileCommand
 		return args;
 	}
 
-	static IReadOnlyList<string> ResolveMibcReferenceAssemblies(
-		ResolvedMauiProject project,
-		string framework,
-		string configuration)
-	{
-		var candidateRoots = GetMibcReferenceSearchRoots(project, framework, configuration).ToArray();
-		if (candidateRoots.Length == 0)
-			return [];
-
-		var linkedOrShrunkAssemblies = candidateRoots
-			.SelectMany(root => Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories))
-			.Where(static path => path.Contains($"{Path.DirectorySeparatorChar}linked{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-				|| path.Contains($"{Path.AltDirectorySeparatorChar}linked{Path.AltDirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-				|| path.Contains($"{Path.DirectorySeparatorChar}shrunk{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-				|| path.Contains($"{Path.AltDirectorySeparatorChar}shrunk{Path.AltDirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
-			.Distinct(StringComparer.OrdinalIgnoreCase)
-			.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-			.ToArray();
-
-		if (linkedOrShrunkAssemblies.Length > 0)
-			return linkedOrShrunkAssemblies;
-
-		return candidateRoots
-			.SelectMany(root => Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories))
-			.Distinct(StringComparer.OrdinalIgnoreCase)
-			.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-			.ToArray();
-	}
-
-	static IEnumerable<string> GetMibcReferenceSearchRoots(
-		ResolvedMauiProject project,
-		string framework,
-		string configuration)
-	{
-		var searchRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-		{
-			Path.Combine(project.ProjectDirectory, "obj", configuration, framework),
-			Path.Combine(project.ProjectDirectory, "bin", configuration, framework)
-		};
-
-		for (var current = new DirectoryInfo(project.ProjectDirectory); current is not null; current = current.Parent)
-		{
-			searchRoots.Add(Path.Combine(current.FullName, "artifacts", "obj", project.ProjectName, configuration, framework));
-			searchRoots.Add(Path.Combine(current.FullName, "artifacts", "bin", project.ProjectName, configuration, framework));
-		}
-
-		return searchRoots.Where(Directory.Exists);
-	}
-
 	internal static int FindAvailableTcpPort(int startingPort, int maxPort = IPEndPoint.MaxPort)
 		=> ProfileCommandPortRouter.FindAvailableTcpPort(startingPort, maxPort);
 
@@ -801,7 +791,8 @@ public static class ProfileCommand
 				DiagnosticAddress: device.IsEmulator ? "10.0.2.2" : IPAddress.Loopback.ToString(),
 				DiagnosticListenMode: "connect",
 				DsrouterKind: device.IsEmulator ? "android-emu" : "android",
-				RequiresManualExitControlPortRouting: !device.IsEmulator),
+				RequiresManualExitControlPortRouting: !device.IsEmulator,
+				RequiresExplicitDsrouter: !device.IsEmulator),
 			Platforms.iOS => new ProfileTransportConfiguration(
 				Platform: Platforms.iOS,
 				DiagnosticAddress: IPAddress.Loopback.ToString(),

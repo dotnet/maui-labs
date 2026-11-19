@@ -5,6 +5,22 @@ namespace Microsoft.Maui.DevFlow.Tests;
 
 public class HtmlRendererNativeElementTests
 {
+    [Theory]
+    [InlineData(true, "true")]
+    [InlineData(false, "false")]
+    public void RenderElements_InputReadOnlyState_IsAvailableToInspector(bool readOnly, string expected)
+    {
+        var element = new ElementInfo
+        {
+            Id = "entry",
+            Type = "Entry",
+            FrameworkProperties = new() { ["IsReadOnly"] = readOnly.ToString() },
+            Bounds = new BoundsInfo { Width = 100, Height = 40 }
+        };
+
+        Assert.Contains($"data-isReadOnly=\"{expected}\"", HtmlRenderer.RenderElements([element]));
+    }
+
     [Fact]
     public void RenderElements_NativeMetadata_IsAvailableToInspector()
     {

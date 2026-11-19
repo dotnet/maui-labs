@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Maui.Cli.DevFlow.Broker;
 using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Maui.DevFlow.Driver;
@@ -9,6 +10,7 @@ public class McpAgentSession
 {
 	int? _defaultAgentPort;
 	readonly string _mutationLeaseId = Guid.NewGuid().ToString("N");
+	readonly ConcurrentDictionary<int, string> _androidSerialByAgentPort = new();
 
 	public int? DefaultAgentPort
 	{
@@ -37,6 +39,9 @@ public class McpAgentSession
 			MutationLeaseLabel = "MCP client"
 		};
 	}
+
+	public string? GetAndroidDeviceSerial(int agentPort)
+		=> _androidSerialByAgentPort.GetValueOrDefault(agentPort);
 
 	public void SetDefaultAgent(AgentRegistration agent)
 	{
@@ -108,23 +113,46 @@ public class McpAgentSession
 		return agents?.FirstOrDefault(a => a.Port == agentPort);
 	}
 
-	static async Task TryEnsureAndroidForwardingAsync(int[] agentPorts, bool ensureBrokerReverse)
+	async Task TryEnsureAndroidForwardingAsync(int[] agentPorts, bool ensureBrokerReverse)
 	{
 		if (!AndroidDevFlowPortForwarder.IsAdbLikelyAvailable())
+		{
+			foreach (var agentPort in agentPorts)
+				_androidSerialByAgentPort.TryRemove(agentPort, out _);
 			return;
+		}
 
 		try
 		{
-			await AndroidDevFlowPortForwarder.CreateDefault().EnsureAsync(new AndroidDevFlowForwardingRequest
+			var report = await AndroidDevFlowPortForwarder.CreateDefault().EnsureAsync(new AndroidDevFlowForwardingRequest
 			{
 				AgentPorts = agentPorts,
 				EnsureBrokerReverse = ensureBrokerReverse,
 				BrokerPort = BrokerClient.ReadBrokerPortPublic() ?? Broker.BrokerServer.DefaultPort,
 				Repair = true
 			});
+			var confirmedPorts = report.AgentForwards
+				.Where(static forward => forward.PresentAfter)
+				.Select(static forward => forward.Port)
+				.ToHashSet();
+			foreach (var agentPort in agentPorts)
+			{
+				if (report.IsReady
+					&& !string.IsNullOrWhiteSpace(report.SelectedSerial)
+					&& confirmedPorts.Contains(agentPort))
+				{
+					_androidSerialByAgentPort[agentPort] = report.SelectedSerial;
+				}
+				else
+				{
+					_androidSerialByAgentPort.TryRemove(agentPort, out _);
+				}
+			}
 		}
 		catch (Exception ex)
 		{
+			foreach (var agentPort in agentPorts)
+				_androidSerialByAgentPort.TryRemove(agentPort, out _);
 			Console.Error.WriteLine($"[DevFlow Android forwarding] {ex.Message}");
 		}
 	}

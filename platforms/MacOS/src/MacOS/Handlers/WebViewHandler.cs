@@ -46,7 +46,7 @@ public partial class WebViewHandler : MacOSViewHandler<IWebView, WKWebView>, IWe
 
     protected override void DisconnectHandler(WKWebView platformView)
     {
-        platformView.NavigationDelegate = null;
+        platformView.NavigationDelegate = null!;
         _navigationDelegate = null;
         base.DisconnectHandler(platformView);
     }
@@ -54,7 +54,7 @@ public partial class WebViewHandler : MacOSViewHandler<IWebView, WKWebView>, IWe
     public void LoadHtml(string? html, string? baseUrl)
     {
         if (html != null)
-            PlatformView.LoadHtmlString(html, baseUrl != null ? new NSUrl(baseUrl) : null);
+            PlatformView.LoadHtmlString(html, baseUrl != null ? new NSUrl(baseUrl) : new NSUrl("about:blank"));
     }
 
     public void LoadUrl(string? url)

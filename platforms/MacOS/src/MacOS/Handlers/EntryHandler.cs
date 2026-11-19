@@ -14,10 +14,10 @@ public partial class EntryHandler : MacOSViewHandler<IEntry, NSTextField>
             [nameof(ITextInput.Text)] = MapText,
             [nameof(ITextStyle.TextColor)] = MapTextColor,
             [nameof(ITextStyle.Font)] = MapFont,
+            [nameof(IEntry.IsPassword)] = MapIsPassword,
             [nameof(ITextStyle.CharacterSpacing)] = MapCharacterSpacing,
             [nameof(IPlaceholder.Placeholder)] = MapPlaceholder,
             [nameof(IPlaceholder.PlaceholderColor)] = MapPlaceholderColor,
-            [nameof(IEntry.IsPassword)] = MapIsPassword,
             [nameof(IEntry.ReturnType)] = MapReturnType,
             [nameof(ITextInput.IsReadOnly)] = MapIsReadOnly,
             [nameof(ITextAlignment.HorizontalTextAlignment)] = MapHorizontalTextAlignment,
@@ -62,7 +62,9 @@ public partial class EntryHandler : MacOSViewHandler<IEntry, NSTextField>
         // Use reflection to update the handler's PlatformView reference
         // since ViewHandler doesn't expose a public setter
         var prop = typeof(ViewHandler).GetProperty("PlatformView");
-        prop?.SetValue(this, newView);
+        if (prop == null)
+            throw new InvalidOperationException("ViewHandler.PlatformView was not found.");
+        prop.SetValue(this, newView);
     }
 
     internal void OnTextChanged(object? sender, EventArgs e)
@@ -158,6 +160,9 @@ public partial class EntryHandler : MacOSViewHandler<IEntry, NSTextField>
                 Bezeled = true,
                 BezelStyle = NSTextFieldBezelStyle.Rounded,
                 Frame = frame,
+                Bounds = currentView.Bounds,
+                Font = currentView.Font,
+                TextColor = currentView.TextColor,
                 StringValue = text ?? string.Empty,
             };
         }
@@ -169,6 +174,9 @@ public partial class EntryHandler : MacOSViewHandler<IEntry, NSTextField>
                 Bezeled = true,
                 BezelStyle = NSTextFieldBezelStyle.Rounded,
                 Frame = frame,
+                Bounds = currentView.Bounds,
+                Font = currentView.Font,
+                TextColor = currentView.TextColor,
                 StringValue = text ?? string.Empty,
             };
         }
@@ -186,6 +194,9 @@ public partial class EntryHandler : MacOSViewHandler<IEntry, NSTextField>
 
         // Update handler's platform view reference
         handler.SetPlatformView(newView);
+        MacOSViewGeometry.Unregister(currentView, handler);
+        MacOSViewGeometry.Register(newView, handler);
+        handler.UpdateValue(nameof(IView.Scale));
     }
 
     public static void MapIsReadOnly(EntryHandler handler, IEntry entry)

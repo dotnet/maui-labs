@@ -16,7 +16,7 @@ public partial class StreamingResponseHandlerTests
 		{
 			// Simulates a hung tool that never returns — the handler is never completed.
 			// The reader should be cancellable via CancellationToken timeout.
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
@@ -33,13 +33,13 @@ public partial class StreamingResponseHandlerTests
 		{
 			// Simulates a slow producer that writes content with delays.
 			// The reader should still get all updates before the channel is completed.
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			var writeTask = Task.Run(async () =>
 			{
 				handler.ProcessContent("Hello");
 				await Task.Delay(50);
-				handler.ProcessContent("Hello World");
+				handler.ProcessContent(" World");
 				await Task.Delay(50);
 				handler.Complete();
 			});
@@ -68,7 +68,7 @@ public partial class StreamingResponseHandlerTests
 		{
 			// Simulates a tool that takes time to execute — content before, tool call,
 			// slow tool result, content after.
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			var writeTask = Task.Run(async () =>
 			{

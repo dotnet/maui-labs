@@ -264,8 +264,6 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
 
     internal void Log(string message)
     {
-        System.Diagnostics.Debug.WriteLine(message);
-        Console.WriteLine(message);
         LogCallback?.Invoke(message);
     }
 
@@ -627,17 +625,17 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
         private string HandleBrowserMethod(string method, int id)
         {
             if (method == "Browser.getVersion")
-                return System.Text.Json.JsonSerializer.Serialize(new
+                return new System.Text.Json.Nodes.JsonObject
                 {
-                    id,
-                    result = new
+                    ["id"] = id,
+                    ["result"] = new System.Text.Json.Nodes.JsonObject
                     {
-                        protocolVersion = "1.3",
-                        product = "MAUI Blazor WebView/1.0",
-                        userAgent = "Microsoft.Maui.DevFlow",
-                        jsVersion = ""
+                        ["protocolVersion"] = "1.3",
+                        ["product"] = "MAUI Blazor WebView/1.0",
+                        ["userAgent"] = "Microsoft.Maui.DevFlow",
+                        ["jsVersion"] = ""
                     }
-                });
+                }.ToJsonString();
             return $"{{\"id\":{id},\"result\":{{}}}}";
         }
 
@@ -666,32 +664,13 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
             var json = System.Text.Json.JsonDocument.Parse(cdpJson);
             var url = json.RootElement.GetProperty("params").GetProperty("url").GetString() ?? "";
 
-            if (Uri.TryCreate(url, UriKind.Absolute, out _))
+            if (WebViewNavigation.IsAbsoluteUrl(url))
             {
                 await _owner.RunOnMainThreadAsync(() => { _navigate(url); });
             }
             else
             {
-                var escapedUrl = EscapeJsString(url);
-                var script = $@"(function() {{
-                    const target = '{escapedUrl}';
-                    try {{
-                        if (window.Blazor && typeof window.Blazor.navigateTo === 'function') {{
-                            window.Blazor.navigateTo(target);
-                            return 'blazor';
-                        }}
-                    }} catch {{}}
-
-                    try {{
-                        history.pushState({{}}, '', target);
-                        window.dispatchEvent(new PopStateEvent('popstate'));
-                        return 'history';
-                    }} catch {{}}
-
-                    location.href = target;
-                    return 'location';
-                }})()";
-
+                var script = WebViewNavigation.CreateRelativeNavigationScript(url);
                 await _owner.RunOnMainThreadAsync(async () => { await _evalJs(script); });
             }
 
@@ -777,7 +756,11 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
             if (string.IsNullOrEmpty(result)) return null;
             if (result.StartsWith("\"") && result.EndsWith("\""))
             {
-                try { return System.Text.Json.JsonSerializer.Deserialize<string>(result); }
+                try
+                {
+                    using var document = System.Text.Json.JsonDocument.Parse(result);
+                    return document.RootElement.GetString();
+                }
                 catch { }
             }
             return result;

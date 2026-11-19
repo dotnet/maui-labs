@@ -17,10 +17,20 @@ public class GtkLayoutPanel : Gtk.Fixed
 	readonly Dictionary<Gtk.Widget, Gsk.Transform?> _childTransforms = new();
 
 	/// <summary>
-	/// Set to true when children are added/removed so the root tick callback
+	/// Set to true when children or their measurements change so the root tick callback
 	/// knows to re-measure and re-arrange even if the window size hasn't changed.
 	/// </summary>
 	public bool LayoutDirty { get; set; }
+
+	internal static void InvalidateLayout(Gtk.Widget widget)
+	{
+		for (Gtk.Widget? current = widget; current != null; current = current.GetParent())
+		{
+			if (current is GtkLayoutPanel panel)
+				panel.LayoutDirty = true;
+		}
+		widget.QueueResize();
+	}
 
 	/// <summary>
 	/// When true, this panel is driven by an external layout (e.g., CollectionView template)
@@ -150,6 +160,17 @@ public class GtkLayoutPanel : Gtk.Fixed
 	{
 		child.SetParent(this);
 		_childBounds[child] = Rect.Zero;
+		if (IsExternallyManaged)
+			MarkExternallyManaged(child);
+	}
+
+	internal static void MarkExternallyManaged(Gtk.Widget widget)
+	{
+		if (widget is GtkLayoutPanel panel)
+			panel.IsExternallyManaged = true;
+
+		for (var child = widget.GetFirstChild(); child != null; child = child.GetNextSibling())
+			MarkExternallyManaged(child);
 	}
 
 	/// <summary>

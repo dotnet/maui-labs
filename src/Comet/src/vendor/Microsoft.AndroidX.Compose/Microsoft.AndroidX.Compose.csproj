@@ -1,0 +1,86 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    VENDORED from jonathanpeppers/Microsoft.AndroidX.Compose (MIT) — see ../VENDORED.md.
+    Local changes: net10→net11 TFM; Compose package versions pinned inline (Comet's
+    repo disables central package management); PublicAPI analyzer dropped (dev-only).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net11.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsTrimmable>true</IsTrimmable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>AndroidX.Compose</RootNamespace>
+    <!-- RS0026/RS0027: optional-overload analyzer (see upstream rationale). -->
+    <NoWarn>$(NoWarn);RS0026;RS0027</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.AndroidX.Compose.SourceGenerators\Microsoft.AndroidX.Compose.SourceGenerators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Kotlin stdlib (IFunctionN ACWs, Kotlin.Unit) -->
+    <PackageReference Include="Xamarin.Kotlin.StdLib" Version="2.4.0.1" />
+    <!-- AndroidX core / activity / lifecycle -->
+    <PackageReference Include="Xamarin.AndroidX.Activity" Version="1.13.0.1" />
+    <PackageReference Include="Xamarin.AndroidX.Activity.Compose" Version="1.13.0" />
+    <PackageReference Include="Xamarin.AndroidX.Core" Version="1.19.0.1" />
+    <PackageReference Include="Xamarin.AndroidX.Core.Core.Ktx" Version="1.19.0.1" />
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Runtime.Compose" Version="2.10.0.2" />
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Runtime.Compose.Android" Version="2.10.0.3" />
+    <!--
+      Preview 7 compatibility exceptions: MAUI and Navigation 2.9.8 require Lifecycle
+      Runtime 2.11, but the latest Compose bindings still declare 2.10 upper bounds.
+      NavigationEvent 1.1.2 also conflicts with the 1.0.2 Compose bindings below.
+      These known NU1608 families are accepted until compatible Lifecycle and
+      NavigationEvent Compose bindings are available; remove the direct pins then.
+    -->
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Runtime.Android" Version="2.11.0.1" />
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Runtime.Ktx.Android" Version="2.11.0.1" />
+    <!-- AndroidX Compose -->
+    <PackageReference Include="Xamarin.AndroidX.Compose.Animation" Version="1.11.2" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Animation.Android" Version="1.11.2.1" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Animation.Core" Version="1.11.2" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Animation.Core.Android" Version="1.11.2.1" />
+    <!--
+      NavigationEvent 1.1.2 requires annotation 1.11.3 while Compose Runtime 1.11.2
+      declares an upper bound below 1.11.3. Remove these pins with compatible bindings.
+    -->
+    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation" Version="1.11.3.1" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation.Android" Version="1.11.3.1" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime" Version="1.11.2.1" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Android" Version="1.11.2.1" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Saveable" Version="1.11.2" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Saveable.Android" Version="1.11.2" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.UI" Version="1.11.2" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.UI.Android" Version="1.11.2" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.UI.Graphics" Version="1.11.2.1" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.UI.Graphics.Android" Version="1.11.2.1" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.UI.Text" Version="1.11.2.1" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.UI.Text.Android" Version="1.11.2.1" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.UI.Unit" Version="1.11.2.1" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.UI.Unit.Android" Version="1.11.2.1" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Foundation" Version="1.11.2.2" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Foundation.Android" Version="1.11.2.2" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Foundation.Layout" Version="1.11.2" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Foundation.Layout.Android" Version="1.11.2" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Material3" Version="1.4.0.2" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Material3Android" Version="1.4.0.3" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Material3.Adaptive" Version="1.2.0" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Material3.AdaptiveAndroid" Version="1.2.0" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Material.Icons.Core" Version="1.7.8.6" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Material.Icons.Core.Android" Version="1.7.8.6" />
+    <!-- AndroidX Navigation -->
+    <PackageReference Include="Xamarin.AndroidX.Navigation.Common" Version="2.9.8" />
+    <PackageReference Include="Xamarin.AndroidX.Navigation.Runtime" Version="2.9.8" />
+    <PackageReference Include="Xamarin.AndroidX.Navigation.Compose" Version="2.9.8" />
+    <PackageReference Include="Xamarin.AndroidX.Navigation.Compose.Android" Version="2.9.8" />
+  </ItemGroup>
+  <ItemGroup>
+    <AndroidJavaSource Include="Java\PointerInputEventHandlerImpl.java">
+      <Bind>false</Bind>
+    </AndroidJavaSource>
+  </ItemGroup>
+</Project>

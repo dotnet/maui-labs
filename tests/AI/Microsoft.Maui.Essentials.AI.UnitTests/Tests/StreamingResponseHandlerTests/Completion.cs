@@ -1,3 +1,4 @@
+using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.UnitTests;
@@ -10,9 +11,9 @@ public partial class StreamingResponseHandlerTests
 	public class CompletionTests
 	{
 		[Fact]
-		public async Task Complete_FlushesRemainingContent()
+		public async Task Complete_AfterContent_PreservesUpdate()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			handler.ProcessContent("Hello");
 			handler.Complete();
@@ -26,7 +27,7 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public async Task CompleteWithError_SurfacesExceptionToReader()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			handler.ProcessContent("Hello");
 			handler.CompleteWithError(new InvalidOperationException("test error"));
@@ -37,35 +38,65 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public void DoubleComplete_DoesNotThrow()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			handler.CompleteWithError(new InvalidOperationException("first error"));
 			handler.Complete();
 			handler.CompleteWithError(new InvalidOperationException("second error"));
 		}
 
-		[Fact]
-		public async Task Complete_WithJsonChunker_FlushesRemainingJsonContent()
+		[Theory]
+		[InlineData(null)]
+		[InlineData("apple-intelligence")]
+		[InlineData("another-model")]
+		public async Task Complete_WithUsage_EmitsUsageContent(string? modelId)
 		{
-			// Use JsonStreamChunker to ensure the Flush()-on-Complete path is exercised.
-			// JsonStreamChunker expects complete valid JSON at each step and tracks partial state.
-			var handler = new StreamingResponseHandler(new JsonStreamChunker());
+			var handler = new StreamingResponseHandler(modelId);
+			var usage = new UsageDetails
+			{
+				InputTokenCount = 12,
+				OutputTokenCount = 5,
+				TotalTokenCount = 17,
+				CachedInputTokenCount = 3,
+				ReasoningTokenCount = 2
+			};
 
-			// Feed progressive complete JSON snapshots — the chunker tracks partial strings
-			handler.ProcessContent("{\"greeting\":\"Hello\"}");
-			handler.ProcessContent("{\"greeting\":\"Hello world\"}");
-
-			// Complete should flush remaining content from JsonStreamChunker
-			handler.Complete();
+			handler.ProcessContent("Hello");
+			handler.Complete(usage);
 
 			var updates = await ReadAll(handler);
 
-			// Should have text updates from the progressive JSON
-			Assert.NotEmpty(updates);
-			var allText = string.Concat(updates
-				.SelectMany(u => u.Contents.OfType<Microsoft.Extensions.AI.TextContent>())
-				.Select(tc => tc.Text));
-			Assert.Contains("Hello", allText, StringComparison.Ordinal);
+			Assert.Equal(2, updates.Count);
+			Assert.All(updates, update => Assert.Equal(modelId, update.ModelId));
+			Assert.Equal("Hello", updates[0].Text);
+			Assert.Same(usage, Assert.IsType<UsageContent>(Assert.Single(updates[1].Contents)).Details);
+		}
+
+		[Fact]
+		public async Task Complete_WithUsage_AggregatesIntoChatResponse()
+		{
+			var handler = new StreamingResponseHandler();
+			handler.ProcessContent("Hello");
+			handler.Complete(new UsageDetails
+			{
+				InputTokenCount = 12,
+				OutputTokenCount = 5,
+				TotalTokenCount = 17,
+				CachedInputTokenCount = 3,
+				ReasoningTokenCount = 2
+			});
+
+			var response = await handler
+				.ReadAllAsync(CancellationToken.None)
+				.ToChatResponseAsync();
+
+			Assert.Equal("Hello", response.Text);
+			Assert.NotNull(response.Usage);
+			Assert.Equal(12, response.Usage.InputTokenCount);
+			Assert.Equal(5, response.Usage.OutputTokenCount);
+			Assert.Equal(17, response.Usage.TotalTokenCount);
+			Assert.Equal(3, response.Usage.CachedInputTokenCount);
+			Assert.Equal(2, response.Usage.ReasoningTokenCount);
 		}
 	}
 }

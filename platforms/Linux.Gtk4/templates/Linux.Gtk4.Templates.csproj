@@ -27,4 +27,18 @@
     <Compile Remove="**\*" />
   </ItemGroup>
 
+  <Target Name="PrepareGtkTemplatePackageVersions" BeforeTargets="_GetPackageFiles">
+    <PropertyGroup>
+      <_GtkTemplateProject>$(IntermediateOutputPath)templates\MauiLinuxApp.csproj</_GtkTemplateProject>
+      <!-- Arcade computes PackageVersion independently of PlatformMauiLinuxGtk4Version. -->
+      <_GtkTemplateContent>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/maui-linux-gtk4-app/MauiLinuxApp.csproj').Replace('__GtkPackageVersion__', '$(PackageVersion)'))</_GtkTemplateContent>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_GtkTemplateProject)" Lines="$(_GtkTemplateContent)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Content Remove="maui-linux-gtk4-app\MauiLinuxApp.csproj" />
+      <Content Include="$(_GtkTemplateProject)" PackagePath="content\maui-linux-gtk4-app\MauiLinuxApp.csproj" />
+      <FileWrites Include="$(_GtkTemplateProject)" />
+    </ItemGroup>
+  </Target>
+
 </Project>

@@ -116,6 +116,36 @@ public class AgentClientQueryTests
         Assert.Equal("typed", element.Value);
     }
 
+    [Theory]
+    [InlineData("""{"revision":"geometry-1","diagnosticInputsRevision":"0:0:3","elements":[]}""", "0:0:3")]
+    [InlineData("""{"revision":"geometry-1","elements":[]}""", null)]
+    public async Task GetTreeSnapshotAsync_OptionalDiagnosticInputsRevision_ParsesEnvelope(string payload, string? inputsRevision)
+    {
+        using var agent = FakeAgent.StartJson(payload);
+        using var client = new AgentClient("localhost", agent.Port);
+
+        var snapshot = await client.GetTreeSnapshotAsync(includeNative: false);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal("geometry-1", snapshot!.Revision);
+        Assert.Equal(inputsRevision, snapshot.DiagnosticInputsRevision);
+        Assert.Empty(snapshot.Elements);
+        Assert.Equal("envelope=true&native=false", Assert.Single(agent.Requests).Query);
+    }
+
+    [Fact]
+    public async Task GetTreeSnapshotAsync_LegacyArray_RemainsCompatibleWithoutInputRevision()
+    {
+        using var agent = FakeAgent.StartJson(TwoElementPayload);
+        using var client = new AgentClient("localhost", agent.Port);
+
+        var snapshot = await client.GetTreeSnapshotAsync();
+
+        Assert.NotNull(snapshot);
+        Assert.Null(snapshot!.DiagnosticInputsRevision);
+        Assert.Equal(2, snapshot.Elements.Count);
+    }
+
     [Fact]
     public async Task GetStatusAsync_ReachesAgentThroughLocalhostAlias()
     {
@@ -132,6 +162,35 @@ public class AgentClientQueryTests
         Assert.True(status!.Running);
         Assert.Equal("1.2.3", status.Version);
         Assert.Equal("Sample", status.AppName);
+    }
+
+    [Fact]
+    public async Task GetStatusAsync_ReadsTheSyntheticTouchCapability()
+    {
+        using var agent = FakeAgent.StartJson("""
+            { "running": true, "capabilities": { "ui": true, "jobs": true, "syntheticTouch": true } }
+            """);
+        using var client = new AgentClient("localhost", agent.Port);
+
+        var status = await client.GetStatusAsync();
+
+        Assert.NotNull(status?.Capabilities);
+        Assert.True(status!.Capabilities!.SyntheticTouch);
+    }
+
+    [Fact]
+    public async Task GetStatusAsync_TreatsAnAbsentSyntheticTouchCapabilityAsUnavailable()
+    {
+        // An agent that predates the tier omits the field entirely.
+        using var agent = FakeAgent.StartJson("""
+            { "running": true, "capabilities": { "ui": true } }
+            """);
+        using var client = new AgentClient("localhost", agent.Port);
+
+        var status = await client.GetStatusAsync();
+
+        Assert.NotNull(status?.Capabilities);
+        Assert.False(status!.Capabilities!.SyntheticTouch);
     }
 
     [Fact]

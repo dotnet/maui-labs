@@ -1,5 +1,30 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
+  <!-- Resizetizer does not process the macos TFM. Let the Apple SDK own copying,
+       incremental builds, publishing and signing, using the backend's lookup paths. -->
+  <Target Name="_MacOSCollectMauiResources"
+          BeforeTargets="_CollectBundleResources"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos' and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <_MacOSMauiBundleResource Include="@(MauiImage)">
+        <LogicalName>Images/%(Filename)%(Extension)</LogicalName>
+      </_MacOSMauiBundleResource>
+      <_MacOSMauiBundleResource Include="@(MauiFont)">
+        <LogicalName>Fonts/%(Filename)%(Extension)</LogicalName>
+      </_MacOSMauiBundleResource>
+      <_MacOSMauiBundleResource Include="@(MauiAsset)">
+        <LogicalName Condition="'%(MauiAsset.LogicalName)' == ''">%(Filename)%(Extension)</LogicalName>
+      </_MacOSMauiBundleResource>
+      <_MacOSMauiBundleResource>
+        <LogicalName>$([System.String]::Copy('%(_MacOSMauiBundleResource.LogicalName)').Replace('\', '/'))</LogicalName>
+      </_MacOSMauiBundleResource>
+      <!-- Replace default Resources glob entries for these files: otherwise the
+           SDK may keep the default Raw/ path instead of the MauiAsset logical name. -->
+      <BundleResource Remove="@(_MacOSMauiBundleResource)" MatchOnMetadata="FullPath" MatchOnMetadataOptions="PathLike" />
+      <BundleResource Include="@(_MacOSMauiBundleResource)" />
+    </ItemGroup>
+  </Target>
+
   <!--
     macOS AppKit app icon generation from MauiIcon items.
     Processes MauiIcon SVG/PNG sources into a .icns file using sips + iconutil,

@@ -24,12 +24,30 @@
       ]
     },
     "ui.screenshot": {
+      "version": 3,
+      "features": [
+        "element",
+        "fullscreen",
+        "selector",
+        "capture-epoch",
+        "resolution-hints"
+      ]
+    },
+    "ui.events": {
       "version": 1,
-      "features": ["element", "fullscreen", "selector"]
+      "supported": true,
+      "features": ["stream", "subscribe", "action-lifecycle"]
+    },
+    "ui.menus": {
+      "version": 1,
+      "supported": true,
+      "features": ["list", "invoke"],
+      "maui": true,
+      "native": true
     },
     "webview": {
       "version": 1,
-      "features": ["evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot"]
+      "features": ["evaluate", "contexts", "source", "dom", "dom-query", "console", "screenshot"]
     },
     "network": {
       "version": 1,

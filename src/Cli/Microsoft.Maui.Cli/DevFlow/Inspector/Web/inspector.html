@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DevFlow Inspector</title>
+  <title>MAUI DevFlow Inspector</title>
   <!-- Base tag ensures relative URLs resolve correctly even when the page is
        opened at /inspector/{id} without a trailing slash. Without this, the
        browser would resolve devflow.css as /inspector/devflow.css (treating
@@ -19,6 +19,8 @@
     <symbol id="i-tree" viewBox="0 0 24 24"><path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/></symbol>
     <symbol id="i-bounds" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 4"/></symbol>
     <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
     <symbol id="i-record" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="7"/></symbol>
     <symbol id="i-assert" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-replay" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6 3v18l14-9z"/></symbol>
@@ -63,7 +65,7 @@
       </div>
       <span class="df-sep"></span>
       <button id="df-toggle-tree" class="df-tool-btn df-active" title="Show/hide the element tree" aria-expanded="true" aria-controls="df-tree"><svg class="df-ic"><use href="#i-tree"/></svg><span class="df-btn-label">Tree</span></button>
-      <button id="df-toggle-fit" class="df-tool-btn df-active" title="Fit the app view to the available space (toggle to see it at 1:1 actual size)" aria-pressed="true"><svg class="df-ic"><use href="#i-fit"/></svg><span class="df-btn-label">Fit</span></button>
+      <button id="df-toggle-fit" class="df-tool-btn df-active" title="Fit the app view to the available space" aria-pressed="true"><svg class="df-ic"><use href="#i-fit"/></svg><span class="df-btn-label">Fit</span></button>
       <button id="df-toggle-record" class="df-tool-btn" title="Record your interactions into a replayable Markdown test. Enabled when you're driving the app — take control if another session is Read-only." aria-pressed="false"><svg class="df-ic df-ic-rec"><use href="#i-record"/></svg><span class="df-btn-label">Record</span></button>
       <div id="df-toolbar-secondary" class="df-toolbar-secondary" aria-label="More inspector actions">
         <button id="df-toggle-bounds" class="df-tool-btn" title="Outline every element" aria-pressed="false"><svg class="df-ic"><use href="#i-bounds"/></svg><span class="df-btn-label">Bounds</span></button>
@@ -79,70 +81,74 @@
       <button id="df-more" class="df-tool-btn df-more-btn df-hidden" title="More inspector actions" aria-haspopup="menu" aria-expanded="false" aria-controls="df-toolbar-overflow"><svg class="df-ic"><use href="#i-more"/></svg><span class="df-btn-label">More</span></button>
       <div id="df-toolbar-overflow" class="df-toolbar-overflow df-hidden" role="menu" aria-label="More inspector actions"></div>
       <span class="df-spacer"></span>
-      <span id="df-presence" class="df-presence" role="status" aria-live="polite" aria-atomic="true" title="Who can drive this app right now"></span>
+      <span id="df-presence" class="df-presence" title="Who can drive this app right now"></span>
       <button id="df-take-control" class="df-tool-btn df-hidden" title="Another session is driving this app, click to take control"><svg class="df-ic"><use href="#i-key"/></svg><span class="df-btn-label">Take control</span></button>
     </div>
     <div id="df-status" class="df-status" role="status" aria-live="polite"></div>
+    <div id="df-health-live" class="df-sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="df-action-announcer" class="df-sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     <div id="df-body">
       <button id="df-pane-scrim" class="df-pane-scrim df-hidden" aria-hidden="true" tabindex="-1"></button>
       <aside id="df-tree-pane" class="df-pane" aria-label="Visual tree">
         <div class="df-pane-header"><h2 class="df-pane-title">Visual tree</h2><span id="df-tree-count" class="df-pane-count"></span></div>
         <div id="df-tree" role="tree" aria-label="Element tree"></div>
       </aside>
-      <section id="df-view-pane" class="df-pane df-pane-grow" role="main" aria-label="Live app preview">
-        <div class="df-pane-header"><h2 class="df-pane-title">Screenshot</h2></div>
+      <section id="df-view-pane" class="df-pane df-pane-grow" role="main" aria-label="Live app preview" tabindex="-1">
+        <div class="df-pane-header">
+          <h2 class="df-pane-title df-preview-title">Screenshot</h2>
+          <span id="df-preview-health" class="df-preview-health" data-tone="success">
+            <span id="df-preview-health-label">Live</span>
+            <span id="df-preview-badges" class="df-preview-badges"></span>
+          </span>
+          <span id="df-preview-pending" class="df-pane-count df-hidden">Updating…</span>
+          <div id="df-viewport-controls" class="df-viewport-controls" role="group" aria-label="Viewport zoom and pan">
+            <button id="df-zoom-out" class="df-icon-btn" type="button" title="Zoom out (-)" aria-label="Zoom out"><svg class="df-ic"><use href="#i-minus"/></svg></button>
+            <label class="df-sr-only" for="df-zoom-preset">Zoom preset</label>
+            <select id="df-zoom-preset" class="df-field df-zoom-preset" title="Zoom preset">
+              <option value="fit">Fit</option>
+              <option value="0.5">50%</option>
+              <option value="1">100%</option>
+              <option value="2">200%</option>
+              <option value="custom" hidden>Custom</option>
+            </select>
+            <span id="df-zoom-indicator" class="df-zoom-indicator" aria-hidden="true">Fit</span>
+            <button id="df-zoom-in" class="df-icon-btn" type="button" title="Zoom in (+)" aria-label="Zoom in"><svg class="df-ic"><use href="#i-plus"/></svg></button>
+          </div>
+          <span id="df-zoom-announcement" class="df-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
+        </div>
+        <div id="df-health-banner" class="df-health-banner df-hidden" role="note" aria-labelledby="df-health-banner-heading" aria-describedby="df-health-banner-detail">
+          <svg class="df-health-icon"><use href="#i-refresh"/></svg>
+          <div class="df-health-copy">
+            <strong id="df-health-banner-heading">Preview delayed</strong>
+            <span id="df-health-banner-detail">Showing the last captured frame.</span>
+          </div>
+          <button id="df-retry-capture" class="df-tool-btn" type="button"><svg class="df-ic"><use href="#i-refresh"/></svg><span>Retry capture</span></button>
+        </div>
         <div id="df-disconnected-overlay" class="df-connection-overlay df-hidden" aria-hidden="true">
           <div class="df-connection-card">
             <svg class="df-connection-icon"><use href="#i-refresh"/></svg>
-            <h2>App disconnected</h2>
-            <p>Showing the last captured frame. Waiting for DevFlow to reconnect…</p>
+            <h2 id="df-connection-heading">App disconnected</h2>
+            <p id="df-connection-detail">Showing the last captured frame while DevFlow reconnects.</p>
             <button id="df-retry-connection" class="df-tool-btn" type="button"><svg class="df-ic"><use href="#i-refresh"/></svg><span>Retry now</span></button>
           </div>
         </div>
-        <div id="df-hit-candidates" class="df-hit-candidates df-hidden" role="listbox" aria-label="Elements at selected point"></div>
-        <div id="df-viewport-wrap" role="region" aria-label="Live app viewport">
-          <div id="df-stage">
-            <div id="app-viewport" data-width="{{VIEWPORT_WIDTH}}" data-height="{{VIEWPORT_HEIGHT}}" data-root-offset-x="{{ROOT_OFFSET_X}}" data-root-offset-y="{{ROOT_OFFSET_Y}}" style="width:{{VIEWPORT_WIDTH}}px; height:{{VIEWPORT_HEIGHT}}px;">
-              {{SCREENSHOT}}
-              <div id="diagnostic-overlays" aria-hidden="true"></div>
-              {{ELEMENTS}}
+        <div id="df-preview-surface">
+          <div id="df-hit-candidates" class="df-hit-candidates df-hidden" role="listbox" aria-label="Elements at selected point"></div>
+          <span id="df-viewport-help" class="df-sr-only">Use plus or minus to zoom, 0 to Fit, 1 for 100 percent, arrow keys to pan, or hold Space while dragging. Middle-button drag also pans the Inspector view without driving the app.</span>
+          <div id="df-viewport-wrap" role="region" aria-label="Live app viewport" aria-describedby="df-viewport-help" tabindex="0">
+            <div id="df-stage">
+              <div id="app-viewport" data-width="{{VIEWPORT_WIDTH}}" data-height="{{VIEWPORT_HEIGHT}}" data-root-offset-x="{{ROOT_OFFSET_X}}" data-root-offset-y="{{ROOT_OFFSET_Y}}" style="width:{{VIEWPORT_WIDTH}}px; height:{{VIEWPORT_HEIGHT}}px;">
+                {{SCREENSHOT}}
+                <div id="df-action-overlay" aria-hidden="true"></div>
+                <div id="diagnostic-overlays" aria-hidden="true"></div>
+                {{ELEMENTS}}
+              </div>
             </div>
+            <div id="df-action-chrome" aria-hidden="true"></div>
           </div>
         </div>
       </section>
-      <aside id="df-diagnostics-pane" class="df-pane df-hidden" aria-label="Layout diagnostics" tabindex="-1">
-        <div class="df-pane-header">
-          <h2 class="df-pane-title">Layout diagnostics</h2>
-          <span id="diagnostics-summary" class="df-pane-el"></span>
-          <button id="df-diagnostics-close" class="df-icon-btn df-pane-close" title="Close layout diagnostics"><svg class="df-ic"><use href="#i-close"/></svg></button>
-        </div>
-        <div class="df-diag-controls">
-          <select id="diagnostics-filter" class="df-field" aria-label="Outcome filter">
-            <option value="actionable">Actionable</option>
-            <option value="all">All findings</option>
-            <option value="incomplete">Incomplete</option>
-            <option value="passes">Passes</option>
-          </select>
-          <select id="diagnostics-severity" class="df-field" aria-label="Minimum severity">
-            <option value="all">All severities</option>
-            <option value="minor">Minor+</option>
-            <option value="moderate">Moderate+</option>
-            <option value="serious">Serious+</option>
-            <option value="critical">Critical</option>
-          </select>
-          <select id="diagnostics-confidence" class="df-field" aria-label="Minimum confidence">
-            <option value="all">All confidence</option>
-            <option value="low">Low+</option>
-            <option value="medium">Medium+</option>
-            <option value="high">High+</option>
-            <option value="exact">Exact</option>
-          </select>
-          <input id="diagnostics-rule" class="df-field" type="search" placeholder="Filter rule">
-          <label class="df-diag-check"><input id="diagnostics-suppressed" type="checkbox"> Suppressed</label>
-        </div>
-        <div id="diagnostics-coverage" class="df-diag-coverage"></div>
-        <div id="diagnostics-list" class="df-diag-list"></div>
-      </aside>
+      <section id="df-diagnostics-pane" class="df-layout-panel df-hidden" aria-label="Layout diagnostics" tabindex="-1"></section>
       <aside id="df-props-pane" class="df-pane df-hidden" aria-label="Properties" tabindex="-1">
         <div class="df-pane-header"><h2 class="df-pane-title">Properties</h2><span id="df-props-el" class="df-pane-el"></span><button id="df-props-close" class="df-icon-btn df-pane-close" title="Close properties"><svg class="df-ic"><use href="#i-close"/></svg></button></div>
         <div id="df-props" aria-label="Properties"></div>
@@ -170,6 +176,7 @@
     <div id="df-dock" class="df-hidden" aria-label="App data">
       <div id="df-dock-tabs">
         <div class="df-dock-tab-list" role="tablist" aria-label="App data">
+          <button id="df-tab-layout" class="df-dock-tab" data-tab="layout" role="tab" aria-selected="false" aria-controls="df-dock-body" tabindex="-1">Layout</button>
           <button id="df-tab-logs" class="df-dock-tab df-active" data-tab="logs" role="tab" aria-selected="true" aria-controls="df-dock-body" tabindex="0">Logs</button>
           <button id="df-tab-network" class="df-dock-tab" data-tab="network" role="tab" aria-selected="false" aria-controls="df-dock-body" tabindex="-1">Network</button>
           <button id="df-tab-preferences" class="df-dock-tab" data-tab="preferences" role="tab" aria-selected="false" aria-controls="df-dock-body" tabindex="-1">Preferences</button>

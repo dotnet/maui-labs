@@ -153,23 +153,19 @@ public class DatePickerHandler : GtkViewHandler<IDatePicker, Gtk.Box>
 
 		var button = handler.PlatformView?.GetFirstChild() as Gtk.Button;
 		var css = handler.BuildFontCss(textStyle.Font);
-		if (!string.IsNullOrEmpty(css))
-			handler.ApplyCss(button, css);
+		handler.UpdateCss(button, css);
 	}
 
 	public static void MapCharacterSpacing(DatePickerHandler handler, IDatePicker datePicker)
 	{
 		var button = handler.PlatformView?.GetFirstChild() as Gtk.Button;
-		handler.ApplyCss(button, $"letter-spacing: {datePicker.CharacterSpacing}px;");
+		handler.UpdateCss(button, $"letter-spacing: {datePicker.CharacterSpacing}px;");
 	}
 
 	public static void MapTextColor(DatePickerHandler handler, IDatePicker datePicker)
 	{
-		if (datePicker.TextColor != null)
-		{
-			var button = handler.PlatformView?.GetFirstChild() as Gtk.Button;
-			handler.ApplyCss(button, $"color: {ToGtkColor(datePicker.TextColor)};");
-		}
+		var button = handler.PlatformView?.GetFirstChild() as Gtk.Button;
+		handler.UpdateCss(button, datePicker.TextColor != null ? $"color: {ToGtkColor(datePicker.TextColor)};" : null);
 	}
 
 	public static void MapMinimumDate(DatePickerHandler handler, IDatePicker datePicker)

@@ -5,6 +5,7 @@
     <IsPackable>true</IsPackable>
     <PackageId>Microsoft.Maui.DevFlow.Logging</PackageId>
     <IsShipping>true</IsShipping>
+    <IsAotCompatible>true</IsAotCompatible>
     <Description>Buffered rotating JSONL file logger for Microsoft.Maui.DevFlow. No MAUI dependency.</Description>
     <PackageTags>logging;jsonl;rotating</PackageTags>
   </PropertyGroup>

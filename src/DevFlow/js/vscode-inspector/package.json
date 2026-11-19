@@ -24,7 +24,7 @@
     }
   },
   "engines": {
-    "vscode": "^1.98.0"
+    "vscode": "^1.134.0"
   },
   "categories": [
     "Debuggers",
@@ -62,7 +62,7 @@
           "devflow"
         ],
         "displayName": "MAUI DevFlow: Data Snapshot",
-        "modelDescription": "Returns the bounded, redacted point-in-time Data snapshot the user added from the MAUI DevFlow Inspector (Logs, Network, Preferences, Device, Sensors, file metadata, or native Alerts). Use the included followUpTools identifiers to query DevFlow MCP for fresher or deeper detail when needed.",
+        "modelDescription": "Returns the bounded, redacted point-in-time Data snapshot the user added from the MAUI DevFlow Inspector (Layout diagnostics, Logs, Network, Preferences, Device, Sensors, file metadata, or native Alerts). Use the included followUpTools identifiers to query DevFlow MCP for fresher or deeper detail when needed.",
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "mauiData",
         "icon": "$(attach)",
@@ -101,15 +101,17 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "npm run typecheck && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=dist/extension.js",
+    "build:test": "tsc -p tsconfig.test.json",
+    "test": "npm run build:test && node --test \"test/**/*.test.mjs\"",
     "watch": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=dist/extension.js --watch",
     "package:vsix": "npm run build && vsce package --pre-release --no-dependencies --out dist/maui-devflow-inspector.vsix"
   },
   "devDependencies": {
     "@maui-devflow/client": "0.1.0-preview.12",
-    "@types/node": "^20.16.0",
-    "@types/vscode": "^1.90.0",
-    "@vscode/vsce": "^3.9.2",
-    "esbuild": "^0.28.1",
-    "typescript": "^5.6.3"
+    "@types/node": "^26.4.0",
+    "@types/vscode": "^1.134.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
   }
 }

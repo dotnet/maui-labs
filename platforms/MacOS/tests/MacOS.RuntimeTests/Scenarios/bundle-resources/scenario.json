@@ -1,0 +1,16 @@
+{
+  "name": "bundle-resources",
+  "expectedCases": 4,
+  "expectedAssertions": 26,
+  "driver": "driver.py",
+  "evidence": ["bundle-files.json", "assertions.txt"],
+  "fixedEvidence": ["resources.json", "image.png", "font.png"],
+  "baseline": {
+    "source": "platforms/MacOS/src/MacOS/buildTransitive/Microsoft.Maui.Platforms.MacOS.targets",
+    "commit": "9206e7c5c6486a7f422efd36a7635c6fe9609000",
+    "exitCode": 42,
+    "outcome": "regression",
+    "failureId": "resources.missing",
+    "message": "The linked MauiImage was not loaded."
+  }
+}

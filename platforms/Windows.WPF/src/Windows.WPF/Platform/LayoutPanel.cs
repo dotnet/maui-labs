@@ -11,6 +11,7 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 	{
 		internal Func<double, double, Size>? CrossPlatformMeasure { get; set; }
 		internal Func<Rect, Size>? CrossPlatformArrange { get; set; }
+		internal ILayout? VirtualView { get; set; }
 
 		public bool ClipsToBounds { get; set; }
 
@@ -45,9 +46,16 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			// MAUI's CrossPlatformMeasure may not call WPF Measure on all children
 			// (e.g., views with explicit WidthRequest/HeightRequest).
 			double maxChildHeight = 0;
-			foreach (System.Windows.UIElement child in InternalChildren)
+			for (var index = 0; index < InternalChildren.Count; index++)
 			{
-				child.Measure(constrainedSize);
+				var child = InternalChildren[index];
+				// Keep the constraints chosen by MAUI for children it already measured.
+				// Remeasuring a FlexLayout with the whole parent's height inflates its lines.
+				// Nested flex items are an exception: the shared flex engine bypasses
+				// their native Measure, so they still need the fallback on constraint changes.
+				var nestedFlex = VirtualView is IFlexLayout flex && index < flex.Count && flex[index] is IFlexLayout;
+				if (!child.IsMeasureValid || nestedFlex)
+					child.Measure(constrainedSize);
 				if (child.DesiredSize.Height > maxChildHeight)
 					maxChildHeight = child.DesiredSize.Height;
 			}

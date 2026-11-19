@@ -10,6 +10,8 @@ internal static class ProfileSessionSetup
 {
 	internal static async Task<ProfileSessionContext> PrepareAsync(ProfileSessionRequest request, CancellationToken cancellationToken)
 	{
+		ValidateBuildIsolationOptions(request.NoBuild);
+
 		var primaryOutputPath = ProfileOutputResolver.GetPrimaryOutputPath(request.OutputPath, request.OutputFormat);
 		var outputDirectory = Path.GetDirectoryName(request.OutputPath);
 		if (string.IsNullOrWhiteSpace(outputDirectory))
@@ -23,41 +25,69 @@ internal static class ProfileSessionSetup
 
 		var profilePlatform = ProfileTargetResolver.InferPlatformFromTargetFramework(request.Framework) ?? request.Device.Platform;
 		var transport = ProfileCommand.ResolveProfileTransport(profilePlatform, request.Device);
-		var context = new ProfileSessionContext(request, primaryOutputPath, profilePlatform, transport);
-		context.UseRuntimeOwnedTraceCollection = ShouldUseRuntimeOwnedTraceCollection(context);
-		if (context.UseRuntimeOwnedTraceCollection)
+		var buildWorkspace = ProfileBuildWorkspace.Create(request.Project.ProjectDirectory, request.Formatter, request.UseJson, request.Verbose);
+		var context = new ProfileSessionContext(request, primaryOutputPath, profilePlatform, transport, buildWorkspace);
+
+		try
 		{
-			context.RuntimeOwnedTraceDevicePath = ResolveRuntimeOwnedTraceDevicePath(context);
-			if (string.IsNullOrWhiteSpace(context.RuntimeOwnedTraceDevicePath))
-				context.UseRuntimeOwnedTraceCollection = false;
-		}
+			context.UseRuntimeOwnedTraceCollection = ShouldUseRuntimeOwnedTraceCollection(context);
+			if (context.UseRuntimeOwnedTraceCollection)
+			{
+				context.RuntimeOwnedTraceDevicePath = ResolveRuntimeOwnedTraceDevicePath(context);
+				if (string.IsNullOrWhiteSpace(context.RuntimeOwnedTraceDevicePath))
+					context.UseRuntimeOwnedTraceCollection = false;
+			}
 
-		WriteSessionHeader(context);
-		WriteVerboseSettings(context);
+			WriteSessionHeader(context);
+			WriteVerboseSettings(context);
 
-		context.ReservedPorts = await ProfileCommandPortRouter.ReserveProfilePortsAndConfigureRoutingAsync(
-			context.Device,
-			context.Transport,
-			context.DiagnosticPort,
-			context.Formatter,
-			context.UseJson,
-			context.Verbose,
-			cancellationToken);
+			context.ReservedPorts = await ProfileCommandPortRouter.ReserveProfilePortsAndConfigureRoutingAsync(
+				context.Device,
+				context.Transport with { RequiresExplicitDsrouter = context.RequiresExplicitDsrouter },
+				context.DiagnosticPort,
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				cancellationToken);
 
-		context.DiagnosticPort = context.ReservedPorts.DiagnosticPort;
+			context.DiagnosticPort = context.ReservedPorts.DiagnosticPort;
 
-		var hasProfilingHelper = MauiProjectResolver.HasPackageReference(context.Project.ProjectPath, ProfileCommand.ProfilingHelperPackageId);
-		context.BuildInjection = string.Equals(profilePlatform, Platforms.iOS, StringComparison.OrdinalIgnoreCase)
-			? null
-			: ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
+			var hasProfilingHelper = MauiProjectResolver.HasPackageReference(context.Project.ProjectPath, ProfileCommand.ProfilingHelperPackageId);
+			var existingBuildHooks = await ProfileBuildWorkspace.ResolveExistingBuildHooksAsync(
+				context.Project.ProjectPath,
+				context.Framework,
+				context.Configuration,
+				cancellationToken);
+			context.BuildInjection = ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
 				context.DiagnosticAddress,
-				context.ReservedPorts!.ExitControlPort,
+				context.ReservedPorts.ExitControlPort,
 				injectBootstrap: !hasProfilingHelper,
 				enableRuntimePgo: context.UseRuntimeOwnedTraceCollection || context.OutputFormat == TraceOutputFormat.Mibc,
 				eventPipeOutputPath: context.RuntimeOwnedTraceDevicePath);
+			context.BuildWorkspace.ConfigureBuildTargets(context.BuildInjection?.TargetsPath, existingBuildHooks);
 
-		WriteDiagnosticPortInfo(context);
-		return context;
+			WriteDiagnosticPortInfo(context);
+			return context;
+		}
+		catch
+		{
+			await ProfileSessionRunner.CleanupAsync(context);
+			throw;
+		}
+	}
+
+	internal static void ValidateBuildIsolationOptions(bool noBuild)
+	{
+		if (!noBuild)
+			return;
+
+		throw MauiToolException.UserActionRequired(
+			ErrorCodes.InvalidArgument,
+			"--no-build cannot be used for profiling because each profiling session builds into a new isolated workspace.",
+			[
+				"Remove --no-build. The profiling build is stored under the app project's ignored obj directory and is deleted after the session.",
+				"Your normal bin and obj outputs will not be overwritten."
+			]);
 	}
 
 	static void WriteSessionHeader(ProfileSessionContext context)
@@ -92,9 +122,14 @@ internal static class ProfileSessionSetup
 			context.Formatter,
 			context.UseJson,
 			context.Verbose,
+			$"Profile build workspace: {context.BuildWorkspace.Path}");
+		ProfileCommandProcessHelpers.WriteVerbose(
+			context.Formatter,
+			context.UseJson,
+			context.Verbose,
 			$"Profile settings: configuration={context.Configuration}, noBuild={context.NoBuild}, dsrouterKind={context.DsrouterKind}, " +
 			$"diagnosticAddress={context.DiagnosticAddress}, diagnosticListenMode={context.Transport.DiagnosticListenMode}, diagnosticPort={context.DiagnosticPort}, " +
-			$"traceProfile={context.TraceProfile ?? "(default)"}, outputFormat={ProfileOutputResolver.FormatOutputFormat(context.OutputFormat)}, duration={context.EffectiveDuration?.ToString() ?? "(manual stop)"}, " +
+			$"traceProfile={context.TraceProfile ?? "(default)"}, outputFormat={ProfileOutputResolver.FormatOutputFormat(context.OutputFormat)}, duration={context.EffectiveDuration?.ToString() ?? "(manual stop)"}, traceStopTimeout={context.TraceStopTimeout}, " +
 			$"stoppingEventProvider={context.StoppingEventProvider ?? "(none)"}, stoppingEventName={context.StoppingEventName ?? "(none)"}, " +
 			$"stoppingEventPayloadFilter={context.StoppingEventPayloadFilter ?? "(none)"}");
 	}
@@ -111,6 +146,10 @@ internal static class ProfileSessionSetup
 		}
 
 		context.Formatter.WriteInfo($"Diagnostic port: {context.DiagnosticPort}");
+		if (!context.UseRuntimeOwnedTraceCollection
+			&& context.RequiresExplicitDsrouter
+			&& context.ReservedPorts?.DsrouterTcpPort is { } dsrouterTcpPort)
+			context.Formatter.WriteInfo($"Dsrouter host TCP port: {dsrouterTcpPort}");
 		if (context.DiagnosticPort != context.RequestedDiagnosticPort)
 			context.Formatter.WriteInfo($"Port {context.RequestedDiagnosticPort} was busy, so the profiler selected {context.DiagnosticPort}.");
 

@@ -5,6 +5,13 @@ info:
   description: >
     Protocol for runtime app inspection, interaction, and debugging in
     DevFlow-enabled applications.
+    Percent-encode path parameter values as individual URI segments. The server
+    splits the route before decoding each captured parameter exactly once:
+    %20 is a space, %2B is a literal plus, %2F is a slash within the parameter,
+    and %2520 is the literal text %20. A raw plus remains a plus. Static route
+    segments are not decoded. Malformed percent escapes are preserved by
+    System.Uri.UnescapeDataString, consistent with query parameter decoding;
+    endpoint-specific validation still applies to decoded values.
   license:
     name: MIT
     identifier: MIT
@@ -36,6 +43,8 @@ tags:
     description: Device info, sensors, jobs, permissions, geolocation
   - name: storage
     description: Preferences, secure storage, and sandboxed app files
+  - name: invoke
+    description: App-registered DevFlow Action discovery and invocation
   - name: extensions
     description: Third-party extension routes
 
@@ -57,6 +66,54 @@ paths:
                 $ref: "./schemas/agent-status.json"
         "500":
           $ref: "#/components/responses/InternalError"
+
+  /api/v1/agent/lease:
+    post:
+      operationId: controlMutationLease
+      tags: [agent]
+      summary: Control the mutation lease
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, default: status }
+                leaseId: { type: string }
+                holderKind: { type: string }
+                label: { type: string }
+                force: { type: boolean }
+                transactionId: { type: string }
+      responses:
+        "200":
+          description: Mutation lease status.
+
+  /api/v1/agent/recording:
+    post:
+      operationId: controlMutationRecording
+      tags: [agent]
+      summary: Control workflow mutation recording
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, default: status }
+                recordingId: { type: string }
+                name: { type: string }
+                app: { type: string }
+                platform: { type: string }
+                preconditions: { type: string }
+      responses:
+        "200":
+          description: Mutation recording status.
+        "409":
+          description: A mutation lease is required.
+        "503":
+          description: The DevFlow broker is unavailable.
 
   /api/v1/agent/capabilities:
     get:
@@ -92,6 +149,29 @@ paths:
           schema:
             type: integer
             minimum: 0
+        - name: window
+          in: query
+          description: Zero-based window index. All windows if omitted.
+          schema:
+            type: integer
+            minimum: 0
+        - name: native
+          in: query
+          description: Include native elements in the captured tree.
+          schema:
+            type: boolean
+            default: true
+        - name: envelope
+          in: query
+          description: >
+            Return an envelope with the tree revision and elements. MAUI agents also
+            return an opaque diagnosticInputsRevision that changes when observed sizing
+            or measurement inputs change, even without geometry changes. It is stable
+            across unchanged captures and does not require running layout diagnostics.
+            Older and native-only backends may omit this optional revision.
+          schema:
+            type: boolean
+            default: false
         - name: layer
           in: query
           description: Which tree layer to return.
@@ -116,13 +196,27 @@ paths:
           explode: false
       responses:
         "200":
-          description: Array of root elements (windows) with their children.
+          description: Array of root elements, or a revision envelope when envelope=true.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "./schemas/element-info.json"
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: "./schemas/element-info.json"
+                  - type: object
+                    required: [revision, elements]
+                    properties:
+                      revision:
+                        type: string
+                        description: Geometry and rendered-state revision.
+                      diagnosticInputsRevision:
+                        type: string
+                        description: Optional opaque revision of observed layout inputs.
+                      elements:
+                        type: array
+                        items:
+                          $ref: "./schemas/element-info.json"
         "409":
           $ref: "#/components/responses/CaptureConflict"
         "500":
@@ -305,6 +399,155 @@ paths:
           $ref: "#/components/responses/InternalError"
         "501":
           $ref: "#/components/responses/BackendNotSupported"
+    post:
+      operationId: hitTestWithBody
+      tags: [ui]
+      summary: Find element at coordinates
+      description: Accepts the same hit-test request data as the GET operation in a JSON body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [x, y]
+              properties:
+                x: { type: number }
+                y: { type: number }
+                window: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: Elements at the given coordinates (deepest first).
+        "400":
+          description: Coordinates are invalid or missing.
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+
+  /api/v1/ui/diagnostics/layout/rules:
+    get:
+      operationId: getLayoutDiagnosticRules
+      tags: [ui]
+      summary: Get supported layout diagnostic rules
+      description: >
+        Returns schemaVersion 1.0 and the agent's ruleSetVersion. Rule set 1.1 adds
+        layout.constraint-violation, layout.desired-size-constrained and
+        layout.child-outside-parent. These rules use realized MAUI layout metadata;
+        native-only and Blazor nodes do not supply that evidence. Clients should
+        discover supported rule IDs here before sending an explicit rule list.
+      responses:
+        "200":
+          description: Layout diagnostic rule support metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schemaVersion: { type: string, examples: ["1.0"] }
+                  ruleSetVersion: { type: string, examples: ["1.1"] }
+                  profiles: { type: array, items: { type: string } }
+                  rules:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ruleId: { type: string }
+                        support: { type: string, enum: [exact, partial, unsupported] }
+                        confidence: { type: string }
+                        limitations: { type: array, items: { type: string } }
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+
+  /api/v1/ui/diagnostics/layout:
+    post:
+      operationId: analyzeLayout
+      tags: [ui]
+      summary: Analyze the current layout
+      description: >
+        One-shot read-only analysis. Rule set 1.1 retains the 1.0 request/response
+        schema and adds optional sizing, parentRegion and layoutOverflowInsetsPhysicalPixels
+        evidence, plus the additive summary.filtered count. Desired-size
+        and child-frame overflow are informational observations, not proof of
+        clipping. Set minimumSeverity to info to include those observations.
+        Missing managed sizing or excluded relationships are not applicable,
+        never counted as passes. A desired-size pass requires both axes to be known.
+        Unstable snapshots skip the baseline checks and retain one global incomplete
+        signal, rather than producing an incomplete finding for every node.
+        Findings below minimumSeverity are counted in summary.filtered.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                schemaVersion: { type: string, const: "1.0", default: "1.0" }
+                profile: { type: string, enum: [agent, strict, exhaustive, ci], default: agent }
+                rules:
+                  type: array
+                  description: Optional case-insensitive rule IDs from the agent's rule catalog; omitted or empty runs the profile's rules.
+                  items: { type: string }
+                minimumSeverity: { type: string, enum: [info, minor, moderate, serious, critical], default: minor }
+                includeEvidence: { type: boolean, default: true }
+                includePasses: { type: boolean, default: false }
+                scope: { type: object }
+                stability: { type: object }
+                occlusion: { type: object }
+                privacy: { type: object }
+                suppressions: { type: array, items: { type: object } }
+      responses:
+        "200":
+          description: Layout diagnostic results.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schemaVersion: { type: string, examples: ["1.0"] }
+                  ruleSetVersion: { type: string, examples: ["1.1"] }
+                  snapshot: { type: object }
+                  coverage: { type: object }
+                  summary:
+                    type: object
+                    properties:
+                      filtered:
+                        type: integer
+                        minimum: 0
+                        description: Detections omitted by minimumSeverity. These are not passes; use a lower severity to retrieve their details.
+                  findings:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ruleId: { type: string }
+                        outcome: { type: string }
+                        severity: { type: string }
+                        evidence:
+                          type: object
+                          properties:
+                            sizing:
+                              $ref: "#/components/schemas/LayoutSizingEvidence"
+                            parentRegion:
+                              type: object
+                              description: Direct layout parent's existing window-coordinate region, for highlighting; containment is compared in parent-local layout coordinates.
+                            layoutOverflowInsetsPhysicalPixels:
+                              type: object
+                              description: >
+                                Parent-local untransformed layout overflow multiplied by window
+                                display density. Visual transforms are not applied. This is
+                                distinct from rendered overflowInsetsPhysicalPixels and must
+                                not be painted as edge insets on the rendered fullRegion.
+                              properties:
+                                left: { type: number, minimum: 0 }
+                                top: { type: number, minimum: 0 }
+                                right: { type: number, minimum: 0 }
+                                bottom: { type: number, minimum: 0 }
+        "400":
+          description: Invalid request, unsupported schema version, or an unknown rule ID.
+        "429":
+          description: Another layout scan is running.
+        "503":
+          description: Agent is not yet bound to an app.
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/screenshot:
     get:
@@ -314,7 +557,10 @@ paths:
       description: >
         Captures a screenshot of the entire screen or a specific element.
         Element IDs may identify MAUI visual elements or native elements
-        advertised by the visual tree.
+        advertised by the visual tree. Optional resolution hints are bounded,
+        downsample-only requests: agents never upscale beyond the native capture.
+        Successful responses are always PNG; the runtime does not implement
+        format selection.
       parameters:
         - name: elementId
           in: query
@@ -323,26 +569,59 @@ paths:
             type: string
         - name: maxWidth
           in: query
-          description: Maximum width in pixels. The image is scaled down if wider.
+          description: >
+            Legacy maximum width in pixels. The image is scaled down if wider.
+            New clients should also send maxPixelWidth so older agents can still
+            honor the width cap. When maxWidth is supplied with new hints but
+            targetScale and scale are omitted, it retains its legacy precedence
+            over automatic density scaling. New clients mark synthesized legacy
+            fallback requests with scale=auto.
           schema:
             type: integer
             minimum: 1
+        - name: targetScale
+          in: query
+          description: >
+            Requested screenshot pixels per logical app unit. Values are bounded
+            to 0.1-4 and the result never exceeds the backend's native capture.
+          schema:
+            type: number
+            exclusiveMinimum: 0
+            maximum: 4
+        - name: maxPixelWidth
+          in: query
+          description: Maximum returned width in pixels.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 16384
+        - name: maxPixelHeight
+          in: query
+          description: Maximum returned height in pixels.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 16384
+        - name: maxPixels
+          in: query
+          description: Maximum returned pixel count.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 16777216
         - name: scale
           in: query
           description: >
             Scale mode. `native` returns at device pixel density; `auto`
-            returns a reasonable size for agent consumption.
+            returns a reasonable size for agent consumption. targetScale takes
+            precedence when both are supplied. New clients send explicit `auto`
+            when maxWidth is present only as a compatibility fallback for older
+            agents.
           schema:
             type: string
             enum: [native, auto]
             default: auto
-        - name: format
-          in: query
-          description: Image format.
-          schema:
-            type: string
-            enum: [png, jpeg]
-            default: png
         - $ref: "#/components/parameters/CaptureEpochQuery"
         - $ref: "#/components/parameters/RegistryGenerationQuery"
       responses:
@@ -364,12 +643,47 @@ paths:
               schema:
                 type: integer
                 minimum: 0
-          content:
-            image/png:
+            X-DevFlow-Screenshot-Pixel-Width:
+              description: Actual returned PNG width in pixels.
+              schema:
+                type: integer
+                minimum: 1
+            X-DevFlow-Screenshot-Pixel-Height:
+              description: Actual returned PNG height in pixels.
+              schema:
+                type: integer
+                minimum: 1
+            X-DevFlow-Screenshot-Logical-Width:
+              description: Captured logical width reported by the backend.
+              schema:
+                type: number
+                exclusiveMinimum: 0
+            X-DevFlow-Screenshot-Logical-Height:
+              description: Captured logical height reported by the backend.
+              schema:
+                type: number
+                exclusiveMinimum: 0
+            X-DevFlow-Screenshot-Capture-Scale:
+              description: Actual returned pixels per logical unit.
+              schema:
+                type: number
+                exclusiveMinimum: 0
+            X-DevFlow-Screenshot-Native-Scale:
+              description: Native capture pixels per logical unit before downsampling.
+              schema:
+                type: number
+                exclusiveMinimum: 0
+            X-DevFlow-Screenshot-Format:
+              description: Actual image format. Current agents return png.
               schema:
                 type: string
-                format: binary
-            image/jpeg:
+                enum: [png]
+            X-DevFlow-Screenshot-Clamped:
+              description: Whether the requested resolution was bounded.
+              schema:
+                type: boolean
+          content:
+            image/png:
               schema:
                 type: string
                 format: binary
@@ -382,14 +696,162 @@ paths:
         "501":
           $ref: "#/components/responses/BackendNotSupported"
 
+  /api/v1/ui/menus:
+    get:
+      operationId: listMenus
+      tags: [ui]
+      summary: List application menus
+      description: >
+        Returns the application menu bar: the cross-platform MAUI MenuBarItems
+        tree plus, where supported, the platform's native application menu
+        (macOS AppKit NSMenu or Mac Catalyst responder-chain key commands). The
+        native menu bar is not part of the MAUI visual tree returned by the tree
+        endpoint. Ids are positional and can change when menus change. Refresh the
+        listing before using an id. MAUI and AppKit paths escape percent, slash and
+        backslash within title segments as %25, %2F and %5C. Catalyst paths are flat titles.
+        MAUI leaf items expose all declared shortcuts in accelerators; key and modifiers
+        retain the first shortcut for compatibility. Menus on the deepest active page
+        with menu definitions take precedence over its active ancestor containers.
+      parameters:
+        - name: window
+          in: query
+          description: Window index to scope the MAUI menu walk. Defaults to all windows.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: The application menus.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  platform:
+                    type: string
+                  mauiSupported:
+                    type: boolean
+                  nativeSupported:
+                    type: boolean
+                  menuBar:
+                    type: object
+                    description: The cross-platform MAUI MenuBarItems tree.
+                  native:
+                    description: The platform native menu, or null when unavailable.
+        "400":
+          $ref: "#/components/responses/InvalidArgument"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/menus/invoke:
+    post:
+      operationId: invokeMenu
+      tags: [ui]
+      summary: Invoke an application menu item
+      description: >
+        Invokes an application menu item identified by id, path (slash-joined
+        titles), title, or key plus modifiers. The target selects the menu
+        layer: auto (default, tries the MAUI menu then the native menu), maui,
+        or native. Auto falls back only when no MAUI item matches, not when a
+        matched item is disabled. Copy paths from the list response. Title and
+        key matching select the first match; use a window index or id to disambiguate
+        MAUI menus in multi-window apps. Native menus use the active application
+        responder chain, independently of the MAUI window scope.
+        A native action that remains inside a modal event loop returns 202 with
+        status dispatched after five seconds; this acknowledges dispatch, not
+        completion. Inspect and dismiss the dialog to complete the operation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: Positional menu item id from a fresh list response.
+                path:
+                  type: string
+                  description: Path from the list response. MAUI/AppKit escape %, / and backslash within title segments; Catalyst paths are flat titles.
+                title:
+                  type: string
+                  description: Menu item title (first match).
+                key:
+                  type: string
+                  description: Key equivalent (combine with modifiers).
+                modifiers:
+                  type: string
+                  description: Comma or plus separated modifiers, e.g. "cmd,shift".
+                target:
+                  type: string
+                  enum: [auto, maui, native]
+                  default: auto
+                window:
+                  type: integer
+                  minimum: 0
+                  description: Optional window index to scope MAUI menu invocation.
+      responses:
+        "200":
+          description: The menu item was invoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  source:
+                    type: string
+                  title:
+                    type: string
+                  path:
+                    type: string
+        "202":
+          description: Native action started and is still pending (for example, a modal dialog).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, source, status]
+                properties:
+                  success:
+                    const: true
+                  source:
+                    type: string
+                  status:
+                    const: dispatched
+        "404":
+          $ref: "#/components/responses/MenuError"
+        "400":
+          $ref: "#/components/responses/MenuError"
+        "409":
+          $ref: "#/components/responses/MenuError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   # ─────────────────────────── UI Actions ──────────────────────────────
   /api/v1/ui/actions/tap:
     post:
       operationId: tapElement
       tags: [ui-actions]
-      summary: Tap element or coordinates
+      summary: Tap element, or a point inside it
       description: >
-        Taps on an element (by ID) or at absolute coordinates.
+        Taps an element by ID. With x and y — device-independent units from the element's
+        top-left, given together — the tap is instead delivered as a real touch at that point
+        inside the element. That is how content drawn on a canvas is tapped: SkiaSharp's
+        SKCanvasView, GraphicsView, and controls drawn with Microsoft.Maui.Graphics such as
+        Syncfusion's charts hit-test the touch location themselves, and what they draw has no
+        element ID of its own. On Android the touch is a real MotionEvent sent to the element's
+        view; on iOS and Mac Catalyst it is a synthesised UITouch given to the gesture recognizers
+        of the view under the point (or, for a recognizer-less raw-touch view, to the view), which
+        needs AgentOptions.EnableSyntheticTouch (capabilities.syntheticTouch). A point outside the
+        element, or covered by another view, is rejected rather than tapped elsewhere. On Android
+        any view over the point that may take touches counts as covering it — including one that
+        takes them only through a touch listener, such as another canvas.
       requestBody:
         required: true
         content:
@@ -630,13 +1092,36 @@ paths:
       tags: [ui-actions]
       summary: Perform a gesture
       description: >
-        Performs a named gesture — pinch, rotate, pan, swipe, doubletap, longpress or tap.
+        Performs a named gesture — pinch, rotate, pan, drag, swipe, doubletap, longpress or tap.
         The gesture is first offered to a matching MAUI gesture recognizer on the target
         element or its ancestors. If there is none, it is injected natively at the platform
         view, which is how pinch-to-zoom reaches controls that handle gestures internally
-        such as Map, WebView and native scroll views. The response reports which tier
+        such as Map, WebView and native scroll views. Views that take touches directly and
+        expose no recognizer at all — MAUI's GraphicsView, or a type listed in
+        AgentOptions.SyntheticTouchViewTypes — are reached on iOS and Mac Catalyst by
+        synthesised touches, which the agent only does when AgentOptions.EnableSyntheticTouch
+        is set; /api/v1/agent/status reports whether that tier is available as
+        capabilities.syntheticTouch. Controls, scroll views and views with gesture recognizers
+        never receive synthesised touches. On iOS and Mac Catalyst, native swipes prefer
+        target/descendant swipe recognizers and target-local pan/raw-touch handling before
+        falling back to ancestor swipe or pan recognizers. The response reports which tier
         serviced the gesture so callers can tell a real recognizer hit from a native fallback.
         Tap requires elementId; other gesture types target the current page when it is omitted.
+
+        A drag (or pan) given a start point x/y on elementId is a real touch instead: pressed
+        there, optionally held for holdMs, moved to toX/toY — on toElementId when given, else on
+        the element — or by deltaX/deltaY, and released. With toElementId and no toX/toY it is
+        released at the target's centre, which must be part of the same capture as elementId.
+        It is never serviced by invoking a recognizer directly, so competing recognizers settle
+        as they do for a finger: a pan on a custom slider's track moves the thumb and the track's
+        tap does not fire. Android sends the MotionEvents through the window, so an enclosing
+        scroller can take the drag exactly as it would a finger's; iOS and Mac Catalyst feed a
+        synthesised UITouch to the recognizers under the point and need
+        capabilities.syntheticTouch. Because only the element's own recognizers see that touch,
+        iOS and Mac Catalyst refuse a drag that a recognizer outside them would contest — an
+        enclosing scroll view scrolling along the drag's axis, or an ancestor's pan, swipe or long
+        press — instead of reporting a drag a finger might not have made. A start point off the
+        element is rejected, and the element is scrolled into view first.
       requestBody:
         required: true
         content:
@@ -665,6 +1150,142 @@ paths:
         "501":
           $ref: "#/components/responses/BackendNotSupported"
 
+  /api/v1/ui/actions/pointer-sessions:
+    post:
+      operationId: startPointerSession
+      tags: [ui-actions]
+      summary: Start a continuous pointer session
+      description: >
+        Delivers one native or synthetic pointer-down and keeps it active across bounded,
+        sequenced move requests. The caller must negotiate `ui.pointerStream`, send at most
+        one move request at a time, and end or cancel the session. A successful start commits
+        the press; clients must not replay the same interaction through the legacy gesture
+        endpoint after that point. v1 coordinates are `windowLogical`. The Inspector validates
+        its existing cached frame and converts `appLogical` coordinates before calling this route.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/PointerSessionStartRequest"
+      responses:
+        "200":
+          description: Pointer down delivered and session active.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/PointerSessionResponse"
+        "400":
+          description: Invalid session id or request.
+        "409":
+          description: Another pointer session is active or capture metadata conflicts.
+        "413":
+          description: Request exceeds the advertised pointer payload limit.
+        "422":
+          description: Unsupported pointer type, field, coordinate space, or target.
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+
+  /api/v1/ui/actions/pointer-sessions/{id}/move:
+    post:
+      operationId: movePointerSession
+      tags: [ui-actions]
+      summary: Apply a coalesced pointer move batch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/PointerSessionMoveRequest"
+      responses:
+        "200":
+          description: Move batch applied, or an identical sequence retry acknowledged.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/PointerSessionResponse"
+        "409":
+          description: Sequence conflict/gap or backend failure.
+        "410":
+          description: Session ended, was cancelled, timed out, or is unknown.
+        "413":
+          description: Too many samples or request exceeds the payload limit.
+        "422":
+          description: Invalid or regressing sample.
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/pointer-sessions/{id}/end:
+    post:
+      operationId: endPointerSession
+      tags: [ui-actions]
+      summary: Release a continuous pointer session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/PointerSessionEndRequest"
+      responses:
+        "200":
+          description: Pointer up delivered. Identical retries return the same terminal result.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/PointerSessionResponse"
+        "409":
+          description: Sequence conflict/gap or backend failure.
+        "410":
+          description: Session is already terminal or unknown.
+        "422":
+          description: Invalid final sample.
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/pointer-sessions/{id}/cancel:
+    post:
+      operationId: cancelPointerSession
+      tags: [ui-actions]
+      summary: Cancel a continuous pointer session
+      description: >
+        Sends the backend's native cancel phase and is idempotent. Unknown sessions return a
+        successful `unknown` state so cleanup callers can always issue cancellation.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/PointerSessionCancelRequest"
+      responses:
+        "200":
+          description: Session cancelled, already terminal, or unknown.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/PointerSessionResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/ui/actions/batch:
     post:
       operationId: batchActions
@@ -684,6 +1305,16 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/ActionSuccess"
+        "400":
+          description: The action list is missing, empty, invalid, or exceeds the maximum batch size.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/common.json#/$defs/ProblemDetails"
+              example:
+                success: false
+                error: A batch can contain at most 1000 actions.
+                reason: batch-too-large
         "408":
           $ref: "#/components/responses/Timeout"
         "409":
@@ -724,6 +1355,16 @@ paths:
       summary: Get element property value
       description: >
         Returns the current value of a named property on an element.
+        The MAUI backend accepts case-insensitive public-property dot paths and
+        formats the resulting value as a string. A null value or missing path returns 404.
+        Handler and handler PlatformView segments use public MAUI interfaces to
+        avoid ambiguity from hidden properties.
+        Reading a password Entry's direct Text property returns [REDACTED].
+        When traversing IElementHandler.PlatformView belonging to a password Entry,
+        a non-null native view and its entire requested subtree return [REDACTED]
+        before native getters or formatting run, including nonsensitive properties.
+        A null native view still returns 404. Nonpassword handler paths are unaffected.
+        This boundary is not a general redaction policy for other reflective paths.
       parameters:
         - $ref: "#/components/parameters/ElementIdPath"
         - name: name
@@ -778,6 +1419,8 @@ paths:
                   $ref: "./schemas/actions.json#/$defs/CaptureEpoch"
                 registryGeneration:
                   $ref: "./schemas/actions.json#/$defs/RegistryGeneration"
+                correlation:
+                  $ref: "./schemas/frame.json#/$defs/ActionCorrelation"
       responses:
         "200":
           description: The new property value after setting.
@@ -804,16 +1447,15 @@ paths:
       tags: [webview]
       summary: List WebView instances
       description: >
-        Returns all active WebView contexts in the application.
+        Returns all registered CDP WebView contexts, including inactive and
+        not-yet-ready registrations, inside a webviews object property.
       responses:
         "200":
-          description: Array of WebView contexts.
+          description: Registered WebView contexts.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "./schemas/webview.json#/$defs/WebViewContext"
+                $ref: "./schemas/webview.json#/$defs/WebViewContextsResponse"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -821,12 +1463,17 @@ paths:
     post:
       operationId: evaluateJavaScript
       tags: [webview]
-      summary: Execute JavaScript in WebView
+      summary: Send a CDP command to a WebView
       description: >
-        Evaluates a JavaScript expression inside a WebView context and returns the result. This
+        Forwards a raw CDP command to the registered bridge and returns its raw
+        JSON response. JavaScript evaluation uses method Runtime.evaluate with
+        expression and returnByValue inside params; a top-level expression is
+        not translated into a CDP command. This
         low-level endpoint can read or change application data. Interactive Inspector hosts require
         explicit confirmation before calling it; direct API callers are responsible for equivalent
         authorization and user intent.
+      parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
       requestBody:
         required: true
         content:
@@ -835,13 +1482,13 @@ paths:
               $ref: "./schemas/webview.json#/$defs/EvaluateRequest"
       responses:
         "200":
-          description: Evaluation result.
+          description: Raw CDP response, including CDP errors returned by the bridge.
           content:
             application/json:
               schema:
                 $ref: "./schemas/webview.json#/$defs/EvaluateResponse"
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -849,10 +1496,12 @@ paths:
     get:
       operationId: getWebViewDom
       tags: [webview]
-      summary: Get DOM snapshot
+      summary: Get DOM HTML source
       description: >
-        Returns a simplified snapshot of the DOM tree in the WebView.
+        Alias of /api/v1/webview/source. Returns document.documentElement.outerHTML,
+        not a structured DOM tree.
       parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
         - name: contextId
           in: query
           description: WebView context ID. Uses the default context if omitted.
@@ -860,14 +1509,13 @@ paths:
             type: string
       responses:
         "200":
-          description: Simplified DOM tree.
+          description: Page HTML source.
           content:
-            application/json:
+            text/html:
               schema:
-                type: object
-                description: Simplified DOM tree representation.
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+                type: string
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -879,6 +1527,9 @@ paths:
       description: >
         Executes a CSS selector query against the WebView DOM and returns
         matching nodes.
+      parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
+        - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
         content:
@@ -894,11 +1545,15 @@ paths:
                 type: array
                 items:
                   type: object
-                  description: Simplified DOM node.
+                  description: Matching node metadata, not a recursive DOM tree.
+                  properties:
+                    index: { type: integer, minimum: 0 }
+                    tagName: { type: [string, "null"] }
+                    id: { type: [string, "null"] }
+                    className: {}
+                    text: { type: string }
         "400":
-          $ref: "#/components/responses/InvalidSelector"
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -910,6 +1565,7 @@ paths:
       description: >
         Returns the HTML source of the WebView page.
       parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
         - name: contextId
           in: query
           description: WebView context ID. Uses the default context if omitted.
@@ -922,8 +1578,8 @@ paths:
             text/html:
               schema:
                 type: string
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -934,6 +1590,9 @@ paths:
       summary: Navigate WebView
       description: >
         Navigates the WebView to the specified URL.
+      parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
+        - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
         content:
@@ -950,8 +1609,12 @@ paths:
                 properties:
                   success:
                     type: boolean
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+                  contextId:
+                    type: string
+                  url:
+                    type: string
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -962,6 +1625,9 @@ paths:
       summary: Click element in WebView
       description: >
         Clicks a DOM element matching the given CSS selector inside the WebView.
+      parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
+        - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
         content:
@@ -978,10 +1644,12 @@ paths:
                 properties:
                   success:
                     type: boolean
+                  tagName:
+                    type: [string, "null"]
         "400":
-          $ref: "#/components/responses/InvalidSelector"
+          $ref: "#/components/responses/WebViewError"
         "404":
-          $ref: "#/components/responses/ElementNotFound"
+          $ref: "#/components/responses/WebViewElementNotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -992,6 +1660,9 @@ paths:
       summary: Fill field in WebView
       description: >
         Clears and fills a DOM input element matching the given CSS selector.
+      parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
+        - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
         content:
@@ -1008,10 +1679,13 @@ paths:
                 properties:
                   success:
                     type: boolean
+                  textLength:
+                    type: integer
+                    minimum: 0
         "400":
-          $ref: "#/components/responses/InvalidSelector"
+          $ref: "#/components/responses/WebViewError"
         "404":
-          $ref: "#/components/responses/ElementNotFound"
+          $ref: "#/components/responses/WebViewElementNotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1023,6 +1697,9 @@ paths:
       description: >
         Inserts text into the currently focused element in the WebView without
         clearing existing content.
+      parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
+        - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
         content:
@@ -1039,8 +1716,46 @@ paths:
                 properties:
                   success:
                     type: boolean
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+                  textLength:
+                    type: integer
+                    minimum: 0
+        "400":
+          $ref: "#/components/responses/WebViewError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/webview/console:
+    get:
+      operationId: getWebViewConsoleLogs
+      tags: [webview]
+      summary: Query WebView console logs
+      description: >
+        Convenience alias for `/api/v1/logs` with the source fixed to `webview`.
+        Returns the same compact log-entry format as the native log endpoint.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of log entries.
+          schema:
+            type: integer
+            minimum: 1
+        - name: skip
+          in: query
+          description: Number of entries to skip.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Array of WebView console log entries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/logs.json#/$defs/LogEntry"
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1050,8 +1765,11 @@ paths:
       tags: [webview]
       summary: Capture WebView screenshot
       description: >
-        Captures a screenshot of the WebView content.
+        Captures the registered WebView's native element first. If native capture
+        is unavailable, requests a PNG from the CDP bridge using
+        Page.captureScreenshot. Successful responses are always image/png.
       parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
         - name: contextId
           in: query
           description: WebView context ID. Uses the default context if omitted.
@@ -1065,12 +1783,8 @@ paths:
               schema:
                 type: string
                 format: binary
-            image/jpeg:
-              schema:
-                type: string
-                format: binary
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1100,7 +1814,7 @@ paths:
       description: >
         Starts a new profiling session with the given sample interval.
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
@@ -1108,15 +1822,24 @@ paths:
               properties:
                 sampleIntervalMs:
                   type: integer
-                  minimum: 1
-                  description: Sampling interval in milliseconds.
+                  minimum: 50
+                  maximum: 60000
+                  description: Sampling interval in milliseconds. Defaults to the agent's configured interval.
       responses:
         "200":
           description: Session started.
           content:
             application/json:
               schema:
-                $ref: "./schemas/profiler.json#/$defs/ProfilerSessionInfo"
+                type: object
+                required: [session, capabilities]
+                properties:
+                  session:
+                    $ref: "./schemas/profiler.json#/$defs/ProfilerSessionInfo"
+                  capabilities:
+                    $ref: "./schemas/profiler.json#/$defs/ProfilerCapabilities"
+        "400":
+          $ref: "#/components/responses/ProfilerError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1140,7 +1863,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "./schemas/profiler.json#/$defs/ProfilerSessionInfo"
+                type: object
+                required: [session, stoppedAtUtc]
+                properties:
+                  session:
+                    oneOf:
+                      - $ref: "./schemas/profiler.json#/$defs/ProfilerSessionInfo"
+                      - type: "null"
+                  stoppedAtUtc:
+                    $ref: "./schemas/common.json#/$defs/Timestamp"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -1210,7 +1941,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "./schemas/profiler.json#/$defs/ProfilerMarker"
+              type: object
+              description: Input names are case-insensitive. The server assigns the marker timestamp.
+              required: [name]
+              properties:
+                name: { type: string }
+                type: { type: [string, "null"], default: user.action }
+                payloadJson: { type: [string, "null"] }
       responses:
         "200":
           description: Marker published.
@@ -1221,6 +1958,10 @@ paths:
                 properties:
                   success:
                     type: boolean
+                  message:
+                    type: string
+        "400":
+          $ref: "#/components/responses/ProfilerError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1236,7 +1977,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "./schemas/profiler.json#/$defs/ProfilerSpan"
+              type: object
+              description: Input names are case-insensitive. The server assigns spanId and computes duration.
+              required: [name]
+              properties:
+                name: { type: string }
+                kind: { type: [string, "null"], default: ui.operation }
+                status: { type: [string, "null"], default: ok }
+                parentSpanId: { type: [string, "null"] }
+                traceId: { type: [string, "null"] }
+                startTsUtc: { type: [string, "null"], format: date-time }
+                endTsUtc: { type: [string, "null"], format: date-time }
+                threadId: { type: [integer, "null"] }
+                screen: { type: [string, "null"] }
+                elementPath: { type: [string, "null"] }
+                tagsJson: { type: [string, "null"] }
+                error: { type: [string, "null"] }
       responses:
         "200":
           description: Span published.
@@ -1247,6 +2003,10 @@ paths:
                 properties:
                   success:
                     type: boolean
+                  message:
+                    type: string
+        "400":
+          $ref: "#/components/responses/ProfilerError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1313,7 +2073,7 @@ paths:
           description: Filter by HTTP method.
           schema:
             type: string
-        - name: statusCode
+        - name: status
           in: query
           description: Filter by status code.
           schema:
@@ -1394,16 +2154,9 @@ paths:
             minimum: 0
         - name: source
           in: query
-          description: Filter by log source.
+          description: Filter by source, case-insensitively. Omit to include all sources.
           schema:
             type: string
-            enum: [native, webview, framework]
-        - name: level
-          in: query
-          description: Minimum log level.
-          schema:
-            type: string
-            enum: [trace, debug, info, warning, error, critical]
       responses:
         "200":
           description: Array of log entries.
@@ -1492,6 +2245,59 @@ paths:
           $ref: "#/components/responses/InternalError"
         "501":
           $ref: "#/components/responses/BackendNotSupported"
+
+  /api/v1/device/version-tracking:
+    get:
+      operationId: getVersionTrackingInfo
+      tags: [device]
+      summary: Get application version history
+      description: >
+        Returns the current, previous, and first-installed application versions
+        and builds, along with launch state and recorded history.
+      responses:
+        "200":
+          description: Application version tracking information.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - currentVersion
+                  - currentBuild
+                  - isFirstLaunchEver
+                  - isFirstLaunchForCurrentVersion
+                  - isFirstLaunchForCurrentBuild
+                  - versionHistory
+                  - buildHistory
+                properties:
+                  currentVersion:
+                    type: string
+                  currentBuild:
+                    type: string
+                  previousVersion:
+                    type: [string, "null"]
+                  previousBuild:
+                    type: [string, "null"]
+                  firstInstalledVersion:
+                    type: [string, "null"]
+                  firstInstalledBuild:
+                    type: [string, "null"]
+                  isFirstLaunchEver:
+                    type: boolean
+                  isFirstLaunchForCurrentVersion:
+                    type: boolean
+                  isFirstLaunchForCurrentBuild:
+                    type: boolean
+                  versionHistory:
+                    type: array
+                    items:
+                      type: string
+                  buildHistory:
+                    type: array
+                    items:
+                      type: string
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/device/app:
     get:
@@ -1653,8 +2459,11 @@ paths:
       summary: List platform background jobs
       description: >
         Returns platform background jobs known to the agent. Android reports
-        WorkManager identifiers, tags, states, and run attempts. iOS and Mac
-        Catalyst report pending BGTaskScheduler requests.
+        WorkManager identifiers, generations, tags, states, run attempts, and exact
+        JobScheduler mappings. Android also reports the running agent instance identity
+        and device-side HTTP port for host-side adb target verification. Multiple
+        scheduler entries can represent one WorkSpec generation on Android API 23.
+        iOS and Mac Catalyst report pending BGTaskScheduler requests.
       responses:
         "200":
           description: Platform job list.
@@ -1673,11 +2482,15 @@ paths:
       tags: [device]
       summary: Trigger a platform background job
       description: >
-        Attempts to trigger the named platform background job. iOS and Mac
-        Catalyst submit a BGTaskRequest for the identifier; pass `type` when
-        the task is known to be an app refresh task. Android currently reports
+        Attempts to trigger the named platform background job. Debug-built iOS and Mac
+        Catalyst agents submit a BGTaskRequest if needed, then request a debugger launch.
+        Success acknowledges the launch request, not handler execution or completion.
+        Release-built agents return 501 before scheduling or invoking a private API.
+        Pass `type` when the task is known to be an app refresh task. Android reports
         `success=false` because WorkManager worker types and request inputs
-        cannot be reconstructed safely from the listed identifier or tags.
+        cannot be reconstructed safely from the listed identifier or tags. The CLI's
+        Android trigger is a separate host-side adb operation that verifies target
+        identity, holds a mutation transaction, and observes the exact WorkSpec generation.
       parameters:
         - name: identifier
           in: path
@@ -1792,7 +2605,9 @@ paths:
       tags: [storage]
       summary: List preferences
       description: >
-        Returns all preference entries, optionally scoped to a shared container.
+        Returns preference entries, optionally scoped to a shared container.
+        Native store enumeration is authoritative when available; otherwise the
+        tracked-key registry is returned with complete=false and an enumerationError.
       parameters:
         - name: sharedName
           in: query
@@ -1801,13 +2616,11 @@ paths:
             type: string
       responses:
         "200":
-          description: Array of preference entries.
+          description: Preference entries and enumeration completeness.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "./schemas/storage.json#/$defs/PreferenceEntry"
+                $ref: "./schemas/storage.json#/$defs/PreferencesListResponse"
         "500":
           $ref: "#/components/responses/InternalError"
         "501":
@@ -2169,6 +2982,7 @@ paths:
                 properties:
                   success:
                     type: boolean
+                    const: true
         "500":
           $ref: "#/components/responses/InternalError"
         "501":
@@ -2196,6 +3010,100 @@ paths:
           $ref: "#/components/responses/InternalError"
         "501":
           $ref: "#/components/responses/BackendNotSupported"
+
+  # ─────────────────────────────── Invoke ───────────────────────────────
+  /api/v1/invoke/actions:
+    get:
+      operationId: listInvokeActions
+      tags: [invoke]
+      summary: List registered DevFlow Actions
+      description: >
+        Returns methods registered with `DevFlowActionAttribute`, including their
+        parameter metadata.
+      responses:
+        "200":
+          description: Registered action descriptors.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [actions]
+                properties:
+                  actions:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, declaringType, parameters]
+                      properties:
+                        name:
+                          type: string
+                        description:
+                          type: [string, "null"]
+                        declaringType:
+                          type: string
+                        parameters:
+                          type: array
+                          items:
+                            type: object
+                            required: [name, type, isRequired]
+                            properties:
+                              name:
+                                type: string
+                              type:
+                                type: string
+                              description:
+                                type: [string, "null"]
+                              defaultValue:
+                                type: [string, "null"]
+                              isRequired:
+                                type: boolean
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/invoke/actions/{name}:
+    post:
+      operationId: invokeAction
+      tags: [invoke]
+      summary: Invoke a registered DevFlow Action
+      description: Invokes a registered action by name with positional arguments.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Registered action name.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                args:
+                  type: array
+                  items: {}
+      responses:
+        "200":
+          description: Action invocation result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, action]
+                properties:
+                  success:
+                    type: boolean
+                  action:
+                    type: string
+                  returnValue:
+                    type: [string, "null"]
+                  returnType:
+                    type: [string, "null"]
+        "400":
+          $ref: "#/components/responses/InvalidArgument"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   # ─────────────────────────────── Extensions ───────────────────────────
   /api/v1/ext/{namespace}/{path}:
@@ -2352,6 +3260,25 @@ paths:
 # ═══════════════════════════ Components ═══════════════════════════════
 components:
   parameters:
+    WebViewQuery:
+      name: webview
+      in: query
+      description: >
+        Registry index (decimal string), AutomationId, or elementId of a
+        registered CDP bridge. Takes precedence over contextId. Omit to use the
+        default bridge.
+      schema:
+        type: string
+
+    WebViewContextQuery:
+      name: contextId
+      in: query
+      description: >
+        Alias of webview. Takes precedence over contextId in the JSON body;
+        ignored when the webview query parameter is supplied.
+      schema:
+        type: string
+
     ElementIdPath:
       name: id
       in: path
@@ -2377,6 +3304,67 @@ components:
         minimum: 0
 
   schemas:
+    LayoutSizingEvidence:
+      type: object
+      description: >
+        Existing MAUI arranged sizes, desired sizes normalized by removing margins,
+        and explicit minimum/maximum requests in logical units. Does not remeasure
+        controls or return text. Unknown, unset or infinite optional values are
+        omitted. Present only on the additive baseline sizing rules.
+      required: [arrangedWidth, arrangedHeight]
+      properties:
+        arrangedWidth: { type: number, minimum: 0 }
+        arrangedHeight: { type: number, minimum: 0 }
+        desiredWidth: { type: number, minimum: 0 }
+        desiredHeight: { type: number, minimum: 0 }
+        minimumWidth: { type: number, minimum: 0 }
+        minimumHeight: { type: number, minimum: 0 }
+        maximumWidth: { type: number, minimum: 0 }
+        maximumHeight: { type: number, minimum: 0 }
+    OperationError:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, const: false }
+        error: { type: string }
+
+    MissingJsonMetadata:
+      type: object
+      description: >
+        An extension request or response uses a CLR type without registered
+        source-generated metadata while System.Text.Json reflection is disabled.
+        Register the extension's JsonSerializerContext with AgentJson.RegisterContext.
+      required: [success, error, reason]
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          type: string
+        reason:
+          type: string
+          const: json-metadata-missing
+      additionalProperties: false
+
+    UnsupportedJsonContract:
+      type: object
+      description: >
+        JSON serialization or deserialization rejected a contract, for example
+        ambiguous collection ancestor metadata or an unsupported custom converter.
+        The error contains the original serializer diagnostic. Register concrete
+        collection metadata when multiple interface contracts are ambiguous.
+      required: [success, error, reason]
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          type: string
+        reason:
+          type: string
+          const: json-serialization-unsupported
+      additionalProperties: false
+
     BackendNotSupported:
       type: object
       description: >
@@ -2397,6 +3385,27 @@ components:
       additionalProperties: false
 
   responses:
+    WebViewError:
+      description: Missing or unknown WebView, invalid input, or bridge operation failure.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OperationError"
+
+    WebViewElementNotFound:
+      description: No DOM element matches the requested selector.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OperationError"
+
+    ProfilerError:
+      description: Profiler disabled, no active session, invalid interval, or missing marker/span name.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OperationError"
+
     ActionSuccess:
       description: Action completed.
       content:
@@ -2425,6 +3434,25 @@ components:
                 reason: ui-mutation-busy
                 details:
                   retryable: true
+
+    MenuError:
+      description: Invalid menu request, missing item, or an item that cannot be invoked. The error field explains the failure.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [success, error]
+            properties:
+              success:
+                const: false
+              error:
+                type: string
+              reason:
+                type: string
+          example:
+            success: false
+            error: Menu item is disabled
+            reason: menu-not-invokable
 
     ElementNotFound:
       description: Element not found.
@@ -2521,11 +3549,18 @@ components:
             status: 404
 
     InternalError:
-      description: Internal server error.
+      description: >
+        Internal server error. Missing extension JSON metadata in reflection-disabled
+        hosts is reported as a json-metadata-missing envelope rather than closing
+        the connection without a response. Other unsupported JSON contracts use
+        json-serialization-unsupported and preserve the serializer diagnostic.
       content:
         application/json:
           schema:
-            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+            oneOf:
+              - $ref: "./schemas/common.json#/$defs/ProblemDetails"
+              - $ref: "#/components/schemas/MissingJsonMetadata"
+              - $ref: "#/components/schemas/UnsupportedJsonContract"
           example:
             type: "urn:devflow:error:internal-error"
             title: Internal error

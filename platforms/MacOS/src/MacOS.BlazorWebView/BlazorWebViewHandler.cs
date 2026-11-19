@@ -77,10 +77,10 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
         config.SetUrlSchemeHandler(new SchemeHandler(this), urlScheme: "app");
 
         var webview = new WKWebView(CGRect.Empty, config);
-        config.Preferences.SetValueForKey(NSObject.FromObject(true), new NSString("developerExtrasEnabled"));
+        config.Preferences.SetValueForKey(NSObject.FromObject(true)!, new NSString("developerExtrasEnabled"));
 
         // Allow transparent backgrounds — the page CSS controls what's visible
-        webview.SetValueForKey(NSObject.FromObject(false), new NSString("drawsBackground"));
+        webview.SetValueForKey(NSObject.FromObject(false)!, new NSString("drawsBackground"));
 
         return webview;
     }
@@ -323,7 +323,7 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
     {
         static void SetVisibility(NSView view, bool hidden)
         {
-            var name = view.Class.Name;
+            var name = view.Class?.Name ?? string.Empty;
             // NSScrollPocket is the container for the scroll pocket overlay views.
             // BackdropView in WKFlippedView also contributes to the overlay.
             if (name.Contains("ScrollPocket") || name.Contains("BackdropView"))
@@ -434,8 +434,11 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
                 using var ms = new MemoryStream();
                 content.CopyTo(ms);
                 content.Dispose();
-                if (!headers.TryGetValue("Content-Type", out contentType))
+                if (!headers.TryGetValue("Content-Type", out var responseContentType)
+                    || string.IsNullOrEmpty(responseContentType))
                     contentType = "application/octet-stream";
+                else
+                    contentType = responseContentType;
                 return ms.ToArray();
             }
 

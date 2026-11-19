@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Components.WebView.Maui;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting;
 using Microsoft.Maui.DevFlow.Agent.Gtk;
 using Microsoft.Maui.DevFlow.Blazor.Gtk;
 
@@ -18,6 +19,7 @@ public static partial class MauiProgram
 		var builder = MauiApp.CreateBuilder();
 		builder
 			.UseMauiAppLinuxGtk4<App>()
+			.AddLinuxGtk4Essentials()
 			.ConfigureFonts(fonts =>
 			{
 				fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
@@ -45,6 +47,13 @@ public static partial class MauiProgram
 		{
 			options.Port = ResolveAgentPort();
 			options.EnableProfiler = true;
+			options.EnableLayoutDiagnostics = true;
+			var diagnostics = options.RegisterExtension(
+				"com.example.diagnostics",
+				"Sample diagnostics extension",
+				"1.0.0",
+				new[] { "seed_pref" });
+			PreferenceDiagnostics.Register(diagnostics);
 		});
 		builder.AddMauiBlazorDevFlowTools();
 #endif

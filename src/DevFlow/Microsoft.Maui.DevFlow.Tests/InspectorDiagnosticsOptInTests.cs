@@ -18,6 +18,48 @@ public class InspectorDiagnosticsOptInTests
     // up as phantom traffic in the assertions below.
     private const string AgentHost = "127.0.0.9";
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task DiagnosticsAgent_ReadRequestAsync_ConsumesBodyAcrossReads(int initialBodyBytes)
+    {
+        var body = Encoding.UTF8.GetBytes("\u20ac");
+        var headers = Encoding.ASCII.GetBytes(
+            $"POST /api/v1/ui/diagnostics/layout HTTP/1.1\r\nHost: localhost\r\ncontent-length: {body.Length}\r\n\r\n");
+        using var stream = new FragmentedRequestStream(
+            [.. headers, .. body], headers.Length + initialBodyBytes);
+
+        var request = await DiagnosticsAgent.ReadRequestAsync(stream, CancellationToken.None);
+
+        Assert.Equal("POST", request.Method);
+        Assert.Equal("/api/v1/ui/diagnostics/layout", request.Path);
+        Assert.Equal(stream.Length, stream.Position);
+    }
+
+    [Fact]
+    public async Task DiagnosticsAgent_ReadRequestAsync_TruncatedBody_Throws()
+    {
+        using var stream = new MemoryStream(Encoding.ASCII.GetBytes(
+            "POST /api/v1/ui/diagnostics/layout HTTP/1.1\r\nContent-Length: 2\r\n\r\n{"));
+
+        await Assert.ThrowsAsync<EndOfStreamException>(
+            () => DiagnosticsAgent.ReadRequestAsync(stream, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DiagnosticsAgent_ReadRequestAsync_WithoutBody_ReturnsRequest()
+    {
+        using var stream = new FragmentedRequestStream(Encoding.ASCII.GetBytes(
+            "GET /api/v1/agent/status HTTP/1.1\r\nHost: localhost\r\n\r\n"), 1);
+
+        var request = await DiagnosticsAgent.ReadRequestAsync(stream, CancellationToken.None);
+
+        Assert.Equal("GET", request.Method);
+        Assert.Equal("/api/v1/agent/status", request.Path);
+        Assert.Equal(stream.Length, stream.Position);
+    }
+
     [Fact]
     public async Task State_WithoutDiagnosticsFlag_DoesNotAnalyzeLayout()
     {
@@ -34,9 +76,28 @@ public class InspectorDiagnosticsOptInTests
             $"analyze called {agent.AnalyzeCalls}x; agent saw: {string.Join(" | ", agent.Calls)}");
         Assert.DoesNotContain("/api/v1/ui/diagnostics/layout", agent.Calls);
         using var json = JsonDocument.Parse(body);
+        Assert.Equal("rev-1", json.RootElement.GetProperty("treeRevision").GetString());
+        Assert.Equal("inputs-1", json.RootElement.GetProperty("diagnosticInputsRevision").GetString());
         Assert.Equal(
             JsonValueKind.Null,
             json.RootElement.GetProperty("diagnostics").ValueKind);
+    }
+
+    [Fact]
+    public async Task State_SizingInputRevisionChangesWithoutGeometry_DoesNotAnalyzeLayout()
+    {
+        await using var agent = new DiagnosticsAgent();
+        await using var inspector = await StartAsync(agent.Port);
+        using var http = new HttpClient();
+        using var first = JsonDocument.Parse(await http.GetStringAsync($"{inspector.Url}/api/state"));
+        Assert.Equal("inputs-1", first.RootElement.GetProperty("diagnosticInputsRevision").GetString());
+        agent.DiagnosticInputsRevision = "inputs-2";
+        await Task.Delay(250); // Expire the existing 200ms coherent frame cache.
+        using var second = JsonDocument.Parse(await http.GetStringAsync($"{inspector.Url}/api/state"));
+        Assert.Equal(first.RootElement.GetProperty("treeRevision").GetString(),
+            second.RootElement.GetProperty("treeRevision").GetString());
+        Assert.Equal("inputs-2", second.RootElement.GetProperty("diagnosticInputsRevision").GetString());
+        Assert.Equal(0, agent.AnalyzeCalls);
     }
 
     [Theory]
@@ -59,10 +120,163 @@ public class InspectorDiagnosticsOptInTests
             json.RootElement.GetProperty("diagnostics").ValueKind);
     }
 
-    private static async Task<RunningInspector> StartAsync(int agentPort)
+    [Fact]
+    public async Task ExplicitLayoutScan_RequiresReadTokenAndRunsOnce()
+    {
+        await using var agent = new DiagnosticsAgent();
+        await using var inspector = await StartAsync(agent.Port);
+        using var http = new HttpClient();
+        using var denied = await http.PostAsync($"{inspector.Url}/api/diagnostics/layout",
+            new StringContent("{}", Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        Assert.Equal(0, agent.AnalyzeCalls);
+
+        var html = await http.GetStringAsync(inspector.Url + "/");
+        var token = System.Text.RegularExpressions.Regex.Match(
+            html, "<meta\\s+name=\"devflow-inspector-token\"\\s+content=\"([^\"]+)\"").Groups[1].Value;
+        Assert.NotEmpty(token);
+        http.DefaultRequestHeaders.Add("X-DevFlow-Inspector-Token", token);
+        using var response = await http.PostAsync($"{inspector.Url}/api/diagnostics/layout",
+            new StringContent("""{"profile":"strict","rootElementId":"root"}""", Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(body.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(JsonValueKind.Object, body.RootElement.GetProperty("report").ValueKind);
+        Assert.Equal(1, agent.AnalyzeCalls);
+
+        using var state = await http.GetAsync($"{inspector.Url}/api/state");
+        Assert.Equal(HttpStatusCode.OK, state.StatusCode);
+        Assert.Equal(1, agent.AnalyzeCalls);
+    }
+
+    [Theory]
+    [InlineData("{")]
+    [InlineData("""{"profile":"not-a-profile"}""")]
+    [InlineData("""{"profile":null}""")]
+    public async Task ExplicitLayoutScan_InvalidRequest_DoesNotReachAgent(string payload)
+    {
+        await using var agent = new DiagnosticsAgent();
+        await using var inspector = await StartAsync(agent.Port);
+        using var http = new HttpClient();
+        var html = await http.GetStringAsync(inspector.Url + "/");
+        var token = System.Text.RegularExpressions.Regex.Match(
+            html, "<meta\\s+name=\"devflow-inspector-token\"\\s+content=\"([^\"]+)\"").Groups[1].Value;
+        http.DefaultRequestHeaders.Add("X-DevFlow-Inspector-Token", token);
+
+        using var response = await http.PostAsync($"{inspector.Url}/api/diagnostics/layout",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(0, agent.AnalyzeCalls);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("App.csproj")]
+    public async Task LayoutSuppression_WithoutRootedProject_RefusesAmbientPolicyWrites(string? project)
+    {
+        await using var agent = new DiagnosticsAgent();
+        await using var inspector = await StartAsync(agent.Port, project);
+        using var http = new HttpClient();
+        await AuthorizeAsync(http, inspector.Url);
+
+        using var scan = await http.PostAsync($"{inspector.Url}/api/diagnostics/layout",
+            new StringContent("{}", Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.OK, scan.StatusCode);
+        using var report = JsonDocument.Parse(await scan.Content.ReadAsStringAsync());
+        Assert.False(report.RootElement.TryGetProperty("policyFilePath", out _));
+
+        foreach (var action in new[] { "suppress", "unsuppress" })
+        {
+            using var response = await http.PostAsync($"{inspector.Url}/api/diagnostics/{action}",
+                new StringContent("""{"findingId":"test-finding"}""", Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Contains("full path", await response.Content.ReadAsStringAsync());
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LayoutSuppression_RootedProject_ReportsPathAndPreservesSuccessfulRoundTrip(bool legacyFingerprint)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"devflow-layout-policy-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var project = Path.Combine(root, "App.csproj");
+            await File.WriteAllTextAsync(project, "<Project />");
+            if (legacyFingerprint)
+                await File.WriteAllTextAsync(Path.Combine(root, ".mauidevflow"),
+                    """{"layoutDiagnostics":{"suppressions":[{"fingerprint":"0123456789abcdef","reason":"Saved policy"}]}}""");
+            await using var agent = new DiagnosticsAgent
+            {
+                LayoutResponse = """
+                    {"schemaVersion":"1.0","ruleSetVersion":"1.1",
+                     "snapshot":{"id":"snapshot","stable":true,"nodeCount":1},
+                     "summary":{"violations":1},"coverage":{"overall":"partial","rules":[]},
+                     "findings":[{"id":"test-finding","suppressionKey":"0123456789abcdef0123456789abcdef",
+                       "ruleId":"layout.constraint-violation","outcome":"violation","severity":"moderate",
+                       "confidence":"high","message":"Conflicting constraints.","element":{"id":"root","type":"BoxView"}}]}
+                    """
+            };
+            await using var inspector = await StartAsync(agent.Port, project);
+            using var http = new HttpClient();
+            await AuthorizeAsync(http, inspector.Url);
+            using var scan = await http.PostAsync($"{inspector.Url}/api/diagnostics/layout",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, scan.StatusCode);
+            using var report = JsonDocument.Parse(await scan.Content.ReadAsStringAsync());
+            var policyPath = report.RootElement.GetProperty("policyFilePath").GetString();
+            Assert.Equal(Path.Combine(root, ".mauidevflow"), policyPath);
+            var payload = JsonSerializer.Serialize(new { findingId = "test-finding", policyFilePath = policyPath });
+            using var saved = await http.PostAsync($"{inspector.Url}/api/diagnostics/suppress",
+                new StringContent(payload, Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+            using var result = JsonDocument.Parse(await saved.Content.ReadAsStringAsync());
+            Assert.True(result.RootElement.GetProperty("success").GetBoolean());
+            var suppression = Assert.Single(Microsoft.Maui.Cli.DevFlow.LayoutDiagnosticsPolicyLoader.LoadProjectPolicy(project).Suppressions);
+            Assert.Equal(legacyFingerprint ? "0123456789abcdef" : "0123456789abcdef0123456789abcdef", suppression.Fingerprint);
+
+            using var rescanned = await http.PostAsync($"{inspector.Url}/api/diagnostics/layout",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, rescanned.StatusCode);
+            using var wrongPath = await http.PostAsync($"{inspector.Url}/api/diagnostics/unsuppress",
+                new StringContent(JsonSerializer.Serialize(new
+                {
+                    findingId = "test-finding",
+                    policyFilePath = Path.Combine(root, "other", ".mauidevflow")
+                }), Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.Conflict, wrongPath.StatusCode);
+            Assert.Single(Microsoft.Maui.Cli.DevFlow.LayoutDiagnosticsPolicyLoader.LoadProjectPolicy(project).Suppressions);
+
+            using var removed = await http.PostAsync($"{inspector.Url}/api/diagnostics/unsuppress",
+                new StringContent(payload, Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
+            Assert.Empty(Microsoft.Maui.Cli.DevFlow.LayoutDiagnosticsPolicyLoader.LoadProjectPolicy(project).Suppressions);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static async Task AuthorizeAsync(HttpClient http, string url)
+    {
+        var html = await http.GetStringAsync(url + "/");
+        var token = System.Text.RegularExpressions.Regex.Match(
+            html, "<meta\\s+name=\"devflow-inspector-token\"\\s+content=\"([^\"]+)\"").Groups[1].Value;
+        Assert.NotEmpty(token);
+        http.DefaultRequestHeaders.Add("X-DevFlow-Inspector-Token", token);
+        http.DefaultRequestHeaders.Add("X-DevFlow-Lease", Guid.NewGuid().ToString("N"));
+    }
+
+    private static async Task<RunningInspector> StartAsync(int agentPort, string? project = null)
     {
         var port = FreePort();
-        var inspector = new InspectorServer(port, AgentHost, agentPort);
+        var inspector = new InspectorServer(port, AgentHost, agentPort, embedToken: null,
+            agentId: null, appName: null, platform: null, project, sessionId: null);
         inspector.Start();
         using var http = new HttpClient();
         for (var attempt = 0; attempt < 40; attempt++)
@@ -102,6 +316,12 @@ public class InspectorDiagnosticsOptInTests
         }
     }
 
+    private sealed class FragmentedRequestStream(byte[] request, int firstReadSize) : MemoryStream(request)
+    {
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            => base.ReadAsync(buffer[..Math.Min(buffer.Length, Position == 0 ? firstReadSize : 1)], cancellationToken);
+    }
+
     /// <summary>Minimal agent: enough tree + screenshot for a frame, and a counted analyze route.</summary>
     private sealed class DiagnosticsAgent : IAsyncDisposable
     {
@@ -123,6 +343,12 @@ public class InspectorDiagnosticsOptInTests
 
         public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
         public int AnalyzeCalls => Volatile.Read(ref _analyzeCalls);
+        public string DiagnosticInputsRevision { get; set; } = "inputs-1";
+        public string LayoutResponse { get; init; } = """
+            {"snapshot":{"treeRevision":"rev-1","windows":[]},
+             "summary":{"violations":0,"observations":0,"incomplete":0,"passes":1,"notApplicable":0,"suppressed":0},
+             "coverage":{"overall":"partial","rules":[]},"findings":[]}
+            """;
         public IReadOnlyList<string> Calls
         {
             get { lock (_calls) return _calls.ToArray(); }
@@ -156,19 +382,13 @@ public class InspectorDiagnosticsOptInTests
                     if (method == "POST" && path == "/api/v1/ui/diagnostics/layout")
                     {
                         Interlocked.Increment(ref _analyzeCalls);
-                        payload = Encoding.UTF8.GetBytes(
-                            """
-                            {"snapshot":{"treeRevision":"rev-1","windows":[]},
-                             "summary":{"violations":0,"observations":0,"incomplete":0,"passes":1,"notApplicable":0,"suppressed":0},
-                             "coverage":{"overall":"partial","rules":[]},
-                             "findings":[]}
-                            """);
+                        payload = Encoding.UTF8.GetBytes(LayoutResponse);
                     }
                     else if (method == "GET" && path.StartsWith("/api/v1/ui/tree", StringComparison.Ordinal))
                     {
                         payload = Encoding.UTF8.GetBytes(
-                            """
-                            {"revision":"rev-1","elements":[
+                            $$$"""
+                            {"revision":"rev-1","diagnosticInputsRevision":"{{{DiagnosticInputsRevision}}}","elements":[
                               {"id":"root","type":"ContentPage","isVisible":true,"isEnabled":true,
                                "bounds":{"x":0,"y":0,"width":100,"height":100},
                                "windowBounds":{"x":0,"y":0,"width":100,"height":100}}]}
@@ -204,19 +424,40 @@ public class InspectorDiagnosticsOptInTests
             }
         }
 
-        private static async Task<(string Method, string Path)> ReadRequestAsync(
-            NetworkStream stream,
+        public static async Task<(string Method, string Path)> ReadRequestAsync(
+            Stream stream,
             CancellationToken ct)
         {
             var buffer = new byte[8192];
             var text = new StringBuilder();
-            while (text.ToString().IndexOf("\r\n\r\n", StringComparison.Ordinal) < 0)
+            int headerEnd;
+            while ((headerEnd = text.ToString().IndexOf("\r\n\r\n", StringComparison.Ordinal)) < 0)
             {
                 var read = await stream.ReadAsync(buffer, ct);
-                if (read <= 0) break;
-                text.Append(Encoding.UTF8.GetString(buffer, 0, read));
+                if (read == 0)
+                    throw new EndOfStreamException("Incomplete HTTP request headers.");
+                // ASCII preserves byte offsets even when the first read includes a partial UTF-8 body.
+                text.Append(Encoding.ASCII.GetString(buffer, 0, read));
             }
-            var parts = text.ToString().Split("\r\n", 2)[0].Split(' ');
+            var headers = text.ToString()[..headerEnd];
+            var contentLength = 0;
+            foreach (var line in headers.Split("\r\n"))
+            {
+                if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
+                    contentLength = int.Parse(line["Content-Length:".Length..].Trim(),
+                        System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            var remaining = contentLength - (text.Length - headerEnd - 4);
+            while (remaining > 0)
+            {
+                var read = await stream.ReadAsync(buffer.AsMemory(0, Math.Min(buffer.Length, remaining)), ct);
+                if (read == 0)
+                    throw new EndOfStreamException("Incomplete HTTP request body.");
+                remaining -= read;
+            }
+
+            var parts = headers.Split("\r\n", 2)[0].Split(' ');
             return (
                 parts.Length > 0 ? parts[0] : "",
                 parts.Length > 1 ? parts[1] : "");

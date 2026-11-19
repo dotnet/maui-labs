@@ -11,6 +11,7 @@ public partial class ContentViewHandler : MacOSViewHandler<IContentView, MacOSCo
         new PropertyMapper<IContentView, ContentViewHandler>(ViewMapper)
         {
             [nameof(IContentView.Content)] = MapContent,
+            [nameof(ILayout.ClipsToBounds)] = MapClipsToBounds,
             [nameof(IView.Background)] = MapBackground,
         };
 
@@ -70,6 +71,17 @@ public partial class ContentViewHandler : MacOSViewHandler<IContentView, MacOSCo
         handler.PlatformView.NeedsLayout = true;
     }
 
+    public static void MapClipsToBounds(ContentViewHandler handler, IContentView contentView)
+    {
+        handler.PlatformView.WantsLayer = true;
+        if (handler.PlatformView.Layer != null)
+        {
+            handler.PlatformView.Layer.MasksToBounds =
+                contentView is Microsoft.Maui.Controls.TemplatedView { IsClippedToBounds: true }
+                || contentView is ILayout { ClipsToBounds: true };
+        }
+    }
+
     public static void MapBackground(ContentViewHandler handler, IContentView contentView)
     {
         if (handler.PlatformView.Layer == null)
@@ -77,5 +89,7 @@ public partial class ContentViewHandler : MacOSViewHandler<IContentView, MacOSCo
 
         if (contentView.Background is Graphics.SolidPaint solidPaint && solidPaint.Color != null)
             handler.PlatformView.Layer.BackgroundColor = solidPaint.Color.ToPlatformColor().CGColor;
+        else
+            handler.PlatformView.Layer.BackgroundColor = null;
     }
 }

@@ -53,8 +53,7 @@ namespace Microsoft.Maui.Handlers.WPF
 					? System.Windows.FontStyles.Italic
 					: System.Windows.FontStyles.Normal;
 
-			if (!string.IsNullOrEmpty(label.Font.Family))
-				handler.PlatformView.FontFamily = new System.Windows.Media.FontFamily(label.Font.Family);
+			Microsoft.Maui.Platforms.Windows.WPF.WPFFontManager.ApplyFontFamily(handler.PlatformView, label.Font, handler.MauiContext);
 		}
 
 		public static void MapCharacterSpacing(LabelHandler handler, ILabel label)
@@ -168,7 +167,8 @@ namespace Microsoft.Maui.Handlers.WPF
 					run.FontStyle = System.Windows.FontStyles.Italic;
 
 				if (!string.IsNullOrEmpty(mauiSpan.FontFamily))
-					run.FontFamily = new System.Windows.Media.FontFamily(mauiSpan.FontFamily);
+					run.FontFamily = Microsoft.Maui.Platforms.Windows.WPF.WPFFontManager
+						.FromContext(handler.MauiContext).GetFontFamily(Font.OfSize(mauiSpan.FontFamily, mauiSpan.FontSize));
 
 				// CharacterSpacing: WPF doesn't support per-run character spacing natively
 

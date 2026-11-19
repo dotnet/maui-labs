@@ -19,7 +19,18 @@ public abstract class ChatClientGetServiceTestsBase<T>
 	/// <summary>
 	/// Gets the expected default model ID returned by ChatClientMetadata.
 	/// </summary>
-	protected abstract string ExpectedDefaultModelId { get; }
+	protected abstract string? ExpectedDefaultModelId { get; }
+
+	protected virtual void AssertProviderMetadata(ChatClientMetadata metadata) { }
+
+	[Fact]
+	public void GetService_WithNullServiceType_ThrowsArgumentNullException()
+	{
+		using var client = new T();
+
+		Assert.Throws<ArgumentNullException>(() =>
+			((IChatClient)client).GetService(null!, null));
+	}
 
 	[Fact]
 	public void GetService_ReturnsMetadataWithCorrectProviderAndModel()
@@ -31,6 +42,7 @@ public abstract class ChatClientGetServiceTestsBase<T>
 
 		Assert.Equal(ExpectedProviderName, metadata.ProviderName);
 		Assert.Equal(ExpectedDefaultModelId, metadata.DefaultModelId);
+		AssertProviderMetadata(metadata);
 	}
 
 	[Fact]

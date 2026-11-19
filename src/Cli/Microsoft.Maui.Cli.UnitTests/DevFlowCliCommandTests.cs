@@ -533,6 +533,65 @@ public class DevFlowCliCommandTests
         }
     }
 
+    [Fact]
+    public async Task UiScroll_UnderCommaDecimalCulture_AcceptsDotDecimalDelta()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var originalCulture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+        try
+        {
+            var result = await cli.InvokeAsync("devflow", "ui", "scroll", "--dy", "-100.5", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/scroll");
+            Assert.Contains("-100.5", req.Body);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
+    [Fact]
+    public async Task UiGesture_UnderCommaDecimalCulture_AcceptsDotDecimalOptions()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var originalCulture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+        try
+        {
+            var result = await cli.InvokeAsync("devflow", "ui", "gesture", "pinch", "--element", "el-1",
+                "--scale", "2.5", "--origin-x", "0.25", "--origin-y", "0.75", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+            Assert.Contains("2.5", req.Body);
+            Assert.Contains("0.25", req.Body);
+            Assert.Contains("0.75", req.Body);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
+    [Fact]
+    public async Task UiGesture_InvalidNumber_FailsWithoutCallingAgent()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "pinch", "--element", "el-1", "--scale", "big", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+    }
+
     // ========== logs ==========
 
     [Fact]
@@ -870,6 +929,58 @@ public class DevFlowCliCommandTests
         Assert.Equal(0, result.ExitCode);
         var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/device/sensors/Accelerometer/stop");
         Assert.Equal("POST", req.Method);
+    }
+
+    [Theory]
+    [InlineData(true, false, 1)]
+    [InlineData(true, true, 2)]
+    [InlineData(false, false, 2)]
+    [InlineData(false, true, 2)]
+    public async Task Batch_RecognizedFailure_PreservesProcessExitStatus(
+        bool failProperty, bool continueOnError, int expectedCommands)
+    {
+        await using var server = new MockAgentServer(propertyFailureWithoutReason: failProperty);
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+        var originalInput = Console.In;
+        const string propertyCommand = "ui property el-1 Opacity --json";
+        const string statusCommand = "ui status --json";
+
+        try
+        {
+            Console.SetIn(new StringReader($"{propertyCommand}\n{statusCommand}\n"));
+            var arguments = new List<string> { "devflow", "batch", "--delay", "0" };
+            if (continueOnError)
+                arguments.Add("--continue-on-error");
+
+            var result = await cli.InvokeAsync(arguments.ToArray());
+
+            var expectedExitCode = failProperty ? 1 : 0;
+            Assert.Equal(expectedExitCode, result.ExitCode);
+            Assert.Equal(expectedExitCode, Program.ResolveDevFlowExitCode(0));
+            var lines = result.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            Assert.Equal(expectedCommands, lines.Length);
+            using var first = JsonDocument.Parse(lines[0]);
+            Assert.Equal(3, first.RootElement.EnumerateObject().Count());
+            Assert.Equal(propertyCommand, first.RootElement.GetProperty("command").GetString());
+            Assert.Equal(expectedExitCode, first.RootElement.GetProperty("exit_code").GetInt32());
+            if (failProperty)
+                Assert.Contains("Agent not bound to app", first.RootElement.GetProperty("output").GetString());
+            if (expectedCommands == 2)
+            {
+                using var second = JsonDocument.Parse(lines[1]);
+                Assert.Equal(3, second.RootElement.EnumerateObject().Count());
+                Assert.Equal(statusCommand, second.RootElement.GetProperty("command").GetString());
+                Assert.Equal(0, second.RootElement.GetProperty("exit_code").GetInt32());
+                Assert.Contains("\"running\": true", second.RootElement.GetProperty("output").GetString());
+            }
+            Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/elements/el-1/properties/Opacity");
+            Assert.Equal(expectedCommands - 1, server.RecordedRequests.Count(r => r.Path == "/api/v1/agent/status"));
+        }
+        finally
+        {
+            Console.SetIn(originalInput);
+        }
     }
 
     // ========== webview / CDP ==========

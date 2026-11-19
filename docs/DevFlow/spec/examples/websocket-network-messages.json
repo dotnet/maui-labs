@@ -85,14 +85,14 @@
       "requestSize": 86,
       "responseSize": 2048,
       "requestHeaders": {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "User-Agent": "MyApp/2.1.0 (maccatalyst)"
+        "Content-Type": ["application/json"],
+        "Accept": ["application/json"],
+        "User-Agent": ["MyApp/2.1.0 (maccatalyst)"]
       },
       "responseHeaders": {
-        "Content-Type": "application/json; charset=utf-8",
-        "X-Request-Id": "abc123-def456",
-        "Cache-Control": "no-store"
+        "Content-Type": ["application/json; charset=utf-8"],
+        "X-Request-Id": ["abc123-def456"],
+        "Cache-Control": ["no-store"]
       },
       "requestBody": "{\"email\":\"user@example.com\",\"password\":\"***\"}",
       "responseBody": "{\"token\":\"eyJhbGciOiJSUzI1NiIs...truncated...\",\"expiresIn\":3600,\"user\":{\"id\":\"u_42\",\"name\":\"John Doe\"}}",

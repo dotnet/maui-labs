@@ -45,6 +45,15 @@ public class CommandConstructionTests
 	}
 
 	[Fact]
+	public void RootCommand_IncludesSelfUpdate()
+	{
+		var command = Assert.Single(Program.BuildRootCommand().Subcommands, command => command.Name == "update");
+		Assert.Contains(command.Options, option => option.Name == "--self");
+		Assert.Contains(command.Options, option => option.Name == "--prerelease");
+		Assert.Empty(command.Subcommands);
+	}
+
+	[Fact]
 	public void DevFlowCommand_AllOptionsHaveValidAliases()
 	{
 		var jsonOption = new Option<bool>("--json");

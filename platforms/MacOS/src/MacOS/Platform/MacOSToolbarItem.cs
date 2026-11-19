@@ -277,7 +277,7 @@ public sealed class MenuLayoutRef : MacOSToolbarLayoutItem
 /// <summary>A reference to a <see cref="MacOSToolbarItemGroup"/> in the toolbar layout.</summary>
 public sealed class GroupLayoutRef : MacOSToolbarLayoutItem
 {
-	public MacOSToolbarItemGroup Group { get; }
+	public new MacOSToolbarItemGroup Group { get; }
 	internal GroupLayoutRef(MacOSToolbarItemGroup group) => Group = group;
 }
 

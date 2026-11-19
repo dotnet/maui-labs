@@ -10,7 +10,7 @@ function readSet(source, name) {
   return [...match[1].matchAll(/["']([^"']+)["']/g)].map((entry) => entry[1]);
 }
 
-test("VS Code and Canvas accept redacted Alerts Data snapshots", () => {
+test("VS Code and Canvas accept redacted Alerts and Layout Data snapshots", () => {
   const canvasSource = readFileSync(new URL("../extension.mjs", import.meta.url), "utf8");
   const vscodeSource = readFileSync(
     new URL("../../../../src/DevFlow/js/vscode-inspector/src/extension.ts", import.meta.url),
@@ -19,5 +19,7 @@ test("VS Code and Canvas accept redacted Alerts Data snapshots", () => {
 
   assert.ok(readSet(canvasSource, "DATA_CONTEXT_SCOPES").includes("alerts"));
   assert.ok(readSet(vscodeSource, "dataSnapshotScopes").includes("alerts"));
-  assert.match(vscodeSource, /scope:[^;]*"alerts";/s);
+  assert.ok(readSet(canvasSource, "DATA_CONTEXT_SCOPES").includes("layout"));
+  assert.ok(readSet(vscodeSource, "dataSnapshotScopes").includes("layout"));
+  assert.match(vscodeSource, /scope:[^;]*"layout";/s);
 });

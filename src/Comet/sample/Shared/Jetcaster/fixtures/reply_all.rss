@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:googleplay="http://www.google.com/schemas/play-podcasts/1.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <atom:link href="https://feeds.megaphone.fm/replyall" rel="self" type="application/rss+xml"/>
+    <title>Reply All</title>
+    <link>http://gimletmedia.com/shows/reply-all</link>
+    <language>en</language>
+    <copyright>All rights reserved</copyright>
+    <description>"'A podcast about the internet' that is actually an unfailingly original exploration of modern life and how to survive it." - The Guardian. Hosted by Alex Goldman and Emmanuel Dzotsi from Gimlet.</description>
+    <image>
+      <url>https://megaphone.imgix.net/podcasts/05f71746-a825-11e5-aeb5-a7a572df575e/image/uploads_2F1610700524297-f3e2p6fbm79-8b4536488226b56e93a99ce9f7b555b5_2FReplyAll_ShowArt.png?ixlib=rails-4.3.1&amp;max-w=3000&amp;max-h=3000&amp;fit=crop&amp;auto=format,compress</url>
+      <title>Reply All</title>
+      <link>http://gimletmedia.com/shows/reply-all</link>
+    </image>
+    <itunes:explicit>yes</itunes:explicit>
+    <itunes:type>episodic</itunes:type>
+    <itunes:subtitle></itunes:subtitle>
+    <itunes:author>Gimlet</itunes:author>
+    <itunes:summary>"'A podcast about the internet' that is actually an unfailingly original exploration of modern life and how to survive it." - The Guardian. Hosted by Alex Goldman and Emmanuel Dzotsi from Gimlet.</itunes:summary>
+    <content:encoded>
+      <![CDATA[<p>"'A podcast about the internet' that is actually an unfailingly original exploration of modern life and how to survive it." - The Guardian. Hosted by Alex Goldman and Emmanuel Dzotsi from Gimlet.</p>]]>
+    </content:encoded>
+    <itunes:owner>
+      <itunes:name>Gimlet</itunes:name>
+      <itunes:email>podcasts@gimletmedia.com</itunes:email>
+    </itunes:owner>
+    <itunes:image href="https://megaphone.imgix.net/podcasts/05f71746-a825-11e5-aeb5-a7a572df575e/image/uploads_2F1610700524297-f3e2p6fbm79-8b4536488226b56e93a99ce9f7b555b5_2FReplyAll_ShowArt.png?ixlib=rails-4.3.1&amp;max-w=3000&amp;max-h=3000&amp;fit=crop&amp;auto=format,compress"/>
+    <itunes:category text="Technology">
+    </itunes:category>
+    <itunes:category text="Society &amp; Culture">
+      <itunes:category text="Documentary"/>
+    </itunes:category>
+    <itunes:new-feed-url>https://feeds.megaphone.fm/replyall</itunes:new-feed-url>
+    <item>
+      <title>Big Lives: Emmanuel's New Show</title>
+      <description>Emmanuel has a new show out, Big Lives, and we're excited to share a preview of it! Alongside acclaimed journalist Kai Wright, Emmanuel digs into the BBC archive to examine the sensational stories, messy feelings, and enlightening questions surrounding the icons who have shaped our culture. From musical trailblazers like David Bowie, Amy Winehouse and Tina Turner to stars of the screen like Richard Pryor, Meg Ryan and Jane Fonda, Emmanuel and Kai see these icons in a new light and learn how each legend set the stage for our contemporary cultural landscape. In this preview, they unspool the emotional arc behind George Michael, from teen heartthrob to grieving partner to gay icon. If you like what you hear, find Big Lives wherever you get podcasts.
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</description>
+      <pubDate>Mon, 30 Mar 2026 07:00:00 -0000</pubDate>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:author>Gimlet</itunes:author>
+      <itunes:image href="https://megaphone.imgix.net/podcasts/acfe34f0-2887-11f1-b030-632bf23c4dd3/image/d0df652131a7be4518bc15c6b30416a9.png?ixlib=rails-4.3.1&amp;max-w=3000&amp;max-h=3000&amp;fit=crop&amp;auto=format,compress"/>
+      <itunes:subtitle></itunes:subtitle>
+      <itunes:summary>Emmanuel has a new show out, Big Lives, and we're excited to share a preview of it! Alongside acclaimed journalist Kai Wright, Emmanuel digs into the BBC archive to examine the sensational stories, messy feelings, and enlightening questions surrounding the icons who have shaped our culture. From musical trailblazers like David Bowie, Amy Winehouse and Tina Turner to stars of the screen like Richard Pryor, Meg Ryan and Jane Fonda, Emmanuel and Kai see these icons in a new light and learn how each legend set the stage for our contemporary cultural landscape. In this preview, they unspool the emotional arc behind George Michael, from teen heartthrob to grieving partner to gay icon. If you like what you hear, find Big Lives wherever you get podcasts.
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</itunes:summary>
+      <content:encoded>
+        <![CDATA[<p>Emmanuel has a new show out, Big Lives, and we're excited to share a preview of it! Alongside acclaimed journalist Kai Wright, Emmanuel digs into the BBC archive to examine the sensational stories, messy feelings, and enlightening questions surrounding the icons who have shaped our culture. From musical trailblazers like David Bowie, Amy Winehouse and Tina Turner to stars of the screen like Richard Pryor, Meg Ryan and Jane Fonda, Emmanuel and Kai see these icons in a new light and learn how each legend set the stage for our contemporary cultural landscape. In this preview, they unspool the emotional arc behind George Michael, from teen heartthrob to grieving partner to gay icon. If you like what you hear, <a href="http://lnk.to/BLReplyAll">find Big Lives wherever you get podcasts</a>.</p><p> </p><p>Learn more about your ad choices. Visit <a href="https://podcastchoices.com/adchoices">podcastchoices.com/adchoices</a></p>]]>
+      </content:encoded>
+      <itunes:duration>3246</itunes:duration>
+      <itunes:explicit>no</itunes:explicit>
+      <guid isPermaLink="false"><![CDATA[acfe34f0-2887-11f1-b030-632bf23c4dd3]]></guid>
+      <enclosure url="https://chrt.fm/track/15E3G4/traffic.megaphone.fm/GLT4653461142.mp3?updated=1774887694" length="0" type="audio/mpeg"/>
+    </item>
+<item>
+      <title>Casey Wants to Believe</title>
+      <description>If you like this episode and want to hear more, please sign up for our premium feed here! https://hyperfixedpod.com/joinIf you would like to join at the $60 yearly level and receive your very own Big Chub Chet's button, you can do so here:https://hyperfixedpod.com/buttonThere are a limited number so get them before they're gone! Casey has been chasing the origin of a very specific piece of ephemera for almost 15 years. He came to us for help.LINKS:Busy Beaver Button MuseumThe Button in Question (Spoilers! don't look until the episode is done!)
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</description>
+      <pubDate>Thu, 05 Dec 2024 08:00:00 -0000</pubDate>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:episode>190</itunes:episode>
+      <itunes:author>Gimlet</itunes:author>
+      <itunes:image href="https://megaphone.imgix.net/podcasts/c0633378-b188-11ef-bcb2-677967fca1e9/image/1be9faca6689ec61e2ba38b19716a462.jpeg?ixlib=rails-4.3.1&amp;max-w=3000&amp;max-h=3000&amp;fit=crop&amp;auto=format,compress"/>
+      <itunes:subtitle></itunes:subtitle>
+      <itunes:summary>If you like this episode and want to hear more, please sign up for our premium feed here! https://hyperfixedpod.com/joinIf you would like to join at the $60 yearly level and receive your very own Big Chub Chet's button, you can do so here:https://hyperfixedpod.com/buttonThere are a limited number so get them before they're gone! Casey has been chasing the origin of a very specific piece of ephemera for almost 15 years. He came to us for help.LINKS:Busy Beaver Button MuseumThe Button in Question (Spoilers! don't look until the episode is done!)
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</itunes:summary>
+      <content:encoded>
+        <![CDATA[If you like this episode and want to hear more, please sign up for our premium feed here! <a href="https://www.google.com/url?q=https://hyperfixedpod.com/join&amp;source=gmail-imap&amp;ust=1733759237000000&amp;usg=AOvVaw1wVGwumKqSOTeWJgzEv9s9"><strong>https://hyperfixedpod.com/join</strong></a><br>If you would like to join at the $60 yearly level and receive your very own Big Chub Chet's button, you can do so here:<a href="https://www.google.com/url?q=https://hyperfixedpod.com/button&amp;source=gmail-imap&amp;ust=1733759237000000&amp;usg=AOvVaw0l32E4Vjw--CXD5HqitATY"><strong>https://hyperfixedpod.com/button</strong></a>There are a limited number so get them before they're gone! <br>Casey has been chasing the origin of a very specific piece of ephemera for almost 15 years. He came to us for help.<br>LINKS:<a href="https://www.google.com/url?q=https://buttonmuseum.org/&amp;source=gmail-imap&amp;ust=1733759237000000&amp;usg=AOvVaw3JwxOdV3y8OmyqGJxenALD"><strong>Busy Beaver Button Museum</strong></a><a href="https://www.google.com/url?q=https://buttonmuseum.org/buttons/ask-me-chili-cheese-fries&amp;source=gmail-imap&amp;ust=1733759237000000&amp;usg=AOvVaw2oFNwzuvrfrokwHf6zq1P4"><strong>The Button in Question</strong></a> (Spoilers! don't look until the episode is done!)<p><br></p><p> </p><p>Learn more about your ad choices. Visit <a href="https://podcastchoices.com/adchoices">podcastchoices.com/adchoices</a></p>]]>
+      </content:encoded>
+      <itunes:duration>2057</itunes:duration>
+      <itunes:explicit>no</itunes:explicit>
+      <guid isPermaLink="false"><![CDATA[c0633378-b188-11ef-bcb2-677967fca1e9]]></guid>
+      <enclosure url="https://chrt.fm/track/15E3G4/traffic.megaphone.fm/GLT5843461507.mp3?updated=1733238939" length="0" type="audio/mpeg"/>
+    </item>
+<item>
+      <title>#189 Goodbye All</title>
+      <description>One last thing before we go.
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</description>
+      <pubDate>Thu, 23 Jun 2022 10:00:00 -0000</pubDate>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:author>Gimlet</itunes:author>
+      <itunes:subtitle></itunes:subtitle>
+      <itunes:summary>One last thing before we go.
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</itunes:summary>
+      <content:encoded>
+        <![CDATA[<p>One last thing before we go.</p><p> </p><p>Learn more about your ad choices. Visit <a href="https://podcastchoices.com/adchoices">podcastchoices.com/adchoices</a></p>]]>
+      </content:encoded>
+      <itunes:duration>3049</itunes:duration>
+      <itunes:explicit>yes</itunes:explicit>
+      <guid isPermaLink="false"><![CDATA[82e2118c-a56e-11ec-8697-6fde37096779]]></guid>
+      <enclosure url="https://chrt.fm/track/15E3G4/traffic.megaphone.fm/GLT8627189710.mp3?updated=1655947230" length="0" type="audio/mpeg"/>
+    </item>
+<item>
+      <title>#188 Into the Depths</title>
+      <description>Inspired by @depthsofwikipedia, this week we dive deeper into three of our favorite weird Wikipedia pages.
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</description>
+      <pubDate>Thu, 09 Jun 2022 10:00:00 -0000</pubDate>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:author>Gimlet</itunes:author>
+      <itunes:subtitle></itunes:subtitle>
+      <itunes:summary>Inspired by @depthsofwikipedia, this week we dive deeper into three of our favorite weird Wikipedia pages.
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</itunes:summary>
+      <content:encoded>
+        <![CDATA[<p>Inspired by @depthsofwikipedia, this week we dive deeper into three of our favorite weird Wikipedia pages.</p><p> </p><p>Learn more about your ad choices. Visit <a href="https://podcastchoices.com/adchoices">podcastchoices.com/adchoices</a></p>]]>
+      </content:encoded>
+      <itunes:duration>2554</itunes:duration>
+      <itunes:explicit>yes</itunes:explicit>
+      <guid isPermaLink="false"><![CDATA[650db59c-e77e-11ec-bb18-f30f75d5c47d]]></guid>
+      <enclosure url="https://chrt.fm/track/15E3G4/traffic.megaphone.fm/GLT7757638755.mp3?updated=1654739493" length="0" type="audio/mpeg"/>
+    </item>
+<item>
+      <title>Introducing: Stolen - Surviving St. Michael's</title>
+      <description>We'll be back in a few weeks, in the meantime we're introducing a new show from Gimlet called Stolen: Surviving St. Michael's
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</description>
+      <pubDate>Thu, 26 May 2022 10:00:00 -0000</pubDate>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:author>Gimlet</itunes:author>
+      <itunes:subtitle></itunes:subtitle>
+      <itunes:summary>We'll be back in a few weeks, in the meantime we're introducing a new show from Gimlet called Stolen: Surviving St. Michael's
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</itunes:summary>
+      <content:encoded>
+        <![CDATA[<p>We'll be back in a few weeks, in the meantime we're introducing a new show from Gimlet called Stolen: Surviving St. Michael's</p><p> </p><p>Learn more about your ad choices. Visit <a href="https://podcastchoices.com/adchoices">podcastchoices.com/adchoices</a></p>]]>
+      </content:encoded>
+      <itunes:duration>2610</itunes:duration>
+      <guid isPermaLink="false"><![CDATA[108fff96-dc68-11ec-bbb1-db4a58091531]]></guid>
+      <enclosure url="https://chrt.fm/track/15E3G4/traffic.megaphone.fm/GLT6837192981.mp3?updated=1653516763" length="0" type="audio/mpeg"/>
+    </item>
+<item>
+      <title>A Message About the Future of the Show</title>
+      <description>Some news: Emmanuel and Alex will be stepping away from making the show. And this iteration of Reply All will be ending in late June.
+This isn’t a decision that was made by any one person. Reply All has always been a super collaborative project which is what we’ve loved so much about making it. Ultimately, staff who have been working on this show for a long time – in some cases five, six, seven years at this point – are ready to pursue other things.
+Making this show has been an incredible pleasure. Thank you all so much for listening.
+We hope you join us for our remaining episodes, including our last one, on June 23rd.
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</description>
+      <pubDate>Thu, 19 May 2022 21:10:58 -0000</pubDate>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:author>Gimlet</itunes:author>
+      <itunes:subtitle></itunes:subtitle>
+      <itunes:summary>Some news: Emmanuel and Alex will be stepping away from making the show. And this iteration of Reply All will be ending in late June.
+This isn’t a decision that was made by any one person. Reply All has always been a super collaborative project which is what we’ve loved so much about making it. Ultimately, staff who have been working on this show for a long time – in some cases five, six, seven years at this point – are ready to pursue other things.
+Making this show has been an incredible pleasure. Thank you all so much for listening.
+We hope you join us for our remaining episodes, including our last one, on June 23rd.
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</itunes:summary>
+      <content:encoded>
+        <![CDATA[<p>Some news: Emmanuel and Alex will be stepping away from making the show. And this iteration of Reply All will be ending in late June.</p><p>This isn’t a decision that was made by any one person. Reply All has always been a super collaborative project which is what we’ve loved so much about making it. Ultimately, staff who have been working on this show for a long time – in some cases five, six, seven years at this point – are ready to pursue other things.</p><p>Making this show has been an incredible pleasure. Thank you all so much for listening.</p><p>We hope you join us for our remaining episodes, including our last one, on June 23rd.</p><p> </p><p>Learn more about your ad choices. Visit <a href="https://podcastchoices.com/adchoices">podcastchoices.com/adchoices</a></p>]]>
+      </content:encoded>
+      <itunes:duration>128</itunes:duration>
+      <guid isPermaLink="false"><![CDATA[828e0664-a56e-11ec-8697-1bcbd90dadcb]]></guid>
+      <enclosure url="https://chrt.fm/track/15E3G4/traffic.megaphone.fm/GLT5640748476.mp3?updated=1652994547" length="0" type="audio/mpeg"/>
+    </item>
+<item>
+      <title>#187 Flying the Coop</title>
+      <description>A community of chicken lovers faces an unlikely foe.
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</description>
+      <pubDate>Thu, 12 May 2022 10:00:00 -0000</pubDate>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:author>Gimlet</itunes:author>
+      <itunes:subtitle></itunes:subtitle>
+      <itunes:summary>A community of chicken lovers faces an unlikely foe.
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</itunes:summary>
+      <content:encoded>
+        <![CDATA[<p>A community of chicken lovers faces an unlikely foe.</p><p> </p><p>Learn more about your ad choices. Visit <a href="https://podcastchoices.com/adchoices">podcastchoices.com/adchoices</a></p>]]>
+      </content:encoded>
+      <itunes:duration>2095</itunes:duration>
+      <itunes:explicit>yes</itunes:explicit>
+      <guid isPermaLink="false"><![CDATA[8271bb1c-a56e-11ec-8697-a7cdfb036056]]></guid>
+      <enclosure url="https://chrt.fm/track/15E3G4/traffic.megaphone.fm/GLT4309456385.mp3?updated=1652353701" length="0" type="audio/mpeg"/>
+    </item>
+<item>
+      <title>Introducing: Stuck with Damon Young</title>
+      <description>We'll be back with a new episode next week, but in the meantime, we're featuring an episode of a new show from Gimlet and Crooked Media: Stuck with Damon Young. 
+
+You can listen to episodes here: https://open.spotify.com/show/42kxHmWquXQBJCxG0rXvu6 
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</description>
+      <pubDate>Thu, 05 May 2022 14:28:41 -0000</pubDate>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:author>Gimlet</itunes:author>
+      <itunes:subtitle></itunes:subtitle>
+      <itunes:summary>We'll be back with a new episode next week, but in the meantime, we're featuring an episode of a new show from Gimlet and Crooked Media: Stuck with Damon Young. 
+
+You can listen to episodes here: https://open.spotify.com/show/42kxHmWquXQBJCxG0rXvu6 
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</itunes:summary>
+      <content:encoded>
+        <![CDATA[<p>We'll be back with a new episode next week, but in the meantime, we're featuring an episode of a new show from Gimlet and Crooked Media: Stuck with Damon Young. </p><p><br></p><p>You can listen to episodes here: https://open.spotify.com/show/42kxHmWquXQBJCxG0rXvu6 </p><p> </p><p>Learn more about your ad choices. Visit <a href="https://podcastchoices.com/adchoices">podcastchoices.com/adchoices</a></p>]]>
+      </content:encoded>
+      <itunes:duration>2556</itunes:duration>
+      <guid isPermaLink="false"><![CDATA[8255bab6-a56e-11ec-8697-2f50eb7c92b1]]></guid>
+      <enclosure url="https://chrt.fm/track/15E3G4/traffic.megaphone.fm/GLT1954853984.mp3?updated=1651761242" length="0" type="audio/mpeg"/>
+    </item>
+<item>
+      <title>#186 The Contact List</title>
+      <description>Emmanuel tries a personal experiment.
+
+
+
+
+
+--------
+This episode was inspired by the work of Soraya Perry. Check out her work as a filmmaker, musician, and visual artist here: www.sorayaperry.com
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</description>
+      <pubDate>Thu, 21 Apr 2022 10:00:00 -0000</pubDate>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:author>Gimlet</itunes:author>
+      <itunes:subtitle></itunes:subtitle>
+      <itunes:summary>Emmanuel tries a personal experiment.
+
+
+
+
+
+--------
+This episode was inspired by the work of Soraya Perry. Check out her work as a filmmaker, musician, and visual artist here: www.sorayaperry.com
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</itunes:summary>
+      <content:encoded>
+        <![CDATA[<p>Emmanuel tries a personal experiment.</p><p><br></p><p><br></p><p><br></p><p><br></p><p><br></p><p>--------</p><p>This episode was inspired by the work of Soraya Perry. Check out her work as a filmmaker, musician, and visual artist here: www.sorayaperry.com</p><p> </p><p>Learn more about your ad choices. Visit <a href="https://podcastchoices.com/adchoices">podcastchoices.com/adchoices</a></p>]]>
+      </content:encoded>
+      <itunes:duration>2333</itunes:duration>
+      <guid isPermaLink="false"><![CDATA[82394da4-a56e-11ec-8697-f3ed8a72f245]]></guid>
+      <enclosure url="https://chrt.fm/track/15E3G4/traffic.megaphone.fm/GLT2944926398.mp3?updated=1650514153" length="0" type="audio/mpeg"/>
+    </item>
+<item>
+      <title>Introducing: Conviction - The Disappearance of Nuseiba Hasan</title>
+      <description>Alex chats with Habiba Nosheen about her new show, Conviction: The Disappearance of Nuseiba Hasan. 
+
+Listen to all the episodes of the show here: https://open.spotify.com/show/2XquJlPU9ibLYZMH0ZzFwA
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</description>
+      <pubDate>Thu, 14 Apr 2022 10:00:00 -0000</pubDate>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:author>Gimlet</itunes:author>
+      <itunes:subtitle></itunes:subtitle>
+      <itunes:summary>Alex chats with Habiba Nosheen about her new show, Conviction: The Disappearance of Nuseiba Hasan. 
+
+Listen to all the episodes of the show here: https://open.spotify.com/show/2XquJlPU9ibLYZMH0ZzFwA
+Learn more about your ad choices. Visit podcastchoices.com/adchoices</itunes:summary>
+      <content:encoded>
+        <![CDATA[<p>Alex chats with Habiba Nosheen about her new show, Conviction: The Disappearance of Nuseiba Hasan. </p><p><br></p><p>Listen to all the episodes of the show here: https://open.spotify.com/show/2XquJlPU9ibLYZMH0ZzFwA</p><p> </p><p>Learn more about your ad choices. Visit <a href="https://podcastchoices.com/adchoices">podcastchoices.com/adchoices</a></p>]]>
+      </content:encoded>
+      <itunes:duration>2355</itunes:duration>
+      <guid isPermaLink="false"><![CDATA[821d92bc-a56e-11ec-8697-4f4fc5e82f55]]></guid>
+      <enclosure url="https://chrt.fm/track/15E3G4/traffic.megaphone.fm/GLT5346312905.mp3?updated=1649889191" length="0" type="audio/mpeg"/>
+    </item>
+  </channel>
+</rss>

@@ -217,23 +217,22 @@ export function createPropertyGridController(options) {
         editor.type = 'color';
         editor.className = 'df-field';
         const color = parseHexColor(value);
-        if (color) {
-          editor.value = color.rgb;
-          editor.dataset.alpha = color.alpha;
-        } else {
-          editor.dataset.representable = 'false';
-          editor.setAttribute('aria-label', `${name}: unset; activate to choose a color`);
+        if (color) editor.value = color.rgb;
+        else editor.dataset.representable = 'false';
+        // <input type="color"> cannot show or produce alpha: a fully transparent value gets the
+        // same placeholder as an unset one, and a pick is always opaque.
+        if (!color || color.alpha === '00') {
+          const state = color ? 'Transparent' : 'Unset';
+          editor.setAttribute('aria-label', `${name}: ${state.toLowerCase()}; activate to choose a color`);
           unsetColorControl = document.createElement('span');
           unsetColorControl.className = 'df-color-unset';
           unsetColorLabel = document.createElement('span');
           unsetColorLabel.className = 'df-color-unset-label';
-          unsetColorLabel.textContent = 'Unset';
+          unsetColorLabel.textContent = state;
         }
         editor.title = value != null ? String(value) : '';
-        readValue = () => {
-          const alpha = editor.dataset.alpha || 'FF';
-          return alpha === 'FF' ? editor.value : '#' + alpha + editor.value.slice(1);
-        };
+        editor.addEventListener('input', () => { editor.title = editor.value; });
+        readValue = () => editor.value;
       } else if (kind === 'text') {
         editor = document.createElement('textarea');
         editor.rows = String(value ?? '').includes('\n') ? 3 : 1;

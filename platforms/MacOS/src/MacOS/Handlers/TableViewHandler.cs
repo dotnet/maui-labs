@@ -6,6 +6,8 @@ using AppKit;
 
 using Microsoft.Maui.Platforms.MacOS.Platform;
 
+#pragma warning disable CS0618 // This handler provides compatibility for MAUI's obsolete TableView and cell types.
+
 namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 
 public partial class TableViewHandler : MacOSViewHandler<TableView, NSScrollView>
@@ -75,7 +77,7 @@ public partial class TableViewHandler : MacOSViewHandler<TableView, NSScrollView
 		foreach (var subview in _itemViews)
 		{
 			var height = GetViewHeight(subview, width);
-			subview.Frame = new CGRect(0, (double)y, (double)width, (double)height);
+			subview.SetLayoutFrame(new CGRect(0, (double)y, (double)width, (double)height));
 			y += height;
 		}
 
@@ -87,7 +89,7 @@ public partial class TableViewHandler : MacOSViewHandler<TableView, NSScrollView
 	{
 		// Plain NSView separators have a fixed 1px frame
 		if (view is not MacOSContainerView)
-			return view.Frame.Height > 0 ? view.Frame.Height : 1;
+			return view.Bounds.Height > 0 ? view.Bounds.Height : 1;
 
 		if (VirtualView != null && !VirtualView.HasUnevenRows && VirtualView.RowHeight > 0)
 			return VirtualView.RowHeight;
@@ -115,8 +117,8 @@ public partial class TableViewHandler : MacOSViewHandler<TableView, NSScrollView
 		var root = VirtualView?.Root;
 		if (root == null)
 		{
-			if (PlatformView.Frame.Width > 0)
-				LayoutItems(new Rect(0, 0, PlatformView.Frame.Width, PlatformView.Frame.Height));
+			if (PlatformView.Bounds.Width > 0)
+				LayoutItems(new Rect(0, 0, PlatformView.Bounds.Width, PlatformView.Bounds.Height));
 			return;
 		}
 
@@ -136,7 +138,7 @@ public partial class TableViewHandler : MacOSViewHandler<TableView, NSScrollView
 				DrawsBackground = true,
 				BackgroundColor = NSColor.FromRgba(245, 245, 245, 255),
 				TextColor = NSColor.Gray,
-				Font = NSFont.BoldSystemFontOfSize(12),
+				Font = NSFont.BoldSystemFontOfSize(12)!,
 			};
 			// Wrap in a container with padding
 			var headerContainer = new NSView();
@@ -166,8 +168,8 @@ public partial class TableViewHandler : MacOSViewHandler<TableView, NSScrollView
 			}
 		}
 
-		if (PlatformView.Frame.Width > 0)
-			LayoutItems(new Rect(0, 0, PlatformView.Frame.Width, PlatformView.Frame.Height));
+		if (PlatformView.Bounds.Width > 0)
+			LayoutItems(new Rect(0, 0, PlatformView.Bounds.Width, PlatformView.Bounds.Height));
 	}
 
 	void AddView(IView mauiView)

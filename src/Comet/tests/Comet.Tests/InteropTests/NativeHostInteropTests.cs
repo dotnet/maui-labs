@@ -218,16 +218,9 @@ namespace Comet.Tests
 			Assert.Equal(20, mauiSize.Height);
 		}
 
-		[Fact]
-		public void NativeHost_ExposesNativeViewAccessAfterHandlerInitialization()
-		{
-			var native = new NativeObject();
-			var host = new NativeHost(native);
-			host.ViewHandler = new NativeHostTrackingHandler(native);
-
-			Assert.True(host.TryGetNativeView<NativeObject>(out var resolved));
-			Assert.Same(native, resolved);
-		}
+		// NativeHost_ExposesNativeViewAccessAfterHandlerInitialization was deleted with
+		// the legacy MAUI ViewHandler render path (Phase 5): it exercised
+		// Comet.Handlers.INativeHostHandler, which no longer exists.
 
 		class InteropPage : View
 		{
@@ -335,69 +328,5 @@ namespace Comet.Tests
 		{
 		}
 
-		class NativeHostTrackingHandler : IViewHandler, Comet.Handlers.INativeHostHandler
-		{
-			public NativeHostTrackingHandler(object nativeView)
-			{
-				NativeView = nativeView;
-			}
-
-			public IView CurrentView { get; private set; }
-			public object NativeView { get; }
-			public IMauiContext MauiContext => null;
-			public object ContainerView => null;
-			public bool HasContainer { get; set; }
-			public Rect Frame { get; private set; }
-			public Dictionary<string, object> ChangedProperties { get; } = new Dictionary<string, object>();
-
-			IView IViewHandler.VirtualView => CurrentView;
-			IElement IElementHandler.VirtualView => CurrentView;
-			object IElementHandler.PlatformView => NativeView;
-
-			public void SetVirtualView(IView view)
-			{
-				CurrentView = view;
-			}
-
-			void IElementHandler.SetVirtualView(IElement view) => SetVirtualView((IView)view);
-
-			public void UpdateValue(string property)
-			{
-			}
-
-			public void Invoke(string command, object args = null)
-			{
-			}
-
-			public void DisconnectHandler()
-			{
-				CurrentView = null;
-			}
-
-			public void Dispose()
-			{
-			}
-
-			void IElementHandler.SetMauiContext(IMauiContext mauiContext)
-			{
-			}
-
-			Size IViewHandler.GetDesiredSize(double widthConstraint, double heightConstraint) => new Size(120, 35);
-
-			void IViewHandler.PlatformArrange(Rect frame)
-			{
-				Frame = frame;
-			}
-
-			object Comet.Handlers.INativeHostHandler.GetNativeView() => NativeView;
-
-			Size Comet.Handlers.INativeHostHandler.MeasureNativeView(Size availableSize) => new Size(120, 35);
-
-			void Comet.Handlers.INativeHostHandler.SyncNativeView()
-			{
-				if (CurrentView is NativeHost host)
-					host.ApplyUpdated(NativeView, null);
-			}
-		}
 	}
 }

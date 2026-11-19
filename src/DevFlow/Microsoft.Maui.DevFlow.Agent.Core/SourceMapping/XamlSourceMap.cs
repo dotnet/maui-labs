@@ -9,10 +9,21 @@ public readonly record struct XamlSourceEntry(
     string TypeName,
     int ChildCount,
     string? AutomationId = null,
-    string? FullTypeName = null);
+    string? FullTypeName = null)
+{
+    /// <summary>
+    /// The element's literal <c>Text</c> attribute, or null when absent or a markup extension. Tells
+    /// same-type siblings apart, since the runtime element must still show this text to be mapped.
+    /// Init-only rather than positional so the public constructor and deconstruction are unchanged.
+    /// </summary>
+    public string? Text { get; init; }
+}
 
 public sealed class XamlSourceMap
 {
+    private const string MauiGlobalXmlNamespace = "http://schemas.microsoft.com/dotnet/maui/global";
+    private const string XamlXmlNamespace = "http://schemas.microsoft.com/winfx/2009/xaml";
+
     private static readonly HashSet<string> s_contentProperties = new(StringComparer.Ordinal)
     {
         "Content",
@@ -49,6 +60,21 @@ public sealed class XamlSourceMap
         => Parse(xaml, file, contentHash: null);
 
     public static XamlSourceMap? Parse(string xaml, string file, string? contentHash)
+        => Parse(xaml, file, contentHash, namespaceMappings: null);
+
+    public static XamlSourceMap? Parse(
+        string xaml,
+        string file,
+        string? contentHash,
+        IReadOnlyDictionary<string, string>? namespaceMappings)
+        => Parse(xaml, file, contentHash, namespaceMappings, typeMappings: null);
+
+    public static XamlSourceMap? Parse(
+        string xaml,
+        string file,
+        string? contentHash,
+        IReadOnlyDictionary<string, string>? namespaceMappings,
+        IReadOnlyDictionary<string, string>? typeMappings)
     {
         if (string.IsNullOrWhiteSpace(xaml))
             return null;
@@ -56,7 +82,29 @@ public sealed class XamlSourceMap
         XDocument document;
         try
         {
-            document = XDocument.Parse(xaml, LoadOptions.SetLineInfo);
+            var nameTable = new NameTable();
+            var namespaceManager = new XmlNamespaceManager(nameTable);
+            namespaceManager.AddNamespace(string.Empty, MauiGlobalXmlNamespace);
+            namespaceManager.AddNamespace("x", XamlXmlNamespace);
+            if (namespaceMappings is not null)
+            {
+                foreach (var mapping in namespaceMappings)
+                    namespaceManager.AddNamespace(mapping.Key, mapping.Value);
+            }
+            var parserContext = new XmlParserContext(
+                nameTable,
+                namespaceManager,
+                null,
+                XmlSpace.None);
+            using var reader = XmlReader.Create(
+                new StringReader(xaml),
+                new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Parse,
+                    XmlResolver = null
+                },
+                parserContext);
+            document = XDocument.Load(reader, LoadOptions.SetLineInfo);
         }
         catch (XmlException)
         {
@@ -67,26 +115,32 @@ public sealed class XamlSourceMap
             return null;
 
         var map = new Dictionary<string, XamlSourceEntry>(StringComparer.Ordinal);
-        Visit(root, string.Empty, map, root.Attribute("AutomationId")?.Value);
+        Visit(
+            root,
+            string.Empty,
+            map,
+            root.Attribute("AutomationId")?.Value,
+            typeMappings);
         return new XamlSourceMap(file, map, contentHash ?? ComputeContentHash(xaml));
     }
 
     /// <summary>
     /// Build-time content hash of the .xaml text. Must stay byte-identical to
-    /// <c>XamlSourcePropertyEditor.ComputeSourceHash</c> (first 8 bytes of SHA-256 over the UTF-8
+    /// <c>XamlSourcePropertyEditor.ComputeSourceHash</c> (first 16 bytes of SHA-256 over the UTF-8
     /// text, lowercase hex) — the inspector compares them to decide whether source is stale.
     /// </summary>
     internal static string ComputeContentHash(string xaml)
         => Convert.ToHexString(
             System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(xaml)),
             0,
-            8).ToLowerInvariant();
+            16).ToLowerInvariant();
 
     private static void Visit(
         XElement element,
         string path,
         Dictionary<string, XamlSourceEntry> map,
-        string? usableAutomationId)
+        string? usableAutomationId,
+        IReadOnlyDictionary<string, string>? typeMappings)
     {
         var children = ContentChildren(element).ToList();
         if (element is IXmlLineInfo lineInfo && lineInfo.HasLineInfo())
@@ -97,7 +151,10 @@ public sealed class XamlSourceMap
                 element.Name.LocalName,
                 children.Count,
                 usableAutomationId,
-                ResolveFullTypeName(element));
+                ResolveFullTypeName(element, typeMappings))
+            {
+                Text = LiteralText(element)
+            };
         }
 
         var childIds = children.Select(child => child.Attribute("AutomationId")?.Value).ToList();
@@ -115,12 +172,32 @@ public sealed class XamlSourceMap
                 ? childId
                 : null;
             var childPath = path.Length == 0 ? index.ToString() : $"{path}/{index}";
-            Visit(children[index], childPath, map, uniqueId);
+            Visit(children[index], childPath, map, uniqueId, typeMappings);
         }
     }
 
-    private static string? ResolveFullTypeName(XElement element)
+    // MAUI treats a value as a markup extension when it starts with '{' after trimming.
+    private static string? LiteralText(XElement element)
     {
+        var text = element.Attribute("Text")?.Value;
+        return text is null || text.TrimStart().StartsWith('{') ? null : text;
+    }
+
+    private static string? ResolveFullTypeName(
+        XElement element,
+        IReadOnlyDictionary<string, string>? typeMappings)
+    {
+        if (typeMappings is not null
+            && typeMappings.TryGetValue(
+                element.Name.NamespaceName + '\0' + element.Name.LocalName,
+                out var fullTypeName))
+        {
+            return fullTypeName;
+        }
+
+        if (typeMappings is not null)
+            return null;
+
         const string prefix = "clr-namespace:";
         var xmlNamespace = element.Name.NamespaceName;
         if (!xmlNamespace.StartsWith(prefix, StringComparison.Ordinal))

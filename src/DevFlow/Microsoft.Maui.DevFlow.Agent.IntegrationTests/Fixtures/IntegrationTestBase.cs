@@ -1,7 +1,9 @@
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Maui.Cli.DevFlow;
 using Microsoft.Maui.DevFlow.Driver;
 using Xunit.Abstractions;
 
@@ -31,12 +33,74 @@ public abstract class IntegrationTestBase
         Output = output;
     }
 
+    protected async Task<(int ExitCode, string Stdout, string Stderr)> InvokeCliCommandAsync(params string[] args)
+    {
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        var originalExitCode = Environment.ExitCode;
+        using var stdout = new StringWriter();
+        using var stderr = new StringWriter();
+        var errorField = typeof(DevFlowCommands).GetField("_errorOccurred", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var exitCodeField = typeof(DevFlowCommands).GetField("_requestedExitCode", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var labelField = typeof(DevFlowCommands).GetField("_agentLabelEmitted", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var previousError = errorField.GetValue(null);
+        var previousExitCode = exitCodeField.GetValue(null);
+        var previousLabel = labelField.GetValue(null);
+
+        try
+        {
+            Console.SetOut(stdout);
+            Console.SetError(stderr);
+            errorField.SetValue(null, false);
+            exitCodeField.SetValue(null, null);
+            labelField.SetValue(null, false);
+            var exitCode = await Microsoft.Maui.Cli.Program.Main([
+                "devflow", .. args,
+                "--agent-host", new Uri(App.AgentBaseUrl).Host,
+                "--agent-port", App.AgentPort.ToString()
+            ]);
+            return (exitCode, stdout.ToString().TrimEnd(), stderr.ToString().TrimEnd());
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+            Environment.ExitCode = originalExitCode;
+            errorField.SetValue(null, previousError);
+            exitCodeField.SetValue(null, previousExitCode);
+            labelField.SetValue(null, previousLabel);
+        }
+    }
+
+    protected async Task<(int ExitCode, string Stdout, string Stderr)> InvokeCliCommandWithLeaseAsync(params string[] args)
+    {
+        var released = await Client.ControlMutationLeaseAsync("release");
+        Assert.True(released.Ok, released.Error);
+
+        try
+        {
+            return await InvokeCliCommandAsync(args);
+        }
+        finally
+        {
+            var cliLeaseId = (string)typeof(DevFlowCommands)
+                .GetField("s_cliMutationLeaseId", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+            try
+            {
+                var cliReleased = await Client.ControlMutationLeaseAsync("release", leaseId: cliLeaseId);
+                Assert.True(cliReleased.Ok, cliReleased.Error);
+            }
+            finally
+            {
+                var restored = await Client.ControlMutationLeaseAsync("claim");
+                Assert.True(restored.YouHold, restored.Error);
+            }
+        }
+    }
+
     protected async Task<JsonElement> GetJsonAsync(string path)
     {
-        using var response = await SendHttpWithTransportRetryAsync(() => Http.GetAsync(path));
-        response.EnsureSuccessStatusCode();
-        var body = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<JsonElement>(body, JsonOptions);
+        return await SendHttpWithTransportRetryAsync(() => AppFixture.ReadCaptureAsync(Http, path));
     }
 
     protected Task<HttpResponseMessage> GetRawAsync(string path)
@@ -165,12 +229,12 @@ public abstract class IntegrationTestBase
         // Routes are Shell navigation, which only the MAUI sample has. The native samples are a
         // single screen carrying the same ids, so a route request degrades to "wait for the anchor".
         if (!TestFramework.IsNative)
-            await Client.NavigateAsync(route);
+        {
+            Assert.True(await Client.NavigateAsync(route), $"Navigation to '{route}' failed.");
+        }
 
         if (expectedAutomationId != null)
             await FindElementAsync(expectedAutomationId, timeoutMs);
-        else if (!TestFramework.IsNative)
-            await Task.Delay(500);
     }
 
     protected Task NavigateToMainPageAsync() => NavigateToPageAsync("//native", "AddButton");

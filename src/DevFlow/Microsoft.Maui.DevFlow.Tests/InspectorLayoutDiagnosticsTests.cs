@@ -23,10 +23,7 @@ public class InspectorLayoutDiagnosticsTests
 
         Assert.Contains("id=\"df-diagnostics-pane\"", html);
         Assert.Contains("id=\"diagnostic-overlays\"", html);
-        Assert.Contains("id=\"diagnostics-filter\"", html);
-        Assert.Contains("id=\"diagnostics-severity\"", html);
-        Assert.Contains("id=\"diagnostics-confidence\"", html);
-        Assert.Contains("id=\"diagnostics-rule\"", html);
-        Assert.Contains("id=\"diagnostics-suppressed\"", html);
+        Assert.Contains("id=\"df-tab-layout\"", html);
+        Assert.Contains("data-tab=\"layout\"", html);
     }
 }

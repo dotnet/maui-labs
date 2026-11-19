@@ -22,16 +22,6 @@ public static class DataStreamsHelper
 		return File.ReadAllLines(path);
 	}
 
-	public static IEnumerable<object[]> JsonlItineraries
-	{
-		get
-		{
-			var directory = Path.Combine("TestData", "DataStreams", "Itinerary");
-			return Directory.GetFiles(directory, "*.jsonl")
-				.Select(path => new object[] { Path.GetFileName(path), path });
-		}
-	}
-
 	public static IEnumerable<object[]> TxtItineraries
 	{
 		get

@@ -33,6 +33,7 @@ public class AgentClient : IDisposable
     private readonly HttpClient _http;
     private readonly string _baseUrl;
     private readonly AsyncLocal<MutationLeaseIdentity?> _mutationLeaseOverride = new();
+    private readonly AsyncLocal<ActionContextIdentity?> _actionContextOverride = new();
     private bool _disposed;
 
     public string BaseUrl => _baseUrl;
@@ -85,9 +86,23 @@ public class AgentClient : IDisposable
     public TimeSpan TransientFailureRetryDelay { get; set; } = TimeSpan.FromMilliseconds(250);
 
     public AgentClient(string host = "localhost", int port = 9223)
+        : this(host, port, CreateTransportHandler(host))
+    {
+    }
+
+    internal AgentClient(string host, int port, HttpMessageHandler transportHandler)
     {
         _baseUrl = $"http://{host}:{port}";
-        _http = CreateHttpClient(host, GetCurrentMutationLease);
+        _http = CreateHttpClient(
+            transportHandler,
+            GetCurrentMutationLease,
+            GetCurrentActionContext);
+    }
+
+    internal TimeSpan HttpTimeout
+    {
+        get => _http.Timeout;
+        set => _http.Timeout = value;
     }
 
     /// <summary>
@@ -101,6 +116,41 @@ public class AgentClient : IDisposable
         var previous = _mutationLeaseOverride.Value;
         _mutationLeaseOverride.Value = new MutationLeaseIdentity(leaseId, holderKind, label);
         return new MutationLeaseScope(_mutationLeaseOverride, previous);
+    }
+
+    /// <summary>
+    /// Temporarily correlates mutating calls with a DevFlow UI action lifecycle.
+    /// Correlation fields are descriptive metadata only and never participate in authorization.
+    /// </summary>
+    public IDisposable UseActionContext(
+        string? source = null,
+        string? actionId = null,
+        string? streamId = null,
+        string? frameId = null,
+        long? frameRevision = null,
+        string? coordinateSpace = null,
+        double? x = null,
+        double? y = null,
+        double? toX = null,
+        double? toY = null,
+        double? deltaX = null,
+        double? deltaY = null)
+    {
+        var previous = _actionContextOverride.Value;
+        _actionContextOverride.Value = new ActionContextIdentity(
+            source,
+            actionId,
+            streamId,
+            frameId,
+            frameRevision,
+            coordinateSpace,
+            x,
+            y,
+            toX,
+            toY,
+            deltaX,
+            deltaY);
+        return new ActionContextScope(_actionContextOverride, previous);
     }
 
     /// <summary>Claim, query, heartbeat, or release this caller's mutation lease.</summary>
@@ -269,6 +319,9 @@ public class AgentClient : IDisposable
             MutationLeaseLabel);
     }
 
+    private ActionContextIdentity? GetCurrentActionContext()
+        => _actionContextOverride.Value;
+
     private async Task EnsureMutationLeaseAsync()
     {
         if (!AutoAcquireMutationLease)
@@ -292,8 +345,22 @@ public class AgentClient : IDisposable
             throw new MutationLeaseException(status);
     }
 
+    private static HttpClient CreateHttpClient(
+        HttpMessageHandler transportHandler,
+        Func<MutationLeaseIdentity?> mutationLeaseProvider,
+        Func<ActionContextIdentity?> actionContextProvider)
+    {
+        var leaseHandler = new MutationLeaseHeaderHandler(
+            mutationLeaseProvider,
+            actionContextProvider)
+        {
+            InnerHandler = transportHandler
+        };
+        return new HttpClient(leaseHandler) { Timeout = TimeSpan.FromSeconds(30) };
+    }
+
     /// <summary>
-    /// Builds the underlying <see cref="HttpClient"/>. When <paramref name="host"/> is the
+    /// Builds the underlying HTTP transport. When <paramref name="host"/> is the
     /// <c>localhost</c> alias, the IPv4 (<c>127.0.0.1</c>) loopback used by the built-in agent is
     /// preferred, with IPv6 (<c>::1</c>) kept as a fallback.
     /// </summary>
@@ -312,17 +379,6 @@ public class AgentClient : IDisposable
     /// between the two.
     /// </para>
     /// </remarks>
-    private static HttpClient CreateHttpClient(
-        string host,
-        Func<MutationLeaseIdentity?> mutationLeaseProvider)
-    {
-        var leaseHandler = new MutationLeaseHeaderHandler(mutationLeaseProvider)
-        {
-            InnerHandler = CreateTransportHandler(host)
-        };
-        return new HttpClient(leaseHandler) { Timeout = TimeSpan.FromSeconds(30) };
-    }
-
     private static HttpMessageHandler CreateTransportHandler(string host)
     {
         if (!IsLoopbackAlias(host))
@@ -811,7 +867,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<ElementInfo?> GetElementAsync(string id)
     {
-        return await GetAsync<ElementInfo>($"{UiApi}/elements/{id}");
+        return await GetAsync<ElementInfo>($"{UiApi}/elements/{Uri.EscapeDataString(id)}");
     }
 
     /// <summary>
@@ -871,6 +927,30 @@ public class AgentClient : IDisposable
         var payload = new JsonObject
         {
             ["elementId"] = elementId
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return PostActionResultAsync($"{UiApi}/actions/tap", payload);
+    }
+
+    /// <summary>
+    /// Tap at a point inside an element, delivered as a real touch there. <paramref name="x"/> and
+    /// <paramref name="y"/> are device-independent units from the element's top-left corner. This
+    /// is how content drawn on a canvas — SkiaSharp, Microsoft.Maui.Graphics, Syncfusion charts —
+    /// is tapped, since what is drawn has no element id of its own. On iOS and Mac Catalyst the app
+    /// must enable synthetic touch (<c>capabilities.syntheticTouch</c> in the agent status).
+    /// </summary>
+    public Task<ActionResult> TapResultAsync(
+        string elementId,
+        double x,
+        double y,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        var payload = new JsonObject
+        {
+            ["elementId"] = elementId,
+            ["x"] = x,
+            ["y"] = y
         };
         AddCaptureMetadata(payload, captureEpoch, registryGeneration);
         return PostActionResultAsync($"{UiApi}/actions/tap", payload);
@@ -1029,7 +1109,8 @@ public class AgentClient : IDisposable
     }
 
     /// <summary>
-    /// Performs a gesture. Supported types: tap, doubletap, longpress, swipe, pan, pinch, rotate.
+    /// Performs a gesture. Supported types: tap, doubletap, longpress, swipe, pan, drag, pinch, rotate.
+    /// For a drag from a point use <see cref="DragAsync"/>.
     /// </summary>
     public async Task<bool> GestureAsync(
         string type,
@@ -1094,6 +1175,193 @@ public class AgentClient : IDisposable
         if (steps.HasValue) payload["steps"] = steps.Value;
         AddCaptureMetadata(payload, captureEpoch, registryGeneration);
 
+        return await PostGestureAsync(payload, type);
+    }
+
+    /// <summary>
+    /// Drag from a point on an element, delivered as a real touch: pressed at
+    /// (<paramref name="x"/>, <paramref name="y"/>), optionally held for <paramref name="holdMs"/>,
+    /// moved to the end point and lifted there. Points are device-independent units from the
+    /// element's top-left. The drag ends at (<paramref name="toX"/>, <paramref name="toY"/>) — on
+    /// <paramref name="toElementId"/> when one is given, otherwise on the dragged element (where it
+    /// may lie past the element's edge) — or, with no end point, at the centre of
+    /// <paramref name="toElementId"/>. This is what moves a custom slider's thumb, reorders a list
+    /// or drops an item onto a target the way a finger does; unlike <see cref="PanAsync"/> it is
+    /// never serviced by invoking a gesture recognizer directly. On iOS and Mac Catalyst the app
+    /// must enable synthetic touch (<c>capabilities.syntheticTouch</c> in the agent status).
+    /// </summary>
+    public async Task<GestureResult> DragAsync(
+        string elementId,
+        double x,
+        double y,
+        double? toX = null,
+        double? toY = null,
+        string? toElementId = null,
+        int? holdMs = null,
+        int? durationMs = null,
+        int? steps = null,
+        long? captureEpoch = null,
+        long? registryGeneration = null)
+    {
+        var payload = new JsonObject
+        {
+            ["type"] = "drag",
+            ["elementId"] = elementId,
+            ["x"] = x,
+            ["y"] = y
+        };
+
+        if (toX.HasValue) payload["toX"] = toX.Value;
+        if (toY.HasValue) payload["toY"] = toY.Value;
+        if (toElementId is not null) payload["toElementId"] = toElementId;
+        if (holdMs.HasValue) payload["holdMs"] = holdMs.Value;
+        if (durationMs.HasValue) payload["durationMs"] = durationMs.Value;
+        if (steps.HasValue) payload["steps"] = steps.Value;
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+
+        return await PostGestureAsync(payload, "drag");
+    }
+
+    /// <summary>
+    /// Starts a capability-negotiated continuous pointer session. The caller must send moves in
+    /// exact sequence order and end or cancel the session. A successful response means the native
+    /// pointer-down was delivered; do not replay the interaction through a legacy gesture after
+    /// that point.
+    /// </summary>
+    public Task<PointerSessionResult> StartPointerSessionAsync(PointerSessionStartRequest request)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (string.IsNullOrWhiteSpace(request.SessionId))
+            throw new ArgumentException("A pointer session id is required.", nameof(request));
+
+        return SendPointerSessionAsync(
+            $"{UiApi}/actions/pointer-sessions",
+            ProtocolJson.SerializeToNode(request),
+            request.SessionId);
+    }
+
+    /// <summary>Sends one bounded batch of coalesced pointer samples.</summary>
+    public Task<PointerSessionResult> MovePointerSessionAsync(
+        string sessionId,
+        int sequence,
+        IReadOnlyList<PointerSessionSample> samples)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            throw new ArgumentException("A pointer session id is required.", nameof(sessionId));
+        if (samples is null)
+            throw new ArgumentNullException(nameof(samples));
+
+        return SendPointerSessionAsync(
+            $"{UiApi}/actions/pointer-sessions/{Uri.EscapeDataString(sessionId)}/move",
+            new JsonObject
+            {
+                ["sequence"] = sequence,
+                ["samples"] = new JsonArray(samples.Select(
+                    static sample => ProtocolJson.SerializeToNode(sample)).ToArray())
+            },
+            sessionId);
+    }
+
+    /// <summary>Ends a pointer session with its final coordinate sample.</summary>
+    public Task<PointerSessionResult> EndPointerSessionAsync(
+        string sessionId,
+        int sequence,
+        PointerSessionSample sample)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            throw new ArgumentException("A pointer session id is required.", nameof(sessionId));
+        if (sample is null)
+            throw new ArgumentNullException(nameof(sample));
+
+        return SendPointerSessionAsync(
+            $"{UiApi}/actions/pointer-sessions/{Uri.EscapeDataString(sessionId)}/end",
+            new JsonObject
+            {
+                ["sequence"] = sequence,
+                ["sample"] = ProtocolJson.SerializeToNode(sample)
+            },
+            sessionId);
+    }
+
+    /// <summary>
+    /// Cancels a pointer session. Cancellation is idempotent and safe to send when the caller is
+    /// unsure whether the session still exists.
+    /// </summary>
+    public Task<PointerSessionResult> CancelPointerSessionAsync(
+        string sessionId,
+        string? reason = null)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            throw new ArgumentException("A pointer session id is required.", nameof(sessionId));
+
+        return SendPointerSessionAsync(
+            $"{UiApi}/actions/pointer-sessions/{Uri.EscapeDataString(sessionId)}/cancel",
+            new JsonObject { ["reason"] = reason },
+            sessionId);
+    }
+
+    private async Task<PointerSessionResult> SendPointerSessionAsync(
+        string path,
+        JsonNode payload,
+        string sessionId)
+    {
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
+            {
+                using var content = ProtocolJson.CreateJsonContent(payload);
+                return await _http.PostAsync($"{_baseUrl}{path}", content);
+            });
+            var responseBody = await response.Content.ReadAsStringAsync();
+            var result = ProtocolJson.Deserialize<PointerSessionResult>(responseBody)
+                ?? new PointerSessionResult
+                {
+                    Success = false,
+                    SessionId = sessionId,
+                    State = "rejected",
+                    Error = "Agent returned an unreadable pointer session response."
+                };
+            result.StatusCode = (int)response.StatusCode;
+            if (!response.IsSuccessStatusCode)
+            {
+                result.Success = false;
+                if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.NotImplemented
+                    && string.IsNullOrWhiteSpace(result.Reason))
+                {
+                    result.Reason = "not_supported";
+                }
+            }
+            return result;
+        }
+        catch (NotSupportedByAgentException ex)
+        {
+            return new PointerSessionResult
+            {
+                Success = false,
+                SessionId = sessionId,
+                State = "rejected",
+                Reason = "not_supported",
+                Error = ex.Message,
+                StatusCode = 501
+            };
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            return new PointerSessionResult
+            {
+                Success = false,
+                SessionId = sessionId,
+                State = "unknown",
+                Reason = "transport-failure",
+                Error = ex.Message,
+                TransportFailure = true
+            };
+        }
+    }
+
+    private async Task<GestureResult> PostGestureAsync(JsonObject payload, string type)
+    {
         try
         {
             using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
@@ -1179,7 +1447,10 @@ public class AgentClient : IDisposable
             "rotate", elementId, rotation: degrees, durationMs: durationMs, steps: steps,
             captureEpoch: captureEpoch, registryGeneration: registryGeneration);
 
-    /// <summary>Drag by a vector in device-independent pixels.</summary>
+    /// <summary>
+    /// Drag by a vector in device-independent pixels. This may be serviced by invoking the MAUI
+    /// pan recognizer directly; for a real touch from a known point use <see cref="DragAsync"/>.
+    /// </summary>
     public Task<GestureResult> PanAsync(
         string? elementId,
         double deltaX,
@@ -1356,7 +1627,30 @@ public class AgentClient : IDisposable
             maxWidth,
             scale,
             captureEpoch,
-            registryGeneration);
+            registryGeneration,
+            resolution: null);
+        return result.Success ? result.Data : null;
+    }
+
+    public async Task<byte[]?> ScreenshotAsync(
+        int? window,
+        string? elementId,
+        string? selector,
+        int? maxWidth,
+        string? scale,
+        long? captureEpoch,
+        long? registryGeneration,
+        ScreenshotResolutionOptions? resolution)
+    {
+        var result = await ScreenshotResultAsync(
+            window,
+            elementId,
+            selector,
+            maxWidth,
+            scale,
+            captureEpoch,
+            registryGeneration,
+            resolution);
         return result.Success ? result.Data : null;
     }
 
@@ -1382,7 +1676,8 @@ public class AgentClient : IDisposable
             maxWidth,
             scale,
             captureEpoch: null,
-            registryGeneration: null);
+            registryGeneration: null,
+            resolution: null);
 
     public Task<ScreenshotResult> ScreenshotResultAsync(
         int? window,
@@ -1400,6 +1695,27 @@ public class AgentClient : IDisposable
             scale,
             captureEpoch,
             registryGeneration,
+            resolution: null,
+            fullscreen: false);
+
+    public Task<ScreenshotResult> ScreenshotResultAsync(
+        int? window,
+        string? elementId,
+        string? selector,
+        int? maxWidth,
+        string? scale,
+        long? captureEpoch,
+        long? registryGeneration,
+        ScreenshotResolutionOptions? resolution)
+        => ScreenshotResultCoreAsync(
+            window,
+            elementId,
+            selector,
+            maxWidth,
+            scale,
+            captureEpoch,
+            registryGeneration,
+            resolution,
             fullscreen: false);
 
     public async Task<byte[]?> FullscreenScreenshotAsync(
@@ -1408,6 +1724,21 @@ public class AgentClient : IDisposable
         string? scale = null,
         long? captureEpoch = null,
         long? registryGeneration = null)
+        => await FullscreenScreenshotAsync(
+            window,
+            maxWidth,
+            scale,
+            captureEpoch,
+            registryGeneration,
+            resolution: null);
+
+    public async Task<byte[]?> FullscreenScreenshotAsync(
+        int? window,
+        int? maxWidth,
+        string? scale,
+        long? captureEpoch,
+        long? registryGeneration,
+        ScreenshotResolutionOptions? resolution)
     {
         var result = await ScreenshotResultCoreAsync(
             window,
@@ -1417,9 +1748,28 @@ public class AgentClient : IDisposable
             scale,
             captureEpoch,
             registryGeneration,
+            resolution,
             fullscreen: true);
         return result.Success ? result.Data : null;
     }
+
+    public Task<ScreenshotResult> FullscreenScreenshotResultAsync(
+        int? window = null,
+        int? maxWidth = null,
+        string? scale = null,
+        long? captureEpoch = null,
+        long? registryGeneration = null,
+        ScreenshotResolutionOptions? resolution = null)
+        => ScreenshotResultCoreAsync(
+            window,
+            elementId: null,
+            selector: null,
+            maxWidth,
+            scale,
+            captureEpoch,
+            registryGeneration,
+            resolution,
+            fullscreen: true);
 
     private async Task<ScreenshotResult> ScreenshotResultCoreAsync(
         int? window,
@@ -1429,19 +1779,36 @@ public class AgentClient : IDisposable
         string? scale,
         long? captureEpoch,
         long? registryGeneration,
+        ScreenshotResolutionOptions? resolution,
         bool fullscreen)
     {
         try
         {
             var queryParams = new List<string>();
+            var hasResolutionHints = resolution?.TargetScale != null
+                || resolution?.MaxPixelWidth != null
+                || resolution?.MaxPixelHeight != null
+                || resolution?.MaxPixels != null;
             if (fullscreen) queryParams.Add("fullscreen=true");
             if (window != null) queryParams.Add($"window={window}");
             if (elementId != null) queryParams.Add($"elementId={Uri.EscapeDataString(elementId)}");
             if (selector != null) queryParams.Add($"selector={Uri.EscapeDataString(selector)}");
-            if (maxWidth != null) queryParams.Add($"maxWidth={maxWidth}");
-            if (scale != null) queryParams.Add($"scale={Uri.EscapeDataString(scale)}");
+            var fallbackMaxWidth = MinPositive(maxWidth, resolution?.MaxPixelWidth);
+            if (fallbackMaxWidth != null) queryParams.Add($"maxWidth={fallbackMaxWidth}");
+            if (scale != null)
+                queryParams.Add($"scale={Uri.EscapeDataString(scale)}");
+            else if (hasResolutionHints && maxWidth == null)
+                queryParams.Add("scale=auto");
             if (captureEpoch != null) queryParams.Add($"captureEpoch={captureEpoch}");
             if (registryGeneration != null) queryParams.Add($"registryGeneration={registryGeneration}");
+            if (resolution?.TargetScale != null)
+                queryParams.Add($"targetScale={resolution.TargetScale.Value.ToString(CultureInfo.InvariantCulture)}");
+            if (resolution?.MaxPixelWidth != null)
+                queryParams.Add($"maxPixelWidth={resolution.MaxPixelWidth.Value}");
+            if (resolution?.MaxPixelHeight != null)
+                queryParams.Add($"maxPixelHeight={resolution.MaxPixelHeight.Value}");
+            if (resolution?.MaxPixels != null)
+                queryParams.Add($"maxPixels={resolution.MaxPixels.Value}");
 
             var url = queryParams.Count > 0
                 ? $"{_baseUrl}{UiApi}/screenshot?{string.Join("&", queryParams)}"
@@ -1450,17 +1817,80 @@ public class AgentClient : IDisposable
             const int captureRetryCount = 2;
             for (var attempt = 0; ; attempt++)
             {
-                using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
+                var received = await SendScreenshotRequestWithRetriesAsync(
+                    url,
+                    resolution?.MaxEncodedBytes);
+                using var response = received.Response;
+                if (received.ExceededLimit)
+                {
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        return ScreenshotResult.Failure(
+                            "Screenshot request failed with an oversized error response.",
+                            "screenshot-too-large");
+                    }
+                    return ScreenshotResult.Failure(
+                        $"Screenshot exceeded the configured {resolution!.MaxEncodedBytes} byte limit.",
+                        "screenshot-too-large");
+                }
+                var data = received.Data ?? [];
                 if (response.IsSuccessStatusCode)
                 {
+                    var (fallbackPixelWidth, fallbackPixelHeight) = GetPngDimensions(data);
+                    var headerPixelWidth = GetHeaderInt32(response, "X-DevFlow-Screenshot-Pixel-Width");
+                    var headerPixelHeight = GetHeaderInt32(response, "X-DevFlow-Screenshot-Pixel-Height");
+                    var pixelWidth = fallbackPixelWidth ?? headerPixelWidth;
+                    var pixelHeight = fallbackPixelHeight ?? headerPixelHeight;
+                    var logicalWidth = GetHeaderDouble(response, "X-DevFlow-Screenshot-Logical-Width");
+                    var logicalHeight = GetHeaderDouble(response, "X-DevFlow-Screenshot-Logical-Height");
+                    var captureScale = GetHeaderDouble(response, "X-DevFlow-Screenshot-Capture-Scale");
+                    var nativeScale = GetHeaderDouble(response, "X-DevFlow-Screenshot-Native-Scale");
+                    var metadataValid = (!fallbackPixelWidth.HasValue
+                            || !headerPixelWidth.HasValue
+                            || fallbackPixelWidth == headerPixelWidth)
+                        && (!fallbackPixelHeight.HasValue
+                            || !headerPixelHeight.HasValue
+                            || fallbackPixelHeight == headerPixelHeight)
+                        && DimensionsMatchScale(
+                            pixelWidth,
+                            pixelHeight,
+                            logicalWidth,
+                            logicalHeight,
+                            captureScale);
+                    if (!metadataValid)
+                    {
+                        logicalWidth = null;
+                        logicalHeight = null;
+                        captureScale = null;
+                        nativeScale = null;
+                    }
+
                     return ScreenshotResult.Ok(
-                        await response.Content.ReadAsByteArrayAsync(),
+                        data,
                         GetHeaderInt64(response, "X-DevFlow-Capture-Epoch"),
                         GetHeaderInt64(response, "X-DevFlow-Registry-Generation"),
-                        GetHeaderInt32(response, "X-DevFlow-Window-Id"));
+                        GetHeaderInt32(response, "X-DevFlow-Window-Id"),
+                        pixelWidth,
+                        pixelHeight,
+                        logicalWidth,
+                        logicalHeight,
+                        captureScale,
+                        nativeScale,
+                        GetHeaderString(response, "X-DevFlow-Screenshot-Format")
+                            ?? (response.Content.Headers.ContentType?.MediaType == "image/png" ? "png" : null),
+                        metadataValid
+                            ? GetHeaderBoolean(response, "X-DevFlow-Screenshot-Clamped")
+                            : null);
                 }
 
-                var body = await response.Content.ReadAsStringAsync();
+                var body = Encoding.UTF8.GetString(data);
+                if (response.StatusCode == HttpStatusCode.NotImplemented &&
+                    TryParseNotSupported(body, out var capability, out var unsupportedReason))
+                {
+                    return ScreenshotResult.Failure(
+                        new NotSupportedByAgentException(capability, unsupportedReason).Message,
+                        "not_supported");
+                }
                 if (response.StatusCode == HttpStatusCode.Conflict
                     && IsCaptureChangedDuringRead(body)
                     && attempt < captureRetryCount)
@@ -1472,14 +1902,102 @@ public class AgentClient : IDisposable
                 return ParseScreenshotError(body);
             }
         }
-        // The shared retry path turns a uniform 501 not_supported envelope into this typed
-        // exception. ScreenshotResultAsync's documented contract is to report failures through
-        // the returned ScreenshotResult rather than throwing, so translate it back into one here.
+        // Keep the result contract defensive if a custom transport surfaces the typed exception.
         catch (NotSupportedByAgentException ex)
         {
             return ScreenshotResult.Failure(ex.Message, "not_supported");
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return ScreenshotResult.Failure(null); }
+    }
+
+    private async Task<(HttpResponseMessage Response, byte[]? Data, bool ExceededLimit)>
+        SendScreenshotRequestWithRetriesAsync(
+            string url,
+            int? maximumBytes)
+    {
+        var retryCount = Math.Max(0, TransientFailureRetryCount);
+        for (var attempt = 0; ; attempt++)
+        {
+            HttpResponseMessage? response = null;
+            try
+            {
+                response = await _http.GetAsync(
+                    url,
+                    HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                const int maximumErrorBodyBytes = 64 * 1024;
+                var responseLimit = response.IsSuccessStatusCode
+                    ? maximumBytes
+                    : Math.Min(maximumBytes ?? maximumErrorBodyBytes, maximumErrorBodyBytes);
+                var (data, exceededLimit) = await ReadScreenshotDataAsync(
+                    response,
+                    responseLimit).ConfigureAwait(false);
+                return (response, data, exceededLimit);
+            }
+            catch (Exception ex) when (
+                IsTransientTransportException(ex) &&
+                attempt < retryCount)
+            {
+                response?.Dispose();
+                var delay = GetTransientFailureRetryDelay(attempt);
+                if (delay > TimeSpan.Zero)
+                    await Task.Delay(delay).ConfigureAwait(false);
+            }
+            catch
+            {
+                response?.Dispose();
+                throw;
+            }
+        }
+    }
+
+    private async Task<(byte[]? Data, bool ExceededLimit)> ReadScreenshotDataAsync(
+        HttpResponseMessage response,
+        int? maximumBytes)
+    {
+        var content = response.Content;
+        if (maximumBytes is <= 0)
+            return (null, true);
+        if (maximumBytes.HasValue &&
+            content.Headers.ContentLength is long contentLength &&
+            contentLength > maximumBytes.Value)
+        {
+            return (null, true);
+        }
+
+        using var stream = await content.ReadAsStreamAsync().ConfigureAwait(false);
+        var initialCapacity = content.Headers.ContentLength is > 0 and <= int.MaxValue
+            ? (int)content.Headers.ContentLength.Value
+            : 0;
+        if (maximumBytes.HasValue)
+            initialCapacity = Math.Min(initialCapacity, maximumBytes.Value);
+        using var buffer = new MemoryStream(initialCapacity);
+        using var timeout = new CancellationTokenSource(_http.Timeout);
+        using var timeoutRegistration = timeout.Token.Register(response.Dispose);
+        var chunk = new byte[81920];
+        try
+        {
+            while (true)
+            {
+                var read = await stream.ReadAsync(
+                    chunk,
+                    0,
+                    chunk.Length,
+                    timeout.Token).ConfigureAwait(false);
+                if (read == 0)
+                    return (buffer.ToArray(), false);
+                if (maximumBytes.HasValue && buffer.Length > maximumBytes.Value - read)
+                    return (null, true);
+                buffer.Write(chunk, 0, read);
+            }
+        }
+        catch (Exception ex) when (
+            timeout.IsCancellationRequested &&
+            ex is IOException or ObjectDisposedException or OperationCanceledException)
+        {
+            throw new TaskCanceledException(
+                "The screenshot response body timed out.",
+                new TimeoutException("The screenshot response body timed out.", ex));
+        }
     }
 
     private static ScreenshotResult ParseScreenshotError(string body)
@@ -1543,7 +2061,7 @@ public class AgentClient : IDisposable
     /// </remarks>
     public async Task<string?> GetPropertyAsync(string elementId, string propertyName)
     {
-        var (result, statusCode) = await GetJsonWithStatusAsync($"{UiApi}/elements/{elementId}/properties/{propertyName}");
+        var (result, statusCode) = await GetJsonWithStatusAsync($"{UiApi}/elements/{Uri.EscapeDataString(elementId)}/properties/{Uri.EscapeDataString(propertyName)}");
 
         if (result.ValueKind == JsonValueKind.Undefined)
         {
@@ -1584,7 +2102,7 @@ public class AgentClient : IDisposable
 
     /// <summary>Get curated editable property descriptors and current values for an element.</summary>
     public Task<JsonElement> GetPropertyDescriptorsAsync(string elementId)
-        => GetJsonAsync($"{UiApi}/elements/{elementId}/properties");
+        => GetJsonAsync($"{UiApi}/elements/{Uri.EscapeDataString(elementId)}/properties");
 
     /// <summary>
     /// Set a property value on an element.
@@ -1614,7 +2132,7 @@ public class AgentClient : IDisposable
                 };
                 AddCaptureMetadata(payload, captureEpoch, registryGeneration);
                 using var content = ProtocolJson.CreateJsonContent(payload);
-                return await _http.PutAsync($"{_baseUrl}{UiApi}/elements/{elementId}/properties/{propertyName}", content);
+                return await _http.PutAsync($"{_baseUrl}{UiApi}/elements/{Uri.EscapeDataString(elementId)}/properties/{Uri.EscapeDataString(propertyName)}", content);
             });
             return response.IsSuccessStatusCode;
         }
@@ -1634,7 +2152,7 @@ public class AgentClient : IDisposable
         };
         AddCaptureMetadata(payload, captureEpoch, registryGeneration);
         return PutActionResultAsync(
-            $"{UiApi}/elements/{elementId}/properties/{propertyName}",
+            $"{UiApi}/elements/{Uri.EscapeDataString(elementId)}/properties/{Uri.EscapeDataString(propertyName)}",
             payload);
     }
 
@@ -1715,7 +2233,56 @@ public class AgentClient : IDisposable
             return await _http.PostAsync($"{_baseUrl}{path}", content);
         });
         var responseBody = await response.Content.ReadAsStringAsync();
-        return ProtocolJson.ParseElement(responseBody);
+        if (!response.IsSuccessStatusCode)
+            throw CreateHttpRequestException(
+                $"WebView command '{method}' failed with HTTP {(int)response.StatusCode}: {responseBody}",
+                null, response.StatusCode);
+
+        var result = ParseWebViewResponse(responseBody, method);
+        ThrowIfCdpFailed(result, method);
+        return result;
+    }
+
+    private static JsonElement ParseWebViewResponse(string body, string operation)
+    {
+        try
+        {
+            return ProtocolJson.ParseElement(body);
+        }
+        catch (JsonException ex)
+        {
+            throw new JsonException($"WebView operation '{operation}' returned invalid JSON: {body}", ex);
+        }
+    }
+
+    private static void ThrowIfCdpFailed(JsonElement response, string method)
+    {
+        if (response.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException($"WebView command '{method}' returned an invalid CDP response.");
+
+        if (response.TryGetProperty("error", out var error))
+        {
+            var message = error.ValueKind == JsonValueKind.Object && error.TryGetProperty("message", out var detail)
+                ? detail.ToString() : error.ToString();
+            throw new InvalidOperationException($"WebView command '{method}' failed: {message}; response: {response.GetRawText()}");
+        }
+        if (response.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.False)
+            throw new InvalidOperationException($"WebView command '{method}' failed: {response.GetRawText()}");
+
+        if (response.TryGetProperty("result", out var result)
+            && result.ValueKind == JsonValueKind.Object
+            && result.TryGetProperty("exceptionDetails", out var exception))
+        {
+            var message = exception.ValueKind == JsonValueKind.Object
+                && exception.TryGetProperty("exception", out var exceptionValue)
+                && exceptionValue.ValueKind == JsonValueKind.Object
+                && exceptionValue.TryGetProperty("description", out var description)
+                && !string.IsNullOrWhiteSpace(description.ToString())
+                    ? description.ToString()
+                    : exception.ValueKind == JsonValueKind.Object && exception.TryGetProperty("text", out var text)
+                        ? text.ToString() : exception.GetRawText();
+            throw new InvalidOperationException($"WebView command '{method}' threw: {message}");
+        }
     }
 
     /// <summary>
@@ -1731,7 +2298,12 @@ public class AgentClient : IDisposable
         var path = $"{WebViewApi}/source";
         if (!string.IsNullOrEmpty(webviewId))
             path += $"?webview={Uri.EscapeDataString(webviewId)}";
-        return await GetStringWithTransientRetriesAsync($"{_baseUrl}{path}");
+        using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync($"{_baseUrl}{path}"));
+        var body = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw CreateHttpRequestException(
+                $"WebView source failed with HTTP {(int)response.StatusCode}: {body}", null, response.StatusCode);
+        return body;
     }
 
     public async Task<bool> NavigateWebViewAsync(string url, string? contextId = null)
@@ -1744,7 +2316,7 @@ public class AgentClient : IDisposable
         if (!string.IsNullOrWhiteSpace(contextId))
             payload["contextId"] = contextId;
 
-        return await PostActionAsync($"{WebViewApi}/navigate", payload);
+        return await PostWebViewActionAsync($"{WebViewApi}/navigate", payload);
     }
 
     public async Task<bool> ClickWebViewAsync(string selector, string? contextId = null)
@@ -1757,7 +2329,7 @@ public class AgentClient : IDisposable
         if (!string.IsNullOrWhiteSpace(contextId))
             payload["contextId"] = contextId;
 
-        return await PostActionAsync($"{WebViewApi}/input/click", payload);
+        return await PostWebViewActionAsync($"{WebViewApi}/input/click", payload);
     }
 
     public async Task<bool> FillWebViewAsync(string selector, string text, string? contextId = null)
@@ -1771,7 +2343,7 @@ public class AgentClient : IDisposable
         if (!string.IsNullOrWhiteSpace(contextId))
             payload["contextId"] = contextId;
 
-        return await PostActionAsync($"{WebViewApi}/input/fill", payload);
+        return await PostWebViewActionAsync($"{WebViewApi}/input/fill", payload);
     }
 
     public async Task<bool> InsertWebViewTextAsync(string text, string? contextId = null)
@@ -1784,7 +2356,27 @@ public class AgentClient : IDisposable
         if (!string.IsNullOrWhiteSpace(contextId))
             payload["contextId"] = contextId;
 
-        return await PostActionAsync($"{WebViewApi}/input/text", payload);
+        return await PostWebViewActionAsync($"{WebViewApi}/input/text", payload);
+    }
+
+    private async Task<bool> PostWebViewActionAsync(string path, JsonNode body)
+    {
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
+        {
+            using var content = ProtocolJson.CreateJsonContent(body);
+            return await _http.PostAsync($"{_baseUrl}{path}", content);
+        });
+        var responseBody = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw CreateHttpRequestException(
+                $"WebView action '{path}' failed with HTTP {(int)response.StatusCode}: {responseBody}",
+                null, response.StatusCode);
+
+        var result = ParseWebViewResponse(responseBody, path);
+        ThrowIfCdpFailed(result, path);
+        if (!result.TryGetProperty("success", out var success) || success.ValueKind != JsonValueKind.True)
+            throw new InvalidOperationException($"WebView action '{path}' did not report success: {responseBody}");
+        return true;
     }
 
     public async Task<string> HitTestAsync(double x, double y, int? window = null)
@@ -2025,6 +2617,91 @@ public class AgentClient : IDisposable
             && int.TryParse(values.FirstOrDefault(), out var value)
                 ? value
                 : null;
+
+    private static double? GetHeaderDouble(HttpResponseMessage response, string name)
+    {
+        if (!response.Headers.TryGetValues(name, out var values)
+            || !double.TryParse(
+                values.FirstOrDefault(),
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var value)
+            || double.IsNaN(value)
+            || double.IsInfinity(value)
+            || value <= 0)
+        {
+            return null;
+        }
+
+        return value;
+    }
+
+    private static bool? GetHeaderBoolean(HttpResponseMessage response, string name)
+        => response.Headers.TryGetValues(name, out var values)
+            && bool.TryParse(values.FirstOrDefault(), out var value)
+                ? value
+                : null;
+
+    private static string? GetHeaderString(HttpResponseMessage response, string name)
+        => response.Headers.TryGetValues(name, out var values)
+            ? values.FirstOrDefault()
+            : null;
+
+    private static int? MinPositive(int? first, int? second)
+    {
+        if (first is <= 0) first = null;
+        if (second is <= 0) second = null;
+        return first.HasValue && second.HasValue
+            ? Math.Min(first.Value, second.Value)
+            : first ?? second;
+    }
+
+    private static bool DimensionsMatchScale(
+        int? pixelWidth,
+        int? pixelHeight,
+        double? logicalWidth,
+        double? logicalHeight,
+        double? captureScale)
+    {
+        var metadataCount = (logicalWidth.HasValue ? 1 : 0)
+            + (logicalHeight.HasValue ? 1 : 0)
+            + (captureScale.HasValue ? 1 : 0);
+        if (metadataCount == 0)
+            return true;
+        if (metadataCount != 3 || !pixelWidth.HasValue || !pixelHeight.HasValue)
+            return false;
+
+        static bool AxisMatches(
+            double logicalSize,
+            int pixelSize,
+            double scale)
+        {
+            var tolerance = Math.Max(1.5, pixelSize * 0.005);
+            return Math.Abs(logicalSize * scale - pixelSize) <= tolerance;
+        }
+
+        return AxisMatches(logicalWidth!.Value, pixelWidth.Value, captureScale!.Value)
+            && AxisMatches(logicalHeight!.Value, pixelHeight.Value, captureScale.Value);
+    }
+
+    private static (int? Width, int? Height) GetPngDimensions(byte[] png)
+    {
+        ReadOnlySpan<byte> signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        if (png.Length < 24 || !png.AsSpan(0, 8).SequenceEqual(signature))
+            return (null, null);
+
+        var width = ((uint)png[16] << 24)
+            | ((uint)png[17] << 16)
+            | ((uint)png[18] << 8)
+            | png[19];
+        var height = ((uint)png[20] << 24)
+            | ((uint)png[21] << 16)
+            | ((uint)png[22] << 8)
+            | png[23];
+        return width is > 0 and <= int.MaxValue && height is > 0 and <= int.MaxValue
+            ? ((int)width, (int)height)
+            : (null, null);
+    }
 
     private async Task<bool> PostActionAsync(string path, JsonNode body)
     {
@@ -2331,9 +3008,21 @@ public class AgentClient : IDisposable
             return;
 
         var body = await response.Content.ReadAsStringAsync();
-        string capability;
-        string? reason = null;
+        if (!TryParseNotSupported(body, out var capability, out var reason))
+            return;
 
+        // The caller never receives the message, so release it here.
+        response.Dispose();
+        throw new NotSupportedByAgentException(capability, reason);
+    }
+
+    private static bool TryParseNotSupported(
+        string body,
+        out string capability,
+        out string? reason)
+    {
+        capability = "unknown";
+        reason = null;
         try
         {
             var json = ProtocolJson.ParseElement(body);
@@ -2345,25 +3034,22 @@ public class AgentClient : IDisposable
                 kind.ValueKind != JsonValueKind.String ||
                 kind.GetString() != "not_supported")
             {
-                return;
+                return false;
             }
 
-            capability = json.TryGetProperty("capability", out var c) && c.ValueKind == JsonValueKind.String
-                ? c.GetString() ?? "unknown"
-                : "unknown";
-
+            capability = json.TryGetProperty("capability", out var c) &&
+                c.ValueKind == JsonValueKind.String
+                    ? c.GetString() ?? "unknown"
+                    : "unknown";
             if (json.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String)
                 reason = r.GetString();
+            return true;
         }
         catch (JsonException)
         {
             // Non-JSON 501 — leave it to the caller's existing error handling.
-            return;
+            return false;
         }
-
-        // The caller never receives the message, so release it here.
-        response.Dispose();
-        throw new NotSupportedByAgentException(capability, reason);
     }
 
     private TimeSpan GetTransientFailureRetryDelay(int attempt)
@@ -2619,6 +3305,50 @@ public class AgentClient : IDisposable
         catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
     }
 
+    // ── Menus ──
+
+    /// <summary>Lists MAUI menu definitions and supported native application menus.</summary>
+    public async Task<JsonElement> GetMenusAsync(int? window = null)
+    {
+        var path = window.HasValue ? $"{UiApi}/menus?window={window.Value}" : $"{UiApi}/menus";
+        return await GetJsonAsync(path);
+    }
+
+    /// <summary>
+    /// Invokes an application menu item by id, slash-joined title path, title, or key and modifiers.
+    /// The target selects the menu layer: auto (default), maui, or native.
+    /// </summary>
+    public async Task<JsonElement> InvokeMenuAsync(
+        string? id = null,
+        string? path = null,
+        string? title = null,
+        string? key = null,
+        string? modifiers = null,
+        string? target = null,
+        int? window = null)
+    {
+        var payload = new JsonObject();
+        if (!string.IsNullOrWhiteSpace(id)) payload["id"] = id;
+        if (!string.IsNullOrWhiteSpace(path)) payload["path"] = path;
+        if (!string.IsNullOrWhiteSpace(title)) payload["title"] = title;
+        if (!string.IsNullOrWhiteSpace(key)) payload["key"] = key;
+        if (!string.IsNullOrWhiteSpace(modifiers)) payload["modifiers"] = modifiers;
+        if (!string.IsNullOrWhiteSpace(target)) payload["target"] = target;
+        if (window.HasValue) payload["window"] = window.Value;
+
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
+            {
+                using var content = ProtocolJson.CreateJsonContent(payload);
+                return await _http.PostAsync($"{_baseUrl}{UiApi}/menus/invoke", content);
+            });
+            var responseBody = await response.Content.ReadAsStringAsync();
+            return string.IsNullOrWhiteSpace(responseBody) ? default : ProtocolJson.ParseElement(responseBody);
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
+    }
+
     // ── Files ──
 
     public async Task<JsonElement> ListStorageRootsAsync()
@@ -2737,6 +3467,20 @@ public class AgentClient : IDisposable
 
     private sealed record MutationLeaseIdentity(string LeaseId, string HolderKind, string? Label);
 
+    private sealed record ActionContextIdentity(
+        string? Source,
+        string? ActionId,
+        string? StreamId,
+        string? FrameId,
+        long? FrameRevision,
+        string? CoordinateSpace,
+        double? X,
+        double? Y,
+        double? ToX,
+        double? ToY,
+        double? DeltaX,
+        double? DeltaY);
+
     private sealed class MutationLeaseScope : IDisposable
     {
         private readonly AsyncLocal<MutationLeaseIdentity?> _slot;
@@ -2759,13 +3503,39 @@ public class AgentClient : IDisposable
         }
     }
 
+    private sealed class ActionContextScope : IDisposable
+    {
+        private readonly AsyncLocal<ActionContextIdentity?> _slot;
+        private readonly ActionContextIdentity? _previous;
+        private bool _disposed;
+
+        public ActionContextScope(
+            AsyncLocal<ActionContextIdentity?> slot,
+            ActionContextIdentity? previous)
+        {
+            _slot = slot;
+            _previous = previous;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _slot.Value = _previous;
+        }
+    }
+
     private sealed class MutationLeaseHeaderHandler : DelegatingHandler
     {
         private readonly Func<MutationLeaseIdentity?> _leaseProvider;
+        private readonly Func<ActionContextIdentity?> _actionContextProvider;
 
-        public MutationLeaseHeaderHandler(Func<MutationLeaseIdentity?> leaseProvider)
+        public MutationLeaseHeaderHandler(
+            Func<MutationLeaseIdentity?> leaseProvider,
+            Func<ActionContextIdentity?> actionContextProvider)
         {
             _leaseProvider = leaseProvider;
+            _actionContextProvider = actionContextProvider;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(
@@ -2786,8 +3556,54 @@ public class AgentClient : IDisposable
                 }
             }
 
+            var actionContext = _actionContextProvider();
+            if (actionContext is not null)
+            {
+                SetHeader(request, "X-DevFlow-Action-Source", actionContext.Source);
+                SetHeader(request, "X-DevFlow-Action-Id", actionContext.ActionId);
+                SetHeader(request, "X-DevFlow-Action-Stream-Id", actionContext.StreamId);
+                SetHeader(request, "X-DevFlow-Action-Frame-Id", actionContext.FrameId);
+                SetHeader(
+                    request,
+                    "X-DevFlow-Action-Frame-Revision",
+                    actionContext.FrameRevision?.ToString(CultureInfo.InvariantCulture));
+                SetHeader(
+                    request,
+                    "X-DevFlow-Action-Coordinate-Space",
+                    actionContext.CoordinateSpace);
+                SetHeader(request, "X-DevFlow-Action-X", FormatNumber(actionContext.X));
+                SetHeader(request, "X-DevFlow-Action-Y", FormatNumber(actionContext.Y));
+                SetHeader(request, "X-DevFlow-Action-To-X", FormatNumber(actionContext.ToX));
+                SetHeader(request, "X-DevFlow-Action-To-Y", FormatNumber(actionContext.ToY));
+                SetHeader(request, "X-DevFlow-Action-Delta-X", FormatNumber(actionContext.DeltaX));
+                SetHeader(request, "X-DevFlow-Action-Delta-Y", FormatNumber(actionContext.DeltaY));
+            }
+
             return base.SendAsync(request, cancellationToken);
         }
+
+        private static void SetHeader(
+            HttpRequestMessage request,
+            string name,
+            string? value)
+        {
+            request.Headers.Remove(name);
+            if (value is null || string.IsNullOrWhiteSpace(value) || value.Length > 256)
+                return;
+            foreach (var character in value)
+            {
+                if (character < 0x20 || character == 0x7f)
+                    return;
+            }
+            request.Headers.TryAddWithoutValidation(name, value);
+        }
+
+        private static string? FormatNumber(double? value)
+            => value is { } number
+                && !double.IsNaN(number)
+                && !double.IsInfinity(number)
+                ? number.ToString("R", CultureInfo.InvariantCulture)
+                : null;
     }
 }
 
@@ -2918,6 +3734,8 @@ public class AgentDescriptor
 
 public class DeviceDescriptor
 {
+    [System.Text.Json.Serialization.JsonPropertyName("id")]
+    public string? Id { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("platform")]
     public string? Platform { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("deviceType")]
@@ -2968,8 +3786,20 @@ public class AgentCapabilities
     public bool Profiler { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("jobs")]
     public bool Jobs { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("menus")]
+    public bool Menus { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("theme")]
     public bool Theme { get; set; }
+    /// <summary>
+    /// Whether gestures can be delivered as synthesised touches to raw-touch views such as
+    /// GraphicsView. True only on iOS and Mac Catalyst when the app enables the tier.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonPropertyName("syntheticTouch")]
+    public bool SyntheticTouch { get; set; }
+
+    /// <summary>Whether this backend can maintain a continuous pointer session.</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("pointerStream")]
+    public bool PointerStream { get; set; }
 }
 
 public class NetworkRequest

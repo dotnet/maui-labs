@@ -152,6 +152,37 @@ The repo is at 0.1.0-preview so breaking changes are acceptable, but:
 - **Signing**: configured in `eng/Signing.props`. New third-party DLLs need a `3PartySHA2` entry.
 - **Version**: defined in `eng/Versions.props` (`VersionPrefix` + `VersionSuffix`). Per-product overrides in `src/{Product}/Version.props`.
 
+## npm Dependencies and Supply Chain
+
+The JavaScript in this repo ships (the DevFlow Inspector client and VS Code host are packaged and
+distributed), so vulnerable transitive dependencies reach users. Catch them **locally, before
+opening the PR** — not weeks later via a Dependabot advisory PR.
+
+**Whenever you add, update, or remove an npm dependency, or regenerate a lockfile:**
+
+```bash
+node eng/scripts/audit-npm.mjs
+```
+
+This audits every npm project in the repo and verifies each is registered in
+`.github/dependabot.yml`. Exit `0` = clean. Exit `1` = `high`/`critical` advisories, an
+unregistered project, or a missing lockfile. Exit `2` = a project could not be checked against
+the advisory database. Resolve all three before opening the PR.
+
+- **Exit `2` is not a pass.** `npm audit` also exits non-zero when it cannot reach the registry,
+  so that result means no signal. `--allow-unverified` downgrades it for offline work; CI never
+  passes that flag and so fails closed.
+- **Register every new `package.json` in `.github/dependabot.yml` in the same PR.** Dependabot
+  security alerts fire repo-wide, but routine *version* updates only run for listed directories.
+  An unregistered project drifts silently until advisories pile up.
+- **Commit a `package-lock.json`.** Without one there is no resolved graph to audit.
+- **`devDependencies` count too** — they run on CI runners with repo credentials in scope.
+- Fix with `npm audit fix` in the reported directory, re-run `npm ci && npm test`, and commit the
+  updated `package-lock.json`. Remediation is required; a known advisory left in place keeps the
+  check red and blocks later dependency PRs.
+
+Full guidance: `.github/instructions/dependencies.instructions.md`.
+
 ## Dependency Updates (darc)
 
 Upstream dependencies are managed via [darc/Maestro](https://github.com/dotnet/arcade/blob/main/Documentation/Darc.md). When updating a dependency:
@@ -384,6 +415,7 @@ This stage filters the product's `.nupkg` files from the shared `PackageArtifact
 
 #### Key conventions
 
+- **Adding a package to an existing product**: update the exact `.slnf` or `.slnx` used by that product's build job in this pipeline, not only the product's main solution. Then verify the publish stage's `Copy-Item` glob matches the new `<PackageId>`. A shipping project omitted from the official build input does not produce a package for release.
 - **Package glob pattern**: example: `Microsoft.Maui.{Product}.*.nupkg` — use the actual `<PackageId>` prefix from your `.csproj` files (e.g., Linux GTK4 uses `Microsoft.Maui.Platforms.Linux.Gtk4.*.nupkg`).
 - **`dependsOn: [Validate, publish_using_darc]`**: these stages come from the Arcade post-build template (`eng/common/templates-official/post-build/post-build.yml`) and must always be listed.
 - **Signing**: All shipped NuGet packages must build on Windows so MicroBuild/ESRP can sign the DLLs. If the product is Linux-only, build *and pack* on Windows (signing), then optionally add a separate Linux verification job (see the `LinuxGtk4_LinuxVerify` job for the pattern).

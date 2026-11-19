@@ -38,6 +38,13 @@ public static class MauiProgram
         {
             options.Port = ResolveAgentPort();
             options.EnableProfiler = true;
+            options.EnableLayoutDiagnostics = true;
+            var diagnostics = options.RegisterExtension(
+                "com.example.diagnostics",
+                "Sample diagnostics extension",
+                "1.0.0",
+                new[] { "seed_pref" });
+            PreferenceDiagnostics.Register(diagnostics);
         });
 #endif
 

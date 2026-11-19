@@ -202,7 +202,7 @@ public interface IAppleProvider
 	IReadOnlyList<string> SupportedPlatforms { get; }
 
 	/// <summary>
-	/// Lists simulator devices as <see cref="Device"/> models for device manager integration.
+	/// Lists simulators and connected physical iPhones/iPads as <see cref="Device"/> models for device manager integration.
 	/// </summary>
 	/// <remarks>
 	/// Every returned device must be tagged with a platform listed in

@@ -7,7 +7,7 @@
         <AppThemeBinding Light="#F5F5F5" Dark="#1C1B1F" />
     </ContentPage.BackgroundColor>
 
-    <ScrollView Padding="16">
+    <ScrollView Padding="16" AutomationId="GestureScrollView">
         <VerticalStackLayout Spacing="16">
 
             <Label Text="Each target reports the gesture it received, so an automated pinch/pan/swipe can be verified by reading the status label back."
@@ -17,6 +17,22 @@
                     <AppThemeBinding Light="#49454F" Dark="#CAC4D0" />
                 </Label.TextColor>
             </Label>
+
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Read-only input tap target" FontAttributes="Bold" FontSize="16" />
+                    <Entry Text="Tap to select an item"
+                           IsReadOnly="True"
+                           AutomationId="TapInput">
+                        <Entry.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnInputTapped" />
+                        </Entry.GestureRecognizers>
+                    </Entry>
+                    <Label x:Name="InputTapStatusLabel"
+                           Text="input tap: 0"
+                           AutomationId="InputTapStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
 
             <!-- Pinch: PinchGestureRecognizer, accumulates e.Scale like a real pinch -->
             <Border StrokeShape="RoundRectangle 8" Padding="16">
@@ -144,6 +160,56 @@
                                 Orientation="Vertical">
                         <VerticalStackLayout x:Name="NativeScrollContent" Spacing="4" />
                     </ScrollView>
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Raw touch: the child takes touches directly; a native ancestor swipe must not preempt it. -->
+            <Border x:Name="NativeSwipeHost"
+                    StrokeShape="RoundRectangle 8"
+                    Padding="16"
+                    HandlerChanged="OnNativeSwipeHostHandlerChanged"
+                    HandlerChanging="OnNativeSwipeHostHandlerChanging">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#DCE7C8" Dark="#3B4A2E" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Raw-touch target (GraphicsView)" FontAttributes="Bold" FontSize="16" />
+                    <Label Text="Takes touches directly — no gesture recognizer to drive."
+                           FontSize="12"
+                           AutomationId="NativeSwipeProbeTarget" />
+                    <GraphicsView x:Name="RawTouchCanvas"
+                                  AutomationId="RawTouchTarget"
+                                  HeightRequest="140"
+                                  StartInteraction="OnRawTouchStarted"
+                                  DragInteraction="OnRawTouchDragged"
+                                  EndInteraction="OnRawTouchEnded" />
+                    <Label x:Name="RawTouchStatusLabel"
+                           Text="rawtouch: none"
+                           FontSize="14"
+                           AutomationId="RawTouchStatusLabel" />
+                    <Label x:Name="NativeSwipeStatusLabel"
+                           Text="native swipe: unavailable"
+                           FontSize="14"
+                           AutomationId="NativeSwipeStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- An ordinary control. Synthesised touches must never reach it: a drag delivered
+                 to a button presses it, and one that ends inside also clicks it. -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#E6E0E9" Dark="#49454F" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Synthetic-touch guard (Button)" FontAttributes="Bold" FontSize="16" />
+                    <Button AutomationId="SyntheticTouchGuardButton"
+                            Text="Gestures must not press this"
+                            Pressed="OnGuardButtonPressed"
+                            Clicked="OnGuardButtonClicked" />
+                    <Label x:Name="GuardStatusLabel"
+                           Text="guard: pressed=0 clicked=0"
+                           FontSize="14"
+                           AutomationId="GuardStatusLabel" />
                 </VerticalStackLayout>
             </Border>
 

@@ -1,3 +1,4 @@
+using Comet.Reactive;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -51,7 +52,7 @@ namespace Comet.Benchmarks
 
 		// --- Many independent state fields ---
 
-		[Benchmark(Description = "MVU: View with N independent State<T> fields")]
+		[Benchmark(Description = "MVU: View with N independent Signal<T> fields")]
 		public void MvuManyStates()
 		{
 			var view = new ManyStatesCometView(Size);
@@ -163,13 +164,13 @@ namespace Comet.Benchmarks
 
 	public class ManyStatesCometView : Comet.View
 	{
-		readonly State<string>[] _states;
+		readonly Signal<string>[] _states;
 
 		public ManyStatesCometView(int count)
 		{
-			_states = new State<string>[count];
+			_states = new Signal<string>[count];
 			for (int i = 0; i < count; i++)
-				_states[i] = new State<string>($"Initial {i}");
+				_states[i] = new Signal<string>($"Initial {i}");
 
 			Body = () =>
 			{
@@ -189,7 +190,7 @@ namespace Comet.Benchmarks
 
 	public class ListChurnCometView : Comet.View
 	{
-		readonly State<int> _generation = new State<int>(0);
+		readonly Signal<int> _generation = new Signal<int>(0);
 		readonly int _size;
 		readonly List<string> _items;
 
@@ -222,7 +223,7 @@ namespace Comet.Benchmarks
 
 	public class DeepConditionalView : Comet.View
 	{
-		readonly State<bool> _show = new State<bool>(false);
+		readonly Signal<bool> _show = new Signal<bool>(false);
 		readonly int _depth;
 
 		public DeepConditionalView(int depth)
@@ -254,8 +255,8 @@ namespace Comet.Benchmarks
 
 	public class HiddenStateCometView : Comet.View
 	{
-		readonly State<bool> _showMain = new State<bool>(true);
-		public readonly State<int> _hiddenCounter = new State<int>(0);
+		readonly Signal<bool> _showMain = new Signal<bool>(true);
+		public readonly Signal<int> _hiddenCounter = new Signal<int>(0);
 
 		public HiddenStateCometView(int size)
 		{
@@ -276,7 +277,7 @@ namespace Comet.Benchmarks
 
 	public class TypeChangingView : Comet.View
 	{
-		readonly State<int> _viewType = new State<int>(0);
+		readonly Signal<int> _viewType = new Signal<int>(0);
 
 		public TypeChangingView(int unused)
 		{
@@ -297,7 +298,7 @@ namespace Comet.Benchmarks
 					_ => new VStack
 					{
 						new Text("Type C"),
-						new Comet.Slider(new Func<double>(() => 0.5), 0.0, 1.0)
+						new Comet.Slider(() => 0.5, () => 0.0, () => 1.0)
 					}
 				};
 			};

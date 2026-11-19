@@ -109,7 +109,7 @@ public partial class CarouselViewHandler : MacOSViewHandler<CarouselView, NSScro
 			return;
 
 		var scrollX = PlatformView.ContentView.Bounds.X;
-		var pageWidth = PlatformView.Frame.Width;
+		var pageWidth = PlatformView.Bounds.Width;
 		if (pageWidth <= 0)
 			return;
 
@@ -130,7 +130,7 @@ public partial class CarouselViewHandler : MacOSViewHandler<CarouselView, NSScro
 		if (PlatformView == null || _itemCount == 0)
 			return;
 
-		var pageWidth = PlatformView.Frame.Width;
+		var pageWidth = PlatformView.Bounds.Width;
 		var targetX = position * pageWidth;
 		var scrollView = PlatformView;
 
@@ -193,7 +193,7 @@ public partial class CarouselViewHandler : MacOSViewHandler<CarouselView, NSScro
 
 		foreach (var subview in subviews)
 		{
-			subview.Frame = new CGRect(x, 0, pageWidth, pageHeight);
+			subview.SetLayoutFrame(new CGRect(x, 0, pageWidth, pageHeight));
 			x += (nfloat)pageWidth;
 		}
 
@@ -235,8 +235,8 @@ public partial class CarouselViewHandler : MacOSViewHandler<CarouselView, NSScro
 	public static void MapPeekAreaInsets(CarouselViewHandler handler, CarouselView view)
 	{
 		// Re-layout to account for peek insets
-		if (handler.PlatformView?.Frame.Width > 0)
-			handler.LayoutItems(new Rect(0, 0, handler.PlatformView.Frame.Width, handler.PlatformView.Frame.Height));
+		if (handler.PlatformView?.Bounds.Width > 0)
+			handler.LayoutItems(new Rect(0, 0, handler.PlatformView.Bounds.Width, handler.PlatformView.Bounds.Height));
 	}
 
 	public static void MapLoop(CarouselViewHandler handler, CarouselView view)
@@ -295,8 +295,8 @@ public partial class CarouselViewHandler : MacOSViewHandler<CarouselView, NSScro
 			}
 		}
 
-		if (PlatformView.Frame.Width > 0)
-			LayoutItems(new Rect(0, 0, PlatformView.Frame.Width, PlatformView.Frame.Height));
+		if (PlatformView.Bounds.Width > 0)
+			LayoutItems(new Rect(0, 0, PlatformView.Bounds.Width, PlatformView.Bounds.Height));
 	}
 
 	static IView? CreateItemView(object item, DataTemplate? template)

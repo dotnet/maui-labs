@@ -4,6 +4,10 @@ namespace Microsoft.Maui.Handlers.WPF
 {
 	public partial class ButtonHandler : WPFViewHandler<IButton, WButton>
 	{
+		System.Windows.Controls.StackPanel? _fontImagePanel;
+		System.Windows.Controls.Image? _fontImage;
+		System.Windows.Controls.TextBlock? _fontImageLabel;
+
 		protected override WButton CreatePlatformView() => new WButton();
 
 		protected override void ConnectHandler(WButton platformView)
@@ -39,7 +43,15 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public static void MapText(ButtonHandler handler, IButton button)
 		{
-			handler.PlatformView.Content = (button as IText)?.Text ?? string.Empty;
+			if (handler._fontImageLabel != null &&
+				ReferenceEquals(handler.PlatformView.Content, handler._fontImagePanel) &&
+				button is Microsoft.Maui.Controls.Button mauiButton && mauiButton.ImageSource is IFontImageSource)
+			{
+				handler._fontImageLabel.Text = mauiButton.Text ?? string.Empty;
+				handler.UpdateFontImageSpacing(mauiButton);
+				return;
+			}
+			MapImageSource(handler, button);
 		}
 
 		public static void MapTextColor(ButtonHandler handler, IButton button)
@@ -69,8 +81,7 @@ namespace Microsoft.Maui.Handlers.WPF
 					? System.Windows.FontStyles.Italic
 					: System.Windows.FontStyles.Normal;
 
-			if (!string.IsNullOrEmpty(textStyle.Font.Family))
-				handler.PlatformView.FontFamily = new System.Windows.Media.FontFamily(textStyle.Font.Family);
+			Microsoft.Maui.Platforms.Windows.WPF.WPFFontManager.ApplyFontFamily(handler.PlatformView, textStyle.Font, handler.MauiContext);
 		}
 
 		public static void MapCharacterSpacing(ButtonHandler handler, IButton button)
@@ -87,7 +98,63 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public static void MapImageSource(ButtonHandler handler, IButton button)
 		{
-			// ImageSource mapping requires an image loading pipeline; not yet available for WPF.
+			var text = (button as IText)?.Text ?? string.Empty;
+			if (button is not Microsoft.Maui.Controls.Button mauiButton ||
+				mauiButton.ImageSource is not IFontImageSource source)
+			{
+				handler._fontImagePanel = null;
+				handler._fontImage = null;
+				handler._fontImageLabel = null;
+				handler.PlatformView.Content = text;
+				return;
+			}
+
+			var image = new System.Windows.Controls.Image
+			{
+				Source = Microsoft.Maui.Platforms.Windows.WPF.FontImageSourceHelper.RenderGlyph(source, handler.MauiContext),
+				Stretch = System.Windows.Media.Stretch.None,
+				VerticalAlignment = System.Windows.VerticalAlignment.Center,
+				HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+			};
+			var label = new System.Windows.Controls.TextBlock
+			{
+				Text = text,
+				VerticalAlignment = System.Windows.VerticalAlignment.Center,
+				HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+			};
+			var layout = mauiButton.ContentLayout;
+			var position = layout.Position;
+			var vertical = position is Microsoft.Maui.Controls.Button.ButtonContentLayout.ImagePosition.Top
+				or Microsoft.Maui.Controls.Button.ButtonContentLayout.ImagePosition.Bottom;
+			var imageFirst = position is Microsoft.Maui.Controls.Button.ButtonContentLayout.ImagePosition.Left
+				or Microsoft.Maui.Controls.Button.ButtonContentLayout.ImagePosition.Top;
+			var panel = new System.Windows.Controls.StackPanel
+			{
+				Orientation = vertical ? System.Windows.Controls.Orientation.Vertical : System.Windows.Controls.Orientation.Horizontal,
+			};
+			panel.Children.Add(imageFirst ? image : label);
+			panel.Children.Add(imageFirst ? label : image);
+			handler._fontImagePanel = panel;
+			handler._fontImage = image;
+			handler._fontImageLabel = label;
+			handler.UpdateFontImageSpacing(mauiButton);
+			handler.PlatformView.Content = panel;
+		}
+
+		void UpdateFontImageSpacing(Microsoft.Maui.Controls.Button button)
+		{
+			if (_fontImage == null)
+				return;
+			var layout = button.ContentLayout;
+			var position = layout.Position;
+			var vertical = position is Microsoft.Maui.Controls.Button.ButtonContentLayout.ImagePosition.Top
+				or Microsoft.Maui.Controls.Button.ButtonContentLayout.ImagePosition.Bottom;
+			var imageFirst = position is Microsoft.Maui.Controls.Button.ButtonContentLayout.ImagePosition.Left
+				or Microsoft.Maui.Controls.Button.ButtonContentLayout.ImagePosition.Top;
+			var spacing = string.IsNullOrEmpty(button.Text) || _fontImage.Source == null ? 0 : layout.Spacing;
+			_fontImage.Margin = vertical
+				? new System.Windows.Thickness(0, imageFirst ? 0 : spacing, 0, imageFirst ? spacing : 0)
+				: new System.Windows.Thickness(imageFirst ? 0 : spacing, 0, imageFirst ? spacing : 0, 0);
 		}
 
 		public static void MapBackground(ButtonHandler handler, IButton button)

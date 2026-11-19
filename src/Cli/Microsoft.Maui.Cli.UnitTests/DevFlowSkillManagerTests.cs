@@ -28,6 +28,7 @@ public sealed class DevFlowSkillManagerTests
 
         var statePath = GetStatePathFromResults(result);
         Assert.StartsWith(Path.Combine(workspace.StateRoot, "workspaces"), statePath, StringComparison.Ordinal);
+        Assert.Matches("^[0-9a-f]{32}$", new DirectoryInfo(Path.GetDirectoryName(statePath)!).Parent!.Name);
         Assert.True(File.Exists(statePath));
 
         var skillState = Assert.IsType<JsonObject>(CliJson.ParseNode(await File.ReadAllTextAsync(statePath)));
@@ -432,7 +433,91 @@ public sealed class DevFlowSkillManagerTests
 
         var skillState = Assert.IsType<JsonObject>(CliJson.ParseNode(await File.ReadAllTextAsync(statePath)));
         Assert.Equal(".agent/skills", skillState["relativeSkillDirectory"]?.GetValue<string>());
-        Assert.StartsWith("path-", skillState["target"]?.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Matches("^path-[0-9a-f]{32}$", skillState["target"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("project", false)]
+    [InlineData("project", true)]
+    [InlineData("user", true)]
+    public async Task Install_ExistingShortStateKeys_PreserveOwnershipAndLockPath(string scope, bool custom)
+    {
+        using var workspace = TemporaryWorkspace.Create();
+        var customPath = custom ? Path.Combine(".agent", "skills") : null;
+        var (oldPath, newPath) = WriteLegacySkillState(workspace, scope, custom);
+
+        var result = await DevFlowSkillManager.InstallRecommendedAsync(
+            scope, "claude", customPath, force: false, allowDowngrade: false,
+            confirm: null, CancellationToken.None);
+
+        Assert.Equal(oldPath, GetStatePathFromResults(result));
+        Assert.True(File.Exists(oldPath + ".lock"));
+        Assert.False(File.Exists(newPath));
+        Assert.All(result["results"]!.AsArray().OfType<JsonObject>(), entry =>
+        {
+            Assert.Equal("up-to-date", entry["status"]?.GetValue<string>());
+            Assert.Equal(Path.GetFileNameWithoutExtension(oldPath), entry["target"]?.GetValue<string>());
+        });
+        var updatedState = Assert.IsType<JsonObject>(CliJson.ParseNode(await File.ReadAllTextAsync(oldPath)));
+        Assert.Equal(3, updatedState["entries"]!.AsArray().Count);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Install_LegacyProjectTarget_UserCleanupUsesItsOwnStateKey(bool existingUserState)
+    {
+        using var workspace = TemporaryWorkspace.Create();
+        var customPath = Path.Combine(".agent", "skills");
+        var (oldProjectPath, newProjectPath) = WriteLegacySkillState(workspace, "project", custom: true);
+        if (existingUserState)
+            await DevFlowSkillManager.InstallRecommendedAsync(
+                "user", "claude", customPath, force: false, allowDowngrade: false,
+                confirm: null, CancellationToken.None);
+        var legacySkill = Path.Combine(workspace.UserRoot, customPath, "maui-ai-debugging");
+        Directory.CreateDirectory(legacySkill);
+        await File.WriteAllTextAsync(Path.Combine(legacySkill, "SKILL.md"), "legacy user skill");
+
+        await DevFlowSkillManager.InstallRecommendedAsync(
+            "project", "claude", customPath, force: false, allowDowngrade: false,
+            confirm: null, CancellationToken.None);
+
+        var userStateDirectory = Path.Combine(workspace.StateRoot, "user", "skills");
+        Assert.False(Directory.Exists(legacySkill));
+        Assert.True(File.Exists(Path.Combine(userStateDirectory, Path.GetFileName(newProjectPath))));
+        Assert.False(File.Exists(Path.Combine(userStateDirectory, Path.GetFileName(oldProjectPath))));
+        await DevFlowSkillManager.InstallRecommendedAsync(
+            "user", "claude", customPath, force: false, allowDowngrade: false,
+            confirm: null, CancellationToken.None);
+    }
+
+    [Theory]
+    [InlineData("workspace")]
+    [InlineData("target")]
+    [InlineData("metadata")]
+    public async Task Install_ConflictingLegacyState_RefusesWithoutWrites(string conflict)
+    {
+        using var workspace = TemporaryWorkspace.Create();
+        var customPath = Path.Combine(".agent", "skills");
+        var (oldPath, newPath) = WriteLegacySkillState(workspace, "project", custom: true);
+        if (conflict == "workspace")
+            Directory.CreateDirectory(Path.GetDirectoryName(newPath)!);
+        else if (conflict == "target")
+            File.Copy(oldPath, Path.Combine(Path.GetDirectoryName(oldPath)!, Path.GetFileName(newPath)));
+        else
+        {
+            var state = Assert.IsType<JsonObject>(CliJson.ParseNode(await File.ReadAllTextAsync(oldPath)));
+            state["relativeSkillDirectory"] = ".different/skills";
+            await File.WriteAllTextAsync(oldPath, CliJson.SerializeUntyped(state));
+        }
+        var before = await File.ReadAllTextAsync(oldPath);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            DevFlowSkillManager.InstallRecommendedAsync(
+                "project", "claude", customPath, force: false, allowDowngrade: false,
+                confirm: null, CancellationToken.None));
+
+        Assert.Equal(before, await File.ReadAllTextAsync(oldPath));
     }
 
     [Fact]
@@ -739,6 +824,36 @@ public sealed class DevFlowSkillManagerTests
                 // Best-effort cleanup for test temp folders.
             }
         }
+    }
+
+    static (string OldPath, string NewPath) WriteLegacySkillState(TemporaryWorkspace workspace, string scope, bool custom)
+    {
+        var root = scope == "user" ? workspace.UserRoot : workspace.Path;
+        var relative = custom ? ".agent/skills" : ".claude/skills";
+        var workspaceId = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(workspace.Path)))[..32].ToLowerInvariant();
+        var target = custom
+            ? "path-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(relative)))[..32].ToLowerInvariant()
+            : "claude";
+        string StatePath(string id, string key) => Path.Combine(workspace.StateRoot,
+            scope == "user" ? "user" : Path.Combine("workspaces", id), "skills", key + ".json");
+        var oldTarget = custom ? target[..21] : target;
+        var oldPath = StatePath(workspaceId[..24], oldTarget);
+        var skillDirectory = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar), "maui-devflow-onboard");
+        Directory.CreateDirectory(skillDirectory);
+        File.WriteAllText(Path.Combine(skillDirectory, "SKILL.md"), "old managed skill");
+        Directory.CreateDirectory(Path.GetDirectoryName(oldPath)!);
+        File.WriteAllText(oldPath, System.Text.Json.JsonSerializer.Serialize(new
+        {
+            version = 2, scope, target = oldTarget, targetRoot = root,
+            relativeSkillDirectory = relative, workspaceRoot = workspace.Path,
+            entries = new[] { new
+            {
+                skillId = "maui-devflow-onboard", scope, target = oldTarget, installedByCliVersion = "0.0.1",
+                contentHash = HashContent("old managed skill"),
+                files = new[] { new { path = "SKILL.md", hash = HashContent("old managed skill") } }
+            } }
+        }));
+        return (oldPath, StatePath(workspaceId, target));
     }
 
     static string GetStatePathFromResults(JsonObject result)

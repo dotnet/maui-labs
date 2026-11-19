@@ -1,0 +1,171 @@
+scenarios:
+  - name: "Find the root cause of a missing API in Java resolution"
+    prompt: |
+      In my net10.0-android direct binding, WidgetActivity is in
+      api.xml.class-parse but absent from api.xml and generated C#. The native
+      inheritance is WidgetActivity -> VendorActivity -> FragmentActivity.
+      The build succeeds with warnings. I have binding.binlog but no diagnosis.
+      Give a concrete investigation and repair plan, not a slim wrapper.
+    assertions:
+      - type: "output_contains"
+        value: "java-resolution-report.log"
+      - type: "output_contains"
+        value: "Xamarin.AndroidX.Fragment"
+      - type: "output_contains"
+        value: "binlogtool"
+    rubric:
+      - "Identifies Java type resolution as the stage that removed the API."
+      - "Traces the missing base chain and verifies a compatible Fragment binding reference."
+      - "Requests or inspects a diagnostic rebuild rather than treating build success as coverage."
+      - "Does not invent the missing class in Additions or remove the required API."
+    timeout: 180
+
+  - name: "Distinguish listener implementor Handler collisions"
+    prompt: |
+      My binding has CS0102: IChangeListenerImplementor already contains
+      OnChangeHandler. In api.xml, com.example.ChangeListener has
+      onChange(java.lang.String) and
+      onChange(java.lang.String, java.lang.Object).
+      Both callbacks must remain callable. Show the Metadata.xml repair.
+    assertions:
+      - type: "output_contains"
+        value: "managedName"
+      - type: "output_matches"
+        pattern: 'count\(parameter\)\s*=\s*2'
+      - type: "output_not_contains"
+        value: "<remove-node"
+    rubric:
+      - "Renames only the two-parameter callback to a distinct managed method name."
+      - "Explains Handler names derive from callback names, not just argsType."
+      - "Preserves Java entry points and checks both callbacks after regeneration."
+    timeout: 180
+
+  - name: "Repair duplicate EventArgs without deleting listeners"
+    prompt: |
+      com.example.DownloadListener and com.example.UploadListener both declare
+      onError(int). Generated ErrorEventArgs has duplicate constructors (CS0111).
+      I need both events. Give exact transforms using these API names.
+    assertions:
+      - type: "output_contains"
+        value: "argsType"
+      - type: "output_contains"
+        value: "DownloadListener"
+      - type: "output_contains"
+        value: "UploadListener"
+      - type: "output_not_contains"
+        value: "<remove-node"
+    rubric:
+      - "Uses distinct descriptive argsType values on the two listener methods."
+      - "Does not suppress both events or patch generated EventArgs C#."
+    timeout: 180
+
+  - name: "Do not generalize a malformed generic managedReturn failure"
+    prompt: |
+      A net10.0-android binding property fails CS0738: the generated property
+      does not implement IList<string> on its interface. I tried:
+      <attr path="/api/package[@name='com.example']/class[@name='Gauge']/method[@name='getKeys' and count(parameter)=0]" name="managedReturn">System.Collections.IList&gt;System.String&lt;</attr>
+      Now BG0000 says length must be non-negative. Does this prove generic
+      managedReturn is unsupported? I must preserve the public property.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)revers|malformed|bracket"
+      - type: "output_contains"
+        value: "System.Collections.Generic"
+      - type: "output_matches"
+        pattern: "(?i)explicit interface"
+    rubric:
+      - "Identifies reversed angle brackets and the wrong generic collection namespace."
+      - "Does not claim this one malformed example proves all generic managedReturn unsupported."
+      - "Offers a forwarding explicit interface property only after verifying actual collection conversion semantics."
+      - "Does not blindly cast a nongeneric list or return empty data to compile."
+      - "Preserves the public property and separates syntax correction from generator support."
+    timeout: 180
+
+  - name: "Explain Kotlin visibility and async JVM shape"
+    prompt: |
+      I am binding an existing Kotlin Android AAR without changing its source.
+      javap shows com.example.HiddenClient is public, but diagnostics say
+      "Kotlin: Hiding internal class com.example.HiddenClient". It never appears
+      in api.xml.class-parse. Another public class exposes suspend load() and
+      Flow updates(). Can Metadata.xml visibility restore HiddenClient, and
+      will load and updates become Task and IAsyncEnumerable automatically?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)Kotlin.{0,30}(metadata|internal)|internal.{0,30}Kotlin"
+      - type: "output_matches"
+        pattern: "(?i)continuation"
+      - type: "output_matches"
+        pattern: "(?i)callback|Java-friendly"
+    rubric:
+      - "Explains Kotlin metadata can hide JVM-public internal APIs before transforms."
+      - "Does not promise a visibility attr can restore an unparsed node."
+      - "Distinguishes bindable coroutine JVM types from automatic idiomatic C# async translation."
+      - "Prefers a supported public callback API and treats an owned wrapper as an explicit alternative."
+    timeout: 180
+
+  - name: "Resolve dependencies without packaging duplicate Java classes"
+    prompt: |
+      In a .NET 10 binding I have a binding NuGet and a local JAR containing the
+      same Java classes. D8 fails with duplicate classes. Should I set
+      Bind=false on the JAR? Separately, XA4242 suggests Xamarin.AndroidX.Core,
+      a vendor runtime helper has no NuGet and no public C# surface, and an
+      annotation processor is verified compile-time-only. How should I handle
+      each? Does AndroidMavenLibrary fetch the whole transitive graph?
+    assertions:
+      - type: "output_contains"
+        value: "Xamarin.AndroidX.Core"
+      - type: "output_contains"
+        value: "AndroidMavenLibrary"
+      - type: "output_contains"
+        value: "AndroidIgnoredJavaDependency"
+    rubric:
+      - "Removes the redundant native artifact; explains Bind=false still includes Java code."
+      - "Uses the suggested compatible NuGet rather than duplicating AndroidX bytecode."
+      - "Includes the runtime helper with Bind=false and accounts for its dependencies."
+      - "Only ignores the proven compile-time-only dependency."
+      - "Does not claim AndroidMavenLibrary automatically downloads the complete transitive graph."
+    timeout: 180
+
+  - name: "Handle return-signature collisions without misleading Java rules"
+    prompt: |
+      Two methods in my Kotlin-built AAR generate Get(Key) in C# with different
+      return types and cause CS0111. Their JNI descriptors have the same
+      parameter descriptor but different returns; api.xml retains distinct
+      generic parameter types. I need both. Is Java allowed to overload only
+      by return type? Where should the lasting fix go?
+    assertions:
+      - type: "output_contains"
+        value: "managedName"
+      - type: "output_contains"
+        value: "Metadata.xml"
+      - type: "output_matches"
+        pattern: "(?i)JVM|bytecode"
+    rubric:
+      - "Distinguishes Java source overload rules from JVM descriptors and Kotlin-generated shapes."
+      - "Uses precise generic parameter selectors and distinct managed names for both APIs."
+      - "Preserves JNI signatures and avoids editing generated C#."
+    timeout: 180
+
+  - name: "Preserve a covariant typed API through an interface adapter"
+    prompt: |
+      In Example.Binding, generated partial class Widget derives from
+      Java.Lang.Object, implements the vendor's generated IWidgetCloner interface,
+      and exposes public Widget Clone(). IWidgetCloner declares
+      Java.Lang.Object Clone(), causing CS0738. Keep the public Widget-returning
+      method; do not modify generated code. Show the addition and explain if this
+      means modern C# never supports covariant return types.
+    assertions:
+      - type: "output_contains"
+        value: "IWidgetCloner.Clone()"
+      - type: "output_not_contains"
+        value: "Java.Lang.ICloneable.Clone()"
+      - type: "output_contains"
+        value: "Additions"
+      - type: "output_matches"
+        pattern: "(?i)override"
+    rubric:
+      - "Adds an explicit IWidgetCloner implementation returning Clone() from the generated typed method."
+      - "Uses the existing vendor interface without redeclaring it or substituting the ICloneable marker interface."
+      - "Preserves the typed public API and forwards real behavior instead of stubbing."
+      - "Distinguishes interface implementation constraints from supported C# class-override covariance."
+    timeout: 180

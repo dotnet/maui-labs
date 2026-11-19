@@ -106,8 +106,7 @@ namespace Microsoft.Maui.Handlers.WPF
 					? FontStyles.Italic
 					: FontStyles.Normal;
 
-			if (!string.IsNullOrEmpty(font.Family))
-				handler.PlatformView.FontFamily = new FontFamily(font.Family);
+			Microsoft.Maui.Platforms.Windows.WPF.WPFFontManager.ApplyFontFamily(handler.PlatformView, font, handler.MauiContext);
 		}
 
 		public static void MapCharacterSpacing(PickerHandler handler, IPicker picker)

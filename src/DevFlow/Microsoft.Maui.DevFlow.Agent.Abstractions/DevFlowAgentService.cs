@@ -34,6 +34,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             _options.MutationLeaseTimeoutMs);
         _server = new AgentHttpServer(_options.Port);
         _server.MutationLeaseValidator = ValidateMutationLeaseAsync;
+        _server.MutationAdmissionValidator = RejectMutationDuringPointerSession;
         _server.MutationObserver = ObserveMutationAsync;
         NetworkStore = new NetworkRequestStore(_options.MaxNetworkBufferSize);
         _profilerCollector = CreateProfilerCollector();
@@ -100,6 +101,9 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     /// <summary>Device type ("Physical" / "Virtual") reported to clients.</summary>
     protected virtual string DeviceTypeName => "Unknown";
+
+    /// <summary>Platform-specific device identifier when the app can report one safely.</summary>
+    protected virtual string? DeviceIdentifier => null;
 
     /// <summary>Device idiom ("Phone" / "Tablet" / "Desktop") reported to clients.</summary>
     protected virtual string IdiomName => "Unknown";
@@ -202,61 +206,65 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             var cdpWebViews = GetCdpWebViewsSnapshot();
             var (w, h, density) = GetWindowMetrics(windowIndex);
 
-            return new
+            return new Dictionary<string, object?>
             {
-                timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                agent = new
+                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
+                ["agent"] = new Dictionary<string, object?>
                 {
-                    name = "Microsoft.Maui.DevFlow.Agent",
-                    version = AgentVersion,
-                    framework = FrameworkDisplayName,
-                    frameworkId = FrameworkName,
-                    frameworkVersion = Environment.Version.ToString(),
-                    uiFramework = UiFrameworkName,
-                    sessionId = _sessionId,
+                    ["name"] = "Microsoft.Maui.DevFlow.Agent",
+                    ["version"] = AgentVersion,
+                    ["framework"] = FrameworkDisplayName,
+                    ["frameworkId"] = FrameworkName,
+                    ["frameworkVersion"] = Environment.Version.ToString(),
+                    ["uiFramework"] = UiFrameworkName,
+                    ["sessionId"] = _sessionId,
                 },
-                device = new
+                ["device"] = new Dictionary<string, object?>
                 {
-                    platform = PlatformName,
-                    deviceType = DeviceTypeName,
-                    idiom = IdiomName,
-                    displayDensity = density,
-                    windowCount = WindowCount,
-                    windowWidth = double.IsFinite(w) ? w : 0,
-                    windowHeight = double.IsFinite(h) ? h : 0,
+                    ["id"] = DeviceIdentifier,
+                    ["platform"] = PlatformName,
+                    ["deviceType"] = DeviceTypeName,
+                    ["idiom"] = IdiomName,
+                    ["displayDensity"] = density,
+                    ["windowCount"] = WindowCount,
+                    ["windowWidth"] = double.IsFinite(w) ? w : 0,
+                    ["windowHeight"] = double.IsFinite(h) ? h : 0,
                 },
-                app = new
+                ["app"] = new Dictionary<string, object?>
                 {
-                    name = appName,
-                    packageId = packageId,
-                    version = appVersion,
-                    build = appBuild,
-                    processId = Environment.ProcessId,
+                    ["name"] = appName,
+                    ["packageId"] = packageId,
+                    ["version"] = appVersion,
+                    ["build"] = appBuild,
+                    ["processId"] = Environment.ProcessId,
                 },
-                capabilities = new
+                ["capabilities"] = new Dictionary<string, object?>
                 {
-                    ui = IsUiSupported,
-                    layoutDiagnostics = _options.EnableLayoutDiagnostics,
-                    screenshots = IsScreenshotSupported,
-                    webview = cdpWebViews.Any(v => v.IsReady),
-                    network = true,
-                    logs = true,
-                    sensors = IsSensorsSupported,
-                    storage = IsStorageSupported,
-                    profiler = IsProfilerFeatureAvailable,
-                    jobs = IsJobsSupported,
-                    theme = IsThemeSupported,
-                    mutationLease = _options.RequireMutationLease,
+                    ["ui"] = IsUiSupported,
+                    ["layoutDiagnostics"] = _options.EnableLayoutDiagnostics,
+                    ["screenshots"] = IsScreenshotSupported,
+                    ["webview"] = cdpWebViews.Any(v => v.IsReady),
+                    ["network"] = true,
+                    ["logs"] = true,
+                    ["sensors"] = IsSensorsSupported,
+                    ["storage"] = IsStorageSupported,
+                    ["profiler"] = IsProfilerFeatureAvailable,
+                    ["jobs"] = IsJobsSupported,
+                    ["menus"] = IsMenusSupported,
+                    ["theme"] = IsThemeSupported,
+                    ["mutationLease"] = _options.RequireMutationLease,
+                    ["syntheticTouch"] = IsSyntheticTouchSupported,
+                    ["pointerStream"] = IsPointerStreamSupported,
                 },
-                running = IsAppBound,
+                ["running"] = IsAppBound,
                 // Current navigation route (null for backends without a router). Powers the
                 // inspector's "Return to start route" checkpoint restore. Read on the UI thread.
-                route = GetCurrentRouteLocation(),
-                cdpReady = cdpWebViews.Any(v => v.IsReady),
-                cdpWebViewCount = cdpWebViews.Length,
-                profiler = BuildProfilerCapabilitiesPayload(),
-                profilerSession = _profilerSessions.CurrentSession,
-                extensions = BuildExtensionsMarker()
+                ["route"] = GetCurrentRouteLocation(),
+                ["cdpReady"] = cdpWebViews.Any(v => v.IsReady),
+                ["cdpWebViewCount"] = cdpWebViews.Length,
+                ["profiler"] = BuildProfilerCapabilitiesPayload(),
+                ["profilerSession"] = _profilerSessions.CurrentSession,
+                ["extensions"] = BuildExtensionsMarker()
             };
         });
 
@@ -283,6 +291,15 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// <summary>Whether app theme endpoints are backed by an implementation.</summary>
     protected virtual bool IsThemeSupported => false;
 
+    /// <summary>Whether the backend can inspect and invoke application menus.</summary>
+    protected virtual bool IsMenusSupported => false;
+
+    /// <summary>
+    /// Whether gestures can be delivered as synthesised touches to raw-touch views. Only a
+    /// backend that implements the tier (iOS and Mac Catalyst) reports the opt-in option.
+    /// </summary>
+    protected virtual bool IsSyntheticTouchSupported => false;
+
     /// <summary>
     /// Reason surfaced to clients when a capability group is unavailable.
     /// </summary>
@@ -293,8 +310,8 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     protected static object Capability(int version, bool supported, string[] features, string? reason)
         => supported
-            ? new { version, supported = true, features, reason = (string?)null }
-            : new { version, supported = false, features = s_noFeatures, reason };
+            ? new Dictionary<string, object?> { ["version"] = version, ["supported"] = true, ["features"] = features, ["reason"] = (string?)null }
+            : new Dictionary<string, object?> { ["version"] = version, ["supported"] = false, ["features"] = s_noFeatures, ["reason"] = reason };
 
     /// <summary>
     /// Allows a backend to add or replace capability entries.
@@ -313,41 +330,43 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             ["css-selector", "type", "text", "accessibility-id"], reason);
         capabilities["ui.actions"] = Capability(1, IsUiSupported,
             ["tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties"], reason);
+        capabilities["ui.pointerStream"] = BuildPointerStreamCapability();
         capabilities["ui.screenshot"] = Capability(1, IsScreenshotSupported,
             ["element", "fullscreen", "selector"], reason);
-        capabilities["ui.events"] = Capability(1, true, ["stream", "subscribe"], null);
+        capabilities["ui.events"] = Capability(1, true, ["stream", "subscribe", "action-lifecycle"], null);
+        capabilities["ui.menus"] = Capability(1, IsMenusSupported, ["list", "invoke"], reason);
 
         if (_options.EnableLayoutDiagnostics)
         {
-            capabilities["ui.layoutDiagnostics"] = new
+            capabilities["ui.layoutDiagnostics"] = new Dictionary<string, object?>
             {
-                version = 1,
-                schemaVersion = "1.0",
-                ruleSetVersion = "1.0",
-                features = new[] { "clipping", "overflow", "text-truncation", "overlap", "occlusion", "coverage", "suppressions", "watch" }
+                ["version"] = 1,
+                ["schemaVersion"] = "1.0",
+                ["ruleSetVersion"] = "1.0",
+                ["features"] = new[] { "clipping", "overflow", "text-truncation", "overlap", "occlusion", "coverage", "suppressions", "watch" }
                     .Concat(cdpWebViews.Any(view => view.IsReady)
                         ? ["blazor-dom"]
                         : Array.Empty<string>())
                     .ToArray(),
-                watch = new
+                ["watch"] = new Dictionary<string, object?>
                 {
-                    supported = true,
-                    transport = "polling"
+                    ["supported"] = true,
+                    ["transport"] = "polling"
                 },
-                blazor = new
+                ["blazor"] = new Dictionary<string, object?>
                 {
-                    supported = cdpWebViews.Any(view => view.IsReady),
-                    readyWebViewCount = cdpWebViews.Count(view => view.IsReady)
+                    ["supported"] = cdpWebViews.Any(view => view.IsReady),
+                    ["readyWebViewCount"] = cdpWebViews.Count(view => view.IsReady)
                 },
-                profiles = new[] { "agent", "strict", "exhaustive", "ci" },
-                rules = GetLayoutRuleSupport()
+                ["profiles"] = new[] { "agent", "strict", "exhaustive", "ci" },
+                ["rules"] = GetLayoutRuleSupport()
             };
         }
 
         // Listed unconditionally so clients can discover the group and see *why* it is unavailable,
         // per the capability protocol: unsupported groups report supported:false rather than vanish.
         capabilities["webview"] = Capability(1, cdpWebViews.Length > 0,
-            ["evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot"],
+            ["evaluate", "contexts", "source", "dom", "dom-query", "console", "screenshot"],
             "No WebView has registered a CDP endpoint with this agent.");
 
         capabilities["profiler"] = Capability(1, IsProfilerFeatureAvailable, BuildProfilerFeatureList(), "Profiler collector is unavailable on this platform.");
@@ -370,25 +389,25 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         var themeCapability = Capability(1, IsThemeSupported, ["get", "set"], reason);
         capabilities["theme"] = themeCapability;
         capabilities["app.theme"] = themeCapability;
-        capabilities["agent.mutationLease"] = new
+        capabilities["agent.mutationLease"] = new Dictionary<string, object?>
         {
-            version = 1,
-            enforced = _options.RequireMutationLease,
-            features = new[] { "claim", "status", "heartbeat", "release", "force-takeover", "broker-authority", "local-fallback" }
+            ["version"] = 1,
+            ["enforced"] = _options.RequireMutationLease,
+            ["features"] = new[] { "claim", "status", "heartbeat", "release", "force-takeover", "broker-authority", "local-fallback" }
         };
 
         PopulateCapabilities(capabilities);
 
         var result = new Dictionary<string, object?>
         {
-            ["agent"] = new
+            ["agent"] = new Dictionary<string, object?>
             {
-                name = "Microsoft.Maui.DevFlow.Agent",
-                version = AgentVersion,
-                framework = FrameworkName,
-                frameworkId = FrameworkName,
-                uiFramework = UiFrameworkName,
-                frameworkVersion = FrameworkVersion
+                ["name"] = "Microsoft.Maui.DevFlow.Agent",
+                ["version"] = AgentVersion,
+                ["framework"] = FrameworkName,
+                ["frameworkId"] = FrameworkName,
+                ["uiFramework"] = UiFrameworkName,
+                ["frameworkVersion"] = FrameworkVersion
             },
             ["capabilities"] = capabilities
         };
@@ -398,11 +417,11 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             var extensions = BuildExtensionMetadata();
             foreach (var extension in _options.Extensions)
             {
-                capabilities[extension.Namespace] = new
+                capabilities[extension.Namespace] = new Dictionary<string, object?>
                 {
-                    version = GetCapabilityVersion(extension.Version),
-                    supported = true,
-                    features = extension.Features.Count > 0
+                    ["version"] = GetCapabilityVersion(extension.Version),
+                    ["supported"] = true,
+                    ["features"] = extension.Features.Count > 0
                         ? extension.Features
                         : extension.Tools.Select(tool => tool.Name).ToArray()
                 };
@@ -421,11 +440,11 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// on the active backend.
     /// </summary>
     protected HttpResponse NotSupported(string capability, string? reason = null)
-        => HttpResponse.Json(new
+        => HttpResponse.Json(new Dictionary<string, object?>
         {
-            error = "not_supported",
-            capability,
-            reason = reason ?? UnsupportedCapabilityReason
+            ["error"] = "not_supported",
+            ["capability"] = capability,
+            ["reason"] = reason ?? UnsupportedCapabilityReason
         }, 501);
 
     private Task<HttpResponse> NotSupportedTask(string capability, string? reason = null)
@@ -435,6 +454,10 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     /// <summary>Handles <c>GET /api/v1/ui/tree</c>.</summary>
     protected virtual Task<HttpResponse> HandleTree(HttpRequest request) => NotSupportedTask("ui.tree");
+
+    protected virtual Task<HttpResponse> HandleMenusList(HttpRequest request) => NotSupportedTask("ui.menus");
+
+    protected virtual Task<HttpResponse> HandleMenuInvoke(HttpRequest request) => NotSupportedTask("ui.menus");
 
     /// <summary>Handles <c>GET /api/v1/ui/element/{id}</c>.</summary>
     protected virtual Task<HttpResponse> HandleElement(HttpRequest request) => NotSupportedTask("ui.tree");
@@ -509,139 +532,16 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         var body = request.BodyAs<BatchRequest>();
         if (body?.Actions == null || body.Actions.Count == 0)
             return HttpResponse.Error("actions are required");
+        if (body.Actions.Count > MaxUiBatchActions)
+            return HttpResponse.Error(
+                $"A batch can contain at most {MaxUiBatchActions} actions.",
+                statusCode: 400,
+                reason: "batch-too-large");
 
-        var results = new List<object>(body.Actions.Count);
-        var allSucceeded = true;
-
-        foreach (var action in body.Actions)
-        {
-            var actionName = (action.Action ?? action.Type ?? string.Empty).Trim().ToLowerInvariant();
-            HttpResponse response;
-
-            switch (actionName)
-            {
-                case "tap":
-                    response = await HandleTap(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ActionRequest { ElementId = action.ElementId }) });
-                    break;
-                case "fill":
-                    response = await HandleFill(new HttpRequest
-                    {
-                        Method = "POST",
-                        Body = JsonSerializer.Serialize(new FillRequest { ElementId = action.ElementId, Text = action.Text ?? string.Empty })
-                    });
-                    break;
-                case "clear":
-                    response = await HandleClear(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ActionRequest { ElementId = action.ElementId }) });
-                    break;
-                case "focus":
-                    response = await HandleFocus(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ActionRequest { ElementId = action.ElementId }) });
-                    break;
-                case "navigate":
-                    response = await HandleNavigate(new HttpRequest
-                    {
-                        Method = "POST",
-                        Body = JsonSerializer.Serialize(new NavigateRequest { Route = action.Route ?? string.Empty })
-                    });
-                    break;
-                case "resize":
-                    response = await HandleResize(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ResizeRequest(action.Width, action.Height)) });
-                    break;
-                case "scroll":
-                    response = await HandleScroll(new HttpRequest
-                    {
-                        Method = "POST",
-                        Body = JsonSerializer.Serialize(new ScrollRequest
-                        {
-                            ElementId = action.ElementId,
-                            DeltaX = action.DeltaX ?? 0,
-                            DeltaY = action.DeltaY ?? 0,
-                            ItemIndex = action.ItemIndex,
-                            GroupIndex = action.GroupIndex,
-                            ScrollToPosition = action.ScrollToPosition,
-                            Animated = action.Animated
-                        })
-                    });
-                    break;
-                case "back":
-                    response = await HandleBack(new HttpRequest { Method = "POST" });
-                    break;
-                case "key":
-                    response = await HandleKey(new HttpRequest
-                    {
-                        Method = "POST",
-                        Body = JsonSerializer.Serialize(new KeyActionRequest { ElementId = action.ElementId, Key = action.Key, Text = action.Text })
-                    });
-                    break;
-                case "gesture":
-                    response = await HandleGesture(new HttpRequest
-                    {
-                        Method = "POST",
-                        Body = JsonSerializer.Serialize(new GestureActionRequest
-                        {
-                            ElementId = action.ElementId,
-                            Type = action.Type ?? action.Action,
-                            Direction = action.Direction,
-                            Distance = action.Distance,
-                            DurationMs = action.DurationMs,
-                            Scale = action.Scale,
-                            Rotation = action.Rotation,
-                            DeltaX = action.DeltaX,
-                            DeltaY = action.DeltaY,
-                            OriginX = action.OriginX,
-                            OriginY = action.OriginY,
-                            Steps = action.Steps
-                        })
-                    });
-                    break;
-                case "set-property":
-                case "set_property":
-                    response = await HandleSetProperty(new HttpRequest
-                    {
-                        Method = "PUT",
-                        RouteParams = new Dictionary<string, string>
-                        {
-                            ["id"] = action.ElementId ?? string.Empty,
-                            ["name"] = action.Property ?? string.Empty
-                        },
-                        Body = JsonSerializer.Serialize(new SetPropertyRequest { Value = action.Value ?? string.Empty })
-                    });
-                    break;
-                case "invoke-action":
-                case "invoke_action":
-                    response = await HandleInvokeAction(new HttpRequest
-                    {
-                        Method = "POST",
-                        RouteParams = new Dictionary<string, string>
-                        {
-                            ["name"] = action.Name ?? string.Empty
-                        },
-                        Body = JsonSerializer.Serialize(new InvokeActionRequest { Args = action.Args })
-                    });
-                    break;
-                default:
-                    response = HttpResponse.Error($"Unsupported batch action '{actionName}'");
-                    break;
-            }
-
-            var succeeded = response.StatusCode < 400;
-            allSucceeded &= succeeded;
-            results.Add(new
-            {
-                action = actionName,
-                success = succeeded,
-                statusCode = response.StatusCode,
-                response = response.Body
-            });
-
-            if (!succeeded && !body.ContinueOnError)
-                break;
-        }
-
-        return HttpResponse.Json(new
-        {
-            success = allSucceeded,
-            results
-        });
+        return await ExecuteBatchActionsWithLifecycleAsync(
+            request,
+            body,
+            action => ExecuteBatchActionHandlerAsync(action));
     }
 
     /// <summary>Handles <c>POST /api/v1/ui/scroll</c>.</summary>

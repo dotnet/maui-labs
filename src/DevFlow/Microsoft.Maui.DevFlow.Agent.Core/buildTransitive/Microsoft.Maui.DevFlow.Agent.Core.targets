@@ -9,24 +9,17 @@
               Condition="Exists('$(MSBuildThisFileDirectory)../analyzers/dotnet/cs/Microsoft.Maui.DevFlow.Analyzers.dll')" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <_DevFlowXamlPrepareTargets
-        Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'
-          or $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'
-          or $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'
-          or $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">_MauiInjectXamlCssAdditionalFiles</_DevFlowXamlPrepareTargets>
-  </PropertyGroup>
-
+  <!-- MAUI prepares AdditionalFiles before editorconfig generation on every TFM.
+       Check its SDK marker at execution time: MAUI's targets may be imported after this file. -->
   <Target Name="_DevFlowPromoteXamlSourceMaps"
-          DependsOnTargets="$(_DevFlowXamlPrepareTargets)"
-          AfterTargets="$(_DevFlowXamlPrepareTargets)"
+          AfterTargets="_MauiInjectXamlCssAdditionalFiles"
           BeforeTargets="GenerateMSBuildEditorConfigFileCore"
           Condition="'$(DevFlowXamlSourceMapsEnabled)' == 'true'">
     <ItemGroup>
       <AdditionalFiles Include="@(MauiXaml)"
                        KeepDuplicates="false"
                        DevFlowXaml="true"
-                       Condition="'$(_DevFlowXamlPrepareTargets)' == '' and '@(MauiXaml)' != ''" />
+                       Condition="'$(UsingMicrosoftMauiControlsSdk)' != 'true' and '@(MauiXaml)' != ''" />
       <AdditionalFiles DevFlowXaml="true"
                        Condition="'%(AdditionalFiles.GenKind)' == 'Xaml'" />
     </ItemGroup>

@@ -48,24 +48,13 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		/// </summary>
 		void OverrideEssentialsDefaults()
 		{
-			try
-			{
-				// DeviceInfo.currentImplementation — field set by MAUI's Build()
-				// Must override with WPF implementation so OnIdiom Desktop=X works
-				var deviceInfoType = typeof(Microsoft.Maui.Devices.DeviceInfo);
-				var field = deviceInfoType.GetField("currentImplementation",
-					System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
-				if (field != null)
-				{
-					// Get WPFDeviceInfo from DI (registered by Essentials project)
-					var wpfDeviceInfo = Services.GetService(typeof(Microsoft.Maui.Devices.IDeviceInfo));
-					if (wpfDeviceInfo != null && wpfDeviceInfo.GetType().Name.Contains("WPF"))
-						field.SetValue(null, wpfDeviceInfo);
-					else
-						field.SetValue(null, new WPFDeviceInfoFallback());
-				}
-			}
-			catch { }
+			var deviceInfo = Services.GetService<Microsoft.Maui.Devices.IDeviceInfo>()
+				?? new WPFDeviceInfoFallback();
+			var setter = typeof(Microsoft.Maui.Devices.DeviceInfo).GetMethod("SetCurrent",
+				System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
+				[typeof(Microsoft.Maui.Devices.IDeviceInfo)])
+				?? throw new MissingMethodException(typeof(Microsoft.Maui.Devices.DeviceInfo).FullName, "SetCurrent");
+			setter.Invoke(null, [deviceInfo]);
 		}
 
 		/// <summary>

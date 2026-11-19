@@ -65,6 +65,17 @@ public class Program
 			// instead of a non-zero return; translate that into a non-zero process exit.
 			exitCode = ResolveDevFlowExitCode(exitCode);
 
+			if (exitCode == 0 && CliUpdatePolicy.ShouldCheck(args,
+				parseResult.GetValue(GlobalOptions.JsonOption), IsCiMode(parseResult), IsDryRun(parseResult),
+				Console.IsInputRedirected || Console.IsOutputRedirected || Console.IsErrorRedirected,
+				Environment.GetEnvironmentVariable,
+				UpdateCommand.IsGlobalInstall(Environment.ProcessPath, AppContext.BaseDirectory, UpdateCommand.ToolHome)))
+			{
+				var notice = await new CliUpdateNotifier().CheckAsync(UpdateCommand.CurrentVersion, IsVerbose(parseResult));
+				if (notice is not null)
+					Console.Error.WriteLine(notice);
+			}
+
 			return exitCode;
 		}
 
@@ -123,6 +134,7 @@ public class Program
 		rootCommand.Add(ProfileCommand.Create());
 		rootCommand.Add(ProjectCommands.Create());
 		rootCommand.Add(VersionCommand.Create());
+		rootCommand.Add(UpdateCommand.Create());
 
 		// Platform-specific command groups
 		rootCommand.Add(AndroidCommands.Create());
@@ -133,6 +145,9 @@ public class Program
 
 		// DevFlow automation commands (maui devflow ...)
 		rootCommand.Add(DevFlow.DevFlowCommands.CreateDevFlowCommand(GlobalOptions.JsonOption));
+
+		// AI agent skill management (maui ai ...)
+		rootCommand.Add(Commands.AiCommands.Create());
 
 		// Comet Go single-file dev experience (maui go ...)
 		rootCommand.Add(Commands.GoCommands.Create());

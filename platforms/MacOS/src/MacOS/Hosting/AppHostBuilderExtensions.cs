@@ -46,7 +46,6 @@ public static partial class AppHostBuilderExtensions
         handlersCollection.AddHandler<TimePicker, TimePickerHandler>();
         handlersCollection.AddHandler<ScrollView, ScrollViewHandler>();
         handlersCollection.AddHandler<Border, BorderHandler>();
-        handlersCollection.AddHandler<Microsoft.Maui.Controls.Frame, BorderHandler>();
         handlersCollection.AddHandler<NavigationPage, NavigationPageHandler>();
         handlersCollection.AddHandler<Shell, ShellHandler>();
         handlersCollection.AddHandler<ShellItem, ShellItemHandler>();
@@ -59,8 +58,11 @@ public static partial class AppHostBuilderExtensions
         handlersCollection.AddHandler<SearchBar, SearchBarHandler>();
         handlersCollection.AddHandler<CollectionView, CollectionViewHandler>();
 		handlersCollection.AddHandler<CarouselView, CarouselViewHandler>();
+#pragma warning disable CS0618 // Keep handlers registered for obsolete controls that MAUI still exposes.
+        handlersCollection.AddHandler<Microsoft.Maui.Controls.Frame, BorderHandler>();
         handlersCollection.AddHandler<ListView, ListViewHandler>();
         handlersCollection.AddHandler<TableView, TableViewHandler>();
+#pragma warning restore CS0618
         handlersCollection.AddHandler<RefreshView, RefreshViewHandler>();
         handlersCollection.AddHandler<SwipeView, SwipeViewHandler>();
         handlersCollection.AddHandler<IndicatorView, IndicatorViewHandler>();

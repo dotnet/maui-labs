@@ -124,10 +124,25 @@ internal static class LayoutDiagnosticsPolicyLoader
     {
         var normalizedPath = Path.GetFullPath(path).ToUpperInvariant();
         var hash = Convert.ToHexString(
-            SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath)))[..24];
+            SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath)))[..32];
+        // Older CLI processes take only the legacy lock. Always take it first.
+        var legacy = AcquireMutex($"MauiDevFlow.LayoutPolicy.{hash[..24]}", path);
+        try
+        {
+            return AcquireMutex($"MauiDevFlow.LayoutPolicy.{hash}", path, legacy);
+        }
+        catch
+        {
+            legacy.Dispose();
+            throw;
+        }
+    }
+
+    private static IDisposable AcquireMutex(string name, string path, IDisposable? previous = null)
+    {
         var mutex = new Mutex(
             initiallyOwned: false,
-            $"MauiDevFlow.LayoutPolicy.{hash}");
+            name);
         try
         {
             if (!mutex.WaitOne(TimeSpan.FromSeconds(5)))
@@ -137,7 +152,12 @@ internal static class LayoutDiagnosticsPolicyLoader
         catch (AbandonedMutexException)
         {
         }
-        return new MutexReleaser(mutex);
+        catch
+        {
+            mutex.Dispose();
+            throw;
+        }
+        return new MutexReleaser(mutex, previous);
     }
 
     private static void WriteAtomically(string path, string contents)
@@ -278,7 +298,7 @@ internal static class LayoutDiagnosticsPolicyLoader
         destination.Suppressions.AddRange(source.Suppressions);
     }
 
-    private sealed class MutexReleaser(Mutex mutex) : IDisposable
+    private sealed class MutexReleaser(Mutex mutex, IDisposable? previous = null) : IDisposable
     {
         private Mutex? _mutex = mutex;
 
@@ -289,14 +309,9 @@ internal static class LayoutDiagnosticsPolicyLoader
                 null);
             if (mutexToRelease is null)
                 return;
-            try
-            {
+            using (previous)
+            using (mutexToRelease)
                 mutexToRelease.ReleaseMutex();
-            }
-            finally
-            {
-                mutexToRelease.Dispose();
-            }
         }
     }
 }
@@ -320,14 +335,11 @@ internal static class LayoutDiagnosticsSuppressionMatcher
             && !suppression.ElementType.Equals(finding.Element.Type, StringComparison.OrdinalIgnoreCase))
             return false;
         if (suppression.Fingerprint is not null
-            && !suppression.Fingerprint.Equals(
+            && !MatchesFingerprint(suppression.Fingerprint,
                 string.IsNullOrWhiteSpace(finding.SuppressionKey)
                     ? finding.Id
-                    : finding.SuppressionKey,
-                StringComparison.OrdinalIgnoreCase)
-            && !suppression.Fingerprint.Equals(
-                finding.Id,
-                StringComparison.OrdinalIgnoreCase))
+                    : finding.SuppressionKey)
+            && !MatchesFingerprint(suppression.Fingerprint, finding.Id))
             return false;
         if (suppression.SourceFile is not null
             && !SourcePathMatches(suppression.SourceFile, finding.Element.SourceFile))
@@ -354,6 +366,27 @@ internal static class LayoutDiagnosticsSuppressionMatcher
             return false;
 
         return true;
+    }
+
+    internal static bool MatchesFingerprint(string? expected, string actual)
+    {
+        if (expected is null)
+            return false;
+        if (expected.Equals(actual, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var oldParts = expected.Split('-');
+        var newParts = actual.Split('-');
+        if (oldParts.Length != newParts.Length || oldParts.Length > 3)
+            return false;
+        for (var i = 0; i < Math.Min(2, oldParts.Length); i++)
+        {
+            if (oldParts[i].Length != 16 || newParts[i].Length != 32 ||
+                !oldParts[i].All(Uri.IsHexDigit) || !newParts[i].All(Uri.IsHexDigit) ||
+                !newParts[i].StartsWith(oldParts[i], StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        return oldParts.Length < 3 || oldParts[2].Equals(newParts[2], StringComparison.Ordinal);
     }
 
     private static bool SourcePathMatches(string requested, string? actual)

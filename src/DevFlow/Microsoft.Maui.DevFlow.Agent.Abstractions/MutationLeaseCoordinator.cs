@@ -35,6 +35,13 @@ internal sealed class MutationLeaseCoordinator
             LeaseId = leaseId
         });
 
+    public Task<MutationLeaseStatus> CheckAsync(string? leaseId)
+        => ControlAsync(new MutationLeaseRequest
+        {
+            Action = "status",
+            LeaseId = leaseId
+        });
+
     private MutationLeaseStatus ControlLocal(MutationLeaseRequest request)
     {
         lock (_local.Gate)

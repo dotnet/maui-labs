@@ -12,7 +12,7 @@ namespace Microsoft.Maui.DevFlow.Agent.Native;
 /// invoke/actions, WebView CDP registry) is inherited from <see cref="DevFlowAgentService"/>.
 /// This type only implements the UI seam.
 /// </remarks>
-public class NativeDevFlowAgentService : DevFlowAgentService
+public partial class NativeDevFlowAgentService : DevFlowAgentService
 {
     private readonly NativeElementRegistry _registry = new();
     private volatile bool _bound;
@@ -47,6 +47,9 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     protected override string DeviceTypeName => NativeUi.DeviceTypeName;
 
     /// <inheritdoc />
+    protected override string? DeviceIdentifier => NativeUi.DeviceIdentifier;
+
+    /// <inheritdoc />
     protected override bool IsUiSupported => true;
 
     /// <inheritdoc />
@@ -64,8 +67,10 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         capabilities["ui.actions"] = Capability(1, supported: true,
             ["tap", "fill", "clear", "focus", "scroll", "back", "key", "gesture", "properties"],
             reason: null);
-        capabilities["ui.screenshot"] = Capability(1, supported: true,
-            ["element", "fullscreen"],
+        capabilities["ui.screenshot"] = Capability(
+            2,
+            supported: true,
+            ["element", "fullscreen", "resolution-hints"],
             reason: null);
     }
 
@@ -215,14 +220,14 @@ public class NativeDevFlowAgentService : DevFlowAgentService
             // snapshot", without pretending the native agent has MAUI's stale-capture-rejection
             // machinery (it does not advertise that ui.actions feature). registryGeneration has no
             // independent native concept to report, so it stays at its schema-minimum default of 0.
-            return new
+            return new Dictionary<string, object?>
             {
-                x,
-                y,
-                window = windowIndex,
-                captureEpoch = _registry.CurrentWalk,
-                registryGeneration = 0,
-                elements
+                ["x"] = x,
+                ["y"] = y,
+                ["window"] = windowIndex,
+                ["captureEpoch"] = _registry.CurrentWalk,
+                ["registryGeneration"] = 0,
+                ["elements"] = elements
             };
         });
 
@@ -245,7 +250,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
 
             var properties = NativeUi.GetProperties(view);
             return properties.TryGetValue(name, out var value)
-                ? new { elementId = id, name, value }
+                ? new Dictionary<string, object?> { ["elementId"] = id, ["name"] = name, ["value"] = value }
                 : null;
         });
 
@@ -277,7 +282,14 @@ public class NativeDevFlowAgentService : DevFlowAgentService
 
     /// <inheritdoc />
     protected override Task<HttpResponse> HandleTap(HttpRequest request)
-        => ActOnElement(request, "action.tap", (view, _) => NativeUi.TryTap(view, null, null) ? "ok" : "Tap not handled", "Tapped");
+    {
+        // A tap at a point needs touch injection this agent does not have; tapping the element
+        // instead would report success for something other than what was asked.
+        if (request.BodyAs<TapRequest>() is { } body && (body.X.HasValue || body.Y.HasValue))
+            return Task.FromResult(HttpResponse.Error("Tap at a point is not supported by this agent"));
+
+        return ActOnElement(request, "action.tap", (view, _) => NativeUi.TryTap(view, null, null) ? "ok" : "Tap not handled", "Tapped");
+    }
 
     /// <inheritdoc />
     protected override Task<HttpResponse> HandleFill(HttpRequest request)
@@ -329,10 +341,10 @@ public class NativeDevFlowAgentService : DevFlowAgentService
             result == "ok",
             result == "ok" ? null : result,
             body.ElementId,
-            new { key = keyValue, text = body.Text });
+            new Dictionary<string, object?> { ["key"] = keyValue, ["text"] = body.Text });
 
         return result == "ok"
-            ? HttpResponse.Json(new { success = true, key = keyValue, text = body.Text, elementId = body.ElementId })
+            ? HttpResponse.Json(new Dictionary<string, object?> { ["success"] = true, ["key"] = keyValue, ["text"] = body.Text, ["elementId"] = body.ElementId })
             : HttpResponse.Error(result!);
     }
 
@@ -344,6 +356,12 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         var body = request.BodyAs<GestureActionRequest>();
         if (body == null || string.IsNullOrWhiteSpace(body.Type))
             return HttpResponse.Error("type is required");
+
+        // A drag from a point (or onto a drop target) needs touch injection this agent does not
+        // have; a plain gesture on the element instead would report success for the wrong input.
+        if (body.X.HasValue || body.Y.HasValue || body.ToX.HasValue || body.ToY.HasValue
+            || !string.IsNullOrWhiteSpace(body.ToElementId))
+            return HttpResponse.Error("A gesture at a point is not supported by this agent");
 
         var startedAtUtc = DateTime.UtcNow;
         var result = await DispatchAsync(() =>
@@ -369,7 +387,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
             result == "ok",
             result == "ok" ? null : result,
             body.ElementId,
-            new { type = body.Type, direction = body.Direction });
+            new Dictionary<string, object?> { ["type"] = body.Type, ["direction"] = body.Direction });
 
         return result == "ok" ? HttpResponse.Ok("Gesture performed") : HttpResponse.Error(result!);
     }
@@ -425,6 +443,9 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     {
         if (!_bound) return HttpResponse.Error("Agent not bound to app");
 
+        if (!TryParseScreenshotResolutionHints(request, out var resolutionHints, out var resolutionError))
+            return resolutionError!;
+
         int? maxWidth = null;
         if (request.QueryParams.TryGetValue("maxWidth", out var maxWidthText)
             && int.TryParse(maxWidthText, out var parsed) && parsed > 0)
@@ -433,10 +454,11 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         }
 
         var autoScale = true;
-        if (request.QueryParams.TryGetValue("scale", out var scale))
+        var scaleModeExplicit = request.QueryParams.TryGetValue("scale", out var scale);
+        if (scaleModeExplicit)
         {
-            autoScale = !scale.Equals("native", StringComparison.OrdinalIgnoreCase)
-                     && !scale.Equals("full", StringComparison.OrdinalIgnoreCase);
+            autoScale = !string.Equals(scale, "native", StringComparison.OrdinalIgnoreCase)
+                     && !string.Equals(scale, "full", StringComparison.OrdinalIgnoreCase);
         }
 
         var hasElementId = request.QueryParams.TryGetValue("id", out var elementId)
@@ -444,30 +466,51 @@ public class NativeDevFlowAgentService : DevFlowAgentService
 
         try
         {
-            var result = await DispatchAsync(() =>
+            var result = await DispatchAsync(async () =>
             {
                 byte[]? png;
+                double density;
+                (double Width, double Height) logicalSize;
                 if (hasElementId && !string.IsNullOrEmpty(elementId))
                 {
                     var view = ResolveView(elementId);
                     png = view == null ? null : NativeUi.CaptureView(view);
+                    density = view == null
+                        ? NativeUi.DisplayDensity
+                        : NativeUi.GetCaptureDensity(view);
+                    logicalSize = NativeUi.GetCaptureLogicalSize(view);
                 }
                 else
                 {
-                    png = NativeUi.CaptureScreen();
+                    density = NativeUi.ScreenCaptureDensity;
+                    logicalSize = default;
+                    png = await NativeUi.CaptureScreen();
                 }
 
-                return new ScreenshotCaptureResult(png, NativeUi.DisplayDensity);
+                return new ScreenshotCaptureResult(
+                    png,
+                    density,
+                    logicalSize.Width,
+                    logicalSize.Height);
             });
 
-            if (result.Png == null)
+            if (result?.Png == null)
             {
                 return hasElementId
                     ? HttpResponse.NotFound($"Element '{elementId}' not found or has no size")
                     : HttpResponse.Error("Screen capture returned no data");
             }
 
-            return HttpResponse.Png(ResizePngIfNeeded(result.Png, maxWidth, result.Density, autoScale));
+            return BuildScreenshotResponse(
+                ProcessScreenshotPng(
+                    result.Png,
+                    maxWidth,
+                    result.Density,
+                    autoScale,
+                    scaleModeExplicit,
+                    resolutionHints,
+                    logicalWidth: result.LogicalWidth,
+                    logicalHeight: result.LogicalHeight));
         }
         catch (Exception ex)
         {
@@ -619,7 +662,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
 
         if (request.RouteParams.TryGetValue("id", out value) && !string.IsNullOrEmpty(value))
         {
-            id = Uri.UnescapeDataString(value);
+            id = value;
             return true;
         }
 
@@ -664,7 +707,6 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     {
         if (request.RouteParams.TryGetValue(key, out value) && !string.IsNullOrEmpty(value))
         {
-            value = Uri.UnescapeDataString(value);
             return true;
         }
 
@@ -678,7 +720,11 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     private static List<ElementInfo> Flatten(List<ElementInfo> matches)
         => matches.Select(Detach).ToList();
 
-    private sealed record ScreenshotCaptureResult(byte[]? Png, double Density);
+    private sealed record ScreenshotCaptureResult(
+        byte[]? Png,
+        double Density,
+        double LogicalWidth,
+        double LogicalHeight);
 
     /// <summary>Returns a copy without children so query results stay flat.</summary>
     private static ElementInfo Detach(ElementInfo element)

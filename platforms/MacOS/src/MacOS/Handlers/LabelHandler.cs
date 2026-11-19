@@ -194,11 +194,13 @@ public partial class LabelHandler : MacOSViewHandler<ILabel, MauiNSTextField>
         var options = new NSAttributedStringDocumentAttributes
         {
             DocumentType = NSDocumentType.HTML,
-            StringEncoding = NSStringEncoding.UTF8,
+            CharacterEncoding = NSStringEncoding.UTF8,
         };
 
         NSDictionary? resultAttrs;
+#pragma warning disable CA1422 // This constructor is the binding's compatibility path for HTML attributed strings.
         var attrStr = new NSAttributedString(data, options, out resultAttrs);
+#pragma warning restore CA1422
         if (attrStr != null)
         {
             // Apply paragraph style for alignment and line break mode
@@ -353,7 +355,7 @@ public partial class LabelHandler : MacOSViewHandler<ILabel, MauiNSTextField>
         if (!string.IsNullOrEmpty(span.FontFamily))
             nsFont = NSFont.FromFontName(span.FontFamily, size);
 
-        nsFont ??= NSFont.SystemFontOfSize(size);
+        nsFont ??= NSFont.SystemFontOfSize(size)!;
 
         var manager = NSFontManager.SharedFontManager;
         if (span.FontAttributes.HasFlag(FontAttributes.Bold))
@@ -398,7 +400,7 @@ internal static class FontExtensions
                 nsFont = NSFont.FromFontName(font.Family, size);
         }
 
-        nsFont ??= NSFont.SystemFontOfSize(size);
+        nsFont ??= NSFont.SystemFontOfSize(size)!;
 
         var manager = NSFontManager.SharedFontManager;
         if (font.Weight >= FontWeight.Bold)

@@ -34,8 +34,38 @@
           "description": "Preference value. The actual JSON type depends on the type field."
         },
         "type": {
-          "$ref": "#/$defs/PreferenceValueType",
-          "description": "Data type of the preference value."
+          "oneOf": [
+            { "$ref": "#/$defs/PreferenceValueType" },
+            { "const": "unknown" }
+          ],
+          "description": "Data type of the preference value, or unknown when the native value cannot be read as a supported Preferences type."
+        }
+      }
+    },
+    "PreferencesListResponse": {
+      "type": "object",
+      "required": ["keys", "source", "complete", "sharedName", "enumerationError"],
+      "properties": {
+        "keys": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PreferenceEntry" }
+        },
+        "source": {
+          "type": "string",
+          "enum": ["native", "registry"],
+          "description": "Native store enumeration, or the best-effort tracked-key registry fallback."
+        },
+        "complete": {
+          "type": "boolean",
+          "description": "True when the native backing store was enumerated successfully."
+        },
+        "sharedName": {
+          "type": ["string", "null"],
+          "description": "Requested preference container; null selects the default store."
+        },
+        "enumerationError": {
+          "type": ["string", "null"],
+          "description": "Reason for incomplete native enumeration, or null on success."
         }
       }
     },

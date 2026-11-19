@@ -148,6 +148,17 @@ public class InspectorAlertControllerTests
         Assert.DoesNotContain("\"Ok\"", json);
     }
 
+    [Fact]
+    public void PointerCancel_RemainsAvailableDuringReplay()
+    {
+        Assert.True(InspectorServer.IsBlockedDuringReplay("/api/pointer/start"));
+        Assert.True(InspectorServer.IsBlockedDuringReplay("/api/pointer/move"));
+        Assert.True(InspectorServer.IsBlockedDuringReplay("/api/pointer/end"));
+        Assert.False(InspectorServer.IsBlockedDuringReplay("/api/pointer/cancel"));
+        Assert.False(InspectorServer.IsBlockedDuringReplay("/api/pointer/cancel-and-release"));
+        Assert.False(InspectorServer.IsMutation("/api/pointer/cancel-and-release"));
+    }
+
     private sealed class FakeAlertDriver(AlertInfo? alert) : IAlertDriver
     {
         public string? DismissedLabel { get; private set; }

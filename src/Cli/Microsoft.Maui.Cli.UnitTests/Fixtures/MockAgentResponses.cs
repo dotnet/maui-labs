@@ -62,10 +62,15 @@ internal static class MockAgentResponses
               "features": ["tap", "fill", "gesture", "batch", "stale-capture-rejection"],
               "gestures": ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"]
             },
+            "ui.screenshot": {
+              "version": 3,
+              "features": ["element", "fullscreen", "resolution-hints"]
+            },
             "webview": { "version": 1, "features": ["contexts", "evaluate", "source"] },
             "network": { "version": 1, "features": ["list", "detail", "clear"] },
             "logs": { "version": 1, "features": ["list", "stream"] },
             "device.sensors": { "version": 1, "features": ["list", "start", "stop"] },
+            "device.jobs": { "version": 1, "supported": true, "features": ["list", "run"] },
             "storage.preferences": { "version": 1, "features": ["list", "get", "set", "delete", "clear"] },
             "storage.secure": { "version": 1, "features": ["get", "set", "delete", "clear"] },
             "storage.files": { "version": 1, "features": ["roots", "list", "download", "upload", "delete"] },

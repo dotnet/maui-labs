@@ -44,7 +44,7 @@ public static partial class AndroidCommands
 		});
 
 		// jdk install
-		var installCommand = new Command("install", "Install OpenJDK")
+		var installCommand = new Command("install", "Install the Microsoft Build of OpenJDK")
 		{
 			new Option<int>("--version") { Description = "JDK version (17 or 21)", DefaultValueFactory = _ => JdkManager.DefaultJdkVersion },
 			new Option<string>("--path") { Description = "Installation path" }

@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
@@ -30,6 +32,16 @@ public sealed class MockAgentServer : IAsyncDisposable
     private readonly bool _propertyFailureWithoutReason;
     private readonly bool _propertyNotFound;
     private readonly int _capabilitiesErrorResponseCount;
+    private readonly bool _supportMutationLease;
+    private readonly bool _mutationLeaseTransactionBlocked;
+    private readonly string? _webViewEvaluateResponse;
+    private readonly string? _webViewSourceResponse;
+    private readonly int _webViewResponseStatusCode;
+    private readonly object _mutationLeaseLock = new();
+    private string? _mockMutationLeaseId;
+    private string? _mockMutationHolderKind;
+    private string? _mockMutationLabel;
+    private readonly HashSet<string> _mockMutationTransactions = [];
     private int _capabilitiesRequestCount;
     private int _hitTestCount;
     private int _tapCount;
@@ -37,6 +49,9 @@ public sealed class MockAgentServer : IAsyncDisposable
     private int _screenshotCount;
     private int _keyCount;
     private WebApplication? _app;
+    public Func<string>? JobsListResponse { get; set; }
+    public Func<string>? JobRunResponse { get; set; }
+    public Func<string, bool>? RejectMutationLeaseAction { get; set; }
 
     public MockAgentServer(
         bool supportsCaptureEpoch = true,
@@ -56,7 +71,13 @@ public sealed class MockAgentServer : IAsyncDisposable
         bool malformedPropertyResponse = false,
         bool propertyFailureWithoutReason = false,
         bool propertyNotFound = false,
-        int capabilitiesErrorResponseCount = 0)
+        int capabilitiesErrorResponseCount = 0,
+        bool supportMutationLease = false,
+        bool mutationLeaseHeldByOther = false,
+        bool mutationLeaseTransactionBlocked = false,
+        string? webViewEvaluateResponse = null,
+        string? webViewSourceResponse = null,
+        int webViewResponseStatusCode = 200)
     {
         _supportsCaptureEpoch = supportsCaptureEpoch;
         _failFirstHitTestCandidate = failFirstHitTestCandidate;
@@ -76,9 +97,37 @@ public sealed class MockAgentServer : IAsyncDisposable
         _propertyFailureWithoutReason = propertyFailureWithoutReason;
         _propertyNotFound = propertyNotFound;
         _capabilitiesErrorResponseCount = capabilitiesErrorResponseCount;
+        _supportMutationLease = supportMutationLease;
+        _mutationLeaseTransactionBlocked = mutationLeaseTransactionBlocked;
+        _webViewEvaluateResponse = webViewEvaluateResponse;
+        _webViewSourceResponse = webViewSourceResponse;
+        _webViewResponseStatusCode = webViewResponseStatusCode;
+        if (mutationLeaseHeldByOther)
+        {
+            _mockMutationLeaseId = "other-lease";
+            _mockMutationHolderKind = "vscode";
+            _mockMutationLabel = "VS Code Inspector";
+        }
     }
 
     public int Port { get; private set; }
+
+    public bool BindToLocalhost { get; init; }
+
+    public string? WebViewEvaluateResponse { get; set; }
+    public string? AgentStatusResponse { get; set; }
+    public string? VisualTreeResponse { get; set; }
+    public byte[]? ScreenshotResponse { get; set; }
+    public Dictionary<string, string> ScreenshotHeaders { get; } = [];
+    public Func<Task>? BeforeHitTestResponseAsync { get; set; }
+    public bool RejectHitTestCandidateTaps { get; set; }
+    public bool RejectElementScrolls { get; set; }
+    public string? FileDownloadResponse { get; set; }
+    public string BrokerHealthResponse { get; set; } = """{"agents":2}""";
+    public string LayoutResponse { get; set; } = """{"summary":{"incomplete":1}}""";
+    public int LayoutStatusCode { get; set; } = 200;
+    public Dictionary<string, string[]> StreamMessages { get; } = [];
+    public int StreamFragmentSize { get; set; } = 1024;
 
     public IReadOnlyList<RecordedRequest> RecordedRequests
     {
@@ -92,10 +141,25 @@ public sealed class MockAgentServer : IAsyncDisposable
     public async Task StartAsync()
     {
         var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
+        builder.WebHost.ConfigureKestrel(options =>
+        {
+            if (BindToLocalhost)
+            {
+                using var listener = new TcpListener(IPAddress.Loopback, 0);
+                listener.Start();
+                var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                listener.Stop();
+                options.ListenLocalhost(port);
+            }
+            else
+            {
+                options.Listen(IPAddress.Loopback, 0);
+            }
+        });
         builder.Logging.ClearProviders();
 
         _app = builder.Build();
+        _app.UseWebSockets();
 
         _app.Use(async (context, next) =>
         {
@@ -129,6 +193,8 @@ public sealed class MockAgentServer : IAsyncDisposable
         RegisterWebViewEndpoints(_app);
         RegisterNetworkEndpoints(_app);
         RegisterExtensionEndpoints(_app);
+        RegisterStreamEndpoints(_app);
+        _app.MapGet("/api/health", () => Results.Content(BrokerHealthResponse, "application/json"));
 
         await _app.StartAsync();
         Port = _app.Urls.Select(url => new Uri(url).Port).First();
@@ -151,7 +217,7 @@ public sealed class MockAgentServer : IAsyncDisposable
 
     private void RegisterAgentEndpoints(WebApplication app)
     {
-        app.MapGet("/api/v1/agent/status", () => Results.Content(MockAgentResponses.AgentStatus, "application/json"));
+        app.MapGet("/api/v1/agent/status", () => Results.Content(AgentStatusResponse ?? MockAgentResponses.AgentStatus, "application/json"));
         app.MapGet("/api/v1/agent/capabilities", () =>
         {
             if (Interlocked.Increment(ref _capabilitiesRequestCount) <= _capabilitiesErrorResponseCount)
@@ -167,6 +233,90 @@ public sealed class MockAgentServer : IAsyncDisposable
                     : MockAgentResponses.LegacyAgentCapabilities,
                 "application/json");
         });
+        if (_supportMutationLease)
+        {
+            app.MapPost("/api/v1/agent/lease", async (HttpContext context) =>
+            {
+                using var body = await JsonDocument.ParseAsync(context.Request.Body);
+                var action = body.RootElement.TryGetProperty("action", out var actionValue)
+                    ? actionValue.GetString()
+                    : null;
+                var force = body.RootElement.TryGetProperty("force", out var forceValue) &&
+                    forceValue.GetBoolean();
+                var requestedLeaseId = body.RootElement.TryGetProperty("leaseId", out var leaseId)
+                    ? leaseId.GetString()
+                    : null;
+                var requestedHolderKind = body.RootElement.TryGetProperty("holderKind", out var holderKind)
+                    ? holderKind.GetString()
+                    : null;
+                var requestedLabel = body.RootElement.TryGetProperty("label", out var label)
+                    ? label.GetString()
+                    : null;
+                var transactionId = body.RootElement.TryGetProperty("transactionId", out var transaction)
+                    ? transaction.GetString() : null;
+                if (RejectMutationLeaseAction?.Invoke(action ?? "") == true)
+                    return Results.Json(new { ok = false, allowed = false, youHold = false, error = "Lease renewal rejected." });
+                bool allowed;
+                bool youHold;
+                bool heldByOther;
+                string? currentLeaseId;
+                string? currentHolderKind;
+                string? currentLabel;
+                string? currentTransactionId;
+                lock (_mutationLeaseLock)
+                {
+                    if (action == "claim")
+                    {
+                        var available = _mockMutationLeaseId is null ||
+                            string.Equals(_mockMutationLeaseId, requestedLeaseId, StringComparison.Ordinal);
+                        if (available || (force && !_mutationLeaseTransactionBlocked && _mockMutationTransactions.Count == 0))
+                        {
+                            _mockMutationLeaseId = requestedLeaseId;
+                            _mockMutationHolderKind = requestedHolderKind;
+                            _mockMutationLabel = requestedLabel;
+                        }
+                    }
+                    else if (action == "release" &&
+                             string.Equals(_mockMutationLeaseId, requestedLeaseId, StringComparison.Ordinal) &&
+                             _mockMutationTransactions.Count == 0)
+                    {
+                        _mockMutationLeaseId = null;
+                        _mockMutationHolderKind = null;
+                        _mockMutationLabel = null;
+                    }
+                    else if (action is "begin" or "end" &&
+                        !string.IsNullOrWhiteSpace(transactionId) &&
+                        string.Equals(_mockMutationLeaseId, requestedLeaseId, StringComparison.Ordinal))
+                    {
+                        if (action == "begin") _mockMutationTransactions.Add(transactionId);
+                        else _mockMutationTransactions.Remove(transactionId);
+                    }
+
+                    currentLeaseId = _mockMutationLeaseId;
+                    currentHolderKind = _mockMutationHolderKind;
+                    currentLabel = _mockMutationLabel;
+                    youHold = currentLeaseId is not null &&
+                        string.Equals(currentLeaseId, requestedLeaseId, StringComparison.Ordinal);
+                    heldByOther = currentLeaseId is not null && !youHold;
+                    allowed = youHold;
+                    currentTransactionId = youHold && transactionId is not null && _mockMutationTransactions.Contains(transactionId)
+                        ? transactionId : null;
+                }
+                return Results.Json(new
+                {
+                    ok = true,
+                    allowed,
+                    youHold,
+                    heldByOther,
+                    leaseId = youHold ? currentLeaseId : null,
+                    transactionId = currentTransactionId,
+                    holderKind = currentHolderKind,
+                    label = currentLabel,
+                    expiresInMs = currentLeaseId is null ? 0 : 10000,
+                    authority = "mock"
+                });
+            });
+        }
     }
 
     private static void RegisterExtensionEndpoints(WebApplication app)
@@ -183,12 +333,16 @@ public sealed class MockAgentServer : IAsyncDisposable
 
     private void RegisterUiEndpoints(WebApplication app)
     {
+        app.MapPost("/api/v1/ui/diagnostics/layout", () =>
+            Results.Content(LayoutResponse, "application/json", statusCode: LayoutStatusCode));
+
         app.MapGet("/api/v1/ui/tree", () => Results.Content(
             _returnEmptyTree
                 ? "[]"
-                : _includeDetachedNativeRoot
-                ? MockAgentResponses.VisualTreeWithDetachedNativeRoot
-                : MockAgentResponses.VisualTree,
+                : VisualTreeResponse
+                ?? (_includeDetachedNativeRoot
+                    ? MockAgentResponses.VisualTreeWithDetachedNativeRoot
+                    : MockAgentResponses.VisualTree),
             "application/json"));
         app.MapGet("/api/v1/ui/elements", (HttpContext context) =>
         {
@@ -275,7 +429,7 @@ public sealed class MockAgentServer : IAsyncDisposable
 
             return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
         });
-        app.MapGet("/api/v1/ui/hit-test", () =>
+        app.MapGet("/api/v1/ui/hit-test", async () =>
         {
             var hitTestNumber = Interlocked.Increment(ref _hitTestCount);
             if (hitTestNumber <= _nativeProbeBusyHitTestCount)
@@ -298,9 +452,11 @@ public sealed class MockAgentServer : IAsyncDisposable
             var response = _useScrollableHitTestCandidate
                 ? MockAgentResponses.ScrollableHitTestResult(epoch)
                 : MockAgentResponses.HitTestResult(epoch, parentId);
+            if (BeforeHitTestResponseAsync is not null)
+                await BeforeHitTestResponseAsync();
             return Results.Content(response, "application/json");
         });
-        app.MapGet("/api/v1/ui/screenshot", () =>
+        app.MapGet("/api/v1/ui/screenshot", (HttpContext context) =>
         {
             if (_failScreenshotsAfterFirst
                 && Interlocked.Increment(ref _screenshotCount) > 1)
@@ -315,7 +471,9 @@ public sealed class MockAgentServer : IAsyncDisposable
                     statusCode: StatusCodes.Status409Conflict);
             }
 
-            return Results.File(MockAgentResponses.ScreenshotPng, "image/png");
+            foreach (var header in ScreenshotHeaders)
+                context.Response.Headers[header.Key] = header.Value;
+            return Results.File(ScreenshotResponse ?? MockAgentResponses.ScreenshotPng, "image/png");
         });
 
         app.MapPost("/api/v1/ui/actions/tap", async (HttpContext context) =>
@@ -365,6 +523,12 @@ public sealed class MockAgentServer : IAsyncDisposable
             {
                 return Results.BadRequest(new { success = false, error = "not tappable" });
             }
+            if (RejectHitTestCandidateTaps
+                && body.RootElement.TryGetProperty("elementId", out var rejectedElementId)
+                && rejectedElementId.GetString()?.StartsWith("hit-", StringComparison.Ordinal) == true)
+            {
+                return Results.BadRequest(new { success = false, error = "not tappable" });
+            }
 
             return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
         });
@@ -403,7 +567,20 @@ public sealed class MockAgentServer : IAsyncDisposable
             return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
         });
 
-        foreach (var action in new[] { "clear", "focus", "navigate", "scroll", "resize", "back", "batch" })
+        app.MapPost("/api/v1/ui/actions/scroll", async (HttpContext context) =>
+        {
+            using var body = await JsonDocument.ParseAsync(context.Request.Body);
+            if (RejectElementScrolls
+                && body.RootElement.TryGetProperty("elementId", out var elementId)
+                && elementId.ValueKind == JsonValueKind.String)
+            {
+                return Results.BadRequest(new { success = false, error = "not scrollable" });
+            }
+
+            return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
+        });
+
+        foreach (var action in new[] { "clear", "focus", "navigate", "resize", "back", "batch" })
             app.MapPost($"/api/v1/ui/actions/{action}", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
 
         // Gestures return a richer body than the shared ActionSuccess: callers need to know
@@ -412,8 +589,12 @@ public sealed class MockAgentServer : IAsyncDisposable
             Results.Content(MockAgentResponses.GestureSuccess, "application/json"));
     }
 
-    private static void RegisterDeviceEndpoints(WebApplication app)
+    private void RegisterDeviceEndpoints(WebApplication app)
     {
+        app.MapGet("/api/v1/device/jobs", () => Results.Content(
+            JobsListResponse?.Invoke() ?? """{"platform":"Test","supported":false,"jobs":[]}""", "application/json"));
+        app.MapPost("/api/v1/device/jobs/{identifier}/run", () => Results.Content(
+            JobRunResponse?.Invoke() ?? """{"success":false,"error":"Jobs run is unsupported."}""", "application/json"));
         app.MapGet("/api/v1/device/info", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
         app.MapGet("/api/v1/device/app", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
         app.MapGet("/api/v1/device/app/theme", () => Results.Content(MockAgentResponses.ThemeInfo, "application/json"));
@@ -447,7 +628,7 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapPost("/api/v1/device/sensors/{sensor}/stop", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
     }
 
-    private static void RegisterStorageEndpoints(WebApplication app)
+    private void RegisterStorageEndpoints(WebApplication app)
     {
         app.MapGet("/api/v1/storage/preferences", () => Results.Content(MockAgentResponses.PreferencesList, "application/json"));
         app.MapGet("/api/v1/storage/preferences/{key}", () => Results.Content(MockAgentResponses.PreferenceValue, "application/json"));
@@ -462,18 +643,18 @@ public sealed class MockAgentServer : IAsyncDisposable
 
         app.MapGet("/api/v1/storage/roots", () => Results.Content(MockAgentResponses.StorageRoots, "application/json"));
         app.MapGet("/api/v1/storage/files", () => Results.Content(MockAgentResponses.FilesList, "application/json"));
-        app.MapGet("/api/v1/storage/files/{path}", (string path) => Results.Content(MockAgentResponses.FileDownload(path), "application/json"));
+        app.MapGet("/api/v1/storage/files/{path}", (string path) => Results.Content(FileDownloadResponse ?? MockAgentResponses.FileDownload(path), "application/json"));
         app.MapPut("/api/v1/storage/files/{path}", (string path) => Results.Content(MockAgentResponses.FileUpload(path), "application/json"));
         app.MapDelete("/api/v1/storage/files/{path}", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
     }
 
-    private static void RegisterWebViewEndpoints(WebApplication app)
+    private void RegisterWebViewEndpoints(WebApplication app)
     {
         app.MapGet("/api/v1/webview/contexts", () => Results.Content(MockAgentResponses.WebViews, "application/json"));
-        app.MapGet("/api/v1/webview/source", () => Results.Content(MockAgentResponses.WebViewSource, "text/html"));
+        app.MapGet("/api/v1/webview/source", () => Results.Content(
+            _webViewSourceResponse ?? MockAgentResponses.WebViewSource, "text/html", statusCode: _webViewResponseStatusCode));
         app.MapGet("/api/v1/webview/dom", () => Results.Content("""{"root":{"tag":"html"}}""", "application/json"));
         app.MapGet("/api/v1/webview/dom/query", () => Results.Content("""{"matches":[{"tag":"div","id":"app"}]}""", "application/json"));
-        app.MapGet("/api/v1/webview/network", () => Results.Content("""{"entries":[]}""", "application/json"));
         app.MapGet("/api/v1/webview/console", () => Results.Content("""{"entries":[]}""", "application/json"));
         app.MapGet("/api/v1/webview/screenshot", () => Results.File(MockAgentResponses.ScreenshotPng, "image/png"));
 
@@ -481,8 +662,10 @@ public sealed class MockAgentServer : IAsyncDisposable
         {
             using var reader = new StreamReader(context.Request.Body);
             var body = await reader.ReadToEndAsync();
-            var method = JsonDocument.Parse(body).RootElement.GetProperty("method").GetString() ?? string.Empty;
-            return Results.Content(MockAgentResponses.WebViewEvaluate(method), "application/json");
+            using var document = JsonDocument.Parse(body);
+            var method = document.RootElement.GetProperty("method").GetString() ?? string.Empty;
+            return Results.Content(WebViewEvaluateResponse ?? _webViewEvaluateResponse ?? MockAgentResponses.WebViewEvaluate(method),
+                "application/json", statusCode: _webViewResponseStatusCode);
         });
     }
 
@@ -492,6 +675,40 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapGet("/api/v1/network/requests/{id}", (string id) => Results.Content($$"""{"id":"{{id}}"}""", "application/json"));
         app.MapDelete("/api/v1/network/requests", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
         app.MapGet("/api/v1/logs", () => Results.Content("""[{"level":"info","message":"ok"}]""", "application/json"));
+    }
+
+    private void RegisterStreamEndpoints(WebApplication app)
+    {
+        foreach (var stream in new[] { "logs", "network", "sensors" })
+        {
+            app.MapGet($"/ws/v1/{stream}", async (HttpContext context) =>
+            {
+                using var ws = await context.WebSockets.AcceptWebSocketAsync();
+                foreach (var message in StreamMessages.GetValueOrDefault(stream) ?? [])
+                {
+                    var bytes = Encoding.UTF8.GetBytes(message);
+                    for (var offset = 0; offset < bytes.Length; offset += StreamFragmentSize)
+                    {
+                        var length = Math.Min(StreamFragmentSize, bytes.Length - offset);
+                        await ws.SendAsync(new ArraySegment<byte>(bytes, offset, length),
+                            WebSocketMessageType.Text, offset + length == bytes.Length, context.RequestAborted);
+                    }
+                }
+
+                try
+                {
+                    var buffer = new byte[1024];
+                    while (ws.State == WebSocketState.Open)
+                    {
+                        var result = await ws.ReceiveAsync(buffer, context.RequestAborted);
+                        if (result.MessageType == WebSocketMessageType.Close)
+                            break;
+                    }
+                }
+                catch (WebSocketException) { }
+                catch (OperationCanceledException) { }
+            });
+        }
     }
 }
 

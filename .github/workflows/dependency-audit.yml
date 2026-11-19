@@ -1,0 +1,63 @@
+name: Dependency Audit
+
+# Backstop for the local check (`node eng/scripts/audit-npm.mjs`, see
+# .github/instructions/dependencies.instructions.md). Two jobs' worth of coverage in one:
+#
+#  - on PR/push: catches a dependency change that introduces a known-vulnerable package, or a
+#    new package.json that was never registered in .github/dependabot.yml.
+#  - on schedule: catches advisories published *against code already in main*. That is exactly
+#    what produced PRs #447 / #448 / #449 — the lockfile never changed, the advisories appeared
+#    afterwards — so a PR-only trigger would never have surfaced them.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays 06:00 UTC, ahead of the weekly Dependabot version-update run.
+    - cron: '0 6 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '**/.npmrc'
+      - '.github/dependabot.yml'
+      - 'eng/scripts/audit-npm.mjs'
+      - '.github/workflows/dependency-audit.yml'
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+    paths:
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '**/.npmrc'
+      - '.github/dependabot.yml'
+      - 'eng/scripts/audit-npm.mjs'
+      - '.github/workflows/dependency-audit.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Audit npm manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      # No `npm ci` — `npm audit` resolves advisories straight from the lockfile, so the whole
+      # repo is covered without installing any dependency trees.
+      #
+      # `--allow-unverified` is deliberately NOT passed: CI must fail closed (exit 2) when the
+      # advisory database is unreachable, otherwise a registry outage would look identical to
+      # a clean result and this job could stay green indefinitely with no data behind it.
+      - name: Audit npm projects and verify Dependabot registration
+        run: node eng/scripts/audit-npm.mjs

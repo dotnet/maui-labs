@@ -18,6 +18,18 @@ internal static partial class NativeUi
     public static string PlatformName => "iOS";
 #endif
 
+    public static string? DeviceIdentifier
+    {
+        get
+        {
+#if IOS
+            return Environment.GetEnvironmentVariable("SIMULATOR_UDID");
+#else
+            return null;
+#endif
+        }
+    }
+
     public static string UiFrameworkName => "uikit";
 
 #if MACCATALYST
@@ -33,6 +45,22 @@ internal static partial class NativeUi
         action => UIApplication.SharedApplication.InvokeOnMainThread(action));
 
     public static double DisplayDensity => UIScreen.MainScreen.Scale;
+
+    public static double GetCaptureDensity(object? viewObject)
+        => viewObject switch
+        {
+            UIWindow window => window.Screen.Scale,
+            UIView view => view.Window?.Screen.Scale ?? DisplayDensity,
+            _ => DisplayDensity
+        };
+
+    public static double ScreenCaptureDensity
+        => GetCaptureDensity(GetRoots().FirstOrDefault());
+
+    public static (double Width, double Height) GetCaptureLogicalSize(object? viewObject)
+        => viewObject is UIView view
+            ? (view.Bounds.Width, view.Bounds.Height)
+            : (0, 0);
 
     public static IReadOnlyList<object> GetRoots()
     {
@@ -401,7 +429,7 @@ internal static partial class NativeUi
         var renderer = new UIGraphicsImageRenderer(view.Bounds.Size, new UIGraphicsImageRendererFormat
         {
             Opaque = false,
-            Scale = UIScreen.MainScreen.Scale,
+            Scale = (System.Runtime.InteropServices.NFloat)GetCaptureDensity(view),
         });
 
         using var image = renderer.CreateImage(context =>
@@ -411,8 +439,8 @@ internal static partial class NativeUi
         return data?.ToArray();
     }
 
-    public static byte[]? CaptureScreen()
-        => GetRoots().FirstOrDefault() is { } window ? CaptureView(window) : null;
+    public static Task<byte[]?> CaptureScreen()
+        => Task.FromResult(GetRoots().FirstOrDefault() is { } window ? CaptureView(window) : null);
 
     public static IReadOnlyDictionary<string, string?> GetProperties(object viewObject)
     {

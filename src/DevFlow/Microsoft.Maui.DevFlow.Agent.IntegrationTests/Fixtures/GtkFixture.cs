@@ -64,6 +64,16 @@ public sealed class GtkFixture : AppFixtureBase
             WorkingDirectory = Path.GetDirectoryName(executablePath) ?? Environment.CurrentDirectory,
         };
         psi.Environment["DEVFLOW_TEST_PORT"] = AgentPort.ToString();
+        var diagnosticsDirectory = Environment.GetEnvironmentVariable("DEVFLOW_TEST_GTK_DIAGNOSTICS_DIR");
+        if (!string.IsNullOrWhiteSpace(diagnosticsDirectory))
+        {
+            diagnosticsDirectory = Path.GetFullPath(diagnosticsDirectory);
+            Directory.CreateDirectory(diagnosticsDirectory);
+            psi.Environment["DOTNET_DbgEnableMiniDump"] = "1";
+            psi.Environment["DOTNET_DbgMiniDumpType"] = "3";
+            psi.Environment["DOTNET_DbgMiniDumpName"] = Path.Combine(diagnosticsDirectory, "gtk.%p");
+            psi.Environment["DOTNET_EnableCrashReport"] = "1";
+        }
 
         _appProcess = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to launch {executablePath}");

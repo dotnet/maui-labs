@@ -59,6 +59,22 @@ internal static class DevFlowSkillManager
     internal static async Task<JsonObject> InstallAsync(string scope, string target, string? customPath, bool force, bool allowDowngrade, Func<SkillActionPrompt, bool>? confirm, CancellationToken cancellationToken)
         => await WriteSkillsAsync(s_skills.Select(s => s.Id), scope, target, customPath, force, allowDowngrade, "install", allowAllScopes: false, confirm, cancellationToken);
 
+    internal static Task<JsonObject> InstallSkillAsync(string skillId, string scope, string target, string? customPath, bool force, CancellationToken cancellationToken)
+        => WriteSkillsAsync([GetSkill(skillId).Id], scope, target, customPath, force, allowDowngrade: false, "install", allowAllScopes: false, confirm: _ => force, cancellationToken, migrateLegacy: false);
+
+    internal static async Task<bool> MatchesBundledSkillAsync(string skillId, string directory, CancellationToken cancellationToken)
+    {
+        var bundle = await LoadSkillBundleAsync(GetSkill(skillId), cancellationToken);
+        var expected = new JsonObject
+        {
+            ["files"] = new JsonArray(bundle.Files.Select(file => (JsonNode)new JsonObject
+            {
+                ["path"] = file.RelativePath, ["hash"] = HashContent(file.Content)
+            }).ToArray())
+        };
+        return !IsDirty(directory, expected);
+    }
+
     public static async Task<JsonObject> UpdateAsync(string scope, string target, bool force, bool allowDowngrade, CancellationToken cancellationToken)
         => await UpdateAsync(scope, target, customPath: null, force, allowDowngrade, confirm: null, cancellationToken);
 
@@ -78,7 +94,7 @@ internal static class DevFlowSkillManager
     public static async Task<JsonObject> CheckAsync(string scope, string target, bool online, CancellationToken cancellationToken)
         => await CheckAsync(scope, target, customPath: null, online, cancellationToken);
 
-    internal static async Task<JsonObject> CheckAsync(string scope, string target, string? customPath, bool online, CancellationToken cancellationToken)
+    internal static async Task<JsonObject> CheckAsync(string scope, string target, string? customPath, bool online, CancellationToken cancellationToken, bool recordCheck = true)
     {
         var result = CreateBaseResult("check", scope, target);
         result["online"] = online;
@@ -87,7 +103,7 @@ internal static class DevFlowSkillManager
             result["onlineMessage"] = "Online skill file checks are intentionally not implemented. Update Microsoft.Maui.Cli to get newer bundled skills.";
         }
 
-        result["skills"] = await BuildSkillStatusesAsync(scope, target, customPath, cancellationToken);
+        result["skills"] = await BuildSkillStatusesAsync(scope, target, customPath, cancellationToken, recordCheck);
         return result;
     }
 
@@ -188,7 +204,7 @@ internal static class DevFlowSkillManager
         return result;
     }
 
-    static async Task<JsonArray> BuildSkillStatusesAsync(string scope, string target, string? customPath, CancellationToken cancellationToken)
+    static async Task<JsonArray> BuildSkillStatusesAsync(string scope, string target, string? customPath, CancellationToken cancellationToken, bool recordCheck = true)
     {
         var items = new JsonArray();
         var installTargets = ResolveInstallTargets(scope, target, customPath, allowAll: true);
@@ -198,7 +214,8 @@ internal static class DevFlowSkillManager
             foreach (var (skill, bundle) in skillBundles)
                 AddJsonObject(items, CreateStatusObject(installTarget, skill.Id, bundle));
 
-            await RecordSkillCheckAsync(installTarget, skillBundles, cancellationToken);
+            if (recordCheck)
+                await RecordSkillCheckAsync(installTarget, skillBundles, cancellationToken);
         }
 
         return items;
@@ -224,7 +241,7 @@ internal static class DevFlowSkillManager
         return "DevFlow skills have not been checked recently. Run `maui devflow skills check` to compare installed skills with this CLI.";
     }
 
-    static async Task<JsonObject> WriteSkillsAsync(IEnumerable<string> skillIds, string scope, string target, string? customPath, bool force, bool allowDowngrade, string action, bool allowAllScopes, Func<SkillActionPrompt, bool>? confirm, CancellationToken cancellationToken)
+    static async Task<JsonObject> WriteSkillsAsync(IEnumerable<string> skillIds, string scope, string target, string? customPath, bool force, bool allowDowngrade, string action, bool allowAllScopes, Func<SkillActionPrompt, bool>? confirm, CancellationToken cancellationToken, bool migrateLegacy = true)
     {
         var result = CreateBaseResult(action, scope, target);
         if (!string.IsNullOrWhiteSpace(customPath))
@@ -297,7 +314,7 @@ internal static class DevFlowSkillManager
                 AddJsonObject(results, targetResult);
         }
 
-        foreach (var cleanupTarget in GetLegacyCleanupTargets(installTargets))
+        foreach (var cleanupTarget in migrateLegacy ? GetLegacyCleanupTargets(installTargets) : [])
         {
             if (!HasLegacySkillData(cleanupTarget))
                 continue;
@@ -943,12 +960,39 @@ internal static class DevFlowSkillManager
     static InstallTarget CreateInstallTarget(string scope, string targetKind, string targetDirectory, string workspaceRoot)
     {
         var root = scope == "user" ? GetUserRoot() : workspaceRoot;
+        if (targetKind.StartsWith("path-", StringComparison.Ordinal))
+            targetKind = CreateCustomTargetKind(targetDirectory);
+        var stateFilePath = ResolveStateFilePath(workspaceRoot, scope, targetKind);
+        if (targetKind.StartsWith("path-", StringComparison.Ordinal) && targetKind.Length == 37)
+        {
+            var legacyTarget = targetKind[..21];
+            var legacyPath = ResolveStateFilePath(workspaceRoot, scope, legacyTarget);
+            if (File.Exists(legacyPath))
+            {
+                var state = ReadSkillState(legacyPath);
+                var pathComparison = OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal;
+                if (File.Exists(stateFilePath) ||
+                    !string.Equals(GetString(state, "targetRoot"), root, pathComparison) ||
+                    !string.Equals(GetString(state, "relativeSkillDirectory"),
+                        targetDirectory.Replace(Path.DirectorySeparatorChar, '/'), StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot reuse legacy DevFlow skill state '{legacyPath}': the target differs or both old and new state files exist. Resolve the state conflict before continuing.");
+                }
+
+                // Keep the persisted key and its lock file; only new targets get longer IDs.
+                targetKind = legacyTarget;
+                stateFilePath = legacyPath;
+            }
+        }
         return new InstallTarget(
             scope,
             targetKind,
             root,
             targetDirectory,
-            ResolveStateFilePath(workspaceRoot, scope, targetKind),
+            stateFilePath,
             workspaceRoot);
     }
 
@@ -956,9 +1000,20 @@ internal static class DevFlowSkillManager
     {
         var stateRoot = GetDevFlowStateRoot();
         var fileName = $"{target.ToLowerInvariant()}.json";
-        return scope == "user"
-            ? Path.Combine(stateRoot, "user", "skills", fileName)
-            : Path.Combine(stateRoot, "workspaces", GetWorkspaceStateId(workspaceRoot), "skills", fileName);
+        if (scope == "user")
+            return Path.Combine(stateRoot, "user", "skills", fileName);
+
+        var workspaceId = GetWorkspaceStateId(workspaceRoot);
+        var directory = Path.Combine(stateRoot, "workspaces", workspaceId);
+        var legacyDirectory = Path.Combine(stateRoot, "workspaces", workspaceId[..24]);
+        if (Directory.Exists(legacyDirectory))
+        {
+            if (Directory.Exists(directory))
+                throw new InvalidOperationException(
+                    $"Both old and new DevFlow workspace state directories exist for '{workspaceRoot}'. Resolve the state conflict before continuing.");
+            directory = legacyDirectory;
+        }
+        return Path.Combine(directory, "skills", fileName);
     }
 
     static IReadOnlyList<string> ResolveScopes(string scope, bool allowAll)
@@ -1002,7 +1057,7 @@ internal static class DevFlowSkillManager
     static string CreateCustomTargetKind(string targetDirectory)
     {
         var normalized = targetDirectory.Replace(Path.DirectorySeparatorChar, '/');
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[..16].ToLowerInvariant();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[..32].ToLowerInvariant();
         return $"path-{hash}";
     }
 
@@ -1026,7 +1081,7 @@ internal static class DevFlowSkillManager
         if (!string.IsNullOrWhiteSpace(UserRootOverrideForTests))
             return Path.GetFullPath(UserRootOverrideForTests);
 
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var home = Microsoft.Maui.Cli.Ai.AgentEnvironmentDetector.UserHome;
         if (!string.IsNullOrWhiteSpace(home))
             return home;
 
@@ -1053,7 +1108,7 @@ internal static class DevFlowSkillManager
         var normalized = Path.GetFullPath(workspaceRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
-        return Convert.ToHexString(bytes)[..24].ToLowerInvariant();
+        return Convert.ToHexString(bytes)[..32].ToLowerInvariant();
     }
 
     static string GetSkillDirectory(InstallTarget installTarget, string skillId)

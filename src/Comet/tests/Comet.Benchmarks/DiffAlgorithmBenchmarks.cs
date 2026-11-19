@@ -1,3 +1,4 @@
+using Comet.Reactive;
 using System;
 using System.Collections.Generic;
 using BenchmarkDotNet.Attributes;
@@ -121,11 +122,11 @@ namespace Comet.Benchmarks
 
 	public class GrowingListView : Comet.View
 	{
-		readonly State<int> _count;
+		readonly Signal<int> _count;
 
 		public GrowingListView(int initial)
 		{
-			_count = new State<int>(initial);
+			_count = new Signal<int>(initial);
 			Body = () =>
 			{
 				var children = new Comet.View[_count.Value];
@@ -140,12 +141,12 @@ namespace Comet.Benchmarks
 
 	public class ShrinkingListView : Comet.View
 	{
-		readonly State<int> _count;
+		readonly Signal<int> _count;
 		int _removeIndex;
 
 		public ShrinkingListView(int initial)
 		{
-			_count = new State<int>(initial);
+			_count = new Signal<int>(initial);
 			_removeIndex = initial / 2;
 			Body = () =>
 			{
@@ -164,7 +165,7 @@ namespace Comet.Benchmarks
 
 	public class ConditionalView : Comet.View
 	{
-		readonly State<bool> _showSubtree = new State<bool>(false);
+		readonly Signal<bool> _showSubtree = new Signal<bool>(false);
 		readonly int _subtreeSize;
 
 		public ConditionalView(int subtreeSize)

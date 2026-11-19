@@ -22,6 +22,7 @@ public class UnsupportedCapabilityTests
     [InlineData("/api/v1/ui/screenshot", "ui.screenshot")]
     [InlineData("/api/v1/ui/elements/e1/properties", "ui.actions")]
     [InlineData("/api/v1/device/app/theme", "app.theme")]
+    [InlineData("/api/v1/ui/menus", "ui.menus")]
     public async Task UnsupportedEndpoints_Return501NotSupportedEnvelope(string path, string capability)
     {
         var port = GetFreePort();

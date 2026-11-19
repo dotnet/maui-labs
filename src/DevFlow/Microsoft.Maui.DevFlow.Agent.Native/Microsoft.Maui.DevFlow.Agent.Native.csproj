@@ -33,6 +33,10 @@
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'">
+    <Compile Include="..\Shared.AppKit\AppKitWindowCapture.cs" Link="AppKit\AppKitWindowCapture.cs" />
+  </ItemGroup>
+
   <!-- Reuse the framework-agnostic MSBuild port/metadata wiring from the MAUI agent package. -->
   <!--
     Reuse the MAUI agent's build logic verbatim (port config, assembly metadata, Android

@@ -118,4 +118,15 @@ public class AgentMetadataTests : IntegrationTestBase
             status.Capabilities!.Jobs,
             capabilities.GetProperty("capabilities").GetProperty("device.jobs").GetProperty("supported").GetBoolean());
     }
+
+    [Fact]
+    public async Task SyntheticTouchCapability_IsReportedOnlyWhereTheTierExists()
+    {
+        var status = await Client.GetStatusAsync();
+
+        Assert.NotNull(status?.Capabilities);
+        // Only the MAUI sample opts into the UIKit tier; native agents do not implement it.
+        var expected = !TestFramework.IsNative && Platform is "ios" or "maccatalyst";
+        Assert.Equal(expected, status!.Capabilities!.SyntheticTouch);
+    }
 }

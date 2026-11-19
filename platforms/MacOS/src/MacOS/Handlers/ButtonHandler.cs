@@ -140,6 +140,9 @@ class MauiNSButton : NSButton
                         locations[i] = stops[i].Offset;
                     }
                     using var colorSpace = CGColorSpace.CreateSrgb();
+                    if (colorSpace == null)
+                        return;
+
                     using var gradient = new CGGradient(colorSpace, colors, locations);
 
                     if (_linearGradient != null)
@@ -400,7 +403,7 @@ public partial class ButtonHandler : MacOSViewHandler<IButton, NSButton>
 
         if (imageButton.Source is IFileImageSource fileSource)
         {
-            handler.PlatformView.Image = new AppKit.NSImage(fileSource.File);
+            handler.PlatformView.Image = ImageHandler.FindBundleImage(fileSource.File);
         }
         else if (imageButton.Source is IFontImageSource fontSource)
         {

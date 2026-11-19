@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Text;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Client.Tests;
@@ -20,16 +22,19 @@ public class AgentClientRetryTests
     private const string TapBody = """{"success":true}""";
 
     [Theory]
-    [InlineData(0, 1)]
-    [InlineData(1, 2)]
-    [InlineData(3, 4)]
-    public async Task TapAsync_MakesExactlyOneAttemptPerConfiguredRetry(int retryCount, int expectedAttempts)
+    [InlineData(0, 1, false)]
+    [InlineData(1, 2, false)]
+    [InlineData(3, 4, false)]
+    [InlineData(0, 1, true)]
+    [InlineData(1, 2, true)]
+    [InlineData(3, 4, true)]
+    public async Task TapAsync_MakesExactlyOneAttemptPerConfiguredRetry(
+        int retryCount, int expectedAttempts, bool frameworkException)
     {
-        // The agent resets every connection, so each attempt fails the same way at the transport
-        // level while still completing a TCP accept — which is what makes the attempts countable
-        // rather than inferred from elapsed time.
-        using var agent = FakeAgent.Start(_ => FakeAgent.Response.Reset());
-        using var client = new AgentClient("localhost", agent.Port)
+        // Count calls at the transport boundary: a TCP reset does not guarantee the same
+        // exception classification or number of wire requests across HTTP handler families.
+        var transport = new RetryTransport(int.MaxValue, () => TransportFailure(frameworkException));
+        using var client = new AgentClient("localhost", 9223, transport)
         {
             AutoAcquireMutationLease = false,
             TransientFailureRetryCount = retryCount,
@@ -38,20 +43,18 @@ public class AgentClientRetryTests
 
         Assert.False(await client.TapAsync("el-1"));
 
-        Assert.Equal(expectedAttempts, agent.Requests.Count);
+        Assert.Equal(expectedAttempts, transport.Attempts);
     }
 
-    [Fact]
-    public async Task TapAsync_StopsRetryingOnceTheAgentAnswers()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TapAsync_StopsRetryingOnceTheAgentAnswers(bool frameworkException)
     {
         // Two transport failures, then a real answer: the call must succeed on the third attempt and
         // not keep burning the remaining retries.
-        var failuresLeft = 2;
-        using var agent = FakeAgent.Start(_ =>
-            Interlocked.Decrement(ref failuresLeft) >= 0
-                ? FakeAgent.Response.Reset()
-                : FakeAgent.Response.Json(TapBody));
-        using var client = new AgentClient("localhost", agent.Port)
+        var transport = new RetryTransport(2, () => TransportFailure(frameworkException));
+        using var client = new AgentClient("localhost", 9223, transport)
         {
             AutoAcquireMutationLease = false,
             TransientFailureRetryCount = 10,
@@ -60,15 +63,17 @@ public class AgentClientRetryTests
 
         Assert.True(await client.TapAsync("el-1"));
 
-        Assert.Equal(3, agent.Requests.Count);
+        Assert.Equal(3, transport.Attempts);
     }
 
-    [Fact]
-    public async Task TapAsync_DoesNotRetryWhenMutatingRetriesAreDisabled()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TapAsync_DoesNotRetryWhenMutatingRetriesAreDisabled(bool frameworkException)
     {
         // Opting out must be honored, because a retried POST can duplicate the agent-side effect.
-        using var agent = FakeAgent.Start(_ => FakeAgent.Response.Reset());
-        using var client = new AgentClient("localhost", agent.Port)
+        var transport = new RetryTransport(int.MaxValue, () => TransportFailure(frameworkException));
+        using var client = new AgentClient("localhost", 9223, transport)
         {
             AutoAcquireMutationLease = false,
             TransientFailureRetryCount = 3,
@@ -78,7 +83,36 @@ public class AgentClientRetryTests
 
         Assert.False(await client.TapAsync("el-1"));
 
-        Assert.Single(agent.Requests);
+        Assert.Equal(1, transport.Attempts);
+    }
+
+    [Theory]
+    [InlineData("timeout")]
+    [InlineData("cancelled")]
+    [InlineData("protocol")]
+    [InlineData("trust")]
+    public async Task TapAsync_DoesNotRetryNonTransientFailures(string failure)
+    {
+        var transport = new RetryTransport(int.MaxValue, () => failure switch
+        {
+            "timeout" => new TaskCanceledException("timeout", new TimeoutException()),
+            "cancelled" => new TaskCanceledException(),
+            "protocol" => new HttpRequestException("protocol",
+                new WebException("protocol", null, WebExceptionStatus.ProtocolError, response: null)),
+            "trust" => new HttpRequestException("trust",
+                new WebException("trust", null, WebExceptionStatus.TrustFailure, response: null)),
+            _ => throw new ArgumentOutOfRangeException(nameof(failure))
+        });
+        using var client = new AgentClient("localhost", 9223, transport)
+        {
+            AutoAcquireMutationLease = false,
+            TransientFailureRetryCount = 3,
+            TransientFailureRetryDelay = TimeSpan.Zero,
+        };
+
+        Assert.False(await client.TapAsync("el-1"));
+
+        Assert.Equal(1, transport.Attempts);
     }
 
     [Fact]
@@ -214,10 +248,186 @@ public class AgentClientRetryTests
         }
     }
 
+    [Fact]
+    public async Task ScreenshotResultAsync_RetriesConnectionDroppedMidBody()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var requests = 0;
+        var serverTask = Task.Run(async () =>
+        {
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                using var connection = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
+                using var stream = connection.GetStream();
+                await ReadHeadersAsync(stream).ConfigureAwait(false);
+                Interlocked.Increment(ref requests);
+                if (attempt == 0)
+                {
+                    var partial = Encoding.ASCII.GetBytes(
+                        "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: image/png\r\n" +
+                        "Content-Length: 12\r\n" +
+                        "Connection: close\r\n\r\nabc");
+                    await stream.WriteAsync(partial, 0, partial.Length).ConfigureAwait(false);
+                    continue;
+                }
+
+                var body = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4 };
+                var header = Encoding.ASCII.GetBytes(
+                    "HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: image/png\r\n" +
+                    $"Content-Length: {body.Length}\r\n" +
+                    "Connection: close\r\n\r\n");
+                await stream.WriteAsync(header, 0, header.Length).ConfigureAwait(false);
+                await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
+            }
+        });
+
+        using var client = new AgentClient("localhost", port)
+        {
+            TransientFailureRetryCount = 1,
+            TransientFailureRetryDelay = TimeSpan.Zero,
+        };
+
+        try
+        {
+            var result = await client.ScreenshotResultAsync(
+                window: null,
+                elementId: null,
+                selector: null,
+                maxWidth: null,
+                scale: null,
+                captureEpoch: null,
+                registryGeneration: null,
+                resolution: new ScreenshotResolutionOptions
+                {
+                    MaxEncodedBytes = 1024
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal(2, Volatile.Read(ref requests));
+            await serverTask;
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task ScreenshotResultAsync_TimesOutWhenResponseStallsMidBody()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var releaseServer = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var serverTask = Task.Run(async () =>
+        {
+            using var connection = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
+            using var stream = connection.GetStream();
+            await ReadHeadersAsync(stream).ConfigureAwait(false);
+            var partial = Encoding.ASCII.GetBytes(
+                "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: image/png\r\n" +
+                "Content-Length: 12\r\n" +
+                "Connection: close\r\n\r\nabc");
+            await stream.WriteAsync(partial, 0, partial.Length).ConfigureAwait(false);
+            await stream.FlushAsync().ConfigureAwait(false);
+            await releaseServer.Task.ConfigureAwait(false);
+        });
+
+        using var client = new AgentClient("localhost", port)
+        {
+            HttpTimeout = TimeSpan.FromMilliseconds(250),
+            TransientFailureRetryCount = 0,
+        };
+
+        try
+        {
+            var stopwatch = Stopwatch.StartNew();
+            var result = await client.ScreenshotResultAsync(
+                window: null,
+                elementId: null,
+                selector: null,
+                maxWidth: null,
+                scale: null,
+                captureEpoch: null,
+                registryGeneration: null,
+                resolution: new ScreenshotResolutionOptions
+                {
+                    MaxEncodedBytes = 1024
+                });
+
+            Assert.False(result.Success);
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromSeconds(3),
+                $"The stalled screenshot took {stopwatch.Elapsed} to time out.");
+        }
+        finally
+        {
+            releaseServer.TrySetResult(true);
+            listener.Stop();
+            await serverTask;
+        }
+    }
+
+    private static async Task ReadHeadersAsync(NetworkStream stream)
+    {
+        var buffer = new byte[1024];
+        using var received = new MemoryStream();
+        while (true)
+        {
+            var read = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+            if (read <= 0)
+                return;
+            received.Write(buffer, 0, read);
+            var data = received.ToArray();
+            for (var i = 0; i + 3 < data.Length; i++)
+            {
+                if (data[i] == '\r' && data[i + 1] == '\n' &&
+                    data[i + 2] == '\r' && data[i + 3] == '\n')
+                {
+                    return;
+                }
+            }
+        }
+    }
+
     private static Task<FakeAgent> StartAgentAfterAsync(TimeSpan delay, int port, string body)
         => Task.Run(async () =>
         {
             await Task.Delay(delay).ConfigureAwait(false);
             return FakeAgent.Start(IPAddress.Loopback, port, _ => FakeAgent.Response.Json(body));
         });
+
+    private static HttpRequestException TransportFailure(bool frameworkException)
+    {
+        var reset = new SocketException((int)SocketError.ConnectionReset);
+        return new HttpRequestException("Connection reset", frameworkException
+            ? new WebException("Connection reset", reset, WebExceptionStatus.ReceiveFailure, response: null)
+            : reset);
+    }
+
+    private sealed class RetryTransport(int failuresBeforeSuccess, Func<Exception> failure) : HttpMessageHandler
+    {
+        public int Attempts { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Attempts++;
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("/api/v1/ui/actions/tap", request.RequestUri!.AbsolutePath);
+            Assert.Contains("\"elementId\":\"el-1\"", await request.Content!.ReadAsStringAsync());
+            if (Attempts <= failuresBeforeSuccess)
+                throw failure();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(TapBody)
+            };
+        }
+    }
 }
