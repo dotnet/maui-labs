@@ -4,7 +4,7 @@
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
     <RootNamespace>Microsoft.Maui.AI.Chat.Tests</RootNamespace>
-    <NoWarn>$(NoWarn);MEAI001;OPENAI001</NoWarn>
+    <NoWarn>$(NoWarn);MEAI001;MEDE0001;EXTEXP0019;OPENAI001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -96,12 +96,24 @@
              Link="Images\Services\ImageGeneratorDescriptor.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\ViewModels\ImageSettingsViewModel.cs"
              Link="Images\ViewModels\ImageSettingsViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentExtractionClientDescriptor.cs"
+             Link="Documents\Services\DocumentExtractionClientDescriptor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DescribedDocumentExtractionClient.cs"
+             Link="Documents\Services\DescribedDocumentExtractionClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\ViewModels\DocumentExtractionClientOption.cs"
+             Link="Documents\ViewModels\DocumentExtractionClientOption.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\ViewModels\DocumentSettingsViewModel.cs"
+             Link="Documents\ViewModels\DocumentSettingsViewModel.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AISettings.cs"
              Link="Services\AISettings.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AtomicFile.cs"
              Link="Services\AtomicFile.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\InputFile.cs"
              Link="Services\InputFile.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DocumentExtraction" />
   </ItemGroup>
 
   <ItemGroup>

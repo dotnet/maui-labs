@@ -6,7 +6,7 @@ iOS, Mac Catalyst, and Windows (not native macOS); providers vary by platform.
 
 ## What you can try
 
-Chat, Embeddings, and Images have separate providers and capabilities.
+Chat, Embeddings, Images, and Documents have separate providers and capabilities.
 
 ### Chat
 
@@ -50,6 +50,17 @@ input does not imply image-generation support.
 | Windows on-device | Coming soon |
 | Android on-device | Not supported |
 | Azure OpenAI | Supported by the configured image deployment |
+
+### Documents
+
+Pick a PDF or image, or a packaged sample, and choose a client: Apple Vision
+(iOS/Mac Catalyst 26+) or a configured Foundry Mistral deployment.
+
+**Extract** runs the selected `DocumentExtractionClient` and shows the content,
+source geometry, hierarchy, and table cells. **Native** shows the client's raw
+output; **Normalized** switches back. Every client uses the same UI and options.
+See [Apple document extraction](../../docs/ai/apple-document-extraction.md) for
+what the Apple client maps.
 
 ## Diagnostics
 
@@ -140,12 +151,15 @@ dotnet user-secrets set "AI:ApiKey" "<key>" --project $project
 dotnet user-secrets set "AI:DeploymentName" "<chat-deployment>" --project $project
 dotnet user-secrets set "AI:ImageDeploymentName" "<image-deployment>" --project $project
 dotnet user-secrets set "AI:EmbeddingDeploymentName" "<embedding-deployment>" --project $project
+dotnet user-secrets set "AI:DocumentDeploymentName" "<mistral-ocr-deployment>" --project $project
 ```
 
 `AI:DeploymentName` enables Chat, `AI:EmbeddingDeploymentName` enables Embeddings,
 and `AI:ImageDeploymentName` enables Images and Chat's image-generation tool for
 providers that support tool calling. The endpoint and key are required only
 when at least one Azure deployment is configured.
+`AI:DocumentDeploymentName` enables Foundry Mistral in Documents using the same
+`AI:Endpoint` and `AI:ApiKey`.
 
 **Debug builds embed your local user secrets. Do not distribute these builds
 or commit credentials.** Azure prompts, images, and indexed text may leave the
@@ -157,8 +171,7 @@ them before sharing.
 Chat attachments and image edits share root-level `FileInputService` and `InputFile`.
 Callers supply their picker options and use the shared `FileInputService.ImageFiles`
 (JPEG, PNG, GIF, WebP) or `FileInputService.DocumentFiles` (PDF, JPEG, PNG, HEIC, TIFF)
-presets rather than defining private file-type lists. The document preset is available
-for future callers; it does not add a document feature to the playground.
+presets rather than defining private file-type lists. Document extraction uses the document preset.
 Packaged sample names are also supplied by the caller.
 
 ```csharp
@@ -179,3 +192,13 @@ image chat/edit callers continue to accept only JPEG, PNG, GIF, and WebP.
 Both composers use the shared `AttachmentPreview` view for the thumbnail, file name,
 and removal command, retaining their existing automation IDs and accessible removal
 descriptions. Future callers can reuse the same bindings and customize the preview aspect.
+
+The document composer also reuses `AttachmentPreview` and the shared input service:
+
+```csharp
+var document = await files.PickAsync(new PickOptions
+{
+    PickerTitle = "Choose a document",
+    FileTypes = FileInputService.DocumentFiles,
+}, cancellationToken);
+```

@@ -152,6 +152,9 @@ systems.
   input-token usage on supported AICore devices, plus native tools on capable
   Nano V4 profiles.
   Model download is explicit and observable.
+- **Document extraction (experimental):** Apple Vision extracts text, tables,
+  source geometry, and merged cells from images and PDFs on Apple OS 26+.
+  See the [extraction guide](docs/ai/apple-document-extraction.md).
 
 See [Essentials.AI](src/AI/README.md) for documentation and samples.
 
@@ -255,8 +258,9 @@ For live app inspection and host setup, see the
 [MAUI DevFlow Inspector guide](docs/DevFlow/inspector.md).
 
 For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md),
-the [`IChatClient` playground](samples/AIExtensions.Sample.ChatPlayground/README.md) for live
-requests, portable recording/replay, and archived-chat search, and the
+the [AI playground](samples/AIExtensions.Sample.ChatPlayground/README.md) for live
+requests, portable recording/replay, archived-chat search, and document extraction with
+Apple Vision or Foundry Mistral, and the
 [`Garden` sample](samples/AIExtensions.Sample.Garden/README.md).
 
 ## Support
