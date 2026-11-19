@@ -100,8 +100,8 @@
              Link="Services\AISettings.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AtomicFile.cs"
              Link="Services\AtomicFile.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ImageAttachment.cs"
-             Link="Services\ImageAttachment.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\InputFile.cs"
+             Link="Services\InputFile.cs" />
   </ItemGroup>
 
   <ItemGroup>

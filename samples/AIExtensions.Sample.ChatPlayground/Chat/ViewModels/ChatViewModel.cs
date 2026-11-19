@@ -444,7 +444,7 @@ public partial class ChatViewModel : ObservableObject
         return tools;
     }
 
-    private static ChatMessage CreateUserMessage(string prompt, ImageAttachment? attachment)
+    private static ChatMessage CreateUserMessage(string prompt, InputFile? attachment)
     {
         var contents = new List<AIContent>();
         if (!string.IsNullOrWhiteSpace(prompt))

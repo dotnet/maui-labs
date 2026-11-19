@@ -6,7 +6,7 @@ namespace AIExtensions.Sample.ChatPlayground;
 public sealed class ImageGenerationService
 {
     public async Task<IReadOnlyList<GeneratedImage>> GenerateAsync(
-        IImageGenerator generator, string prompt, ImageAttachment? original,
+        IImageGenerator generator, string prompt, InputFile? original,
         ImageGenerationOptions? options = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(generator);
