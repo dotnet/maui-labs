@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <PackageId>Microsoft.Maui.DevFlow.Extensibility</PackageId>
+    <Description>Contract for writing Microsoft.Maui.DevFlow agent plugins: tools, routes and live event streams that the maui CLI, MCP server and inspector discover at runtime. No dependency on the agent or .NET MAUI.</Description>
+    <PackageTags>maui;devflow;plugin;extensibility</PackageTags>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Agent.Abstractions" />
+    <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Tests" />
+    <InternalsVisibleTo Include="maui" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../Microsoft.Maui.DevFlow.Client/ExtensionRouteBinding.cs" Link="Compatibility/ExtensionRouteBinding.cs" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

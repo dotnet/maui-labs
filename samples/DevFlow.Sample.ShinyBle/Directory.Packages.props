@@ -1,0 +1,28 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Packages.props', '$(MSBuildThisFileDirectory)..'))" />
+
+  <!--
+    Shiny 6.5.1 is built against .NET MAUI 10.0.100 and Microsoft.Extensions 10.0.7, newer than the repo's
+    pins. Properties are evaluated before items, so raising them here moves the repo's central versions
+    for this sample only.
+  -->
+  <PropertyGroup>
+    <MicrosoftMauiControlsVersion>10.0.100</MicrosoftMauiControlsVersion>
+    <MicrosoftMauiControlsCompatibilityVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsCompatibilityVersion>
+    <MicrosoftMauiEssentialsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiEssentialsVersion>
+    <MicrosoftMauiControlsMapsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsMapsVersion>
+    <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
+    <MicrosoftExtensionsConfigurationVersion>10.0.7</MicrosoftExtensionsConfigurationVersion>
+    <MicrosoftExtensionsDependencyInjectionVersion>10.0.7</MicrosoftExtensionsDependencyInjectionVersion>
+    <MicrosoftExtensionsHostingVersion>10.0.7</MicrosoftExtensionsHostingVersion>
+    <MicrosoftExtensionsHttpVersion>10.0.7</MicrosoftExtensionsHttpVersion>
+    <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.7</MicrosoftExtensionsLoggingAbstractionsVersion>
+    <MicrosoftExtensionsLoggingConsoleVersion>10.0.7</MicrosoftExtensionsLoggingConsoleVersion>
+    <MicrosoftExtensionsLoggingDebugVersion>10.0.7</MicrosoftExtensionsLoggingDebugVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Shiny.BluetoothLE" Version="6.5.1" />
+    <PackageVersion Include="Shiny.Hosting.Maui" Version="6.5.1" />
+  </ItemGroup>
+</Project>

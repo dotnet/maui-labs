@@ -1,10 +1,14 @@
+using System.Net.WebSockets;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Maui.DevFlow.Driver;
+using Microsoft.Maui.DevFlow.Extensibility;
 
 namespace Microsoft.Maui.Cli.DevFlow;
 
-internal sealed class ExtensionOperations(AgentClient client)
+internal sealed class ExtensionOperations(AgentClient client, DevFlowProviderPolicy? providerPolicy = null)
 {
+    private readonly DevFlowProviderPolicy _policy = providerPolicy ?? DevFlowHostPlugins.Current.ProviderPolicy;
     internal Task<Dictionary<string, ExtensionDescriptor>> ListAsync() =>
         client.GetExtensionsAsync();
 
@@ -26,7 +30,85 @@ internal sealed class ExtensionOperations(AgentClient client)
             return (null, $"Tool '{toolName}' was not found in extension '{ns}'.");
 
         JsonElement? parameterJson = string.IsNullOrWhiteSpace(parameters) ? null : CliJson.ParseElement(parameters);
+        EnsureBinding(ns, tool.Path);
 
         return (await client.CallExtensionToolAsync(tool.Method, tool.Path, parameterJson), null);
+    }
+
+    internal async Task<(ExtensionStreamInfo? Stream, string? Error)> FindStreamAsync(string ns, string streamName)
+    {
+        var extension = await DescribeAsync(ns);
+        if (extension is null)
+            return (null, $"Extension '{ns}' was not found.");
+
+        var stream = extension.Streams.FirstOrDefault(s => string.Equals(s.Name, streamName, StringComparison.OrdinalIgnoreCase));
+        if (stream is null)
+        {
+            var available = extension.Streams.Count == 0 ? "none" : string.Join(", ", extension.Streams.Select(s => s.Name));
+            return (null, $"Stream '{streamName}' was not found in extension '{ns}'. Available streams: {available}.");
+        }
+
+        return (stream, null);
+    }
+
+    internal async Task<ExtensionStreamPage> ReadEventsAsync(string ns, string streamName, long since, int limit)
+    {
+        var (stream, error) = await FindStreamAsync(ns, streamName);
+        if (stream is null) throw new InvalidOperationException(error);
+        EnsureBinding(ns, stream.Path);
+        return await client.GetExtensionEventsAsync(stream, since, limit);
+    }
+
+    private void EnsureBinding(string ns, string path, bool webSocket = false)
+    {
+        if (!_policy.AllowsPath(ns, path, webSocket))
+            throw new InvalidOperationException($"Route '{path}' is outside the bindings approved for '{ns}'.");
+    }
+
+    /// <summary>
+    /// Follows an extension stream over its WebSocket until <paramref name="cancellationToken"/> is
+    /// cancelled or the agent closes the connection.
+    /// </summary>
+    internal async Task WatchAsync(string ns, string streamName, long? since, Action<ExtensionStreamEvent> onEvent, CancellationToken cancellationToken)
+    {
+        var (stream, error) = await FindStreamAsync(ns, streamName);
+        if (stream is null) throw new InvalidOperationException(error);
+        EnsureBinding(ns, stream.WebSocketPath, webSocket: true);
+        using var ws = new ClientWebSocket();
+        await ws.ConnectAsync(new Uri(client.GetExtensionStreamWebSocketUrl(stream, since)), cancellationToken);
+
+        var buffer = new byte[16 * 1024];
+        using var message = new MemoryStream();
+        while (!cancellationToken.IsCancellationRequested && ws.State == WebSocketState.Open)
+        {
+            WebSocketReceiveResult result;
+            try
+            {
+                result = await ws.ReceiveAsync(buffer, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            if (result.MessageType == WebSocketMessageType.Close)
+                break;
+
+            message.Write(buffer, 0, result.Count);
+            if (!result.EndOfMessage)
+                continue;
+
+            var text = Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length);
+            message.SetLength(0);
+            var evt = JsonSerializer.Deserialize(text, DevFlowCliJsonContext.Default.ExtensionStreamEvent);
+            if (evt is not null)
+                onEvent(evt);
+        }
+
+        if (ws.State == WebSocketState.Open)
+        {
+            try { await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None); }
+            catch (WebSocketException) { }
+        }
     }
 }

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A DevFlow plugin as a library would ship it: it references only Microsoft.Maui.DevFlow.Extensibility
+    (never the agent) and the library it monitors.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>ShinyBle.DevFlowPlugin</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Shiny.BluetoothLE" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Extensibility\Microsoft.Maui.DevFlow.Extensibility.csproj" />
+  </ItemGroup>
+
+</Project>
