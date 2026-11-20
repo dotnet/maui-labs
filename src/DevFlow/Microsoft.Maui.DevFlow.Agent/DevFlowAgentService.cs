@@ -2,7 +2,7 @@ using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Agent.Core.Profiling;
 using Microsoft.Maui.DevFlow.Agent.Profiling;
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
 using BackgroundTasks;
 using Foundation;
 #endif
@@ -39,7 +39,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
     {
         get
         {
-#if IOS
+#if IOS || TVOS
             return Environment.GetEnvironmentVariable("SIMULATOR_UDID");
 #else
             return null;
@@ -47,11 +47,37 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
         }
     }
 
+#if TVOS
+    // MAUI Essentials ships no tvOS implementation, so DeviceInfo and AppInfo throw unless the app
+    // registers its own. Report the platform and app identity from UIKit and the app bundle instead.
+    protected override string PlatformName => "tvOS";
+
+    protected override string DeviceTypeName
+        => ObjCRuntime.Runtime.Arch == ObjCRuntime.Arch.SIMULATOR ? "Virtual" : "Physical";
+
+    protected override string IdiomName => "TV";
+
+    protected override string AppDisplayName
+        => ReadBundleString("CFBundleDisplayName") ?? ReadBundleString("CFBundleName") ?? base.AppDisplayName;
+
+    protected override string AppPackageId
+        => Foundation.NSBundle.MainBundle.BundleIdentifier ?? base.AppPackageId;
+
+    protected override string AppVersionString
+        => ReadBundleString("CFBundleShortVersionString") ?? base.AppVersionString;
+
+    protected override string AppBuildString
+        => ReadBundleString("CFBundleVersion") ?? base.AppBuildString;
+
+    private static string? ReadBundleString(string key)
+        => Foundation.NSBundle.MainBundle.ObjectForInfoDictionary(key)?.ToString();
+#endif
+
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
         try
         {
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
             if (window?.Handler?.PlatformView is UIKit.UIWindow uiWindow)
                 return uiWindow.Screen.Scale;
             return UIKit.UIScreen.MainScreen.Scale;
@@ -85,7 +111,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
 
     protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
     {
-#if IOS || MACCATALYST || MACOS || ANDROID
+#if IOS || MACCATALYST || TVOS || MACOS || ANDROID
         return NativePreferenceKeys.Enumerate(sharedName);
 #elif WINDOWS
         if (Microsoft.Maui.ApplicationModel.AppInfo.PackagingModel ==
@@ -127,7 +153,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                 var platformView = target.Handler?.PlatformView;
                 if (platformView != null)
                 {
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
                     // Check: view itself → subviews → ancestors
                     var uiView = platformView as UIKit.UIView;
                     UIKit.UIScrollView? uiScrollView = uiView as UIKit.UIScrollView;
@@ -198,7 +224,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
     {
         try
         {
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
             var uiView = platformView as UIKit.UIView;
             UIKit.UIScrollView? uiScrollView = uiView as UIKit.UIScrollView;
             if (uiScrollView == null)
@@ -259,7 +285,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
         return false;
     }
 
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
     private static T? FindNativeAncestor<T>(UIKit.UIView? view) where T : UIKit.UIView
     {
         var current = view;
@@ -480,7 +506,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
 
     protected override IProfilerCollector CreateProfilerCollector()
     {
-#if ANDROID || IOS || WINDOWS || MACCATALYST
+#if ANDROID || IOS || WINDOWS || MACCATALYST || TVOS
         return new RuntimeProfilerCollector(NativeFrameStatsProviderFactory.Create());
 #else
         return base.CreateProfilerCollector();
@@ -614,7 +640,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
 #if ANDROID
             // Gate on the real dependency rather than on the platform.
             return s_workManagerAvailable.Value;
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
             // BGTaskScheduler is part of the OS, so the capability always exists —
             // whether any identifiers are registered is a separate question.
             return true;
@@ -628,7 +654,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
     {
         get
         {
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
             // Triggering a BGTask needs a private selector that is compiled out of Release
             // builds (see TrySimulateBgTaskLaunch), so a Release agent can list
             // but never run. Advertising "run" there would hand callers a feature-detect that
@@ -789,7 +815,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
         {
             return new Dictionary<string, object?> { ["platform"] = "Android", ["type"] = "WorkManager", ["supported"] = true, ["runSupported"] = false, ["error"] = ex.Message, ["jobs"] = Array.Empty<object>() };
         }
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
         try
         {
             var tcs = new TaskCompletionSource<object?>();
@@ -831,7 +857,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                 ? $"Running job '{identifier}' is not supported on Android because the original WorkManager worker type and request parameters cannot be reconstructed safely from the listed identifier or tags."
                 : WorkManagerMissingReason
         });
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
 #if !DEBUG
         return await base.RunPlatformJobAsync(identifier, type);
 #else
@@ -906,7 +932,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
 #endif
     }
 
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
     /// <summary>
     /// Whether this build can actually trigger a BGTask. The only way to run one on demand is a
     /// private selector, which is compiled out of Release builds, so the advertised capability
@@ -1027,10 +1053,16 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
             var platformView = ve.Handler?.PlatformView;
             if (platformView == null) return false;
 
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
             if (platformView is UIKit.UIControl control)
             {
+#if TVOS
+                // A Siri Remote select press raises PrimaryActionTriggered, which is what tvOS
+                // controls listen for; TouchUpInside comes from touchscreens only.
+                control.SendActionForControlEvents(UIKit.UIControlEvent.PrimaryActionTriggered);
+#else
                 control.SendActionForControlEvents(UIKit.UIControlEvent.TouchUpInside);
+#endif
                 return true;
             }
 #elif ANDROID
@@ -1189,7 +1221,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
         return await base.TryNativeElementTapAsync(elementId, nativeElement);
     }
 
-#if ANDROID || IOS || MACCATALYST
+#if ANDROID || IOS || MACCATALYST || TVOS
     private const long MaxNativeElementScreenshotPixels = 16_777_216;
 
 #if ANDROID
@@ -1213,7 +1245,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                 _ => null
             };
             return Task.FromResult(CaptureAndroidView(view));
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
             if (nativeElement is UIKit.UIView uiView)
                 return Task.FromResult(CaptureAppleView(uiView));
 
@@ -1374,7 +1406,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                 ? stream.ToArray()
                 : null;
     }
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
     private static byte[]? CaptureAppleView(UIKit.UIView? view)
     {
         if (view?.Window is not { } window
@@ -1974,7 +2006,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
             new NSDictionary());
         return pngData?.ToArray();
     }
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
     {
         var pngBytes = await DispatchAsync(() => CaptureAllWindowsComposited());
@@ -1986,8 +2018,16 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
     protected override Task<byte[]?> CaptureFullScreenAsync(int? windowIndex = null)
         => DispatchAsync(() => CaptureAllWindowsComposited());
 
+#if TVOS
+    // tvOS apps run on MAUI's platform-neutral assemblies, whose VisualDiagnostics capture
+    // returns nothing, so render the element's UIView directly.
+    protected override Task<byte[]?> CaptureElementScreenshotAsync(VisualElement element)
+        => DispatchAsync(() => CaptureAppleView(element.Handler?.PlatformView as UIKit.UIView));
+#endif
+
     /// <summary>
-    /// Composites all visible UIWindows in the active UIWindowScene into a single PNG.
+    /// Composites all visible UIWindows in the active UIWindowScene (or, without one, the
+    /// application's windows) into a single PNG.
     /// This captures native overlays such as UIAlertController dialogs that live in
     /// their own UIWindow at an elevated WindowLevel, which VisualDiagnostics misses.
     /// </summary>
@@ -2018,16 +2058,18 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
             }
         }
 
-        if (windowScene == null)
-            return null;
-
-        var screen = windowScene.Screen;
+        // Legacy AppDelegate apps (such as tvOS backends without scene support) have no window
+        // scene; their windows hang off the application on the main screen.
+#pragma warning disable CA1422 // Legacy AppDelegate apps can have no UIWindowScene on current iOS versions.
+        var screen = windowScene?.Screen ?? UIKit.UIScreen.MainScreen;
+        var sceneWindows = windowScene?.Windows ?? UIKit.UIApplication.SharedApplication.Windows;
+#pragma warning restore CA1422
         var screenBounds = screen.Bounds;
 
         // Collect all visible windows sorted by WindowLevel ascending (back → front)
         // so that alert/dialog windows (WindowLevel ~2000) are drawn on top of the app window (level 0)
         var windows = new System.Collections.Generic.List<UIKit.UIWindow>();
-        foreach (var w in windowScene.Windows)
+        foreach (var w in sceneWindows)
         {
             if (!w.Hidden && w.Alpha > 0f)
                 windows.Add(w);
