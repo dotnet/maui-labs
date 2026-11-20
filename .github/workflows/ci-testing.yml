@@ -47,6 +47,8 @@ jobs:
 
       - name: Setup .NET 11
         uses: actions/setup-dotnet@v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.os == 'Windows' && format('{0}/maui-ci-dotnet', runner.temp) || '' }}
         with:
           global-json-file: global.json
 

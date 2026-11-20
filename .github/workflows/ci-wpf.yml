@@ -442,6 +442,7 @@ jobs:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/maui-ci-dotnet
         with:
           global-json-file: global.json
+          dotnet-version: 10.0.403
       - name: Install existing WPF template workloads
         shell: pwsh
         run: |

@@ -38,7 +38,32 @@ test("WPF build and template smoke isolate the SDK from machine-wide workloads",
   assert.match(build, /DOTNET_INSTALL_DIR: \$\{\{ inputs\.isolated-dotnet && format\('\{0\}\/maui-ci-dotnet', runner\.temp\) \|\| '' \}\}/);
   const wpf = read(".github/workflows/ci-wpf.yml");
   assert.match(wpf, /project-name: wpf\n\s+additional-dotnet-version: 10\.0\.403\n\s+isolated-dotnet: true/);
-  assert.match(wpf, /template-smoke:[\s\S]*?uses: actions\/setup-dotnet@v5\n\s+env:\n\s+DOTNET_INSTALL_DIR: \$\{\{ runner\.temp \}\}\/maui-ci-dotnet/);
+  assert.match(wpf, /template-smoke:[\s\S]*?uses: actions\/setup-dotnet@v5\n\s+env:\n\s+DOTNET_INSTALL_DIR: \$\{\{ runner\.temp \}\}\/maui-ci-dotnet\n\s+with:\n\s+global-json-file: global\.json\n\s+dotnet-version: 10\.0\.403/);
+});
+
+test("Windows workload jobs use an isolated SDK and install the net10 runtime when needed", () => {
+  const jobSection = (file, job) => {
+    const text = read(`.github/workflows/${file}`);
+    const match = text.match(new RegExp(`^  ${job}:\\n[\\s\\S]*?(?=^  [\\w-]+:\\s*$|(?![\\s\\S]))`, "m"));
+    assert.ok(match, `${file} must contain ${job}`);
+    return match[0];
+  };
+  for (const [file, job] of [
+    ["ci-devflow.yml", "build"],
+    ["ci-essentialsai.yml", "build-windows"],
+  ]) {
+    const section = jobSection(file, job);
+    assert.match(section, /additional-dotnet-version: 10\.0\.403\n\s+isolated-dotnet: true/);
+  }
+  for (const job of ["windows", "wpf"]) {
+    const section = jobSection("devflow-integration.yml", job);
+    assert.match(section, /DOTNET_INSTALL_DIR: \$\{\{ runner\.temp \}\}\/maui-ci-dotnet/);
+    assert.match(section, /dotnet-version: 10\.0\.403/);
+  }
+  const device = read(".github/workflows/_device-tests.yml");
+  assert.match(device, /DOTNET_INSTALL_DIR: \$\{\{ runner\.os == 'Windows' && format\('\{0\}\/maui-ci-dotnet', runner\.temp\) \|\| '' \}\}/);
+  assert.match(device, /dotnet-version: \$\{\{ runner\.os == 'Windows' && '10\.0\.403' \|\| '' \}\}/);
+  assert.match(read(".github/workflows/ci-testing.yml"), /DOTNET_INSTALL_DIR: \$\{\{ runner\.os == 'Windows' && format\('\{0\}\/maui-ci-dotnet', runner\.temp\) \|\| '' \}\}/);
 });
 
 test("Apple build and device callers export only a physical DEVELOPER_DIR", () => {

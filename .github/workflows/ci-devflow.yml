@@ -55,6 +55,8 @@ jobs:
     with:
       project-path: src/DevFlow/DevFlow.slnf
       project-name: devflow
+      additional-dotnet-version: 10.0.403
+      isolated-dotnet: true
       run-tests: true
       pack: true
       build-arguments: /p:PackDriverNuGet=true

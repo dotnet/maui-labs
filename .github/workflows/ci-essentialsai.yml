@@ -68,6 +68,8 @@ jobs:
       project-path: src/AI/EssentialsAI.slnf
       project-name: essentialsai
       os: '["windows-2025-vs2026"]'
+      additional-dotnet-version: 10.0.403
+      isolated-dotnet: true
       run-tests: true
       pack: true
       build-arguments: /p:UseNet11AppleTargets=true
