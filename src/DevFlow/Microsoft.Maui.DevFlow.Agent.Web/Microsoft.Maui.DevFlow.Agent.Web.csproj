@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <!-- Required by the [JSImport] interop source generator. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <PackageId>Microsoft.Maui.DevFlow.Agent.Web</PackageId>
+    <Description>WebAssembly agent for Microsoft.Maui.DevFlow. Provides visual tree inspection, element interactions, and screenshots for .NET MAUI apps running in the browser. The broker relays the agent API over the agent's WebSocket, since a browser page cannot listen on a port.</Description>
+    <PackageTags>maui;automation;testing;agent;web;wasm;webassembly;browser</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+    <EmbeddedResource Include="devflow-agent.js" LogicalName="devflow-agent.js" />
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\Microsoft.Maui.DevFlow.Agent\build\Microsoft.Maui.DevFlow.Agent.targets"
+          Pack="true"
+          PackagePath="build\$(PackageId).targets"
+          Visible="false" />
+    <None Include="..\Microsoft.Maui.DevFlow.Agent\buildTransitive\Microsoft.Maui.DevFlow.Agent.targets"
+          Pack="true"
+          PackagePath="buildTransitive\$(PackageId).targets"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>

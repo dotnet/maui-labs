@@ -7,7 +7,9 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
     private const double FallbackRefreshRate = 60d;
     private const double FallbackFrameTimeMs = 1000d / FallbackRefreshRate;
 
-    private readonly Process _process = Process.GetCurrentProcess();
+    // Lazy: the browser has no process object, and the reads below already treat
+    // PlatformNotSupportedException as "metric unavailable".
+    private readonly Lazy<Process> _process = new(Process.GetCurrentProcess);
     private readonly INativeFrameStatsProvider? _nativeFrameStatsProvider;
     private readonly ProfilerCapabilities _capabilities;
 
@@ -65,7 +67,7 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
 
         try
         {
-            _process.Refresh();
+            _process.Value.Refresh();
         }
         catch (Exception ex) when (
             ex is InvalidOperationException
@@ -81,7 +83,7 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
         {
             try
             {
-                _lastCpuTime = _process.TotalProcessorTime;
+                _lastCpuTime = _process.Value.TotalProcessorTime;
             }
             catch (Exception ex) when (
                 ex is InvalidOperationException
@@ -209,7 +211,7 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
 
         try
         {
-            _process.Refresh();
+            _process.Value.Refresh();
             return true;
         }
         catch (Exception ex) when (
@@ -231,7 +233,7 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
 
         try
         {
-            var cpuTime = _process.TotalProcessorTime;
+            var cpuTime = _process.Value.TotalProcessorTime;
             var cpuDeltaMs = (cpuTime - _lastCpuTime).TotalMilliseconds;
             _lastCpuTime = cpuTime;
 
@@ -258,7 +260,7 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
 
         try
         {
-            return _process.Threads.Count;
+            return _process.Value.Threads.Count;
         }
         catch (Exception ex) when (
             ex is InvalidOperationException
@@ -277,7 +279,7 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
 
         try
         {
-            var workingSetBytes = _process.WorkingSet64;
+            var workingSetBytes = _process.Value.WorkingSet64;
             if (workingSetBytes <= 0)
                 return (null, null);
 

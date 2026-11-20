@@ -163,7 +163,7 @@ public abstract class AppFixtureBase : IAppFixture
     /// running the tests: side-by-side installs are common on developer machines, and only the one
     /// selected by the repo's global.json has an SDK new enough to build the samples.
     /// </summary>
-    private static string ResolveDotnetPath()
+    protected static string ResolveDotnetPath()
     {
         // The SDK sets this for any process it launches, including the test host.
         var hostPath = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH");
@@ -273,6 +273,7 @@ public abstract class AppFixtureBase : IAppFixture
                 "macos" => "DevFlow.Sample.MacOS",
                 "gtk" => "DevFlow.Sample.Linux",
                 "wpf" => "DevFlow.Sample.WPF",
+                "web" => "DevFlow.Sample.Web",
                 _ => "DevFlow.Sample",
             };
             var mauiPath = Path.Combine(
@@ -325,6 +326,7 @@ public abstract class AppFixtureBase : IAppFixture
                 "macos" => "DevFlow.Sample.MacOS",
                 "gtk" => "DevFlow.Sample.Linux",
                 "wpf" => "DevFlow.Sample.WPF",
+                "web" => "DevFlow.Sample.Web",
                 _ => "DevFlow.Sample",
             };
             var mauiRepoRoot = FindRepoRoot();

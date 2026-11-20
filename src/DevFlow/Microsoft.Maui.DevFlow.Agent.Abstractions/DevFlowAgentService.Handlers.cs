@@ -316,6 +316,16 @@ public partial class DevFlowAgentService
 
         registration.Framework = FrameworkName;
         registration.UiFramework = UiFrameworkName;
+        if (registration.UseTunnel)
+        {
+            // The broker serves a tunneled agent's port, so adopt whichever port it assigned.
+            if (registration.AssignedPort is { } assignedPort && _server.UseBrokerTunnel)
+            {
+                _options.Port = assignedPort;
+                _server.Port = assignedPort;
+            }
+            registration.TunnelRequestHandler = _server.HandleTunneledRequestAsync;
+        }
         _brokerRegistration = registration;
     }
 
