@@ -49,6 +49,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
     // Virtualization state
     readonly List<ItemInfo> _flatItems = new();
     readonly Dictionary<int, (IView mauiView, NSView platformView)> _visibleViews = new();
+    readonly Dictionary<VisualElement, int> _measuredItemViews = new();
     readonly Dictionary<DataTemplate, Queue<IView>> _recyclePool = new();
     nfloat _estimatedItemHeight = 44;
     bool _positionsCalculated;
@@ -62,6 +63,8 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
     bool _isReloading;
     nfloat _lastMeasurementConstraint = -1;
     bool _lastMeasurementWasHorizontal;
+    bool _measureContent;
+    bool _contentMeasureInvalidationPending;
 
     // Threshold: render items this far beyond the visible rect
     static readonly nfloat OverScanPixels = 200;
@@ -95,12 +98,15 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         SubscribeItemsLayout((VirtualView as StructuredItemsView)?.ItemsLayout);
         if (VirtualView is ItemsView itemsView)
             itemsView.ScrollToRequested += OnScrollToRequested;
+        foreach (var item in _visibleViews)
+            ObserveItemMeasurement(item.Value.mauiView, item.Key);
     }
 
     protected override void DisconnectHandler(NSScrollView platformView)
     {
         UnsubscribeScroll();
         UnsubscribeCollection();
+        UnobserveItemMeasurements();
         SubscribeItemsLayout(null);
         if (VirtualView is ItemsView itemsView)
             itemsView.ScrollToRequested -= OnScrollToRequested;
@@ -109,6 +115,33 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
 
     void OnScrollToRequested(object? sender, ScrollToRequestEventArgs args)
         => HandleScrollTo(args);
+
+    public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
+    {
+        var size = base.GetDesiredSize(widthConstraint, heightConstraint);
+        var isHorizontal = GetOrientation(VirtualView.ItemsLayout) == ItemsLayoutOrientation.Horizontal;
+        var view = (IView)VirtualView;
+        var explicitSize = isHorizontal ? view.Width : view.Height;
+        _measureContent = double.IsPositiveInfinity(isHorizontal ? widthConstraint : heightConstraint)
+            && !(double.IsFinite(explicitSize) && explicitSize >= 0);
+        if (!_measureContent || _flatItems.Count == 0 || _itemsContainer == null)
+            return size;
+
+        // NSScrollView has no intrinsic content size. In a parent ScrollView,
+        // report our document extent instead of its zero native fitting size.
+        var rect = new Rect(0, 0,
+            double.IsFinite(widthConstraint) ? Math.Max(0, widthConstraint) : size.Width,
+            double.IsFinite(heightConstraint) ? Math.Max(0, heightConstraint) : size.Height);
+        InvalidateMeasurementsForConstraintChange(rect);
+        CalculatePositions(rect);
+        var extent = (double)_flatItems.Max(info => info.Position + info.Size);
+        var minimum = isHorizontal ? view.MinimumWidth : view.MinimumHeight;
+        var maximum = isHorizontal ? view.MaximumWidth : view.MaximumHeight;
+        extent = Math.Max(extent, double.IsFinite(minimum) && minimum >= 0 ? minimum : 0);
+        if (double.IsFinite(maximum) && maximum >= 0)
+            extent = Math.Min(extent, maximum);
+        return isHorizontal ? new Size(extent, size.Height) : new Size(size.Width, extent);
+    }
 
     public override void PlatformArrange(Rect rect)
     {
@@ -171,6 +204,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         public nfloat Position { get; set; }
         public nfloat Size { get; set; }
         public bool Measured { get; set; }
+        public bool HasMeasurement { get; set; }
         public int CrossPosition { get; set; }
 
         public bool SpansGrid => IsHeader || IsFooter;
@@ -229,7 +263,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         foreach (var info in _flatItems)
         {
             info.Position = offset;
-            if (!info.Measured)
+            if (!info.HasMeasurement)
                 info.Size = _estimatedItemHeight;
             offset += info.Size + spacing;
         }
@@ -255,7 +289,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
                     }
                     info.Position = x;
                     info.CrossPosition = 0;
-                    if (!info.Measured)
+                    if (!info.HasMeasurement)
                         info.Size = _estimatedItemHeight;
                     x += info.Size + hSpacing;
                     continue;
@@ -269,7 +303,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
                 }
                 info.Position = x;
                 info.CrossPosition = columnCount++;
-                if (!info.Measured)
+                if (!info.HasMeasurement)
                     info.Size = _estimatedItemHeight;
                 if (info.Size > columnWidth)
                     columnWidth = info.Size;
@@ -297,7 +331,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
                     }
                     info.Position = y;
                     info.CrossPosition = 0;
-                    if (!info.Measured)
+                    if (!info.HasMeasurement)
                         info.Size = _estimatedItemHeight;
                     y += info.Size + vSpacing;
                     continue;
@@ -311,7 +345,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
                 }
                 info.Position = y;
                 info.CrossPosition = rowCount++;
-                if (!info.Measured)
+                if (!info.HasMeasurement)
                     info.Size = _estimatedItemHeight;
                 if (info.Size > rowHeight)
                     rowHeight = info.Size;
@@ -376,6 +410,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         {
             var (mauiView, platformView) = _visibleViews[idx];
             platformView.RemoveFromSuperview();
+            UnobserveItemMeasurement(mauiView);
             if (mauiView is Element elem && VirtualView is Element parent)
                 parent.RemoveLogicalChild(elem);
             RecycleView(idx, mauiView);
@@ -430,16 +465,19 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
                 {
                     info.Size = measuredSize;
                     info.Measured = true;
+                    info.HasMeasurement = true;
                     needsRecalc = true;
                 }
                 else
                 {
                     info.Measured = true;
+                    info.HasMeasurement = true;
                 }
             }
 
             PositionItem(platformView, info, idx, isHorizontal, span, containerWidth, containerHeight,
                 (nfloat)GetItemSpacing(layout), (nfloat)GetLineSpacing(layout));
+            ObserveItemMeasurement(mauiView, idx);
         }
 
         // If any measurements changed, recalculate positions and reposition all visible items,
@@ -456,7 +494,75 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             }
             // Items shrank — more items may now fit in the viewport; re-run once
             UpdateVisibleItems(viewportOverride);
+            if (_measureContent)
+                InvalidateContentMeasure();
         }
+    }
+
+    void InvalidateContentMeasure()
+    {
+        if (_contentMeasureInvalidationPending)
+            return;
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || !_isInLayout)
+        {
+            ((IView)VirtualView).InvalidateMeasure();
+            return;
+        }
+
+        _contentMeasureInvalidationPending = true;
+        if (!dispatcher.Dispatch(() =>
+        {
+            _contentMeasureInvalidationPending = false;
+            if (_itemsContainer != null)
+                ((IView)VirtualView).InvalidateMeasure();
+        }))
+        {
+            _contentMeasureInvalidationPending = false;
+            throw new InvalidOperationException("Could not dispatch CollectionView content measurement invalidation.");
+        }
+    }
+
+    void ObserveItemMeasurement(IView mauiView, int index)
+    {
+        if (mauiView is not VisualElement visualElement)
+            return;
+
+        if (!_measuredItemViews.ContainsKey(visualElement))
+            visualElement.MeasureInvalidated += OnItemMeasureInvalidated;
+        _measuredItemViews[visualElement] = index;
+    }
+
+    void UnobserveItemMeasurement(IView mauiView)
+    {
+        if (mauiView is VisualElement visualElement && _measuredItemViews.Remove(visualElement))
+            visualElement.MeasureInvalidated -= OnItemMeasureInvalidated;
+    }
+
+    void UnobserveItemMeasurements()
+    {
+        foreach (var visualElement in _measuredItemViews.Keys)
+            visualElement.MeasureInvalidated -= OnItemMeasureInvalidated;
+        _measuredItemViews.Clear();
+    }
+
+    void OnItemMeasureInvalidated(object? sender, EventArgs args)
+    {
+        var visualElement = sender as VisualElement;
+        var index = -1;
+        var observed = visualElement != null && _measuredItemViews.TryGetValue(visualElement, out index);
+        if (_isReloading || visualElement is null || !observed ||
+            index < 0 || index >= _flatItems.Count)
+            return;
+
+        var info = _flatItems[index];
+        if (!info.Measured)
+            return;
+
+        info.Measured = false;
+        _positionsCalculated = false;
+        ((IView)VirtualView).InvalidateMeasure();
     }
 
     void PositionItem(NSView platformView, ItemInfo info, int index,
@@ -603,6 +709,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         foreach (var info in _flatItems)
         {
             info.Measured = false;
+            info.HasMeasurement = false;
             info.Size = _estimatedItemHeight;
         }
         _positionsCalculated = false;
@@ -994,6 +1101,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         try
         {
             ReloadItemsCore();
+            ((IView)VirtualView).InvalidateMeasure();
         }
         finally
         {
@@ -1007,6 +1115,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         UnsubscribeCollection();
 
         // Clear all visible views
+        UnobserveItemMeasurements();
         foreach (var kvp in _visibleViews)
         {
             kvp.Value.platformView.RemoveFromSuperview();
