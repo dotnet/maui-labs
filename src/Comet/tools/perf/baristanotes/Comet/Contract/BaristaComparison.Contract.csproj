@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Shared/FixtureContract.cs" Link="Shared/FixtureContract.cs" />
+    <Compile Include="../../Shared/FixtureValidation.cs" Link="Shared/FixtureValidation.cs" />
+    <Compile Include="../../Shared/FixtureStore.cs" Link="Shared/FixtureStore.cs" />
+  </ItemGroup>
+</Project>

@@ -47,6 +47,12 @@ public readonly struct Sp : IEquatable<Sp>, IComparable<Sp>
     {
     }
 
+    /// <summary>Construct an Sp while preserving a fractional value.</summary>
+    public Sp(float sp)
+        : this(4294967296L | (uint)BitConverter.SingleToInt32Bits(sp))
+    {
+    }
+
     /// <summary>The zero-sp constant (equivalent to <c>0.sp</c> in Kotlin).</summary>
     public static Sp Zero => new(0);
 

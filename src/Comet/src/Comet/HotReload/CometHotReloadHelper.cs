@@ -83,6 +83,10 @@ public static class CometHotReloadHelper
 		return currentViews?[currentView] as object[] ?? Array.Empty<object>();
 	}
 
+	[System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage(
+		"Trimming",
+		"IL2070",
+		Justification = "Replacement construction is reachable only when the debug hot-reload registry is enabled")]
 	static View CreateReplacementInstance(Type replacementType, object[] args)
 	{
 		var constructors = replacementType?.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);

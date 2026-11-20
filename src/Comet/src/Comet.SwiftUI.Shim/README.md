@@ -15,8 +15,18 @@ renders through.
 ./build-xcframework.sh   # produces CometSwiftUIShim.xcframework (device + simulator)
 ```
 
-The `.xcframework` is a build output (git-ignored); regenerate it before building the
-binding or the `CometSwiftUIProbe` sample.
+`CometSwiftUIShim.xcframework` is a first-party generated package input. It is part of
+the Comet solution and is tracked with the Swift source.
+
+Whenever `Sources/CometSwiftUIShim/` or the Objective-C binding contract changes:
+
+1. Run `./build-xcframework.sh`.
+2. Include the regenerated `CometSwiftUIShim.xcframework` in the same change.
+3. Clean the `CometSwiftUIProbe` outputs so the native framework is relinked.
+4. Build and run the iOS probe before reporting the change as complete.
+
+The XCFramework contains device and simulator slices. Do not update only one slice, and
+do not treat a locally generated framework as an untracked prerequisite.
 
 ## Why @objc instead of Swift bindings
 

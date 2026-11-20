@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 using Comet.Internal;
@@ -60,6 +61,20 @@ namespace Comet
 			return listview;
 		}
 
+		/// <summary>
+		/// Reveals a row once after the native list receives its viewport. Center placement
+		/// preserves enough native start/end space for the first and last rows to center.
+		/// </summary>
+		public static ListView<T> InitialScrollTo<T>(
+			this ListView<T> listview,
+			int index,
+			ListScrollPosition position = ListScrollPosition.Start)
+		{
+			listview.InitialScrollIndex = index;
+			listview.InitialScrollPosition = position;
+			return listview;
+		}
+
 		public static CollectionView<T> OnSelected<T>(this CollectionView<T> collectionView, Action<T> selected)
 		{
 			collectionView.ItemSelected = (o) => {
@@ -68,7 +83,33 @@ namespace Comet
 			return collectionView;
 		}
 
+		/// <inheritdoc cref="InitialScrollTo{T}(ListView{T}, int, ListScrollPosition)"/>
+		public static CollectionView<T> InitialScrollTo<T>(
+			this CollectionView<T> collectionView,
+			int index,
+			ListScrollPosition position = ListScrollPosition.Start)
+		{
+			collectionView.InitialScrollIndex = index;
+			collectionView.InitialScrollPosition = position;
+			return collectionView;
+		}
+
+		[RequiresUnreferencedCode(
+			"Reading attributed fields on arbitrary objects requires runtime field metadata. " +
+			"Use the View overload for Comet views in trimmed applications.")]
 		public static List<FieldInfo> GetFieldsWithAttribute(this object obj, Type attribute)
+		{
+			if (obj is View view)
+				return GetFieldsWithAttribute(view, attribute);
+
+			var type = obj.GetType();
+			return type
+				.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
+				.Where(x => Attribute.IsDefined(x, attribute))
+				.ToList();
+		}
+
+		public static List<FieldInfo> GetFieldsWithAttribute(this View obj, Type attribute)
 		{
 			var type = obj.GetType();
 			var fields = type.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance).Where(x => Attribute.IsDefined(x, attribute)).ToList();

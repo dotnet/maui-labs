@@ -15,9 +15,9 @@ namespace Comet.Platform.SwiftUI
 	/// the same layout-driven swap as Android. The reflow is driven by <see cref="SwiftUINavigationNode"/>
 	/// re-laying-out its top screen on <c>ReactiveScheduler.AfterFlush</c> (the SelectorPanel backend
 	/// schedules the flush on a selector change).</summary>
-	sealed class SwiftUISelectorPanelNode : ICometBackendNode, IBackendManagesOwnContent, ISwiftUINativeNode
+	sealed class SwiftUISelectorPanelNode : ICometBackendNode, IBackendRetainsLogicalContentOnOwnerTransfer, ISwiftUINativeNode
 	{
-		readonly SelectorPanel _panel;
+		SelectorPanel _panel;
 		readonly BackendContext _context;
 		readonly CometNode _native;
 		ISwiftUINativeNode?[] _nodes = Array.Empty<ISwiftUINativeNode?>();
@@ -44,11 +44,14 @@ namespace Comet.Platform.SwiftUI
 				_selectorValue = value.AsInt;
 				UpdateHostedChild();
 			}
-			else if (id == PropertyIds.BackgroundColor && value.AsColor is { } c)
+			else if (id == PropertyIds.BackgroundColor)
 			{
 				// The panel surface (gold Surface(tonalElevation = 8.dp)); only visible while a panel is
 				// open (collapsed → zero height → nothing drawn).
-				CometSwiftUIHost.SetColor(_native, "background", ToArgb(c));
+				CometSwiftUIHost.SetColor(
+					_native,
+					"background",
+					value.AsColor is { } c ? ToArgb(c) : 0);
 			}
 		}
 
@@ -125,6 +128,22 @@ namespace Comet.Platform.SwiftUI
 		public void RemoveChildAt(int index) { }
 		public void MoveChild(int fromIndex, int toIndex) { }
 		public void SetEventSink(ICometEventSink? sink) { }
+
+		public void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is not SelectorPanel panel ||
+				(!isHotReload && string.IsNullOrEmpty(newView.GetKey())))
+				return;
+
+			_panel = panel;
+			_selectorValue = panel.Selector.Peek();
+			_nodes = Array.Empty<ISwiftUINativeNode?>();
+			_initialized = false;
+			_hosted = -1;
+			CometSwiftUIHost.ClearChildren(_native);
+			UpdateHostedChild();
+		}
+
 		public void Dispose() { }
 
 		static uint ToArgb(Color c) =>

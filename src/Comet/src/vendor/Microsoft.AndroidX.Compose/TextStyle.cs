@@ -1,4 +1,5 @@
 using Android.Runtime;
+using System.Diagnostics.CodeAnalysis;
 
 namespace AndroidX.Compose;
 
@@ -49,7 +50,11 @@ public sealed class TextStyle
     /// (obtain from <see cref="LineBreakValues"/>). Leave <see langword="null"/> to inherit.</summary>
     public int? LineBreak { get; set; }
 
-    static T? Cast<T>(Java.Lang.Object? wrapper) where T : Java.Lang.Object =>
+    static T? Cast<
+        [DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicConstructors |
+            DynamicallyAccessedMemberTypes.NonPublicConstructors)] T>(
+        Java.Lang.Object? wrapper) where T : Java.Lang.Object =>
         wrapper is null ? null : Java.Lang.Object.GetObject<T>(wrapper.Handle, JniHandleOwnership.DoNotTransfer);
 
     static int UnboxTextAlign(TextAlign? wrapper, int fallback)

@@ -1,6 +1,7 @@
 using Android.Runtime;
 using AndroidX.Compose.Foundation.Lazy;
 using AndroidX.Compose.Foundation.Layout;
+using AndroidX.Compose.Foundation.Gestures;
 using AndroidX.Compose.Runtime;
 
 namespace AndroidX.Compose;
@@ -72,6 +73,9 @@ public sealed class LazyColumn<T> : ComposableNode
     /// </remarks>
     public bool ReverseLayout { get; set; }
 
+    /// <summary>Use Compose's native centered snap fling behavior.</summary>
+    public bool SnapToCenter { get; set; }
+
     /// <summary>
     /// Optional fixed content padding applied inside the list (not as a
     /// modifier on the list frame). Items can scroll behind this area
@@ -80,6 +84,13 @@ public sealed class LazyColumn<T> : ComposableNode
     /// both are present.
     /// </summary>
     public PaddingValues? ContentPadding { get; set; }
+
+    /// <summary>
+    /// Optional native-content lease acquired before an item renders. The lease is
+    /// released when Compose forgets or abandons that exact content, including prefetch.
+    /// Acquisition must not launch work or mutate Compose state.
+    /// </summary>
+    public Func<T, ComposableNode, IDisposable>? RetainItem { get; set; }
 
     /// <summary>
     /// When a parent layout (typically <see cref="Scaffold"/>) hands us
@@ -139,11 +150,26 @@ public sealed class LazyColumn<T> : ComposableNode
                 itemContent: ComposableLambdas.Instantiate4((_, indexBoxed, comp) =>
                 {
                     var i = ((Java.Lang.Integer)indexBoxed!).IntValue();
-                    _itemContent(_items[i]).Render(comp);
+                    var item = _items[i];
+                    var node = _itemContent(item);
+                    if (RetainItem is { } retain)
+                        LazyItemLease.Remember(comp, node, () => retain(item, node));
+                    node.Render(comp);
                 }));
         });
 
         var contentPadding = ContentPadding?.Jvm ?? _runtimeContentPadding;
+        IFlingBehavior? flingBehavior = null;
+        Java.Lang.Object? flingPeer = null;
+        if (SnapToCenter && State is not null)
+        {
+            var snapHandle = ComposeBridges.RememberSnapFlingBehavior(
+                ((Java.Lang.Object)State.Jvm).Handle,
+                ComposeBridges.SnapPositionCenter(),
+                composer);
+            flingPeer = new Java.Lang.Object(snapHandle, JniHandleOwnership.TransferLocalRef);
+            flingBehavior = flingPeer.JavaCast<IFlingBehavior>();
+        }
 
         int defaults = (int)LazyColumnDefault.All;
         if (modifier       is not null) defaults &= ~(int)LazyColumnDefault.Modifier;
@@ -162,12 +188,13 @@ public sealed class LazyColumn<T> : ComposableNode
             reverseLayout:       ReverseLayout,
             verticalArrangement: null,
             horizontalAlignment: null,
-            flingBehavior:       null,
+            flingBehavior:       flingBehavior,
             userScrollEnabled:   true,
             overscrollEffect:    null,
             content:             content,
             _composer:           composer,
             p11:                 0,
             _changed:            defaults);
+        flingPeer?.Dispose();
     }
 }

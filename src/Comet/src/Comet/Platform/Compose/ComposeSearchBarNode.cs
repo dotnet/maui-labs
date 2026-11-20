@@ -14,7 +14,7 @@ namespace Comet.Platform.Compose
 	/// focus, back-collapse — all inside the widget). Slot + content views are owned
 	/// (<see cref="IBackendManagesOwnContent"/>); typed text streams into the control's
 	/// Query signal via a snapshot flow.</summary>
-	sealed class ComposeSearchBarNode : ComposeNode, IBackendManagesOwnContent
+	sealed class ComposeSearchBarNode : ComposeNode, IBackendRetainsLogicalContentOnOwnerTransfer
 	{
 		// M3 search bar container height (dp).
 		const float BarHeightDp = 56f;
@@ -44,7 +44,7 @@ namespace Comet.Platform.Compose
 			if (newView is not Comet.SearchBar bar)
 				return;
 			_bar = bar;
-			if (!isHotReload)
+			if (!isHotReload && string.IsNullOrEmpty(newView.GetKey()))
 				return;
 			_built = false;
 			_placeholder = _leading = _trailing = _content = null;
