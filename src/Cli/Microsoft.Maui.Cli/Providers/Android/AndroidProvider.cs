@@ -22,6 +22,7 @@ public class AndroidProvider : IAndroidProvider
 	AvdManager _avdManager;
 
 	string? _sdkPath;
+	string? _sdkPathSource;
 	string? _jdkPath;
 
 	// Default Android SDK target versions — update these when the minimum supported API level changes
@@ -36,7 +37,7 @@ public class AndroidProvider : IAndroidProvider
 	// images are excluded from auto-detect. Hoisted to avoid a per-element allocation.
 	static readonly Version NoApiLevel = new(0, 0);
 
-	public string? SdkPath => _sdkPath ??= PlatformDetector.Paths.GetAndroidSdkPath();
+	public string? SdkPath => _sdkPath ??= ResolveSdkPath();
 	public string? JdkPath => _jdkPath ??= _jdkManager.DetectedJdkPath ?? PlatformDetector.Paths.GetJdkPath();
 
 	public bool IsSdkInstalled => !string.IsNullOrEmpty(SdkPath) && Directory.Exists(SdkPath);
@@ -59,6 +60,39 @@ public class AndroidProvider : IAndroidProvider
 	{
 		_sdkManager.Dispose();
 		GC.SuppressFinalize(this);
+	}
+
+	public string? GetSdkPathSource()
+	{
+		_ = SdkPath;
+		return _sdkPathSource;
+	}
+
+	string? ResolveSdkPath()
+	{
+		var sdkPath = PlatformDetector.Paths.GetAndroidSdkPath();
+		if (sdkPath is null)
+			return null;
+
+		_sdkPathSource = PathsEqual(sdkPath, Environment.GetEnvironmentVariable("ANDROID_HOME"))
+			? "ANDROID_HOME"
+			: PathsEqual(sdkPath, Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT"))
+				? "ANDROID_SDK_ROOT"
+				: PathsEqual(sdkPath, PlatformDetector.Paths.DefaultAndroidSdkPath)
+					? "default"
+					: "auto-detected";
+		return sdkPath;
+	}
+
+	public ToolPaths GetToolPaths()
+	{
+		return new ToolPaths
+		{
+			Sdkmanager = _sdkManager.SdkManagerPath,
+			Avdmanager = _avdManager.AvdManagerPath,
+			Adb = _adb.AdbPath,
+			Emulator = _avdManager.EmulatorPath
+		};
 	}
 
 	public async Task<List<HealthCheck>> CheckHealthAsync(CancellationToken cancellationToken = default)
@@ -503,6 +537,7 @@ public class AndroidProvider : IAndroidProvider
 			onProgress: (phase, pct, msg) => onProgress?.Invoke(phase.ToString(), pct, msg),
 			cancellationToken);
 		_sdkPath = targetPath;
+		_sdkPathSource = "installed";
 	}
 
 	public async Task<string?> EnsureLatestSdkToolsAsync(string targetPath,
@@ -512,13 +547,29 @@ public class AndroidProvider : IAndroidProvider
 			onProgress: (phase, pct, msg) => onProgress?.Invoke(phase.ToString(), pct, msg),
 			cancellationToken);
 		_sdkPath = targetPath;
+		_sdkPathSource = "installed";
 		return tool.Revision;
 	}
 
 	public void OverrideSdkPath(string path)
 	{
 		_sdkPath = path;
+		_sdkPathSource = "override";
 		RebuildToolWrappers();
+	}
+
+	static bool PathsEqual(string left, string? right)
+	{
+		if (string.IsNullOrWhiteSpace(right))
+			return false;
+
+		var comparison = OperatingSystem.IsWindows()
+			? StringComparison.OrdinalIgnoreCase
+			: StringComparison.Ordinal;
+		return string.Equals(
+			Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
+			Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)),
+			comparison);
 	}
 
 	public void OverrideJdkPath(string path)

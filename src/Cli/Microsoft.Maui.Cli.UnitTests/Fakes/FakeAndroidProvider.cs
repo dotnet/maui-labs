@@ -20,6 +20,8 @@ public class FakeAndroidProvider : IAndroidProvider
 	public bool IsSdkInstalled { get; set; }
 	public bool IsJdkInstalled { get; set; }
 	public bool SdkPathRequiresElevation { get; set; }
+	public string? SdkPathSource { get; set; }
+	public ToolPaths ToolPathsResult { get; set; } = new();
 
 	public List<HealthCheck> HealthChecks { get; set; } = new();
 	public List<Device> Devices { get; set; } = new();
@@ -35,6 +37,7 @@ public class FakeAndroidProvider : IAndroidProvider
 	public List<SdkPackage> AvailablePackages { get; set; } = new();
 	public string? MostRecentSystemImage { get; set; }
 	public bool LicensesAccepted { get; set; }
+	public Exception? LicensesException { get; set; }
 	public (string Command, string Arguments)? LicenseAcceptanceCommand { get; set; }
 
 	/// <summary>
@@ -230,10 +233,18 @@ public class FakeAndroidProvider : IAndroidProvider
 	}
 
 	public Task<bool> AreLicensesAcceptedAsync(CancellationToken cancellationToken = default)
-		=> Task.FromResult(LicensesAccepted);
+		=> LicensesException is null
+			? Task.FromResult(LicensesAccepted)
+			: Task.FromException<bool>(LicensesException);
 
 	public (string Command, string Arguments)? GetLicenseAcceptanceCommand()
 		=> LicenseAcceptanceCommand;
+
+	public string? GetSdkPathSource()
+		=> SdkPathSource;
+
+	public ToolPaths GetToolPaths()
+		=> ToolPathsResult;
 
 	public Task InstallJdkAsync(int? version = null, string? installPath = null, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
 	{

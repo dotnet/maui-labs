@@ -36,6 +36,7 @@ public static partial class AndroidCommands
 		command.Add(JdkOption);
 
 		command.Add(CreateInstallCommand());
+		command.Add(CreateInfoCommand());
 		command.Add(CreateJdkCommand());
 		command.Add(CreateSdkCommand());
 		command.Add(CreateEmulatorCommand());
