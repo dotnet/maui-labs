@@ -38,16 +38,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		void OnClick(object sender, RoutedEventArgs e)
 		{
-			try
-			{
-				// Use reflection to send clicked since IImageButton.Clicked isn't directly accessible
-				var method = typeof(Microsoft.Maui.Controls.ImageButton).GetMethod("SendClicked",
-					System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
-				method?.Invoke(VirtualView, null);
-			}
-			catch { }
-
-			VirtualView?.Command?.Execute(VirtualView?.CommandParameter);
+			VirtualView?.SendClicked();
 		}
 
 		static void MapSource(ImageButtonHandler handler, Microsoft.Maui.Controls.ImageButton view)

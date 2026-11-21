@@ -4,7 +4,10 @@
     <!-- Use Windows SDK-versioned TFM so the WinRT projections (Microsoft.Windows.SDK.NET) are
          available. WebView2CompositionControl (used internally by Wpf.BlazorWebView) loads them
          from its ControlTemplate during the WPF measure pass. -->
-    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <WpfSampleTargetFramework Condition="'$(WpfSampleTargetFramework)' == ''">net11.0-windows10.0.17763.0</WpfSampleTargetFramework>
+    <TargetFramework>$(WpfSampleTargetFramework)</TargetFramework>
+    <MauiVersion Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net10.0-'))">$(Maui10Version)</MauiVersion>
+    <WindowsSdkPackageVersion>$(MicrosoftWindowsSdkNetRefVersion)</WindowsSdkPackageVersion>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
     <UseMaui>true</UseMaui>
@@ -36,14 +39,13 @@
   <ItemGroup>
     <!-- MAUI resources -->
     <MauiFont Include="Resources\Fonts\*" />
-    <MauiImage Include="Resources\Images\*" />
-    <MauiIcon Include="Resources\AppIcon\appicon-modern.svg" />
-    <!-- Copy image assets to output so the WPF ImageHandler can resolve them at runtime.
-         The standard Resizetizer pipeline doesn't run for this custom backend TFM. -->
-    <Content Include="Resources\Images\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>%(Filename)%(Extension)</Link>
-    </Content>
+    <MauiImage Include="Resources\Images\*" Exclude="Resources\Images\dotnet_bot.png" />
+    <!-- MAUI 10 copies sources without rasterizing SVGs; keep its bitmap fallback out of the MAUI 11 graph. -->
+    <MauiImage Include="Resources\Images\dotnet_bot.png"
+               Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net10.0-'))" />
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" />
+    <MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiSplashScreen Include="Resources\Images\dotnet_bot.svg" Color="#512BD4" />
   </ItemGroup>
 
   <ItemGroup>
@@ -59,10 +61,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Windows.WPF\Windows.WPF.csproj" />
     <ProjectReference Include="..\..\src\Windows.WPF.Essentials\Windows.WPF.Essentials.csproj" />
-    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.WPF\Microsoft.Maui.DevFlow.Agent.WPF.csproj" />
+    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.WPF\Microsoft.Maui.DevFlow.Agent.WPF.csproj"
+                      Condition="'$(EnableMauiDevFlow)' == 'true'" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(EnableMauiDevFlow)' == 'true'">
     <AssemblyMetadata Include="Microsoft.Maui.DevFlowProject" Value="Windows.WPF.Sample" />
     <AssemblyMetadata Include="Microsoft.Maui.DevFlowTfm" Value="$(TargetFramework)" />
   </ItemGroup>
@@ -80,7 +83,7 @@
     </ItemGroup>
   </Target>
   <PropertyGroup Condition="'$(WpfTestScenarios)' == 'true'">
-    <DefineConstants>$(DefineConstants);WPF_TEST_SCENARIOS;WPF_FONT_TEST_SCENARIO</DefineConstants>
+    <DefineConstants>$(DefineConstants);WPF_TEST_SCENARIOS;WPF_FONT_TEST_SCENARIO;WPF_RESOURCE_PIPELINE_SCENARIO</DefineConstants>
     <WpfTestTargetsPath Condition="'$(WpfTestTargetsPath)' == ''">$(MSBuildThisFileDirectory)..\..\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets</WpfTestTargetsPath>
   </PropertyGroup>
 
@@ -94,8 +97,10 @@
 
   <!-- Project references do not import the backend's shipping NuGet build targets. -->
   <Import Project="TestScenarios\PackagedAssets.props" Condition="'$(WpfTestScenarios)' == 'true'" />
+  <Import Project="..\..\src\Windows.WPF\buildTransitive\Microsoft.Maui.Platforms.Windows.WPF.props"
+          Condition="'$(_MicrosoftMauiPlatformsWindowsWPFBuildPropsImported)' != 'true'" />
   <Import Project="$(WpfTestTargetsPath)" Condition="'$(WpfTestScenarios)' == 'true'" />
-  <Import Project="..\..\src\Windows.WPF\build\Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets"
-          Condition="'$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)' != 'true'" />
+  <Import Project="..\..\src\Windows.WPF\buildTransitive\Microsoft.Maui.Platforms.Windows.WPF.targets"
+          Condition="'$(_MicrosoftMauiPlatformsWindowsWPFBuildTargetsImported)' != 'true'" />
 
 </Project>

@@ -1,0 +1,6 @@
+{
+  "name": "window-page-reset",
+  "expectedCases": 1,
+  "expectedAssertions": 11,
+  "evidence": ["states.jsonl", "assertions.txt"]
+}

@@ -368,6 +368,7 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Visual Tree Inspection** — query the full MAUI visual tree via HTTP API or CLI
 - **Layout Diagnostics** — detect clipping, lost overflow, text truncation, overlap, and interaction occlusion with platform-specific evidence and confidence
 - **Element Interaction** — tap, fill, scroll, navigate, focus, resize, and mutate properties
+- **Continuous Pointer Sessions** — capability-negotiated, bounded/coalesced press-move-release input for Android and opt-in UIKit targets, with safe legacy gesture fallback
 - **Application Menus** — inspect and invoke the app menu bar: the cross-platform MAUI `MenuBarItems` tree plus the native macOS AppKit `NSMenu` and active Mac Catalyst responder-chain key commands. Disabled items and disabled ancestors are respected; unhandled native actions report failure.
 - **Screenshots** — capture PNG screenshots from any platform (full window or per-element); AppKit window capture includes native chrome and attached sheets without activating the app
 - **Screen Recording** — start/stop video recording of app sessions
@@ -387,6 +388,12 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Batch Operations** — execute command sequences from stdin for scripting
 - **Agent Extensions** — expose app-specific diagnostic tools under `/api/v1/ext/{namespace}/...` with self-describing metadata for CLI and MCP discovery
 - **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK
+
+Android driver commands and screen recording use `System.Diagnostics.Process` through the
+driver's internal `HostProcess` helper, not `Xamarin.Android.Tools.ProcessUtils`. Output and
+error streams drain concurrently; cancelling an ADB command terminates only its client, not
+the shared ADB server. `Xamarin.Android.Tools.AndroidSdk` remains required for `AdbRunner`
+device discovery and reverse-port setup.
 
 ## Focus-safe capture and native dialogs
 
@@ -664,6 +671,8 @@ and XAML text and should normally remain disabled for Release/store builds.
 Source maps reuse MAUI's prepared XAML items regardless of target framework,
 including plain .NET GTK heads and macOS AppKit heads. Projects without the MAUI
 Controls build targets can still supply `MauiXaml` items for source mapping.
+Project-wide XAML prefixes declared with `XmlnsPrefix` in the app or referenced
+assemblies are supported.
 
 The request privacy modes are:
 
@@ -869,6 +878,20 @@ DEVFLOW_TEST_FRAMEWORK=native DEVFLOW_TEST_PLATFORM=maccatalyst \
 
 `native` is supported for `android`, `ios`, `maccatalyst`, and `macos`. There are no
 plain-.NET Windows, GTK, or WPF integration heads.
+
+#### Running the suite against the .NET 11 community backends
+
+The GTK, WPF, and macOS AppKit backends ship `net10.0` assets (MAUI 10 compatibility) and
+`net11.0` assets (MAUI 11 extensibility contracts). Their DevFlow samples multi-target both, and
+`DEVFLOW_TEST_DOTNET` selects which build the fixture launches: `10` (default) or `11`.
+CI runs the `gtk`, `wpf`, and `macos (maui)` lanes once per version.
+
+```bash
+DEVFLOW_TEST_PLATFORM=gtk DEVFLOW_TEST_DOTNET=11 \
+  dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/
+```
+
+`DEVFLOW_TEST_DOTNET=11` applies to the MAUI samples only; the native samples remain `net10.0`.
 
 There is also a manual GitHub Actions workflow at `.github/workflows/devflow-integration.yml` for running the same suite in CI.
 

@@ -52,7 +52,7 @@ public partial class ShellSectionHandler : ElementHandler<ShellSection, NSView>
 				// Tell ShellHandler to show the correct page from the navigation stack
 				if (handler.VirtualView is Element element)
 				{
-					var shell = element.FindParentOfType<Shell>();
+					var shell = FindParentShell(element);
 					if (shell?.Handler is ShellHandler shellHandler)
 						shellHandler.ShowCurrentPage();
 				}
@@ -63,5 +63,16 @@ public partial class ShellSectionHandler : ElementHandler<ShellSection, NSView>
 			else
 				Complete();
 		}
+	}
+
+	static Shell? FindParentShell(Element element)
+	{
+		for (var parent = element.Parent; parent is not null; parent = parent.Parent)
+		{
+			if (parent is Shell shell)
+				return shell;
+		}
+
+		return null;
 	}
 }

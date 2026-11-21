@@ -150,7 +150,7 @@ Attached properties on `MacOSWindow` for native titlebar configuration:
 
 | Dialog | Status | Notes |
 |--------|--------|-------|
-| [x] **DisplayAlert** | ✅ | Title, message, accept/cancel buttons via `NSAlert` + `RunModal()`; managed by `AlertManagerSubscription` with reflection-based AlertManager proxy |
+| [x] **DisplayAlert** | ✅ | Title, message, accept/cancel buttons via `NSAlert` + `RunModal()`; MAUI 11 uses the public typed `IAlertManagerSubscription`, while the reflection proxy is isolated to the MAUI 10 compatibility target |
 | [x] **DisplayActionSheet** | ✅ | Multi-button action sheet via `NSAlert` with button mapping; supports destruction buttons (`HasDestructiveAction`), cancel button |
 | [x] **DisplayPromptAsync** | ✅ | Text input dialog via `NSAlert` with `NSTextField` accessory view, placeholder, initial value support |
 
@@ -491,7 +491,7 @@ Full Blazor Hybrid support via the `Microsoft.Maui.Platforms.MacOS.BlazorWebView
 | [x] **Content Insets** | ✅ | Auto-calculates toolbar height on FullSizeContentView for proper content offset |
 | [x] **Scroll Pocket Overlay** | ✅ | `HideScrollPocketOverlay` property to hide the overscroll area for clean toolbar appearance |
 | [x] **Titlebar Drag Overlay** | ✅ | Enables window dragging even when WebView covers titlebar area |
-| [x] **Registration** | ✅ | `AddMacOSBlazorWebView()` extension method registers handler in MAUI pipeline |
+| [x] **Registration** | ✅ | .NET 11 uses `AddMauiBlazorWebView().UsePlatformHandler<BlazorWebViewHandler>()`; `AddMacOSBlazorWebView()` remains the public AppKit convenience API |
 | [x] **Bindable Properties** | ✅ | `HostPage`, `StartPath`, `ContentInsets`, `HideScrollPocketOverlay` on `MacOSBlazorWebView` |
 | [x] **Root Components** | ✅ | `BlazorRootComponent` list with selector, component type, and parameters |
 

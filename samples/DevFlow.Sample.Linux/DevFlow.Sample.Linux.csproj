@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <RootNamespace>DevFlow.Sample</RootNamespace>
     <ApplicationTitle>MauiTodo</ApplicationTitle>
@@ -65,12 +65,10 @@
     <MauiXaml Include="..\DevFlow.Sample\ModalTestPage.xaml" Link="ModalTestPage.xaml" />
   </ItemGroup>
 
-  <!-- Resources are symlinked from DevFlow.Sample -->
+  <!-- Resources are symlinked from DevFlow.Sample. The GTK backend adds the standard
+       Resources/Images, Fonts and Raw items by default; only customize them here. -->
   <ItemGroup>
-    <MauiImage Include="Resources\Images\*" />
     <MauiImage Update="Resources\Images\dotnet_bot.svg" BaseSize="168,208" />
-    <MauiFont Include="Resources\Fonts\*" />
-    <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- Copy wwwroot to output for Blazor WebView content resolution -->
@@ -97,5 +95,7 @@
 
   <Import Project="..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.targets"
           Condition="Exists('..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.targets')" />
+
+  <Import Project="..\DevFlow.Sample.Net11.props" />
 
 </Project>

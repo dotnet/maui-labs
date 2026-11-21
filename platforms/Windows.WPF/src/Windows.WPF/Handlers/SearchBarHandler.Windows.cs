@@ -63,7 +63,9 @@ namespace Microsoft.Maui.Handlers.WPF
 		void OnTextChanged(object sender, WTextChangedEventArgs e)
 		{
 			if (VirtualView == null) return;
-			VirtualView.Text = _textBox.Text;
+			// Skip echoes of the virtual view's own value (see EntryHandler.OnTextChanged).
+			if (!string.Equals(VirtualView.Text ?? string.Empty, _textBox.Text, StringComparison.Ordinal))
+				VirtualView.Text = _textBox.Text;
 			UpdatePlaceholderVisibility();
 		}
 

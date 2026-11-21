@@ -116,6 +116,12 @@ public sealed class MockAgentServer : IAsyncDisposable
 
     public string? WebViewEvaluateResponse { get; set; }
     public string? AgentStatusResponse { get; set; }
+    public string? VisualTreeResponse { get; set; }
+    public byte[]? ScreenshotResponse { get; set; }
+    public Dictionary<string, string> ScreenshotHeaders { get; } = [];
+    public Func<Task>? BeforeHitTestResponseAsync { get; set; }
+    public bool RejectHitTestCandidateTaps { get; set; }
+    public bool RejectElementScrolls { get; set; }
     public string? FileDownloadResponse { get; set; }
     public string BrokerHealthResponse { get; set; } = """{"agents":2}""";
     public string LayoutResponse { get; set; } = """{"summary":{"incomplete":1}}""";
@@ -333,9 +339,10 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapGet("/api/v1/ui/tree", () => Results.Content(
             _returnEmptyTree
                 ? "[]"
-                : _includeDetachedNativeRoot
-                ? MockAgentResponses.VisualTreeWithDetachedNativeRoot
-                : MockAgentResponses.VisualTree,
+                : VisualTreeResponse
+                ?? (_includeDetachedNativeRoot
+                    ? MockAgentResponses.VisualTreeWithDetachedNativeRoot
+                    : MockAgentResponses.VisualTree),
             "application/json"));
         app.MapGet("/api/v1/ui/elements", (HttpContext context) =>
         {
@@ -422,7 +429,7 @@ public sealed class MockAgentServer : IAsyncDisposable
 
             return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
         });
-        app.MapGet("/api/v1/ui/hit-test", () =>
+        app.MapGet("/api/v1/ui/hit-test", async () =>
         {
             var hitTestNumber = Interlocked.Increment(ref _hitTestCount);
             if (hitTestNumber <= _nativeProbeBusyHitTestCount)
@@ -445,9 +452,11 @@ public sealed class MockAgentServer : IAsyncDisposable
             var response = _useScrollableHitTestCandidate
                 ? MockAgentResponses.ScrollableHitTestResult(epoch)
                 : MockAgentResponses.HitTestResult(epoch, parentId);
+            if (BeforeHitTestResponseAsync is not null)
+                await BeforeHitTestResponseAsync();
             return Results.Content(response, "application/json");
         });
-        app.MapGet("/api/v1/ui/screenshot", () =>
+        app.MapGet("/api/v1/ui/screenshot", (HttpContext context) =>
         {
             if (_failScreenshotsAfterFirst
                 && Interlocked.Increment(ref _screenshotCount) > 1)
@@ -462,7 +471,9 @@ public sealed class MockAgentServer : IAsyncDisposable
                     statusCode: StatusCodes.Status409Conflict);
             }
 
-            return Results.File(MockAgentResponses.ScreenshotPng, "image/png");
+            foreach (var header in ScreenshotHeaders)
+                context.Response.Headers[header.Key] = header.Value;
+            return Results.File(ScreenshotResponse ?? MockAgentResponses.ScreenshotPng, "image/png");
         });
 
         app.MapPost("/api/v1/ui/actions/tap", async (HttpContext context) =>
@@ -512,6 +523,12 @@ public sealed class MockAgentServer : IAsyncDisposable
             {
                 return Results.BadRequest(new { success = false, error = "not tappable" });
             }
+            if (RejectHitTestCandidateTaps
+                && body.RootElement.TryGetProperty("elementId", out var rejectedElementId)
+                && rejectedElementId.GetString()?.StartsWith("hit-", StringComparison.Ordinal) == true)
+            {
+                return Results.BadRequest(new { success = false, error = "not tappable" });
+            }
 
             return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
         });
@@ -550,7 +567,20 @@ public sealed class MockAgentServer : IAsyncDisposable
             return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
         });
 
-        foreach (var action in new[] { "clear", "focus", "navigate", "scroll", "resize", "back", "batch" })
+        app.MapPost("/api/v1/ui/actions/scroll", async (HttpContext context) =>
+        {
+            using var body = await JsonDocument.ParseAsync(context.Request.Body);
+            if (RejectElementScrolls
+                && body.RootElement.TryGetProperty("elementId", out var elementId)
+                && elementId.ValueKind == JsonValueKind.String)
+            {
+                return Results.BadRequest(new { success = false, error = "not scrollable" });
+            }
+
+            return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
+        });
+
+        foreach (var action in new[] { "clear", "focus", "navigate", "resize", "back", "batch" })
             app.MapPost($"/api/v1/ui/actions/{action}", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
 
         // Gestures return a richer body than the shared ActionSuccess: callers need to know

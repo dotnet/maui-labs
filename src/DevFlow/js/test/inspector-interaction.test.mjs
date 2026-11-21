@@ -30,18 +30,24 @@ test("Interact binds the rendered target while both modes share hover feedback",
   assert.match(source, /Interactive element/);
   assert.match(source, /Scrollable element/);
   assert.match(source, /Visual element/);
+  assert.match(source, /createActionOverlayController/);
+  assert.match(source, /pulseActionTarget/);
+  assert.match(css, /#df-action-overlay/);
+  assert.match(css, /\.df-action-ripple/);
+  assert.match(css, /\.df-action-path/);
   assert.match(css, /\.devflow-element\.df-action-target/);
   assert.match(css, /#df-badge\[data-kind="interactive"\]/);
   assert.match(source, /viewportWidth - b\.offsetWidth/);
-  assert.match(source, /vpWrap\.classList\.toggle\('df-fit-active', fitMode\)/);
   assert.match(source, /Copilot can request mutation control with maui_take_control/);
-  assert.match(css, /#df-viewport-wrap\.df-fit-active\s*\{\s*overflow:\s*hidden/);
   assert.match(css, /\.df-hit-candidates\s*\{[\s\S]*position:\s*absolute/);
   assert.match(css, /#df-preview-surface\s*\{[\s\S]*position:\s*relative/);
   assert.match(
     html,
     /id="df-preview-surface"[\s\S]*id="df-hit-candidates"[\s\S]*id="df-viewport-wrap"/,
   );
+  assert.match(html, /id="df-action-announcer"[\s\S]*aria-live="polite"/);
+  assert.match(html, /id="df-action-overlay"/);
+  assert.match(html, /id="df-action-chrome"[^>]*aria-hidden="true"/);
 });
 
 test("active destinations use an accent border without competing with the active mode", () => {

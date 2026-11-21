@@ -70,9 +70,65 @@ assertions as `appkit-runtime-shell-sections-default`. See the
 
 ## Prerequisites
 
-- .NET 10 SDK
+- .NET SDK `11.0.100`
+- GA rollback manifest `eng/workloads/dotnet11-ga.json` with the `macos`
+  workload (`27.2.11039`)
 - macOS 14 (Sonoma) or later
-- Xcode command line tools (for `sips` / `iconutil` — used by the icon build target)
+- Xcode 27.2 for native build and runtime validation
+- Xcode command line tools (`sips` / `iconutil` are used by the icon build target)
+
+The packages include both `net10.0-macos` (MAUI 10.0.110 by default) and
+`net11.0-macos` (MAUI 11.0.10). Native application validation requires the Xcode
+version pinned by each Apple pack: Xcode 27.2 for both the net10 servicing pack
+(`27.2.10000`) and the net11 pack (`27.2.11039`). Install the net10 lane with
+`dotnet workload install macos maui --from-rollback-file eng/workloads/dotnet11-ga-macos-net10.json`.
+Switch back to `eng/workloads/dotnet11-ga.json` for net11 builds. The root SDK stays
+at .NET 11; the compatibility manifest selects the released .NET 10 Apple pack.
+A successful
+library build is not a native application or resource-bundle pass.
+
+Source-based net10 AppKit heads must align their direct MAUI references with
+`$(MacOSMaui10Version)` rather than the repository-wide 10.0.41 baseline. The
+AppKit samples import `platforms/MacOS/MacOS.Versions.props`, which keeps that
+override scoped to AppKit consumers.
+
+On .NET 11, AppKit uses public platform contracts for dialogs, gesture lifecycle,
+assembly-aware font registration, view screenshots, and standard `BlazorWebView`
+hosting. Essentials static facades use the application's DI provider; .NET 10
+retains its reflection compatibility path. The existing AppKit screenshot
+overload, raw asset logical names and filename defaults, and native `.icns`
+packaging remain available. .NET 11 images and fonts use their processed
+outputs; .NET 10 retains source image packaging and its static web asset bridge.
+Both generations track native resource outputs for stale-file removal, normalize
+Unicode logical paths, and reject resource-name collisions. Referenced-library
+resources retain Apple's library-resource packaging.
+Embedded fonts resolve an exact manifest path before a unique basename fallback;
+ambiguous matches fail explicitly instead of depending on manifest ordering.
+
+Blazor root-component replacements and clears are serialized through the same
+managed reconciler used by GTK. The shared regression tests hold asynchronous
+adds/removals open and verify selector reuse, no duplicate operations, and recovery
+after a renderer failure. They do not prove native WebKit behavior.
+`builder.AddMacOSBlazorWebView()` registers the required Blazor services on both
+frameworks; native JavaScript messages are dispatched on the AppKit main thread.
+
+The AppKit workflow accepts pull requests targeting `main` or the GTK stack branch,
+`redth-maui-net11-gtk`. Portable contracts run independently of native build jobs;
+native and package-consumer jobs retain Xcode validation. .NET 11 jobs use the
+hosted [`xcode-27` image](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
+with Xcode 27.2 explicitly selected. .NET 10 uses the same image and Xcode with
+the AppKit-specific servicing rollback manifest. The sample, every non-camera
+native scenario, DevFlow integration, and package-only resource acceptance run
+for both framework generations.
+Camera validation is opt-in on a camera-equipped self-hosted runner
+(`MAUI_APPKIT_CAMERA_TESTS=1`).
+
+Run package-only resource acceptance with
+`pwsh eng/smoke-tests/community-resource-acceptance.ps1 -Backend appkit -AppKitTargetFramework net10.0-macos -KeepArtifacts`
+(or `net11.0-macos`) after selecting the corresponding workload manifest.
+Build the platform demo with
+`dotnet build platforms/MacOS/samples/MacOS.Sample/MacOS.Sample.csproj -f net10.0-macos`
+or `-f net11.0-macos`.
 
 ## Quick start
 
@@ -95,7 +151,7 @@ dotnet run
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-macos</TargetFramework>
+    <TargetFramework>net11.0-macos</TargetFramework>
     <OutputType>Exe</OutputType>
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
@@ -103,6 +159,7 @@ dotnet run
 
     <ApplicationTitle>My macOS App</ApplicationTitle>
     <ApplicationId>com.example.myapp</ApplicationId>
+    <ApplicationManifest>Info.plist</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
@@ -116,9 +173,19 @@ dotnet run
     <MauiImage Include="Resources\Images\*" />
     <MauiFont Include="Resources\Fonts\*" />
     <MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiSplashScreen Include="Resources\Splash\splash.png" />
   </ItemGroup>
 </Project>
 ```
+
+Photo capture uses the native ImageKit picture taker. Apps that call
+`MediaPicker.CapturePhotoAsync` or `CaptureVideoAsync` must include an
+`NSCameraUsageDescription` entry in `Info.plist`; the template includes a
+default explanation that applications should customize. Video capture uses an
+AVFoundation camera session and movie-file output, with native Stop and Cancel
+actions. It records camera-only `.mov` files, so it does not request microphone
+permission. Cancelled, failed, empty, or timed-out recordings delete their
+partial cache files. Camera permission denial is reported explicitly.
 
 #### 2. `Main.cs`
 
@@ -222,16 +289,19 @@ See [the shared host contract](tests/MacOS.RuntimeTests/README.md) to add a scen
 version matrix entry or scoped fixture assets without another application/project.
 Portable `MacOS.Tests` remains independent of native AppKit execution.
 
-The same host also registers `dialog-registration` (consumed MAUI interface,
-AppKit proxy and singleton contract) and `dialogs` (real Page action sheet, prompt
-and alert completion with native-sheet screenshots). The existing AppKit workflow
-tests registration on MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110; native dialogs
-run at 10.0.70 with an exact missing-subscription baseline and bounded fixed run.
+The same host also registers `dialog-registration` (the public typed MAUI 11
+contract, the isolated MAUI 10 compatibility proxy, and singleton semantics) and
+`dialogs` (real Page action sheet, prompt
+and alert completion with native-sheet screenshots). The AppKit workflow
+runs every native scenario on the newest MAUI 10 (`$(MacOSMaui10Version)`) and
+MAUI 11 (`$(MacOSMaui11Version)`) releases; native dialogs use an exact
+missing-subscription baseline and bounded fixed run.
 
 ## Unit tests
 
 The platform-neutral tests exercise the backend's managed lifecycle code using real MAUI
-windows and handlers. They target `net10.0` and do not require AppKit, Xcode, or MAUI workloads:
+windows and handlers. They target `net10.0` and `net11.0` and do not require AppKit,
+Xcode, or MAUI workloads:
 
 ```bash
 dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj
@@ -242,8 +312,9 @@ Native window notifications and rendering still require testing in a running mac
 
 ### Bundled resources
 
-The package's build targets translate `MauiImage`, `MauiFont`, and `MauiAsset` into
-Apple SDK `BundleResource` items, including files linked from outside the head project.
+On .NET 11, the package consumes Resizetizer's `MauiProcessedImage`,
+`MauiProcessedFont`, and `MauiProcessedAsset` outputs as Apple SDK
+`BundleResource` items, including files linked from outside the head project.
 Images are bundled as `Contents/Resources/Images/<filename>` and fonts as
 `Contents/Resources/Fonts/<filename>`. Raw assets use `LogicalName` relative to
 `Contents/Resources` (or the filename when no logical name is supplied), matching
@@ -253,9 +324,38 @@ unrelated `BundleResource` items are unchanged.
 For apps that intentionally manage all these paths using custom `BundleResource` items,
 set `EnableMacOSMauiResourceMapping` to `false` to retain that mapping instead.
 
-This bundles image sources as-is; it does not add Resizetizer resizing or SVG conversion.
-Image names and font names must be unique within their respective bundle directories.
+Images are processed by Resizetizer, including resizing and SVG conversion, before
+Apple collects bundle resources. Native resource outputs, including unpacked library
+resources, participate in MSBuild's incremental clean so renamed or removed assets
+do not survive in the next app bundle. A missing Apple SDK per-library resource
+cache invalidates its matching native stamp so unchanged publish builds retain
+referenced resources rather than treating an incomplete cache as up to date. The
+MAUI 10 compatibility target retains the prior raw-item mapping and is isolated
+from the .NET 11 path. Image names and font names must be unique within their respective bundle directories.
 Use `LogicalName` to preserve nested raw-asset paths.
+
+`MauiSplashScreen` uses the same standard item syntax and is promoted through the
+image pipeline so its processed image is available in `Contents/Resources/Images`.
+Native macOS does not define an operating-system launch-screen contract, so AppKit
+does not automatically display that image before the first window.
+
+On .NET 11, Razor static web assets are converted by the standard MAUI Blazor targets
+and flow through `MauiProcessedAsset`. .NET 10 uses the compatibility static web
+asset bridge; neither framework requires a manual `BundleResource` glob for `wwwroot`.
+
+The standalone package-resource acceptance gate uses supported `dotnet publish`,
+expands the resulting `.pkg` with `pkgutil --expand-full` without installing it,
+and verifies the installed payload's resource bytes and stale-file removal before
+checking collision rejection. Logical names use macOS's decomposed Unicode form:
+`productbuild` normalizes its BOM names, and mismatched physical filenames can be
+omitted from the installer payload on case-sensitive filesystems. Canonically
+equivalent names are compared without changing resource bytes. Distinct resource
+files targeting the same bundle path fail with `MAUIAPPKIT001` rather than allowing
+the native SDK to silently select one. Apple SDK `27.2.11039` does not support
+`publish --no-build`: it invokes `Build` through `GetApplicationArtifactsDependsOn`
+and fails with `NETSDK1085` ([upstream explanation](https://github.com/dotnet/macios/issues/19132)).
+That unsupported operation is not an AppKit acceptance requirement; GTK and WPF
+retain their strict successful no-build publish checks.
 
 The `bundle-resources` scenario runs inside the shared `MacOS.RuntimeTests` host,
 using external image/font/raw fixtures and a local raw item also matched by the

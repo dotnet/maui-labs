@@ -6,7 +6,11 @@ using ObjCRuntime;
 
 namespace Microsoft.Maui.Platforms.MacOS.Essentials;
 
-class ScreenshotImplementation : IScreenshot
+#if NET11_0_OR_GREATER
+public class ScreenshotImplementation : IScreenshot, IViewScreenshot
+#else
+public class ScreenshotImplementation : IScreenshot
+#endif
 {
 	public bool IsCaptureSupported => true;
 
@@ -18,6 +22,18 @@ class ScreenshotImplementation : IScreenshot
 		if (window == null)
 			throw new InvalidOperationException("No window available to capture.");
 
+		return Task.FromResult<IScreenshotResult>(
+			CaptureWindow(window) ?? throw new InvalidOperationException("Failed to capture window."));
+	}
+
+	public Task<IScreenshotResult?> CaptureAsync(NSWindow window)
+	{
+		ArgumentNullException.ThrowIfNull(window);
+		return Task.FromResult(CaptureWindow(window));
+	}
+
+	static IScreenshotResult? CaptureWindow(NSWindow window)
+	{
 		// Capture the window using its CGWindowID
 		var windowId = (uint)window.WindowNumber;
 		var cgImagePtr = CGWindowListCreateImage(
@@ -27,26 +43,38 @@ class ScreenshotImplementation : IScreenshot
 			CGWindowImageOption.BoundsIgnoreFraming);
 
 		if (cgImagePtr == IntPtr.Zero)
-			throw new InvalidOperationException("Failed to capture window.");
+			return null;
 
 		var cgImage = Runtime.GetINativeObject<CGImage>(cgImagePtr, owns: true)!;
 		var nsImage = new NSImage(cgImage, new CGSize(cgImage.Width, cgImage.Height));
 		var tiffData = nsImage.AsTiff();
 		if (tiffData == null)
-			throw new InvalidOperationException("Failed to convert screenshot.");
+			return null;
 
 		var rep = new NSBitmapImageRep(tiffData);
 		var width = (int)rep.PixelsWide;
 		var height = (int)rep.PixelsHigh;
 
-		IScreenshotResult result = new MacOSScreenshotResult(rep, width, height);
-		return Task.FromResult(result);
+		return new MacOSScreenshotResult(rep, width, height);
 	}
 
 	/// <summary>
 	/// Captures a screenshot of a specific NSView.
 	/// Uses CacheDisplay to render the view hierarchy into a bitmap.
 	/// </summary>
+#if NET11_0_OR_GREATER
+	public Task<IScreenshotResult?> CaptureViewAsync(object platformView)
+		=> CapturePlatformAsync(platformView);
+#endif
+
+	internal Task<IScreenshotResult?> CapturePlatformAsync(object platformView) =>
+		platformView switch
+		{
+			NSView view => CaptureAsync(view),
+			NSWindow window => CaptureAsync(window),
+			_ => Task.FromResult<IScreenshotResult?>(null),
+		};
+
 	public Task<IScreenshotResult?> CaptureAsync(NSView view)
 	{
 		ArgumentNullException.ThrowIfNull(view);

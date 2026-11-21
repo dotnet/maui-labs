@@ -40,7 +40,7 @@ public static class AgentServiceExtensions
 
         if (options.EnableFileLogging)
         {
-            var logDir = Path.Combine(FileSystem.CacheDirectory, "mauidevflow-logs");
+            var logDir = Path.Combine(AgentFileSystem.GetCacheDirectory(builder.Services), "mauidevflow-logs");
             var logProvider = new FileLogProvider(logDir, options.MaxLogFileSize, options.MaxLogFiles);
             service.SetLogProvider(logProvider);
 
@@ -123,6 +123,10 @@ public static class AgentServiceExtensions
                 {
                     EnsureAgentStarted();
                 });
+                android.OnStop(activity =>
+                {
+                    _ = service.CancelPointerSessionForHostAsync("app-backgrounded");
+                });
             });
 #elif IOS || MACCATALYST
             lifecycle.AddiOS(ios =>
@@ -132,6 +136,10 @@ public static class AgentServiceExtensions
                     var mainDispatcher = Dispatching.Dispatcher.GetForCurrentThread();
                     EnsureAgentStarted(mainDispatcher);
                     return true;
+                });
+                ios.DidEnterBackground(app =>
+                {
+                    _ = service.CancelPointerSessionForHostAsync("app-backgrounded");
                 });
             });
 #elif WINDOWS

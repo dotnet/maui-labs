@@ -42,6 +42,7 @@ internal class MacOSModalManager
 
 	public int ModalCount => _modalStack.Count;
 	public bool HasModals => _modalStack.Count > 0;
+	public Page? TopModal => _modalStack.Count == 0 ? null : _modalStack[^1].Page;
 
 	public void UpdateParentWindow(NSWindow parentWindow)
 	{
@@ -65,6 +66,9 @@ internal class MacOSModalManager
 
 	public void PushModal(Page page, IMauiContext mauiContext, bool animated)
 	{
+		if (_modalStack.Any(entry => ReferenceEquals(entry.Page, page)))
+			return;
+
 		var style = MacOSPage.GetModalPresentationStyle(page);
 
 		switch (style)
@@ -104,6 +108,24 @@ internal class MacOSModalManager
 
 		return entry.Page;
 	}
+    
+    public void ClearModalStack()
+    {
+        if (!HasModals)
+        {
+            return;
+        }
+
+        foreach (var modalEntry in _modalStack.Where(modalEntry => modalEntry.ModalWindow is not null))
+        {
+            modalEntry.ModalWindow?.OrderOut(null);
+        }
+
+        while (HasModals)
+        {
+            PopModal(false);
+        }
+    }
 
 	public void LayoutAllModals()
 	{

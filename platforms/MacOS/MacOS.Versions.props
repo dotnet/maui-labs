@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <MacOSMaui10Version Condition="'$(MacOSMaui10Version)' == ''">10.0.110</MacOSMaui10Version>
+    <MacOSMaui11Version Condition="'$(MacOSMaui11Version)' == '' and '$(CommunityPlatformMauiVersion)' != ''">$(CommunityPlatformMauiVersion)</MacOSMaui11Version>
+    <MacOSMaui11Version Condition="'$(MacOSMaui11Version)' == ''">11.0.10</MacOSMaui11Version>
+    <MacOSBlazorWebView10Version Condition="'$(MacOSBlazorWebView10Version)' == ''">10.0.110</MacOSBlazorWebView10Version>
+    <MacOSBlazorWebView11Version Condition="'$(MacOSBlazorWebView11Version)' == '' and '$(CommunityPlatformAspNetCoreComponentsWebViewVersion)' != ''">$(CommunityPlatformAspNetCoreComponentsWebViewVersion)</MacOSBlazorWebView11Version>
+    <MacOSBlazorWebView11Version Condition="'$(MacOSBlazorWebView11Version)' == ''">11.0.0</MacOSBlazorWebView11Version>
+  </PropertyGroup>
+</Project>

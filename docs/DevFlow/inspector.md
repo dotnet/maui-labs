@@ -16,7 +16,40 @@ In Interact mode, the Preview shows **Updating…** as soon as a tap is sent. Th
 a fresh frame immediately after the app acknowledges the tap, without a fixed settling delay.
 The hint stays until the new screenshot is decoded and its matching tree is displayed. A rejected
 tap clears its pending hint; a failed refresh keeps the previous frame and retries while the hint
-remains visible.
+remains visible. A newer forced refresh supersedes stalled state or image work, and only the latest
+complete frame may replace the Preview.
+
+The Preview also negotiates screenshot resolution from its rendered size and the browser's device
+pixel ratio. Stable scale buckets avoid a new capture for every resize pixel: small fitted
+previews use smaller PNGs, while 1:1 previews on high-DPI displays can request native sharpness.
+The tree, screenshot, coordinate metadata, and negotiated resolution still commit as one immutable
+frame. Unsupported or older agents keep the legacy 1x behavior.
+
+### Action visualization
+
+The Preview also visualizes admitted DevFlow actions from MCP, the CLI, workflow replay, and other
+Inspector sessions. Taps and long presses show an automation cursor and press marker; swipes,
+pans, point drags, and Inspector wheel gestures show their path. The source is labelled when it
+helps distinguish another driver. A dedicated polite live region announces remote actions and
+bounded failure/cancellation states without reusing the Inspector's general status line. Rapid
+updates are coalesced, and target announcements use only the automation ID or control type rather
+than the element's current text. Continuous pointer actions are announced only after their final
+tap, swipe, long-press, or drag classification is known.
+
+The marker remains visible briefly while the screenshot and tree refresh, and reduced-motion
+clients receive a static marker and path instead of animation. Local Inspector actions retain their
+normal direct input and status feedback; their correlated websocket echoes are suppressed in the
+originating tab while other Inspector tabs still see them.
+
+Action events reference the frame they used when that identity is available. During compatibility
+with agents that expose only capture metadata, the Inspector matches `captureEpoch`,
+`registryGeneration`, and `windowId` against its existing frame cache. Current MAUI agents also
+publish the capture's stable `diagnosticInputsRevision`, allowing an MCP or CLI capture with a
+different epoch to match an unchanged Inspector frame. An event that cannot be mapped to the
+current Preview is shown as a frame-unavailable badge and announcement; it is never repositioned
+against a newer frame. The versioned frame descriptor and coordinate conversions are owned by the
+shared `inspector-frame.js` contract; action visualization does not maintain a second frame ring or
+transform model.
 
 ## Choose a host
 

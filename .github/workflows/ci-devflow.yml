@@ -55,6 +55,8 @@ jobs:
     with:
       project-path: src/DevFlow/DevFlow.slnf
       project-name: devflow
+      additional-dotnet-version: 10.0.403
+      isolated-dotnet: true
       run-tests: true
       pack: true
       build-arguments: /p:PackDriverNuGet=true
@@ -97,8 +99,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           [xml]$trx = Get-Content artifacts\TestResults\InspectorBrowser\layout-browser.trx
           $results = @($trx.TestRun.Results.UnitTestResult)
-          if ($results.Count -ne 21 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
-            throw 'All 21 existing and regression browser tests must execute and pass; skips are not allowed.'
+          if ($results.Count -ne 34 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+            throw 'All 34 existing and regression browser tests must execute and pass; skips are not allowed.'
           }
 
       - name: Repeat Inspector synchronization regressions on Windows
@@ -134,8 +136,8 @@ jobs:
               if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
               [xml]$trx = Get-Content "artifacts\TestResults\InspectorBrowser\$logName"
               $results = @($trx.TestRun.Results.UnitTestResult)
-              if ($results.Count -ne 20 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
-                throw "All 20 retry regressions must execute and pass on $framework iteration $iteration."
+              if ($results.Count -ne 22 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+                throw "All 22 retry regressions must execute and pass on $framework iteration $iteration."
               }
             }
           }
@@ -240,8 +242,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           [xml]$results = Get-Content artifacts/TestResults/inspector-browser/inspector-browser.trx -Raw
           $counts = $results.TestRun.ResultSummary.Counters
-          if ($counts.total -ne '18' -or $counts.executed -ne '18' -or $counts.passed -ne '18' -or $counts.notExecuted -ne '0' -or $counts.failed -ne '0') {
-            throw 'All eighteen Inspector browser fixtures must execute and pass with zero skips.'
+          $expected = '53'
+          if ($counts.total -ne $expected -or $counts.executed -ne $expected -or $counts.passed -ne $expected -or $counts.notExecuted -ne '0' -or $counts.failed -ne '0') {
+            throw "All $expected Inspector browser fixtures must execute and pass with zero skips."
           }
 
       - name: Upload browser test results
@@ -296,5 +299,5 @@ jobs:
       # App heads enforce the Apple SDK's Xcode requirement, which libraries do not, so this job
       # has to pin Xcode even though the library job above gets away without it. Keep in step with
       # the version the pinned .NET for iOS/macOS asks for — see https://aka.ms/xcode-requirement.
-      xcode-version: '26.3'
+      xcode-version: '26.0'
       android-project: samples/DevFlow.Sample.Native/Android/DevFlow.Sample.Native.Android.csproj

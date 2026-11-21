@@ -8,6 +8,8 @@ public class ResourceAssetsPage : ContentPage
 	readonly Label _imageStatus;
 	readonly Label _fontStatus;
 	readonly Label _appIconStatus;
+	readonly Label _assetStatus;
+	readonly Label _splashStatus;
 
 	public ResourceAssetsPage()
 	{
@@ -15,6 +17,8 @@ public class ResourceAssetsPage : ContentPage
 		_imageStatus = new Label { FontSize = 12, TextColor = Colors.Gray };
 		_fontStatus = new Label { FontSize = 12, TextColor = Colors.Gray };
 		_appIconStatus = new Label { FontSize = 12, TextColor = Colors.Gray };
+		_assetStatus = new Label { FontSize = 12, TextColor = Colors.Gray };
+		_splashStatus = new Label { FontSize = 12, TextColor = Colors.Gray };
 
 		var refreshButton = new Button { Text = "Refresh Resource Status" };
 		refreshButton.Clicked += (s, e) => UpdateStatus();
@@ -91,6 +95,8 @@ public class ResourceAssetsPage : ContentPage
 					},
 					_fontStatus,
 					_appIconStatus,
+					_assetStatus,
+					_splashStatus,
 					refreshButton,
 				}
 			}
@@ -102,23 +108,24 @@ public class ResourceAssetsPage : ContentPage
 	void UpdateStatus()
 	{
 		var baseDirectory = AppContext.BaseDirectory;
-		var imagePath = Path.Combine(baseDirectory, "dotnet_bot.png");
-		var fontPath = Path.Combine(baseDirectory, "OpenSans-Regular.ttf");
-		var appIconDirectory = Path.Combine(baseDirectory, "hicolor", "scalable", "apps");
-		var appIconThemeIndexPath = Path.Combine(baseDirectory, "hicolor", "index.theme");
+		var imagePath = Path.Combine(baseDirectory, "Resources", "Images", "dotnet_bot.png");
+		var fontPath = Path.Combine(baseDirectory, "Resources", "Fonts", "OpenSans-Regular.ttf");
+		var appIconDirectory = Path.Combine(baseDirectory, "Resources", "AppIcon");
 		var appIconFilePath = Directory.Exists(appIconDirectory)
-			? Directory.EnumerateFiles(appIconDirectory)
-				.Select(path => new FileInfo(path))
-				.OrderByDescending(static info => info.LastWriteTimeUtc)
-				.Select(static info => info.FullName)
-				.FirstOrDefault()
+			? Directory.EnumerateFiles(appIconDirectory, "appicon.*").FirstOrDefault()
 			: null;
-		var appIconName = string.IsNullOrWhiteSpace(appIconFilePath)
-			? "<none>"
-			: Path.GetFileNameWithoutExtension(appIconFilePath);
+		var appIconName = appIconFilePath == null ? "<none>" : Path.GetFileName(appIconFilePath);
+		var assetPath = Path.Combine(baseDirectory, "Pipeline", "payload.txt");
+		var splashPath = Path.Combine(baseDirectory, "Resources", "Splash", "dotnet_bot.svg");
 
 		_imageStatus.Text = $"dotnet_bot.png exists: {File.Exists(imagePath)}";
 		_fontStatus.Text = $"OpenSans-Regular.ttf exists: {File.Exists(fontPath)}. Compare alias/font-file labels plus Entry/Editor previews above.";
-		_appIconStatus.Text = $"App icon ({appIconName}) exists: {(!string.IsNullOrWhiteSpace(appIconFilePath) && File.Exists(appIconFilePath))}, hicolor index.theme exists: {File.Exists(appIconThemeIndexPath)}";
+#if NET10_0
+		_appIconStatus.Text = "Processed MauiIcon output requires the .NET 11 resource pipeline.";
+#else
+		_appIconStatus.Text = $"Processed MauiIcon ({appIconName}) exists in Resources/AppIcon: {(!string.IsNullOrWhiteSpace(appIconFilePath) && File.Exists(appIconFilePath))}";
+#endif
+		_assetStatus.Text = $"MauiAsset Pipeline/payload.txt exists: {File.Exists(assetPath)}";
+		_splashStatus.Text = $"MauiSplashScreen source exists in Resources/Splash: {File.Exists(splashPath)}";
 	}
 }

@@ -205,6 +205,21 @@ class SourceOverlayTests(unittest.TestCase):
         self.overlay = {"source": "Handler.cs", "replace": {"old": "First Old", "new": "First New"}}
         self.runner.manifest["baseline"] = {"overlays": [self.overlay]}
 
+    def test_shell_sections_baseline_preserves_regression_and_modern_parent_lookup(self):
+        manifest = load_manifest("shell-sections")
+        overlay = next(item for item in manifest["baseline"]["overlays"] if
+                       item["source"].endswith("/ShellSectionHandler.cs"))
+        source = (Path(__file__).resolve().parents[2] /
+                  "src/MacOS/Handlers/ShellSectionHandler.cs").read_text()
+        replacement = overlay["replace"]
+        self.assertEqual(source.count(replacement["old"]), 1)
+        baseline = source.replace(replacement["old"], replacement["new"])
+        self.assertNotIn("QueueSelectionUpdate", baseline)
+        self.assertIn("FindParentShell(element)", baseline)
+        self.assertNotIn("FindParentOfType", baseline)
+        self.assertEqual(manifest["expectedAssertions"], 59)
+        self.assertEqual(manifest["baseline"]["failureId"], "shell-sections.lazy-route")
+
     def test_replacement_restores_exact_bytes_including_bom_and_newlines(self):
         with self.runner.baseline_sources():
             self.assertEqual(self.original.replace(b"First Old", b"First New"), self.source.read_bytes())

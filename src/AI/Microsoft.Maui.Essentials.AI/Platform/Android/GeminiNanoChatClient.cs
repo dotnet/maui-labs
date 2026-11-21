@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using AndroidNative = Com.Microsoft.Maui.Essentials.AI;
 using Microsoft.Extensions.AI;
@@ -17,7 +18,11 @@ namespace Microsoft.Maui.Essentials.AI;
 /// included in the prompt by the Kotlin bridge, with in-memory images and native
 /// system instructions. Native tool calling requires ML Kit model support;
 /// use Microsoft.Extensions.AI function invocation middleware to execute returned calls.
-/// Structured output is not supported.
+/// Structured output requires a JSON schema with an object root, which AICore enforces with
+/// constrained decoding; the generated text is returned as is. Structured output works with tools
+/// and full thinking output; with tools, the model decides on calls without the schema and only its
+/// final answer is generated under it. MaxOutputTokens has no default; when it is unset, Nano V3
+/// (the default model) stops after about 40 tokens.
 /// Model download is explicit and observable; generation never downloads or falls back to a cloud provider.
 /// ChatOptions.ModelId accepts gemini-nano, gemini-nano-fast, gemini-nano-full,
 /// gemini-nano-preview-fast, or gemini-nano-preview-full. The default is stable/full.
@@ -27,6 +32,29 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 {
 	private const string ProviderName = "google";
 	private const string DefaultModelId = "gemini-nano";
+	private static readonly AIJsonSchemaTransformCache SchemaTransformCache = new(new()
+	{
+		DisallowAdditionalProperties = true,
+		RequireAllProperties = true,
+		MoveDefaultKeywordToDescription = true,
+	});
+	// ML Kit tool schemas cannot express closed objects or $schema. Arguments bind by name,
+	// so closed-object markers from strict MEAI and [AIToolSource] tools are safe to drop.
+	// The native bridge still rejects every other keyword it cannot represent.
+	private static readonly AIJsonSchemaTransformCache ToolSchemaTransformCache = new(new()
+	{
+		TransformSchemaNode = static (_, node) =>
+		{
+			if (node is JsonObject schema)
+			{
+				schema.Remove("$schema");
+				if (schema["additionalProperties"] is JsonValue additional &&
+					additional.TryGetValue<bool>(out var allowed) && !allowed)
+					schema.Remove("additionalProperties");
+			}
+			return node;
+		},
+	});
 	private readonly AndroidNative.GeminiNanoNativeClient _native;
 	private ChatClientMetadata? _metadata;
 	private int _disposed;
@@ -50,7 +78,8 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 		using var cancellation = AndroidNative.GeminiNanoNative.CheckStatus(modelId, callback);
 		using var registration = cancellationToken.Register(() => cancellation.Cancel());
 		var status = await callback.Response.ConfigureAwait(false);
-		return CreateModelStatus(status.Status, status.ThinkingAvailable, status.ToolCallingAvailable);
+		return CreateModelStatus(status.Status, status.ThinkingAvailable, status.ToolCallingAvailable,
+			status.StructuredOutputAvailable);
 	}
 
 	/// <summary>
@@ -107,7 +136,8 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 		}
 	}
 
-	internal static ChatModelStatus CreateModelStatus(int nativeStatus, bool thinkingAvailable, bool toolCallingAvailable = false)
+	internal static ChatModelStatus CreateModelStatus(int nativeStatus, bool thinkingAvailable,
+		bool toolCallingAvailable = false, bool structuredOutputAvailable = false)
 	{
 		// ML Kit beta4 FeatureStatus: UNAVAILABLE=0, DOWNLOADABLE=1, DOWNLOADING=2, AVAILABLE=3.
 		var availability = nativeStatus switch
@@ -127,6 +157,8 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 			capabilities.Add(ChatModelCapability.Reasoning);
 		if (toolCallingAvailable)
 			capabilities.Add(ChatModelCapability.ToolCalling);
+		if (structuredOutputAvailable)
+			capabilities.Add(ChatModelCapability.StructuredOutput);
 		return new(availability, capabilities);
 	}
 
@@ -260,8 +292,9 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 		return new(nativeMessages.ToArray(), nativeOptions);
 	}
 
-	private static AndroidNative.NativeChatOptions ToNativeOptions(ChatOptions? options) =>
-		new(
+	private static AndroidNative.NativeChatOptions ToNativeOptions(ChatOptions? options)
+	{
+		var nativeOptions = new AndroidNative.NativeChatOptions(
 			options?.Temperature is { } temperature ? Java.Lang.Float.ValueOf(temperature) : null,
 			options?.TopK is { } topK ? Java.Lang.Integer.ValueOf(topK) : null,
 			options?.Seed is { } seed ? Java.Lang.Integer.ValueOf(checked((int)seed)) : null,
@@ -271,6 +304,29 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 		{
 			ToolsJson = SerializeTools(options),
 		};
+		try
+		{
+			// The native setter rejects schemas ML Kit cannot represent, before any inference.
+			nativeOptions.ResponseSchemaJson = GetConstraintSchema(options);
+		}
+		catch (Java.Lang.IllegalArgumentException exception)
+		{
+			nativeOptions.Dispose();
+			throw new NotSupportedException($"Gemini Nano cannot represent this JSON schema: {exception.Message}", exception);
+		}
+		return nativeOptions;
+	}
+
+	internal static string? GetConstraintSchema(ChatOptions? options)
+	{
+		if (options?.ResponseFormat is not ChatResponseFormatJson format)
+			return null;
+		if (format.Schema is null)
+			throw new NotSupportedException("Gemini Nano structured output requires an explicit JSON schema; schema-free JSON and typed prompt fallback are not supported.");
+
+		return SchemaTransformCache.GetOrCreateTransformedSchema(format)?.GetRawText()
+			?? throw new InvalidOperationException("Failed to transform JSON schema for Gemini Nano structured output.");
+	}
 
 	private static string? SerializeTools(ChatOptions? options)
 	{
@@ -295,7 +351,7 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 				writer.WriteString("name", function.Name);
 				writer.WriteString("description", function.Description ?? "");
 				writer.WritePropertyName("parameters");
-				function.JsonSchema.WriteTo(writer);
+				ToolSchemaTransformCache.GetOrCreateTransformedSchema(function).WriteTo(writer);
 				writer.WriteEndObject();
 			}
 			writer.WriteEndArray();
@@ -359,6 +415,11 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 
 			case FunctionResultContent result:
 				return ToNativeFunctionResult(result, role, useNativeTools);
+
+			// The model's own thoughts come back in replayed history (for example from function invocation);
+			// ML Kit has no input part for them, so they are dropped. Reasoning in other roles is rejected.
+			case TextReasoningContent when role == ChatRole.Assistant:
+				return null;
 
 			default:
 				if (content.GetType().Assembly == typeof(AIContent).Assembly)
@@ -533,8 +594,8 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 		if (options is null)
 			return;
 
-		if (options.ResponseFormat is not null and not ChatResponseFormatText)
-			throw new NotSupportedException("Gemini Nano does not support ChatOptions JSON or structured response formats.");
+		if (options.ResponseFormat is not null and not ChatResponseFormatText and not ChatResponseFormatJson)
+			throw new NotSupportedException("Gemini Nano supports text or explicit JSON schema response formats.");
 
 		if (options.ToolMode is not null and not NoneChatToolMode and not AutoChatToolMode)
 			throw new NotSupportedException("The ML Kit GenAI Prompt API cannot honor required ToolMode invocation.");

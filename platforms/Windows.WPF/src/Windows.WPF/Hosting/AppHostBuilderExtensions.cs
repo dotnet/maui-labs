@@ -9,6 +9,7 @@ using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Controls.Hosting;
 using Microsoft.Maui.Handlers.WPF;
+using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Platforms.Windows.WPF;
 using Microsoft.Maui.Controls.Platform.WPF;
 using Microsoft.Extensions.Logging;
@@ -66,8 +67,6 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 			handlersCollection.AddHandler<Microsoft.Maui.Controls.Shapes.Path, ShapeViewHandler>();
 			handlersCollection.AddHandler<Microsoft.Maui.Controls.Shapes.Polygon, ShapeViewHandler>();
 			handlersCollection.AddHandler<Microsoft.Maui.Controls.Shapes.Polyline, ShapeViewHandler>();
-			handlersCollection.AddHandler<AspNetCore.Components.WebView.Maui.BlazorWebView, AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler>();
-
 			// Navigation handlers
 			handlersCollection.AddHandler<NavigationPage, NavigationViewHandler>();
 			handlersCollection.AddHandler<TabbedPage, TabbedViewHandler>();
@@ -106,34 +105,45 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 			//DependencyService.Register<FontNamedSizeService>();
 
 
-			builder.Services.AddSingleton<IDispatcherProvider>(svc =>
+			builder.Services.Replace(ServiceDescriptor.Singleton<IDispatcherProvider>(svc =>
 				// the DispatcherProvider might have already been initialized, so ensure that we are grabbing the
 				// Current and putting it in the DI container.
-				new WPFDispatcherProvider());
+				new WPFDispatcherProvider()));
 
-			builder.Services.AddScoped(svc =>
+			builder.Services.Replace(ServiceDescriptor.Scoped<IDispatcher>(svc =>
 			{
 				var provider = svc.GetRequiredService<IDispatcherProvider>();
 				if (DispatcherProvider.SetCurrent(provider))
 					svc.GetService<ILogger<Dispatcher>>()?.LogWarning("Replaced an existing DispatcherProvider with one from the service provider.");
 
 				return Dispatcher.GetForCurrentThread()!;
-			});
+			}));
 
 			// Register WPF-specific animation ticker (runs on dispatcher thread)
 			builder.Services.AddSingleton<Microsoft.Maui.Animations.Ticker>(new Microsoft.Maui.Platforms.Windows.WPF.WPFTicker());
 
-			// Register alert/prompt/action sheet handler
+#if NET10_0
+			builder.ConfigureMauiHandlers(handlers =>
+				handlers.AddHandler<AspNetCore.Components.WebView.Maui.BlazorWebView, AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler>());
 			Microsoft.Maui.Platforms.Windows.WPF.WPFAlertManagerSubscription.Register(builder.Services);
+#else
+			Microsoft.Maui.Platforms.Windows.WPF.WPFDialogService.Register(builder.Services);
+			builder.Services.TryAddSingleton<Microsoft.Maui.Controls.Platform.IGesturePlatformManagerFactory,
+				Microsoft.Maui.Platforms.Windows.WPF.WPFGesturePlatformManagerFactory>();
+#endif
+
+			// The WPF BlazorWebViewHandler hosts Wpf.BlazorWebView, which requires the WPF Blazor
+			// services. Register them here so AddMauiBlazorWebView() alone is enough for apps.
+			builder.Services.AddWpfBlazorWebView();
 
 			// Initialize theme detection
 			Microsoft.Maui.Platforms.Windows.WPF.ThemeManager.Initialize();
 
 			// Register font services
-			builder.Services.AddSingleton<IFontRegistrar, Microsoft.Maui.Platforms.Windows.WPF.WPFFontRegistrar>();
-			builder.Services.AddSingleton<IEmbeddedFontLoader>(_ => new WPFEmbeddedFontLoader());
+			builder.Services.Replace(ServiceDescriptor.Singleton<IFontRegistrar, Microsoft.Maui.Platforms.Windows.WPF.WPFFontRegistrar>());
+			builder.Services.Replace(ServiceDescriptor.Singleton<IEmbeddedFontLoader>(_ => new WPFEmbeddedFontLoader()));
 			builder.Services.AddSingleton<WPFFontManager>();
-			builder.Services.AddSingleton<IFontManager>(services => services.GetRequiredService<WPFFontManager>());
+			builder.Services.Replace(ServiceDescriptor.Singleton<IFontManager>(services => services.GetRequiredService<WPFFontManager>()));
 
 			// Register FontNamedSizeService
 			DependencyService.Register<Microsoft.Maui.Platforms.Windows.WPF.WPFFontNamedSizeService>();
@@ -145,11 +155,7 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 					handlers.AddMauiControlsHandlers();
 				});
 
-			// Register EffectsFactory (internal type required for page effects)
-			var effectsFactoryType = typeof(Microsoft.Maui.Controls.Effect).Assembly
-				.GetType("Microsoft.Maui.Controls.Hosting.EffectsFactory");
-			if (effectsFactoryType != null)
-				builder.Services.TryAddSingleton(effectsFactoryType);
+			builder.ConfigureEffects(_ => { });
 
 			builder.RemapForControls();
 
@@ -510,7 +516,9 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 			{
 				if (handler.PlatformView is System.Windows.FrameworkElement fe)
 				{
+#if NET10_0
 					Microsoft.Maui.Platforms.Windows.WPF.GestureManager.SetupGestures(fe, view);
+#endif
 					// Hook VisualStateManager for hover/pressed/focused states
 					Microsoft.Maui.Platforms.Windows.WPF.VisualStateManagerHooks.AttachVisualStateHooks(fe, view);
 				}
