@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Microsoft.Maui.Devices;
 
 namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
@@ -10,7 +9,7 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 		public string Name => Environment.MachineName;
 		public string VersionString => Environment.OSVersion.VersionString;
 		public Version Version => Environment.OSVersion.Version;
-		public DevicePlatform Platform => DevicePlatform.WinUI;
+		public DevicePlatform Platform => DevicePlatform.Create("WPF");
 		public DeviceIdiom Idiom => DeviceIdiom.Desktop;
 		public DeviceType DeviceType => DeviceType.Physical;
 	}

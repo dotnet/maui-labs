@@ -1,30 +1,21 @@
 <Project>
+  <!-- Standard MAUI Blazor targets convert static web assets to MauiAsset.
+       The core AppKit package maps the processed assets to BundleResource. -->
 
-  <!--
-    Bridge the Razor SDK's static web assets to macOS BundleResource items.
-    This mirrors what Microsoft.AspNetCore.Components.WebView.Maui does with
-    ConvertStaticWebAssetsToMauiAssets, but targets BundleResource directly
-    since we don't have the MAUI SDK's MauiAsset processing pipeline.
-
-    Requirements:
-    - Consuming app must use Microsoft.NET.Sdk.Razor
-    - Consuming app must reference Microsoft.AspNetCore.Components.WebView.Maui
-  -->
-
+  <!-- MAUI 10 does not expose the external-backend static web asset hooks. -->
   <Target Name="_IncludeBlazorWebViewBundleResources"
           BeforeTargets="_CollectBundleResources"
-          DependsOnTargets="ResolveProjectReferences;StaticWebAssetsPrepareForRun">
-
+          DependsOnTargets="ResolveProjectReferences;StaticWebAssetsPrepareForRun"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and !$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
     <ComputeStaticWebAssetsTargetPaths Assets="@(StaticWebAsset)" PathPrefix="wwwroot">
       <Output TaskParameter="AssetsWithTargetPath" ItemName="_BlazorBundleResourceWithTargetPath" />
     </ComputeStaticWebAssetsTargetPaths>
-
     <ItemGroup>
-      <BundleResource Include="%(_BlazorBundleResourceWithTargetPath.Identity)"
-                      Condition="'%(_BlazorBundleResourceWithTargetPath.Identity)' != ''"
-                      Link="%(_BlazorBundleResourceWithTargetPath.TargetPath)" />
+      <BundleResource Include="@(_BlazorBundleResourceWithTargetPath)">
+        <LogicalName>$([System.String]::Copy('%(_BlazorBundleResourceWithTargetPath.TargetPath)').Replace('\', '/').Normalize(System.Text.NormalizationForm.FormD))</LogicalName>
+      </BundleResource>
     </ItemGroup>
-
   </Target>
-
 </Project>

@@ -6,7 +6,11 @@ param(
     [string] $ResultsDirectory = 'artifacts/TestResults/gtk-runtime',
     [string] $TestProject = 'platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj',
     [ValidatePattern('^[A-Za-z_][A-Za-z0-9_.]*$')]
-    [string] $TestNamespace = 'Microsoft.Maui.Platforms.Linux.Gtk4.Tests'
+    [string] $TestNamespace = 'Microsoft.Maui.Platforms.Linux.Gtk4.Tests',
+    [ValidateSet('net10.0', 'net11.0')]
+    [string] $TestFramework,
+    [ValidateRange(1, 10)]
+    [int] $Repeat = 1
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,13 +20,13 @@ if (-not $IsLinux) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $project = (Resolve-Path -LiteralPath (Join-Path $repoRoot $TestProject)).Path
-$resultsName = if ($MauiVersion) { "$TestClass-maui-$MauiVersion" } else { $TestClass }
-$results = [IO.Path]::GetFullPath($ResultsDirectory, $repoRoot)
-$trxPath = Join-Path $results "$resultsName.trx"
-New-Item -ItemType Directory -Force -Path $results | Out-Null
-if (Test-Path -LiteralPath $trxPath) {
-    throw "Results already exist at $trxPath; choose a new ResultsDirectory to preserve evidence."
+$dotnetVersion = (& dotnet --version).Trim()
+if ($LASTEXITCODE -ne 0 -or $dotnetVersion -notmatch '^11\.') {
+    throw "Linux GTK4 CI requires the .NET 11 SDK; found '$dotnetVersion'."
 }
+$baseResultsName = if ($MauiVersion) { "$TestClass-maui-$MauiVersion" } else { $TestClass }
+$results = [IO.Path]::GetFullPath($ResultsDirectory, $repoRoot)
+New-Item -ItemType Directory -Force -Path $results | Out-Null
 
 $env:RUN_GTK_RUNTIME_TESTS = '1'
 $env:GSK_RENDERER = 'cairo'
@@ -36,25 +40,41 @@ $filter = "FullyQualifiedName~$TestNamespace.$TestClass."
 if ($MauiVersion) {
     $mauiArgs = @("-p:MauiVersion=$MauiVersion")
 }
-
-& dbus-run-session -- xvfb-run --auto-servernum dotnet test $project `
-    --configuration Release --filter $filter @mauiArgs `
-    --logger 'console;verbosity=detailed' `
-    --logger "trx;LogFileName=$resultsName.trx" `
-    --results-directory $results --blame-hang-timeout 3m '-m:1' '-nr:false'
-if ($LASTEXITCODE -ne 0) {
-    throw "Native GTK class $TestClass failed (exit code $LASTEXITCODE)."
-}
-if (-not (Test-Path -LiteralPath $trxPath)) {
-    throw "Native GTK class $TestClass produced no TRX results."
+if (-not $TestFramework) {
+    $TestFramework = 'net11.0'
+    if ($MauiVersion -and $MauiVersion.StartsWith('10.')) {
+        $TestFramework = 'net10.0'
+    }
 }
 
-[xml] $trx = Get-Content -LiteralPath $trxPath -Raw
-$counters = $trx.TestRun.ResultSummary.Counters
-$total = [int] $counters.total
-if ($total -le 0 -or [int] $counters.executed -ne $total -or
-    [int] $counters.passed -ne $total -or [int] $counters.failed -ne 0 -or
-    [int] $counters.notExecuted -ne 0) {
-    throw "Native GTK class $TestClass did not execute and pass every test: $($counters.OuterXml)"
+for ($iteration = 1; $iteration -le $Repeat; $iteration++) {
+    $resultsName = if ($Repeat -gt 1) { "$baseResultsName-run-$iteration" } else { $baseResultsName }
+    $trxPath = Join-Path $results "$resultsName.trx"
+    if (Test-Path -LiteralPath $trxPath) {
+        throw "Results already exist at $trxPath; choose a new ResultsDirectory to preserve evidence."
+    }
+
+    & dbus-run-session -- xvfb-run --auto-servernum dotnet test $project `
+        --configuration Release --framework $TestFramework --filter $filter @mauiArgs `
+        --logger 'console;verbosity=detailed' `
+        --logger "trx;LogFileName=$resultsName.trx" `
+        --results-directory $results `
+        --blame-crash --blame-crash-dump-type mini `
+        --blame-hang-timeout 3m '-m:1' '-nr:false'
+    if ($LASTEXITCODE -ne 0) {
+        throw "Native GTK class $TestClass run $iteration/$Repeat failed (exit code $LASTEXITCODE)."
+    }
+    if (-not (Test-Path -LiteralPath $trxPath)) {
+        throw "Native GTK class $TestClass run $iteration/$Repeat produced no TRX results."
+    }
+
+    [xml] $trx = Get-Content -LiteralPath $trxPath -Raw
+    $counters = $trx.TestRun.ResultSummary.Counters
+    $total = [int] $counters.total
+    if ($total -le 0 -or [int] $counters.executed -ne $total -or
+        [int] $counters.passed -ne $total -or [int] $counters.failed -ne 0 -or
+        [int] $counters.notExecuted -ne 0) {
+        throw "Native GTK class $TestClass run $iteration/$Repeat did not execute and pass every test: $($counters.OuterXml)"
+    }
+    Write-Host "PASS: native GTK class $TestClass run $iteration/$Repeat executed $total tests with no failures or skips."
 }
-Write-Host "PASS: native GTK class $TestClass executed $total tests with no failures or skips."

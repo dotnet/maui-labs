@@ -1,10 +1,13 @@
 name: CI - macOS AppKit
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - 'platforms/MacOS/**'
+      - 'platforms/Shared/Blazor/**'
+      - 'platforms/Shared/ResourceAcceptance/**'
       - '.github/workflows/ci-macos-appkit.yml'
       - '.github/workflows/_build.yml'
       - 'eng/**'
@@ -15,9 +18,11 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
+    branches: [main, redth-maui-net11-gtk, redth-maui-net11-wpf]
     paths:
       - 'platforms/MacOS/**'
+      - 'platforms/Shared/Blazor/**'
+      - 'platforms/Shared/ResourceAcceptance/**'
       - '.github/workflows/ci-macos-appkit.yml'
       - '.github/workflows/_build.yml'
       - 'eng/**'
@@ -28,77 +33,126 @@ on:
       - 'NuGet.config'
 
 jobs:
+  portable-contracts:
+    name: Portable AppKit contracts (.NET 10 and 11)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            10.0.x
+            11.0.100
+      - name: Run portable lifecycle, resource, and Blazor reconciliation tests
+        run: dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj -c Release
+      - name: Verify native runner contracts
+        run: python3 -B -m unittest discover -s platforms/MacOS/tests/MacOS.RuntimeTests -p 'test_*.py'
+      - name: Verify platform-specific resource acceptance commands
+        shell: pwsh
+        run: ./eng/smoke-tests/tests/community-resource-acceptance.tests.ps1
+
   build:
     uses: ./.github/workflows/_build.yml
     with:
-      project-path: platforms/MacOS/MacOS.slnx
+      project-path: platforms/MacOS/MacOS-libs.slnf
       project-name: macos-appkit
-      os: '["macos-latest"]'
+      os: '["xcode-27"]'
       install-workloads: true
+      workloads: 'macos maui'
+      android-project: ''
       run-tests: true
       pack: true
-      xcode-version: '26.3'
+      xcode-version: '27.2'
+
+  sample-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        dotnet: ['10', '11']
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: platforms/MacOS/samples/MacOS.Sample/MacOS.Sample.csproj
+      project-name: macos-appkit-sample-net${{ matrix.dotnet }}
+      os: '["xcode-27"]'
+      build-target-framework: net${{ matrix.dotnet }}.0-macos
+      run-tests: false
+      pack: false
+      install-workloads: true
+      workloads: 'macos maui'
+      workload-rollback-file: ${{ matrix.dotnet == '10' && 'eng/workloads/dotnet11-ga-macos-net10.json' || 'eng/workloads/dotnet11-ga.json' }}
+      android-project: ''
+      xcode-version: '27.2'
+
+  resource-acceptance:
+    name: Package-only AppKit resource acceptance (net${{ matrix.dotnet }})
+    strategy:
+      fail-fast: false
+      matrix:
+        dotnet: ['10', '11']
+    runs-on: xcode-27
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Select Xcode 27.2
+        run: |
+          developer_dir="$(cd /Applications/Xcode_27.2.app/Contents/Developer && pwd -P)"
+          sudo xcode-select -s "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+          xcodebuild -version
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install pinned AppKit workloads
+        run: ./eng/common/dotnet.sh workload install macos maui --from-rollback-file ${{ matrix.dotnet == '10' && 'eng/workloads/dotnet11-ga-macos-net10.json' || 'eng/workloads/dotnet11-ga.json' }}
+      - name: Verify referenced-library assets, mutation, publish, and collisions
+        shell: pwsh
+        run: ./eng/smoke-tests/community-resource-acceptance.ps1 -Backend appkit -AppKitTargetFramework net${{ matrix.dotnet }}.0-macos -ArtifactsDirectory "$PWD/artifacts/appkit-resources" -KeepArtifacts
+      - name: Upload resource evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: appkit-resource-acceptance-net${{ matrix.dotnet }}
+          path: artifacts/appkit-resources/
+          if-no-files-found: warn
 
   native-runtime:
     name: AppKit runtime (${{ matrix.scenario }}, ${{ matrix.maui-version || 'default' }})
     needs: build
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
+        scenario: [layout, contentview-clipping, scrollview-measure, shell-sections, shell-tabs, dialog-registration, dialogs, window-page-reset, picker, background-reset, tap-buttons, focus-state, window-reopen, menu-localization, collection-view-grid, bundle-resources]
+        maui-version: ['', '10.0.110']
         include:
-          - scenario: layout
-            maui-version: ''
-          - scenario: contentview-clipping
-            maui-version: ''
-          - scenario: shell-sections
-            maui-version: ''
-          - scenario: shell-tabs
-            maui-version: ''
-          - scenario: dialog-registration
-            maui-version: '10.0.41'
-          - scenario: dialog-registration
-            maui-version: '10.0.60'
-          - scenario: dialog-registration
-            maui-version: '10.0.70'
-          - scenario: dialog-registration
-            maui-version: '10.0.110'
-          - scenario: dialogs
-            maui-version: '10.0.70'
-          - scenario: window-page-reset
-            maui-version: ''
-          - scenario: picker
-            maui-version: ''
-          - scenario: background-reset
-            maui-version: ''
-          - scenario: tap-buttons
-          - scenario: focus-state
-            maui-version: ''
           - scenario: menu-localization
             packages: true
-          - scenario: collection-view-grid
-            maui-version: ''
           - scenario: bundle-resources
-            maui-version: ''
             workloads: 'macos maui maui-tizen'
             packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages
+      APPKIT_XCODE_VERSION: '27.2'
     steps:
       - uses: actions/checkout@v6
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+        run: |
+          developer_dir="$(cd "/Applications/Xcode_${APPKIT_XCODE_VERSION}.app/Contents/Developer" && pwd -P)"
+          sudo xcode-select -s "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
       - name: Install pinned scenario workloads
-        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --version 10.0.203
+        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --from-rollback-file ${{ startsWith(matrix.maui-version, '10.') && 'eng/workloads/dotnet11-ga-macos-net10.json' || 'eng/workloads/dotnet11-ga.json' }}
       - name: Download requested product packages
         if: matrix.packages == true
         uses: actions/download-artifact@v8
         with:
-          name: packages-macos-appkit-macos-latest
+          name: packages-macos-appkit-xcode-27
           path: artifacts/runtime-packages
       - name: Verify shared runner contracts
         run: python3 -B -m unittest discover -s platforms/MacOS/tests/MacOS.RuntimeTests -p 'test_*.py'
@@ -118,4 +172,39 @@ jobs:
         with:
           name: appkit-runtime-${{ matrix.scenario }}-${{ matrix.maui-version || 'default' }}
           path: artifacts/appkit-runtime/
+          if-no-files-found: error
+
+  camera-runtime:
+    name: AppKit native camera capture
+    if: vars.MAUI_APPKIT_CAMERA_TESTS == '1'
+    runs-on: [self-hosted, macOS, camera]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Select Xcode 27.2
+        run: |
+          developer_dir="$(cd /Applications/Xcode_27.2.app/Contents/Developer && pwd -P)"
+          sudo xcode-select -s "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+          xcodebuild -version
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install pinned AppKit workload
+        run: ./eng/common/dotnet.sh workload install macos --from-rollback-file eng/workloads/dotnet11-ga.json
+      - name: Verify Xcode
+        run: xcodebuild -version
+      - name: Run camera-equipped AppKit regression
+        run: >-
+          python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py
+          --scenario media-capture
+          --evidence "$PWD/artifacts/appkit-media-capture"
+      - name: Upload camera evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: appkit-media-capture
+          path: artifacts/appkit-media-capture/
           if-no-files-found: error

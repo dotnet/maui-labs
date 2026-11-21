@@ -46,8 +46,7 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 			builder.Services.TryAddSingleton<IGeolocation, WPFGeolocation>();
 			builder.Services.TryAddSingleton<IGeocoding, WPFGeocoding>();
 
-			// Device features (stubs)
-			builder.Services.TryAddSingleton<IBattery, WPFBattery>();
+			// Device features explicitly reporting unsupported capabilities
 			builder.Services.TryAddSingleton<IVibration, WPFVibration>();
 			builder.Services.TryAddSingleton<IFlashlight, WPFFlashlight>();
 			builder.Services.TryAddSingleton<IHapticFeedback, WPFHapticFeedback>();
@@ -56,19 +55,22 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 			builder.Services.TryAddSingleton<IMap, WPFMap>();
 
 			// Media
-			builder.Services.TryAddSingleton<IMediaPicker, WPFMediaPicker>();
 			builder.Services.TryAddSingleton<IScreenshot, WPFScreenshot>();
-			builder.Services.TryAddSingleton<ITextToSpeech, WPFTextToSpeech>();
 			builder.Services.TryAddSingleton<IFilePicker, WPFFilePicker>();
+			builder.Services.TryAddSingleton<IMediaPicker, WPFMediaPicker>();
+			builder.Services.TryAddSingleton<ITextToSpeech, WPFTextToSpeech>();
+			builder.Services.TryAddSingleton<IBattery, WPFBattery>();
+
+#if NET10_0
+			builder.Services.TryAddEnumerable(
+				ServiceDescriptor.Singleton<IMauiInitializeService, EssentialsInitializer>());
+#endif
 
 			// Accessibility
 			builder.Services.TryAddSingleton<ISemanticScreenReader, WPFSemanticScreenReader>();
 
 			// App Actions
 			builder.Services.TryAddSingleton<IAppActions, WPFAppActions>();
-
-			builder.Services.TryAddEnumerable(
-				ServiceDescriptor.Singleton<IMauiInitializeService, EssentialsInitializer>());
 
 			return builder;
 		}

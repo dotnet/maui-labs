@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <TargetFrameworks>net10.0-windows10.0.17763.0;net11.0-windows10.0.17763.0</TargetFrameworks>
+    <WindowsSdkPackageVersion>$(MicrosoftWindowsSdkNetRefVersion)</WindowsSdkPackageVersion>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
     <UseMaui>true</UseMaui>
@@ -71,9 +72,12 @@
                     Link="Components/%(RecursiveDir)%(Filename)%(Extension)" />
     <Content Include="..\DevFlow.Sample\Components\**\*.razor.css"
              Link="Components/%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- index.html is WPF-specific (Blazor autostart); share the rest of the host content. -->
     <Content Include="..\DevFlow.Sample\wwwroot\**"
+             Exclude="..\DevFlow.Sample\wwwroot\index.html"
              Link="wwwroot/%(RecursiveDir)%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -91,7 +95,24 @@
     <AssemblyMetadata Include="Microsoft.Maui.DevFlowTfm" Value="$(TargetFramework)" />
   </ItemGroup>
 
+  <!-- Copy Razor static web assets (_framework/blazor.webview.js, scoped CSS bundle) to the
+       output wwwroot so the WPF BlazorWebView can serve them. Mirrors Windows.WPF.Sample. -->
+  <Target Name="IncludeWpfBlazorStaticWebAssets"
+          BeforeTargets="GetCopyToOutputDirectoryItems;GetCopyToPublishDirectoryItems"
+          DependsOnTargets="StaticWebAssetsPrepareForRun">
+    <ComputeStaticWebAssetsTargetPaths Assets="@(StaticWebAsset)" PathPrefix="wwwroot">
+      <Output TaskParameter="AssetsWithTargetPath" ItemName="_WpfBlazorStaticWebAsset" />
+    </ComputeStaticWebAssetsTargetPaths>
+    <ItemGroup>
+      <ContentWithTargetPath Include="@(_WpfBlazorStaticWebAsset)"
+                             CopyToOutputDirectory="PreserveNewest"
+                             CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
   <Import Project="..\..\platforms\Windows.WPF\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets"
           Condition="Exists('..\..\platforms\Windows.WPF\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets')" />
+
+  <Import Project="..\DevFlow.Sample.Net11.props" />
 
 </Project>

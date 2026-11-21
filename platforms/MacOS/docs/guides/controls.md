@@ -129,17 +129,18 @@ All support standard macOS text editing behaviors (spell check, auto-correct, Se
 ## Dispatcher & Threading
 
 The platform provides a main-thread dispatcher using `DispatchQueue.MainQueue`.
-
-> **⚠️ Important:** `MainThread.BeginInvokeOnMainThread()` and `MainThread.InvokeOnMainThreadAsync()` from `Microsoft.Maui.ApplicationModel` will throw `NotImplementedInReferenceAssemblyException` on macOS AppKit. Use `Dispatcher` or `IDispatcher` instead:
+MAUI 11 and the default MAUI 10.0.110 compatibility package bridge that
+dispatcher to `Microsoft.Maui.ApplicationModel.MainThread`, so the standard
+`MainThread` APIs work on AppKit.
 
 ```csharp
-// ✅ Correct — use Dispatcher (available on any BindableObject / View)
+// Use Dispatcher when a BindableObject or View is already available
 Dispatcher.Dispatch(() =>
 {
     myLabel.Text = "Updated";
 });
 
-// ✅ Correct — use IDispatcher from DI
+// Or resolve IDispatcher from DI
 var dispatcher = serviceProvider.GetRequiredService<IDispatcher>();
 dispatcher.Dispatch(() => { /* UI work */ });
 

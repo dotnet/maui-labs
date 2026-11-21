@@ -3,6 +3,9 @@ using Microsoft.Maui.Hosting;
 #if (essentials)
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting;
 #endif
+#if (blazor)
+using Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView;
+#endif
 
 namespace MauiLinuxApp;
 
@@ -16,6 +19,10 @@ public static class MauiProgram
 
 #if (essentials)
         builder.AddLinuxGtk4Essentials();
+
+#endif
+#if (blazor)
+        builder.Services.AddLinuxGtk4BlazorWebView();
 
 #endif
         return builder.Build();

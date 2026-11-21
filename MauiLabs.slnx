@@ -99,6 +99,9 @@
     <Project Path="platforms/Linux.Gtk4/src/Linux.Gtk4.BlazorWebView/Linux.Gtk4.BlazorWebView.csproj" />
     <Project Path="platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj" />
   </Folder>
+  <Folder Name="/platforms/Shared/">
+    <Project Path="platforms/Shared/Net11ContractProbe/Net11ContractProbe.csproj" />
+  </Folder>
   <Folder Name="/platforms/Windows.WPF/">
     <Project Path="platforms/Windows.WPF/tests/Essentials.Tests/Windows.WPF.Essentials.Tests.csproj" />
     <Project Path="platforms/Windows.WPF/src/Windows.WPF/Windows.WPF.csproj" />
