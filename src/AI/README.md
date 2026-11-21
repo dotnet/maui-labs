@@ -14,6 +14,7 @@ on-device chat and embeddings through `Microsoft.Extensions.AI`.
 | [Apple Foundation Models](../../docs/ai/apple-foundation-models.md) | Apple toolchain, availability, images, native bridge, and validation |
 | [Windows AI language models](../../docs/ai/windows-ai-language-models.md) | Windows packaging, dependencies, model setup, and validation |
 | [Gemini Nano Android](../../docs/ai/gemini-nano-android.md) | Android binding, AICore readiness, download, and validation |
+| [Gemini Nano structured output](../../docs/ai/gemini-nano-structured-output.md) | MEAI schemas, native constraints, streaming, tools, and thinking |
 | [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md) | Interactive provider comparison and diagnostics |
 
 Apple chat is supported on iOS, Mac Catalyst, and macOS 26+ with Apple Intelligence
@@ -32,7 +33,8 @@ For installation and a quick start, see the [package README](Microsoft.Maui.Esse
 
 - The .NET SDK pinned in the repository `global.json`.
 - Matching MAUI workloads.
-- macOS with Xcode 27 for the Apple native bridge and OS 27 APIs.
+- macOS with exactly Xcode 27.2 for the Apple native bridge and OS 27 APIs
+  (the GA Apple pack rejects Xcode 27.3).
 - Windows build and packaging tools for the Windows target and MSIX app heads.
 - Java 17+ and the Android SDK for Android builds.
 
@@ -42,12 +44,14 @@ For installation and a quick start, see the [package README](Microsoft.Maui.Esse
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst27.2 -p:UseNet11AppleTargets=true
 ```
 
-Use `net10.0-ios27.0` or `net10.0-macos27.0` for those platforms.
-`UseXcode27Preview` selects the OS 27 reference packs; it does not install or
-select Xcode.
+Use `net11.0-ios27.2` or `net11.0-macos27.2` for those platforms.
+The pinned GA workload set provides OS 27.2 reference packs for .NET 11.
+`UseNet11AppleTargets` adds those targets while retaining the default .NET 10
+targets; it does not install or select Xcode. Install the matching workloads with
+`dotnet workload install maui macos --from-rollback-file eng/workloads/dotnet11-ga.json`.
 
 ### Android
 
@@ -81,9 +85,9 @@ for MSIX, capability, runtime, and physical-device validation requirements.
 
 ### Full product
 
-The library always targets `net10.0` and Android. Apple targets are added on
-non-Linux hosts, using either the default reference packs or the OS 27 packs
-when `UseXcode27Preview=true`. Windows is appended only on Windows hosts.
+The library always targets `net10.0` and Android. The default .NET 10 Apple
+targets are added on non-Linux hosts; `UseNet11AppleTargets=true` also adds the
+.NET 11 OS 27.2 targets. Windows is appended only on Windows hosts.
 The Chat Playground and device tests use the same platform conditions, without
 the portable `net10.0` target or native macOS app target.
 
@@ -91,9 +95,9 @@ the portable `net10.0` target or native macOS app target.
 dotnet build src/AI/EssentialsAI.slnf
 ```
 
-For normal Apple 26.x reference packs with Xcode 27, the native CI job passes
+For normal Apple 26.x reference packs with Xcode 27.2, the native CI job passes
 `ValidateXcodeVersion=false` to bypass the older packs' Xcode version check.
-When Xcode 27 is the default, no `DEVELOPER_DIR` override is needed.
+The job selects Xcode 27.2 explicitly for the .NET 11 targets.
 
 Official Windows packing consumes Apple native artifacts built by the macOS
 job. `CI=true` or `TF_BUILD=true` selects the prebuilt path but does not create
@@ -144,7 +148,7 @@ are tagged `RequiresModel=true`; exclude them with:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -c Release -p:UseXcode27Preview=true \
+  -f net11.0-maccatalyst27.2 -c Release -p:UseNet11AppleTargets=true \
   --filter "RequiresModel!=true" --logger trx
 ```
 
@@ -162,7 +166,7 @@ makes real requests against the configured deployments:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -c Debug -p:UseXcode27Preview=true \
+  -f net11.0-maccatalyst27.2 -c Debug -p:UseNet11AppleTargets=true \
   -p:EnableOpenAITests=true --logger trx
 ```
 
@@ -172,7 +176,7 @@ For example, isolate the OpenAI chat baseline while diagnosing a failure:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -c Debug -p:UseXcode27Preview=true \
+  -f net11.0-maccatalyst27.2 -c Debug -p:UseNet11AppleTargets=true \
   -p:EnableOpenAIClient=true --filter "FullyQualifiedName~OpenAIChatClient" --logger trx
 ```
 

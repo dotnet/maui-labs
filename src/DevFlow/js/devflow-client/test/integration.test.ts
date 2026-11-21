@@ -13,6 +13,7 @@ import { DevFlowClient } from "../src/index.js";
 interface FakeAgent {
   port: number;
   taps: string[];
+  screenshots: string[];
   recordingHeaders: string[];
   recordingRequests: Array<{ action?: string; recordingId?: string }>;
   leaseActions: string[];
@@ -21,6 +22,7 @@ interface FakeAgent {
 
 function startFakeAgent(): Promise<FakeAgent> {
   const taps: string[] = [];
+  const screenshots: string[] = [];
   const recordingHeaders: string[] = [];
   const recordingRequests: Array<{ action?: string; recordingId?: string }> = [];
   const leaseActions: string[] = [];
@@ -88,6 +90,12 @@ function startFakeAgent(): Promise<FakeAgent> {
     if (req.method === "GET" && url.startsWith("/api/v1/ui/hit-test")) {
       return send({ elements: [{ id: "child1" }, { id: "child2" }, { id: "root" }] });
     }
+    if (req.method === "GET" && url.startsWith("/api/v1/ui/screenshot")) {
+      screenshots.push(url);
+      res.writeHead(200, { "Content-Type": "image/png" });
+      res.end(Buffer.from("png"));
+      return;
+    }
     if (req.method === "POST" && url === "/api/v1/ui/actions/tap") {
       let body = "";
       req.on("data", (c) => (body += c));
@@ -113,6 +121,7 @@ function startFakeAgent(): Promise<FakeAgent> {
       resolve({
         port,
         taps,
+        screenshots,
         recordingHeaders,
         recordingRequests,
         leaseActions,
@@ -149,6 +158,51 @@ test("integration: getStatus reports the resolved agent", async () => {
     const status = await client.getStatus();
     assert.equal(status.ok, true, status.ok ? "" : status.error.message);
     assert.equal(status.ok && status.value?.running, true);
+  } finally {
+    client.dispose();
+    await fake.close();
+  }
+});
+
+test("integration: screenshot sends resolution hints with a legacy width fallback", async () => {
+  const fake = await startFakeAgent();
+  const client = new DevFlowClient({ brokerPort: fake.port, agentPort: fake.port, bootstrapBroker: "never" });
+  try {
+    const screenshot = await client.screenshot({
+      targetScale: 2,
+      maxPixelWidth: 800,
+      maxPixelHeight: 600,
+      maxPixels: 480_000,
+    });
+    assert.equal(screenshot.ok, true, screenshot.ok ? "" : screenshot.error.message);
+    const request = fake.screenshots[0];
+    assert.ok(request);
+    assert.match(request, /maxWidth=800/);
+    assert.match(request, /targetScale=2/);
+    assert.match(request, /maxPixelWidth=800/);
+    assert.match(request, /maxPixelHeight=600/);
+    assert.match(request, /maxPixels=480000/);
+    assert.match(request, /scale=auto/);
+  } finally {
+    client.dispose();
+    await fake.close();
+  }
+});
+
+test("integration: explicit legacy screenshot width does not synthesize auto scale", async () => {
+  const fake = await startFakeAgent();
+  const client = new DevFlowClient({ brokerPort: fake.port, agentPort: fake.port, bootstrapBroker: "never" });
+  try {
+    const screenshot = await client.screenshot({
+      maxWidth: 300,
+      maxPixelHeight: 1000,
+    });
+    assert.equal(screenshot.ok, true, screenshot.ok ? "" : screenshot.error.message);
+    const request = fake.screenshots[0];
+    assert.ok(request);
+    assert.match(request, /maxWidth=300/);
+    assert.match(request, /maxPixelHeight=1000/);
+    assert.doesNotMatch(request, /scale=auto/);
   } finally {
     client.dispose();
     await fake.close();

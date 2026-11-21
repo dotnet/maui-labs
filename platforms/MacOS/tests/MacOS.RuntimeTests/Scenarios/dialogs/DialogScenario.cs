@@ -5,6 +5,10 @@ using AppKit;
 using Foundation;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
+#if NET11_0_OR_GREATER
+using Microsoft.Maui.Controls.Platform;
+using Microsoft.Maui.Platforms.MacOS.Platform;
+#endif
 
 namespace MacOS.RuntimeTests.Scenarios;
 
@@ -31,9 +35,13 @@ sealed class DialogScenario : MauiRuntimeScenario
     public override Task RunAsync(RuntimeTestContext context, Window window)
     {
         var assembly = typeof(Window).Assembly;
+#if NET11_0_OR_GREATER
+        var subscriptionType = typeof(IAlertManagerSubscription);
+#else
         var subscriptionType = assembly.GetType("Microsoft.Maui.Controls.Platform.AlertManager", true)!
             .GetProperty("Subscription")?.PropertyType
             ?? throw new InvalidOperationException("MAUI has no AlertManager.Subscription property.");
+#endif
         var subscription = window.Handler!.MauiContext!.Services.GetService(subscriptionType);
         context.WriteJson("registration.json", new
         {
@@ -42,7 +50,11 @@ sealed class DialogScenario : MauiRuntimeScenario
             consumedType = subscriptionType.FullName,
             registeredType = subscription?.GetType().FullName
         });
+#if NET11_0_OR_GREATER
+        context.Assert(subscription is AlertManagerSubscription,
+#else
         context.Assert(subscription is DispatchProxy,
+#endif
             "The real window must resolve the consumed dialog subscription.", "dialogs.subscription");
 
         _stageStarted = Stopwatch.GetTimestamp();

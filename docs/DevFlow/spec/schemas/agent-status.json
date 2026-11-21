@@ -155,6 +155,10 @@
         "syntheticTouch": {
           "type": "boolean",
           "description": "Whether gestures can be delivered as synthesised touches to raw-touch views such as GraphicsView. True only on iOS and Mac Catalyst when AgentOptions.EnableSyntheticTouch is set."
+        },
+        "pointerStream": {
+          "type": "boolean",
+          "description": "Whether the backend can keep a native or synthetic pointer press active across sequenced move requests."
         }
       },
       "additionalProperties": true

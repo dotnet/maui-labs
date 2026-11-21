@@ -1,7 +1,10 @@
+#if NET10_0
 using System.Reflection;
+#endif
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
@@ -27,7 +30,9 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 	{
 	};
 
+#if NET10_0
 	private readonly Dictionary<Page, Gtk.Window> _modalDialogs = new();
+#endif
 	private bool _destroying;
 	private GtkAllocationObserver? _allocationObserver;
 
@@ -42,7 +47,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 	protected override Gtk.Window CreatePlatformElement()
 	{
 		return MauiContext?.Services.GetService(typeof(Gtk.Window)) as Gtk.Window
-			?? new Gtk.Window();
+			?? Gtk.Window.New();
 	}
 
 	public override void SetVirtualView(IElement view)
@@ -60,7 +65,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 
 		if (platformView.GetChild() == null)
 		{
-			platformView.SetChild(new WindowRootViewContainer());
+			platformView.SetChild(WindowRootViewContainer.NewWithProperties([]));
 		}
 
 		platformView.OnCloseRequest += OnCloseRequest;
@@ -71,17 +76,20 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 				VirtualView?.FrameChanged(new Rect(0, 0, width, height));
 		}, MauiContext?.Services.GetService(typeof(ILogger<WindowHandler>)) as ILogger);
 
+#if NET10_0
 		if (VirtualView is Microsoft.Maui.Controls.Window mauiWindow)
 		{
 			mauiWindow.ModalPushed += OnModalPushed;
 			mauiWindow.ModalPopped += OnModalPopped;
 		}
+#endif
 	}
 
 	protected override void DisconnectHandler(Gtk.Window platformView)
 	{
 		_allocationObserver?.Dispose();
 		_allocationObserver = null;
+#if NET10_0
 		if (VirtualView is Microsoft.Maui.Controls.Window mauiWindow)
 		{
 			mauiWindow.ModalPushed -= OnModalPushed;
@@ -94,6 +102,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 			dialog.Close();
 		}
 		_modalDialogs.Clear();
+#endif
 
 		platformView.OnCloseRequest -= OnCloseRequest;
 		platformView.OnNotify -= OnWindowNotify;
@@ -125,6 +134,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 		}
 	}
 
+#if NET10_0
 	private void OnModalPushed(object? sender, ModalPushedEventArgs e)
 	{
 		if (MauiContext == null || PlatformView == null) return;
@@ -147,7 +157,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 			// Native GTK4 modal dialog window (default)
 			var platformContent = (Gtk.Widget)e.Modal.ToPlatform(MauiContext);
 
-			var dialog = new Gtk.Window();
+			var dialog = Gtk.Window.New();
 			dialog.SetModal(true);
 			dialog.SetTransientFor(PlatformView);
 			dialog.SetTitle((e.Modal as Page)?.Title ?? string.Empty);
@@ -272,6 +282,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 		}
 		// else: user-initiated dialog close — already closed by GTK via OnCloseRequest
 	}
+#endif
 
 	public static void MapTitle(WindowHandler handler, IWindow window)
 	{
@@ -295,8 +306,9 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 			GtkMenuBarManager.ApplyToWindow(handler.PlatformView, page);
 		}
 
-		// Ensure AlertManager.Subscribe() is called so DI-registered
-		// IAlertManagerSubscription gets picked up for DisplayAlert etc.
+#if NET10_0
+		// MAUI 10 does not expose this lifecycle hook. The net11 asset relies on
+		// Window.TryResolveAlertManager()/Subscribe() and the public typed service.
 		if (window is Microsoft.Maui.Controls.Window mauiWindow)
 		{
 			try
@@ -310,6 +322,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 			}
 			catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"AlertManager setup failed: {ex.Message}"); }
 		}
+#endif
 	}
 
 	public static void MapWidth(WindowHandler handler, IWindow window)

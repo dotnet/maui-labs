@@ -31,9 +31,8 @@ jobs:
       Configuration: Release
     strategy:
       matrix:
-        # The .NET 11 iOS/Mac Catalyst packs the template restores need Xcode 27, which
-        # macos-latest does not have yet. The runner's minor (27.1) is newer than the one
-        # the packs pin (27.0), so the smoke build skips that exact-version check.
+        # The .NET 11 iOS/Mac Catalyst packs require Xcode 27.2, which
+        # macos-latest does not have yet.
         os: [xcode-27, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
@@ -42,14 +41,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Select Xcode 27.2
+        if: runner.os == 'macOS'
+        run: sudo xcode-select -s /Applications/Xcode_27.2.app/Contents/Developer
+
       - name: Setup .NET 11
         uses: actions/setup-dotnet@v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.os == 'Windows' && format('{0}/maui-ci-dotnet', runner.temp) || '' }}
         with:
-          dotnet-version: '11.0.x'
-          dotnet-quality: 'preview'
+          global-json-file: global.json
 
       - name: Install MAUI workload
-        run: dotnet workload install maui
+        run: dotnet workload install maui --from-rollback-file ${{ github.workspace }}/eng/workloads/dotnet11-ga.json
 
       - name: Build runtime
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj

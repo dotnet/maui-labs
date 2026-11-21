@@ -51,7 +51,10 @@ namespace Microsoft.Maui.Handlers.WPF
 		void OnTextChanged(object sender, WTextChangedEventArgs e)
 		{
 			if (VirtualView == null) return;
-			VirtualView.Text = PlatformView.Text;
+			// Skip echoes of the virtual view's own value: MAUI queues nested Text sets, so echoing
+			// a stale value back while a TextChanged handler rewrites Text would ping-pong forever.
+			if (!string.Equals(VirtualView.Text ?? string.Empty, PlatformView.Text, StringComparison.Ordinal))
+				VirtualView.Text = PlatformView.Text;
 			UpdatePlaceholderVisibility();
 		}
 
@@ -86,7 +89,8 @@ namespace Microsoft.Maui.Handlers.WPF
 		void OnPasswordChanged(object sender, RoutedEventArgs e)
 		{
 			if (VirtualView == null || _passwordBox == null) return;
-			VirtualView.Text = _passwordBox.Password;
+			if (!string.Equals(VirtualView.Text ?? string.Empty, _passwordBox.Password, StringComparison.Ordinal))
+				VirtualView.Text = _passwordBox.Password;
 		}
 
 		void UpdatePlaceholderVisibility()

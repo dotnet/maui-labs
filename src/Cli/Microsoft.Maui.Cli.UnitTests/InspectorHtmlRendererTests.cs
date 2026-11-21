@@ -8,6 +8,17 @@ namespace Microsoft.Maui.Cli.UnitTests;
 public class InspectorHtmlRendererTests
 {
     [Fact]
+    public void Render_PreservesLegacyIntegerViewportSignature()
+    {
+        var parameters = typeof(HtmlRenderer)
+            .GetMethod(nameof(HtmlRenderer.Render))!
+            .GetParameters();
+
+        Assert.Equal(typeof(int), parameters[2].ParameterType);
+        Assert.Equal(typeof(int), parameters[3].ParameterType);
+    }
+
+    [Fact]
     public void RenderElements_EscapesHtmlInTextAttribute()
     {
         var tree = new List<ElementInfo>
@@ -224,6 +235,20 @@ public class InspectorHtmlRendererTests
 
         Assert.DoesNotContain("data-offscreen", OverlayDiv(html, "page"));
         Assert.Contains("data-offscreen=\"true\"", OverlayDiv(html, "flyout-row"));
+    }
+
+    [Fact]
+    public void RenderWithViewport_PreservesFractionalLogicalSize()
+    {
+        var html = HtmlRenderer.RenderWithViewport(
+            [],
+            hasScreenshot: true,
+            screenshotWidth: 320.5,
+            screenshotHeight: 640.25);
+
+        Assert.Contains("data-width=\"320.5\"", html);
+        Assert.Contains("data-height=\"640.25\"", html);
+        Assert.Contains("width:320.5px; height:640.25px;", html);
     }
 
     [Fact]

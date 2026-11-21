@@ -49,7 +49,7 @@ public sealed class PromptBasedSchemaClient : DelegatingChatClient
 				""");
 
 			// Prepend as system message so it's authoritative
-			messages = [schemaPrompt, .. messages];
+			messages = (ChatMessage[])[schemaPrompt, .. messages];
 
 			options = options.Clone();
 			options.ResponseFormat = null;

@@ -78,8 +78,7 @@ internal static class GtkImageSourceLoader
 		layout.Dispose();
 		fontDesc.Dispose();
 
-		// Render to PNG and load as Gdk.Texture (MemoryTextureBuilder has
-		// issues in GirCore 0.7.0, so we use cairo_surface_write_to_png)
+		// Render to PNG and load as Gdk.Texture to avoid manual pixel-format conversion.
 		var tmpPath = Path.Combine(Path.GetTempPath(), $"maui_font_{Guid.NewGuid():N}.png");
 		try
 		{

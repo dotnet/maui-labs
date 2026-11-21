@@ -4,12 +4,11 @@
 // broker/agent is resolved yet, `renderDisconnected` (below) is the runtime fallback — a lightweight
 // status shell in the same hybrid --df-* token language that self-heals via /inspector-ready polling.
 //
-// The nonce'd relay <script> is the canvas end of the authenticated host bridge. The canvas can't
-// open VS Code Chat or an editor, so it advertises only `saveRecording`: when the inspector finishes
-// a recording it hands the Markdown here and we POST it to the canvas server (/recording), which
-// writes it into the project's maui-tests/ folder. Send-to-Copilot and open-source fall back to the
-// inspector's own clipboard behavior. The bridge nonce rides in the iframe URL *fragment*, so it
-// never reaches the broker over HTTP; every message in both directions is gated by it + event.source.
+// The nonce'd relay <script> is the canvas end of the authenticated host bridge. Canvas advertises
+// recording persistence, selection, Copilot context, and Data attachment. Open-source and workflow
+// file picking keep using the shared Inspector's browser fallbacks. The bridge nonce rides in the
+// iframe URL *fragment*, so it never reaches the broker over HTTP; every message in both directions
+// is gated by it + event.source.
 
 import { randomBytes } from "node:crypto";
 

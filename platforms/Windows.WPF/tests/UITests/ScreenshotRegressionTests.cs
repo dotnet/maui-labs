@@ -111,7 +111,7 @@ public class ScreenshotRegressionTests
     public void Window_HasTitle()
     {
         var proc = _fixture.GetProcess();
-        // Window title changes per page but should never be empty
+        // The native title is owned by Window.Title (the gallery sets it), not by page titles
         Assert.False(string.IsNullOrWhiteSpace(proc.MainWindowTitle),
             "Window should have a non-empty title");
     }

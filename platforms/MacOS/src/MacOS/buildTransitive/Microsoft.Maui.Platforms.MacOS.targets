@@ -1,10 +1,29 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
-  <!-- Resizetizer does not process the macos TFM. Let the Apple SDK own copying,
-       incremental builds, publishing and signing, using the backend's lookup paths. -->
+  <PropertyGroup>
+    <IncrementalCleanDependsOn>$(IncrementalCleanDependsOn);_MacOSTrackBundleResourceOutputs</IncrementalCleanDependsOn>
+  </PropertyGroup>
+
+  <!-- MAUI 10 compatibility path. .NET 11 uses the processed resource contract below. -->
+  <Target Name="_MacOSPromoteMauiSplashScreens"
+          BeforeTargets="ResizetizeCollectItems;_MacOSCollectMauiResources"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and '@(MauiSplashScreen)' != ''
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <_MacOSExistingMauiImage Include="@(MauiImage)" />
+      <MauiImage Include="@(MauiSplashScreen)"
+                 Exclude="@(_MacOSExistingMauiImage)"
+                 IsAppSplashScreen="true" />
+    </ItemGroup>
+  </Target>
+
   <Target Name="_MacOSCollectMauiResources"
           BeforeTargets="_CollectBundleResources"
-          Condition="'$(TargetPlatformIdentifier)' == 'macos' and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+          DependsOnTargets="_MacOSPromoteMauiSplashScreens"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and !$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
     <ItemGroup>
       <_MacOSMauiBundleResource Include="@(MauiImage)">
         <LogicalName>Images/%(Filename)%(Extension)</LogicalName>
@@ -16,13 +35,171 @@
         <LogicalName Condition="'%(MauiAsset.LogicalName)' == ''">%(Filename)%(Extension)</LogicalName>
       </_MacOSMauiBundleResource>
       <_MacOSMauiBundleResource>
-        <LogicalName>$([System.String]::Copy('%(_MacOSMauiBundleResource.LogicalName)').Replace('\', '/'))</LogicalName>
+        <LogicalName>$([System.String]::Copy('%(_MacOSMauiBundleResource.LogicalName)').Replace('\', '/').Normalize(System.Text.NormalizationForm.FormD))</LogicalName>
       </_MacOSMauiBundleResource>
       <!-- Replace default Resources glob entries for these files: otherwise the
            SDK may keep the default Raw/ path instead of the MauiAsset logical name. -->
       <BundleResource Remove="@(_MacOSMauiBundleResource)" MatchOnMetadata="FullPath" MatchOnMetadataOptions="PathLike" />
       <BundleResource Include="@(_MacOSMauiBundleResource)" />
     </ItemGroup>
+  </Target>
+
+  <Target Name="_MacOSPrepareMauiImages"
+          BeforeTargets="ResizetizeImages"
+          DependsOnTargets="ResizetizeCollectItems"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <MauiImage Update="@(MauiImage)" Condition="'%(MauiImage.Link)' != ''">
+        <Link>$([System.String]::Copy('%(MauiImage.Link)').Replace('\', '/'))</Link>
+      </MauiImage>
+      <!-- AppKit packages MauiIcon through its native .icns target. Resizetizer's
+           generic icon PNGs have no AppKit role metadata and would otherwise be
+           copied into the Images directory as ordinary application images. -->
+      <MauiImage Remove="@(MauiImage->WithMetadataValue('IsAppIcon', 'true'))" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_MacOSPrepareRawMauiAssets"
+          BeforeTargets="ProcessMauiAssets"
+          DependsOnTargets="ResizetizeCollectItems"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <!-- Keep the AppKit raw-asset default when Resizetizer supplies a source-relative Link. -->
+      <MauiAsset Update="@(MauiAsset)">
+        <LogicalName Condition="'%(MauiAsset.LogicalName)' == ''">%(Filename)%(Extension)</LogicalName>
+      </MauiAsset>
+    </ItemGroup>
+  </Target>
+
+  <!-- Apple collects BundleResource before the standard external-backend hooks
+       would otherwise be reached. Drive the public Resizetizer processing graph
+       before that native collection; each processor invokes the hook registered
+       in this package's .props file. -->
+  <Target Name="_MacOSPrepareProcessedMauiResources"
+          BeforeTargets="_CollectBundleResources"
+          DependsOnTargets="ProcessMauiAssets;ProcessMauiFonts;ResizetizeImages"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'" />
+
+  <Target Name="_MacOSCollectProcessedMauiImages"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <FileWrites Include="@(MauiProcessedImage)" />
+      <_MacOSProcessedMauiImageBundleResource Include="@(MauiProcessedImage)"
+                                              Condition="'%(MauiProcessedImage.IsAppIcon)' != 'true'
+                                                         and '%(MauiProcessedImage.MSBuildSourceProjectFile)' == ''">
+        <LogicalName>Images/%(MauiProcessedImage.Filename)%(MauiProcessedImage.Extension)</LogicalName>
+      </_MacOSProcessedMauiImageBundleResource>
+      <_MacOSProcessedMauiImageBundleResource>
+        <LogicalName>$([System.String]::Copy('%(_MacOSProcessedMauiImageBundleResource.LogicalName)').Replace('\', '/').Normalize(System.Text.NormalizationForm.FormD))</LogicalName>
+      </_MacOSProcessedMauiImageBundleResource>
+      <BundleResource Remove="@(MauiImage)"
+                      MatchOnMetadata="FullPath"
+                      MatchOnMetadataOptions="PathLike" />
+      <BundleResource Remove="@(_MacOSProcessedMauiImageBundleResource)"
+                      MatchOnMetadata="FullPath"
+                      MatchOnMetadataOptions="PathLike" />
+      <BundleResource Include="@(_MacOSProcessedMauiImageBundleResource)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_MacOSCollectProcessedMauiFonts"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <FileWrites Include="@(MauiProcessedFont)" />
+      <_MacOSProcessedMauiFontBundleResource Include="@(MauiProcessedFont)"
+                                             Condition="'%(MauiProcessedFont.MSBuildSourceProjectFile)' == ''">
+        <LogicalName>Fonts/%(MauiProcessedFont.Filename)%(MauiProcessedFont.Extension)</LogicalName>
+      </_MacOSProcessedMauiFontBundleResource>
+      <_MacOSProcessedMauiFontBundleResource>
+        <LogicalName>$([System.String]::Copy('%(_MacOSProcessedMauiFontBundleResource.LogicalName)').Replace('\', '/').Normalize(System.Text.NormalizationForm.FormD))</LogicalName>
+      </_MacOSProcessedMauiFontBundleResource>
+      <BundleResource Remove="@(MauiFont)"
+                      MatchOnMetadata="FullPath"
+                      MatchOnMetadataOptions="PathLike" />
+      <BundleResource Remove="@(_MacOSProcessedMauiFontBundleResource)"
+                      MatchOnMetadata="FullPath"
+                      MatchOnMetadataOptions="PathLike" />
+      <BundleResource Include="@(_MacOSProcessedMauiFontBundleResource)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_MacOSCollectProcessedMauiAssets"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <_MacOSProcessedMauiAssetBundleResource Include="@(MauiProcessedAsset)"
+                                              Condition="'%(MauiProcessedAsset.MSBuildSourceProjectFile)' == ''">
+        <LogicalName Condition="'%(MauiProcessedAsset.TargetPath)' != '' and $([System.String]::Copy('%(MauiProcessedAsset.TargetPath)').Replace('\', '/').StartsWith('wwwroot/'))">%(MauiProcessedAsset.TargetPath)</LogicalName>
+        <LogicalName Condition="!$([System.String]::Copy('%(MauiProcessedAsset.TargetPath)').Replace('\', '/').StartsWith('wwwroot/')) and '%(MauiProcessedAsset.LogicalName)' != ''">%(MauiProcessedAsset.LogicalName)</LogicalName>
+        <LogicalName Condition="!$([System.String]::Copy('%(MauiProcessedAsset.TargetPath)').Replace('\', '/').StartsWith('wwwroot/')) and '%(MauiProcessedAsset.LogicalName)' == '' and '%(MauiProcessedAsset.Link)' != ''">%(MauiProcessedAsset.Link)</LogicalName>
+        <LogicalName Condition="'%(MauiProcessedAsset.LogicalName)' == '' and '%(MauiProcessedAsset.Link)' == '' and '%(MauiProcessedAsset.TargetPath)' != ''">%(MauiProcessedAsset.TargetPath)</LogicalName>
+        <LogicalName Condition="'%(MauiProcessedAsset.Link)' == '' and '%(MauiProcessedAsset.TargetPath)' == '' and '%(MauiProcessedAsset.LogicalName)' == ''">%(MauiProcessedAsset.RecursiveDir)%(MauiProcessedAsset.Filename)%(MauiProcessedAsset.Extension)</LogicalName>
+      </_MacOSProcessedMauiAssetBundleResource>
+      <_MacOSProcessedMauiAssetBundleResource>
+        <LogicalName>$([System.String]::Copy('%(_MacOSProcessedMauiAssetBundleResource.LogicalName)').Replace('\', '/').Normalize(System.Text.NormalizationForm.FormD))</LogicalName>
+      </_MacOSProcessedMauiAssetBundleResource>
+      <BundleResource Remove="@(MauiAsset)"
+                      MatchOnMetadata="FullPath"
+                      MatchOnMetadataOptions="PathLike" />
+      <BundleResource Remove="@(_MacOSProcessedMauiAssetBundleResource)"
+                      MatchOnMetadata="FullPath"
+                      MatchOnMetadataOptions="PathLike" />
+      <BundleResource Include="@(_MacOSProcessedMauiAssetBundleResource)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_MacOSValidateBundleResourceNames"
+          BeforeTargets="_ComputeBundleResourceOutputPaths"
+          DependsOnTargets="_CollectBundleResources;_UnpackLibraryResources"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and '$(_CanOutputAppBundle)' == 'true'
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <_MacOSBundleResourceIdentity Include="@(_BundleResourceWithLogicalName -> '%(FullPath)|%(LogicalName)')"
+                                  KeepDuplicates="false" />
+    </ItemGroup>
+    <RemoveDuplicates Inputs="@(_BundleResourceWithLogicalName -> '%(LogicalName)')">
+      <Output TaskParameter="Filtered" ItemName="_MacOSUniqueBundleResourceNames" />
+    </RemoveDuplicates>
+    <Error Code="MAUIAPPKIT001"
+           Condition="'@(_MacOSBundleResourceIdentity -> Count())' != '@(_MacOSUniqueBundleResourceNames -> Count())'"
+           Text="Multiple bundle resources have the same logical path: @(_BundleResourceWithLogicalName -> '%(FullPath) [%(LogicalName)]', ', ')" />
+  </Target>
+
+  <!-- Apple copies bundle resources after CoreBuild, so register their outputs
+       before IncrementalClean compares this build with the previous file list. -->
+  <Target Name="_MacOSTrackBundleResourceOutputs"
+          DependsOnTargets="_ComputeBundleResourceOutputPaths"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and '$(_CanOutputAppBundle)' == 'true'
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <ItemGroup>
+      <FileWrites Include="@(_BundleResourceWithOutputPath -> '%(OutputPath)')" />
+    </ItemGroup>
+  </Target>
+
+  <!-- The Apple SDK can leave a stamp without its per-library resource cache.
+       Recover the missing output before its timestamp check, or a no-change
+       build/publish drops referenced resources from the current bundle items. -->
+  <Target Name="_MacOSRecoverLibraryResourceCaches"
+          BeforeTargets="_BeforeUnpackLibraryResources"
+          DependsOnTargets="_PrepareUnpackLibraryResources"
+          Condition="'$(TargetPlatformIdentifier)' == 'macos'
+                     and '$(_CanOutputAppBundle)' == 'true'
+                     and '$(EnableMacOSMauiResourceMapping)' != 'false'">
+    <Delete Files="%(_UnpackLibraryResourceItems.StampFile)"
+            Condition="!Exists('%(_UnpackLibraryResourceItems.ItemsFile)')" />
   </Target>
 
   <!--
@@ -77,6 +254,9 @@
 
     <!-- Register outputs -->
     <ItemGroup>
+      <BundleResource Remove="@(MauiIcon)"
+                      MatchOnMetadata="FullPath"
+                      MatchOnMetadataOptions="PathLike" />
       <BundleResource Include="$(_MacOSIconIcnsPath)">
         <LogicalName>AppIcon.icns</LogicalName>
       </BundleResource>

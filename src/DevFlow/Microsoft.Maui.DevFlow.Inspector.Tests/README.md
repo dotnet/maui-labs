@@ -23,12 +23,16 @@ dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.De
   --results-directory artifacts\TestResults\InspectorBrowser
 ```
 
-All **21** fixtures must execute and pass: the original eleven Layout workspace checks,
+All **34** fixtures must execute and pass: the shared Layout, Preview health, synchronization,
+connection-recovery, command-policy, and viewport-navigation checks,
 cached Layout → Logs → Layout Data attachment, and sizing-only `diagnosticInputsRevision`
 invalidation/Live rescanning with unchanged geometry, two queued Live cancellation checks,
+responsive viewport zoom controls,
 three property/Network synchronization checks, and three connection recovery checks covering
 Retry feedback/reduced motion, hung state-request cancellation, and recovery with a live event
-socket (including after a webview visibility change).
+socket (including after a webview visibility change), plus four capability-policy checks covering
+legacy fallback, unsupported-command focus preservation, revoked-input cancellation, and distinct
+unavailable reasons.
 Disabling Live cancels queued automatic rescans while preserving an explicit refresh requested
 during an active scan; it does not abort the in-flight scan.
 
@@ -39,7 +43,7 @@ while detail stays open. Response gates hold each loading state until asserted; 
 clock drives the real polling intervals instead of wall-clock sleeps.
 
 `ci-devflow.yml` provisions Chromium in its dedicated `inspector-layout-browser` Windows job and
-sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 21 passed results and fails
+sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 34 passed results and fails
 if any filtered test is skipped; adding another fixture requires updating the explicit count.
 It also repeats all three synchronization cases five times, failing immediately on any failure
 or skip. The Windows live integration job enables these browser fixtures alongside the native
@@ -97,10 +101,15 @@ until its replacement screenshot loads. An unchanged immediate capture retries o
 UI mutations are not mistaken for the completed tap. Latest-wins coverage supersedes held state
 and image work, distinguishes event-triggered sharing from explicit retries, and requires a fresh
 frame when a property edit lands during image decode. Later app events queue a follow-up capture
-without aborting the current one, and feedback remains tied to the newest accepted tap. Playwright's
-clock verifies that post-acknowledgement capture starts within 50 ms of browser time rather than
-waiting the former fixed 400 ms.
-HTML and shipped scripts are not replaced.
+without aborting the current one, and feedback remains tied to the newest accepted tap. Frame
+coverage also verifies screenshot, dimensions, offsets, overlays, and descriptor commit together
+after image decode, restores a missing bootstrap screenshot on the first valid refresh, and queues
+an EVIDENCE refresh after frame rejection. Resize coverage verifies rendered-size and
+device-pixel-ratio changes settle into one bounded evidence request without being postponed by
+continuous app refreshes, that newer app evidence follows an in-flight resolution capture, and
+that an older-resolution frame cannot settle pending tap feedback. Playwright's clock verifies
+that post-acknowledgement capture starts within 50 ms of browser time rather than waiting the former
+fixed 400 ms. HTML and shipped scripts are not replaced.
 Teardown stops browser timers and prevents a late pagehide keepalive request, then
 drains HTTP traffic before disposing the
 Inspector and awaiting the agent server's shutdown.
@@ -118,6 +127,7 @@ dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests -c Release --no-b
 
 The `inspector-browser` job in `ci-devflow.yml` installs Chromium with its Linux
 dependencies, explicitly enables these fixtures, and runs only this category.
+The job requires exactly **34** passed fixtures with zero skips.
 Without `DEVFLOW_INSPECTOR_BROWSER_FIXTURES=1`, ordinary library builds skip this
 category with a provisioning explanation. When enabled, a missing browser is a
 test failure, not a skip.

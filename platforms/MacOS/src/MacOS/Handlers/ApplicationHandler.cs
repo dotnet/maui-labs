@@ -1,4 +1,5 @@
 using Foundation;
+using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platforms.MacOS.Hosting;
 using Microsoft.Maui.Platforms.MacOS.Platform;

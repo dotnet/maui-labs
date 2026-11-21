@@ -106,11 +106,13 @@ sealed class MenuLocalizationScenario : MauiRuntimeScenario
         evidence.Assert(main.Items.Count(item => item.Title == expected[0]) == 1 &&
             main.Items.Count(item => item.Title == expected[1]) == 1,
             "Localized custom titles suppress the corresponding defaults.");
-        evidence.Assert(app.WindowsMenu?.Handle != windows.Handle,
-            "Removing the default Window menu clears AppKit's old reference (AppKit may lazily create a replacement).");
+        evidence.Assert(app.WindowsMenu?.Handle != windows.Handle &&
+            app.WindowsMenu?.Handle == main.Items.Single(item => item.Title == expected[1]).Submenu!.Handle,
+            "Removing the default Window menu clears AppKit's old reference and registers the localized custom replacement.");
         MenuBarManager.UpdateMenuBar([new MenuBarItem { Text = "Edit" }, new MenuBarItem { Text = "Window" }]);
         evidence.Assert(main.Items.Count(item => item.Title == "Edit") == 1 &&
-            main.Items.Count(item => item.Title == "Window") == 1 && main.Count == 3,
+            main.Items.Count(item => item.Title == "Window") == 1 && main.Count == 3 &&
+            app.WindowsMenu?.Handle == main.Items.Single(item => item.Title == "Window").Submenu!.Handle,
             "Legacy English custom titles still suppress defaults in a non-English app.");
         evidence.Pass("custom-overrides");
 
