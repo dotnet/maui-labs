@@ -33,6 +33,7 @@ sentinel and all 59 fixed assertions remain required.
 | `background-reset` | 4 | Cleared Grid background keeps its colour / direct clears, DataTrigger exit, ContentView, Picker and ImageButton (10 assertions) |
 | `tap-buttons` | 3 | Left click routed to secondary recognizer / primary, secondary and dynamic `Buttons` changes |
 | `focus-state` | 5 | Entry is first responder but `IsFocused` stays false / Entry, focus moves, Editor, `Unfocus()` with ordered Focused/Unfocused events, focus redirected from an `Unfocused` handler (13 assertions) |
+| `window-reopen` | 7 | `Application.ActivateWindow` leaves a minimized window in the Dock / activation restores a minimized or inactive window; Dock reopen preserves visible-window defaults, reuses minimized or hidden windows, creates a fresh window after the last close, and cannot reopen during termination (20 assertions) |
 | `bundle-resources` | 4 | Linked image missing / processed resources, embedded fonts, view capture, and assets loaded from the app bundle |
 | `media-capture` | 1 | Camera-equipped, pre-authorized runner records and verifies a non-empty native `.mov` before deleting it |
 | `menu-localization` | 5 per launch | English defaults in a German app / native bundle localization, app overrides, localized app names, responder actions, custom-menu replacement and option resets |
