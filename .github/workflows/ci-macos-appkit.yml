@@ -125,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [layout, contentview-clipping, scrollview-measure, shell-sections, shell-tabs, dialog-registration, dialogs, window-page-reset, picker, background-reset, tap-buttons, focus-state, menu-localization, collection-view-grid, bundle-resources]
+        scenario: [layout, contentview-clipping, scrollview-measure, shell-sections, shell-tabs, dialog-registration, dialogs, window-page-reset, picker, background-reset, tap-buttons, focus-state, window-reopen, menu-localization, collection-view-grid, bundle-resources]
         maui-version: ['', '10.0.110']
         include:
           - scenario: menu-localization
