@@ -143,8 +143,8 @@ public partial class ScrollViewHandler : MacOSViewHandler<IScrollView, NSScrollV
         // The ScrollView's own size requests bound what its content may use (wrapping text in a scroller
         // with WidthRequest=200 must be measured at 200, not at the parent's width) ...
         var padding = scrollView.Padding;
-        var outerWidth = ResolveConstraint(widthConstraint, scrollView.Width, scrollView.MaximumWidth);
-        var outerHeight = ResolveConstraint(heightConstraint, scrollView.Height, scrollView.MaximumHeight);
+        var outerWidth = ResolveConstraint(widthConstraint, scrollView.Width, scrollView.MinimumWidth, scrollView.MaximumWidth);
+        var outerHeight = ResolveConstraint(heightConstraint, scrollView.Height, scrollView.MinimumHeight, scrollView.MaximumHeight);
 
         // ... and CrossPlatformMeasure measures only the content, so padding is taken out here and added back.
         var content = scrollView.CrossPlatformMeasure(
@@ -169,12 +169,14 @@ public partial class ScrollViewHandler : MacOSViewHandler<IScrollView, NSScrollV
         return new Size(SanitizeSize(width), SanitizeSize(height));
     }
 
-    static double ResolveConstraint(double constraint, double explicitSize, double maximum)
+    static double ResolveConstraint(double constraint, double explicitSize, double minimum, double maximum)
     {
         // An explicit size still goes through the maximum clamp: WidthRequest=400 with
         // MaximumWidthRequest=200 is arranged at 200, so the content must be measured at 200.
         if (IsExplicitSize(explicitSize))
             constraint = explicitSize;
+        if (IsExplicitSize(minimum))
+            constraint = Math.Max(constraint, minimum);
         return IsExplicitSize(maximum) ? Math.Min(constraint, maximum) : constraint;
     }
 

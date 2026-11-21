@@ -10,15 +10,15 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("scrollview-measure", 6, context => new ScrollViewMeasureScenario().CreateDelegate(context),
-            ExpectedAssertions: 14));
+        ScenarioRegistry.Register(new("scrollview-measure", 7, context => new ScrollViewMeasureScenario().CreateDelegate(context),
+            ExpectedAssertions: 17));
 }
 
 /// <summary>
 /// A ScrollView sized by its parent - an Auto row, a stack - used to measure as ~0 because the handler
 /// asked NSScrollView for a fitting size it doesn't have. A horizontal ScrollView in an Auto row
 /// collapsed to nothing (e.g. a toolbar or ribbon body), and MaximumHeightRequest had nothing to clamp.
-/// Content is measured inside the ScrollView's own width request (clamped by its maximum) and padding.
+/// Content is measured inside the ScrollView's own width request (clamped by its minimum/maximum) and padding.
 /// </summary>
 sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
 {
@@ -36,6 +36,8 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
     Label _wrappingLabel = null!;
     ScrollView _overMaximum = null!;
     Label _overMaximumLabel = null!;
+    ScrollView _underMinimum = null!;
+    Label _underMinimumLabel = null!;
     ScrollView _padded = null!;
     View _paddedContent = null!;
 
@@ -50,6 +52,7 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
 
         var native = _horizontal.Handler?.PlatformView as NSScrollView
             ?? throw new InvalidOperationException("Horizontal ScrollView has no AppKit platform view.");
+        var minimumContentSize = ((IView)_underMinimumLabel).Measure(200, double.PositiveInfinity);
         evidence.WriteJson("sizes.json", new
         {
             horizontal = new { _horizontal.Width, _horizontal.Height, native = native.Frame.Height },
@@ -57,6 +60,7 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
             fill = new { _fill.Width, _fill.Height, _fill.Y, grid = _grid.Height },
             wrapping = new { _wrapping.Width, _wrapping.Height, label = new { _wrappingLabel.Width, _wrappingLabel.Height } },
             overMaximum = new { _overMaximum.Width, _overMaximum.Height, label = new { _overMaximumLabel.Width, _overMaximumLabel.Height } },
+            underMinimum = new { _underMinimum.Width, _underMinimum.Height, minimumContentSize, label = new { _underMinimumLabel.Width, _underMinimumLabel.Height } },
             padded = new { _padded.Height, content = new { _paddedContent.X, _paddedContent.Y, _paddedContent.Height } }
         });
 
@@ -116,6 +120,17 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
             $"The ScrollView is tall enough for the text wrapped at the clamped width; scroller {_overMaximum.Height}, label {_overMaximumLabel.Height}.",
             "scrollview-measure.over-maximum-height");
         evidence.Pass("explicit-over-maximum");
+
+        evidence.Assert(Math.Abs(_underMinimum.Width - 200) < 1,
+            $"MinimumWidthRequest expands a smaller WidthRequest; scroller width {_underMinimum.Width}.",
+            "scrollview-measure.under-minimum-width");
+        evidence.Assert(Math.Abs(_underMinimumLabel.Width - 200) < 1,
+            $"Content is measured at the expanded width; label width {_underMinimumLabel.Width}.",
+            "scrollview-measure.under-minimum-label-width");
+        evidence.Assert(Math.Abs(_underMinimum.Height - minimumContentSize.Height) < 1 && minimumContentSize.Height > 20,
+            $"The ScrollView fits text measured at its minimum width; scroller {_underMinimum.Height}, content {minimumContentSize.Height}.",
+            "scrollview-measure.under-minimum-height");
+        evidence.Pass("explicit-under-minimum");
 
         evidence.Assert(Math.Abs(_padded.Height - (ItemHeight + 20)) < 1,
             $"Padding is part of the measured size; expected {ItemHeight + 20}, actual {_padded.Height}.",
@@ -188,6 +203,28 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
             Content = _overMaximumLabel
         };
 
+        _underMinimumLabel = new Label
+        {
+            Text = "Wrapping text must use the minimum width.",
+            LineBreakMode = LineBreakMode.WordWrap
+        };
+        _underMinimum = new ScrollView
+        {
+            AutomationId = "UnderMinimumScroll",
+            WidthRequest = 100,
+            MinimumWidthRequest = 200,
+            HorizontalOptions = LayoutOptions.Start,
+            VerticalOptions = LayoutOptions.Start,
+            Content = _underMinimumLabel
+        };
+        var widthLimits = new Grid
+        {
+            ColumnDefinitions = { new ColumnDefinition(GridLength.Auto), new ColumnDefinition(GridLength.Auto) },
+            ColumnSpacing = 8
+        };
+        widthLimits.Add(_overMaximum, 0, 0);
+        widthLimits.Add(_underMinimum, 1, 0);
+
         _paddedContent = new BoxView { WidthRequest = 900, HeightRequest = ItemHeight, Color = Colors.Plum };
         _padded = new ScrollView
         {
@@ -213,7 +250,7 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
         grid.Add(_horizontal, 0, 0);
         grid.Add(_capped, 0, 1);
         grid.Add(_wrapping, 0, 2);
-        grid.Add(_overMaximum, 0, 3);
+        grid.Add(widthLimits, 0, 3);
         grid.Add(_padded, 0, 4);
         grid.Add(_fill, 0, 5);
 
