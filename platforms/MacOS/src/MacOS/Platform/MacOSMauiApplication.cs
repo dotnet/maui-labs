@@ -101,20 +101,25 @@ public abstract class MacOSMauiApplication : NSApplicationDelegate, IPlatformApp
 
     /// <summary>
     /// Clicking the Dock icon (or opening the app again from Finder) while it has no visible window.
-    /// A minimized window is restored; when every window has been closed a new one is created through
+    /// A minimized or hidden window is restored; when every window has been closed a new one is created through
     /// <see cref="IApplication.CreateWindow"/>, as Mac Catalyst does with a new scene.
     /// </summary>
     public override bool ApplicationShouldHandleReopen(NSApplication sender, bool hasVisibleWindows)
     {
+        if (IsTerminating)
+            return false;
+
         if (hasVisibleWindows)
             return true;
 
-        var minimized = _windows
+        var windows = _windows
             .Select(w => w.Handler?.PlatformView as NSWindow)
-            .FirstOrDefault(w => w is { IsMiniaturized: true });
+            .OfType<NSWindow>()
+            .ToArray();
+        var window = windows.FirstOrDefault(w => w.IsMiniaturized) ?? windows.FirstOrDefault();
 
-        if (minimized != null)
-            BringToFront(minimized);
+        if (window != null)
+            BringToFront(window);
         else if (_windows.Count == 0 && _applicationContext != null)
             CreatePlatformWindow(_applicationContext);
 
