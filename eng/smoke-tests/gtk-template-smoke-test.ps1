@@ -99,6 +99,7 @@ try {
             $source.SetAttribute('key', 'gtk-template-smoke')
             $source.SetAttribute('value', $packages)
             $config.configuration.packageSources.AppendChild($source) | Out-Null
+            $config.configuration.packageSourceMapping.InnerXml += '<packageSource key="gtk-template-smoke"><package pattern="Microsoft.Maui.Platforms.Linux.Gtk4*" /></packageSource>'
             $config.Save((Join-Path $modeRoot 'NuGet.config'))
         }
 

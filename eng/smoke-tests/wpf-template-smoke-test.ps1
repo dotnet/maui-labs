@@ -65,6 +65,7 @@ $source = $config.CreateElement('add')
 $source.SetAttribute('key', 'wpf-smoke')
 $source.SetAttribute('value', $packages)
 [void] $config.configuration.packageSources.AppendChild($source)
+$config.configuration.packageSourceMapping.InnerXml += '<packageSource key="wpf-smoke"><package pattern="Microsoft.Maui.Platforms.Windows.WPF*" /></packageSource>'
 $configPath = Join-Path $work 'NuGet.config'
 $config.Save($configPath)
 
