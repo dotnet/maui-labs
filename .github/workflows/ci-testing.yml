@@ -50,10 +50,10 @@ jobs:
           dotnet-version: '11.0.x'
           dotnet-quality: 'preview'
 
-      # Use nuget.org: the repo's dotnet-public mirror lacks some .NET 11 workload packs
-      # (e.g. Microsoft.NETCore.App.Runtime.browser-wasm.Msi.x64 11.0.0).
-      - name: Install MAUI workload
-        run: dotnet workload install maui --source https://api.nuget.org/v3/index.json
+      # Install only the platforms Testing targets. The full `maui` workload pulls in
+      # wasm-tools on Windows, whose packs are not all mirrored to the internal feeds.
+      - name: Install MAUI workloads
+        run: dotnet workload install maui-android maui-ios maui-maccatalyst
 
       - name: Build runtime
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
