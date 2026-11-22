@@ -47,13 +47,10 @@ jobs:
       - name: Setup .NET 11
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '11.0.x'
-          dotnet-quality: 'preview'
+          dotnet-version: '11.0.100'
 
-      # Pin a workload set whose packs are mirrored to the internal feeds; the
-      # 11.0.0 GA browser-wasm pack (pulled in by wasm-tools on Windows) is not.
       - name: Install MAUI workload
-        run: dotnet workload install maui --version 11.0.100-rc.3.26524.4
+        run: dotnet workload install maui --version 11.0.100
 
       - name: Build runtime
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
