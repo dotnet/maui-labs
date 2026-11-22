@@ -47,10 +47,12 @@ jobs:
       - name: Setup .NET 11
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '11.0.100'
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
 
+      # The stable set's Emscripten manifests are not mirrored to the internal feeds yet.
       - name: Install MAUI workload
-        run: dotnet workload install maui --version 11.0.100
+        run: dotnet workload install maui --version 11.0.100-rc.3.26524.4
 
       - name: Build runtime
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
