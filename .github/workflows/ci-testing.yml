@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'src/Testing/**'
+      - '.github/workflows/ci-testing.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -16,6 +17,7 @@ on:
     branches: [main]
     paths:
       - 'src/Testing/**'
+      - '.github/workflows/ci-testing.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -48,8 +50,10 @@ jobs:
           dotnet-version: '11.0.x'
           dotnet-quality: 'preview'
 
+      # Use nuget.org: the repo's dotnet-public mirror lacks some .NET 11 workload packs
+      # (e.g. Microsoft.NETCore.App.Runtime.browser-wasm.Msi.x64 11.0.0).
       - name: Install MAUI workload
-        run: dotnet workload install maui
+        run: dotnet workload install maui --source https://api.nuget.org/v3/index.json
 
       - name: Build runtime
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
