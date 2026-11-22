@@ -45,18 +45,10 @@ def package_properties(directory):
     if len(versions) != 1:
         raise ValueError("Core and Essentials package versions must match.")
     sources = sorted({str(source) for _, source in packages.values()})
-    config = ET.parse(REPO / "NuGet.config")
-    for index, source in enumerate(sources):
-        key = f"appkit-runtime-{index}"
-        ET.SubElement(config.find("packageSources"), "add", {"key": key, "value": source})
-        mapping = ET.SubElement(config.find("packageSourceMapping"), "packageSource", {"key": key})
-        ET.SubElement(mapping, "package", {"pattern": "Microsoft.Maui.Platforms.MacOS*"})
-    config_path = Path(directory).resolve() / "NuGet.config"
-    config.write(config_path, encoding="utf-8", xml_declaration=True)
     return {
         "RuntimeTestsUseProjectReferences": "false",
         "ResourceTestPackageVersion": versions.pop(),
-        "RestoreConfigFile": str(config_path),
+        "RestoreAdditionalProjectSources": "%3B".join(sources),
     }
 
 

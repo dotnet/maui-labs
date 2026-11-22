@@ -50,7 +50,8 @@ jobs:
           dotnet-version: '11.0.x'
           dotnet-quality: 'preview'
 
-      # The stable set's Emscripten manifests are not mirrored to the internal feeds yet.
+      # Pin a workload set whose packs are mirrored to the internal feeds; the
+      # 11.0.0 GA browser-wasm pack (pulled in by wasm-tools on Windows) is not.
       - name: Install MAUI workload
         run: dotnet workload install maui --version 11.0.100-rc.3.26524.4
 
@@ -79,16 +80,9 @@ jobs:
 
           dotnet new install $templatePackage --debug:custom-hive $hive
           dotnet new mauitest -n MauiTestingSmoke -o $project --debug:custom-hive $hive --no-restore
-          [xml]$config = Get-Content ../../NuGet.config -Raw
-          $source = $config.CreateElement('add')
-          $source.SetAttribute('key', 'testing-smoke')
-          $source.SetAttribute('value', $localPackages)
-          [void]$config.configuration.packageSources.AppendChild($source)
-          $config.configuration.packageSourceMapping.InnerXml += '<packageSource key="testing-smoke"><package pattern="Microsoft.Maui.Testing" /></packageSource>'
-          $configPath = Join-Path $validationRoot 'NuGet.config'
-          $config.Save($configPath)
           dotnet restore (Join-Path $project 'MauiTestingSmoke.csproj') `
-            --configfile $configPath
+            --configfile ../../NuGet.config `
+            "-p:RestoreAdditionalProjectSources=$localPackages"
           dotnet build (Join-Path $project 'MauiTestingSmoke.csproj') --no-restore -p:ValidateXcodeVersion=false
 
       - name: Upload packages

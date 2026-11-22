@@ -2,7 +2,6 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
-import xml.etree.ElementTree as ET
 from zipfile import ZipFile
 
 from run import HOST, load_manifest, validate_result
@@ -34,11 +33,7 @@ class PackageConsumerContractTests(unittest.TestCase):
         properties = driver.package_properties(self.root)
         self.assertEqual(properties["ResourceTestPackageVersion"], "0.1.0-ci.1.1")
         self.assertEqual(properties["RuntimeTestsUseProjectReferences"], "false")
-        config = ET.parse(properties["RestoreConfigFile"])
-        source = config.find("./packageSources/add[@key='appkit-runtime-0']")
-        self.assertEqual(source.get("value"), str(self.root / "packages with spaces"))
-        mapping = config.find("./packageSourceMapping/packageSource[@key='appkit-runtime-0']/package")
-        self.assertEqual(mapping.get("pattern"), "Microsoft.Maui.Platforms.MacOS*")
+        self.assertEqual(properties["RestoreAdditionalProjectSources"], str(self.root / "packages with spaces"))
 
     def test_missing_essential_package_fails(self):
         self.package(driver.PACKAGE_IDS[0])
