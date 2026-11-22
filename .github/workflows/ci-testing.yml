@@ -50,10 +50,10 @@ jobs:
           dotnet-version: '11.0.x'
           dotnet-quality: 'preview'
 
-      # Install only the platforms Testing targets. The full `maui` workload pulls in
-      # wasm-tools on Windows, whose packs are not all mirrored to the internal feeds.
-      - name: Install MAUI workloads
-        run: dotnet workload install maui-android maui-ios maui-maccatalyst
+      # Pin a workload set whose packs are mirrored to the internal feeds; the
+      # 11.0.0 GA browser-wasm pack (pulled in by wasm-tools on Windows) is not.
+      - name: Install MAUI workload
+        run: dotnet workload install maui --version 11.0.100-rc.3.26524.4
 
       - name: Build runtime
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
