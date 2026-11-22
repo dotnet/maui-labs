@@ -82,6 +82,7 @@ When adding a new third-party dependency that gets bundled into a NuGet package,
 - `dotnet-public` (dnceng) — public .NET packages
 - `dotnet-tools` — internal tooling
 - `dotnet-eng` — engineering infrastructure
+- `dotnet-workloads` — stable SDK workload sets and manifests
 - `dotnet10` — version-specific feed
 - `dotnet11` — version-specific feed
 - `dotnet11-transport` — .NET 11 transport feed

@@ -397,7 +397,7 @@ Existing workflows: `ci-ai.yml`, `ci-cli.yml`, `ci-comet.yml`, `ci-devflow.yml`,
 ### NuGet Feed Configuration
 
 NuGet.config uses **internal dnceng proxy feeds only** — no direct nuget.org reference:
-- `dotnet-public`, `dotnet-tools`, `dotnet-eng`, `dotnet10`, `dotnet11`, `dotnet11-transport`
+- `dotnet-public`, `dotnet-tools`, `dotnet-eng`, `dotnet-workloads`, `dotnet10`, `dotnet11`, `dotnet11-transport`
 
 **Do not** add `nuget.org` as a direct feed source. Package versions flow via Dependency Flow (Maestro/DARC).
 
