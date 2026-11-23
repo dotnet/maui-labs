@@ -174,10 +174,9 @@ public partial class InspectorLayoutWorkspaceTests
             }
             """);
 
-        var recover = false;
         var failureStatus = 503;
         var failureBody = """{"ok":false,"reason":"capture-failed","retryable":true}""";
-        await _page.RouteAsync("**/api/state*", route => recover
+        await _page.RouteAsync("**/api/state*", route => route.Request.Url.Contains("fresh=1", StringComparison.Ordinal)
             ? route.FallbackAsync()
             : route.FulfillAsync(new()
         {
@@ -223,7 +222,9 @@ public partial class InspectorLayoutWorkspaceTests
         await _page.Locator(".devflow-element[data-id='layout-target']").ClickAsync();
         await Expect(status).ToContainTextAsync("LayoutTarget");
         var retryCapture = _page.Locator("#df-retry-capture");
-        recover = true;
+        // A safety poll before the click must not recover and hide the Retry button.
+        await AdvanceLayoutPollingAsync();
+        await Expect(_page.Locator("#df-health-banner")).ToBeVisibleAsync();
         await retryCapture.FocusAsync();
         await Expect(retryCapture).ToHaveAttributeAsync("aria-disabled", "false");
         await retryCapture.ClickAsync();

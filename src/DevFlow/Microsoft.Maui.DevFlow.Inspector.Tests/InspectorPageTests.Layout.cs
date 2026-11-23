@@ -680,7 +680,17 @@ public partial class InspectorLayoutWorkspaceTests
             })
         }));
         await _page.GotoAsync(BaseUrl);
-        await AdvanceLayoutPollingAsync();
+        if (eventsSupported)
+        {
+            // A live event socket can suppress safety polling before setup finishes.
+            await _page.RunAndWaitForResponseAsync(
+                () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
+                response => IsStateUrl(response.Url));
+        }
+        else
+        {
+            await AdvanceLayoutPollingAsync();
+        }
         await Expect(_page.Locator(".devflow-element[data-id='layout-target']")).ToBeAttachedAsync();
     }
 
