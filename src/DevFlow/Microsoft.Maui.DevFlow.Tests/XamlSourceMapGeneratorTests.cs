@@ -332,7 +332,7 @@ public class XamlSourceMapGeneratorTests
     [Fact]
     public void GeneratedProvider_EndToEnd_RegistersMapMatchingParser()
     {
-        const string path = @"C:\proj\TestApp\MainPage.xaml";
+        var path = Path.GetFullPath(Path.Combine("proj", "TestApp", "MainPage.xaml"));
         // The generator normalizes to a project-relative path (falling back to the file name when
         // MSBuildProjectDirectory is unavailable, as here) so shipped assemblies never embed
         // developer-machine paths. The inspector resolves it against the registered project.

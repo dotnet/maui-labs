@@ -200,8 +200,6 @@ public partial class InspectorLayoutWorkspaceTests
             () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
             response => response.Url.EndsWith("/api/capabilities", StringComparison.Ordinal));
         await _page.Locator("#df-zoom-preset").SelectOptionAsync("2");
-        var viewportTransform = await _page.Locator("#app-viewport")
-            .EvaluateAsync<string>("element => element.style.transform");
         await _page.Locator("#df-zoom-in").FocusAsync();
 
         Volatile.Write(ref capabilities, ScreenshotUnsupportedCapabilityPayload);
@@ -221,6 +219,11 @@ public partial class InspectorLayoutWorkspaceTests
             """));
         var wrap = _page.Locator("#df-viewport-wrap");
         await wrap.FocusAsync();
+        // Capability changes can resize the preview; isolate the blocked shortcut from that reflow.
+        await _page.Clock.RunForAsync(100);
+        await Expect(_page.Locator("#df-zoom-preset")).ToHaveValueAsync("2");
+        var viewportTransform = await _page.Locator("#app-viewport")
+            .EvaluateAsync<string>("element => element.style.transform");
         await wrap.PressAsync("1");
         Assert.Equal(
             viewportTransform,
