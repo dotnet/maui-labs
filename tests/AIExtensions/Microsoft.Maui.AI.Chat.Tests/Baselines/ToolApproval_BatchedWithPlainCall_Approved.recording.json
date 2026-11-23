@@ -1,0 +1,891 @@
+{
+  "format": "maui-ai-chat-recording",
+  "schemaVersion": 1,
+  "metadata": {
+    "meaiVersion": "10.11.0.0",
+    "pipelineBoundary": "provider"
+  },
+  "interactions": [
+    {
+      "sequence": 0,
+      "name": "interaction-0",
+      "request": {
+        "messages": [
+          {
+            "role": "user",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Get the weather in Seattle and delete the file named test.txt. Call both tools in the same response."
+              }
+            ]
+          }
+        ],
+        "tools": [
+          "GetWeather",
+          "DeleteFile"
+        ]
+      },
+      "updates": [
+        {
+          "sequence": 0,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 1,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 2,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 3,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 4,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 5,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 6,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 7,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 8,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 9,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 10,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 11,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 12,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": "tool_calls",
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 13,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": "tool_calls",
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "usage",
+                "details": {
+                  "InputTokenCount": 180,
+                  "OutputTokenCount": 247,
+                  "TotalTokenCount": 427,
+                  "CachedInputTokenCount": 0,
+                  "ReasoningTokenCount": 192,
+                  "inputAudioTokenCount": null,
+                  "inputTextTokenCount": null,
+                  "outputAudioTokenCount": null,
+                  "outputTextTokenCount": null,
+                  "AdditionalCounts": {
+                    "InputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
+                    "OutputTokenDetails.RejectedPredictionTokenCount": 0
+                  }
+                }
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 14,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "messageId": "chatcmpl-EjVhPfPZgCpKOMYduI3fgKV7y9TFz",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:39.0000000+00:00",
+            "finishReason": "tool_calls",
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "functionCall",
+                "callId": "call_8ZE2Wya1j39CVY7b0oX3OTmc",
+                "name": "GetWeather",
+                "arguments": {
+                  "city": "Seattle"
+                },
+                "informationalOnly": false
+              },
+              {
+                "type": "functionCall",
+                "callId": "call_kBuAhnV3GlPLgnqSaCXXLX52",
+                "name": "DeleteFile",
+                "arguments": {
+                  "fileName": "test.txt"
+                },
+                "informationalOnly": false
+              }
+            ]
+          },
+          "delayMs": null
+        }
+      ],
+      "outcome": "completed",
+      "errorType": null,
+      "errorMessage": null
+    },
+    {
+      "sequence": 1,
+      "name": "interaction-1",
+      "request": {
+        "messages": [
+          {
+            "role": "user",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Get the weather in Seattle and delete the file named test.txt. Call both tools in the same response."
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "contents": [
+              {
+                "type": "functionCall",
+                "callId": "call_8ZE2Wya1j39CVY7b0oX3OTmc",
+                "name": "GetWeather",
+                "arguments": {
+                  "city": "Seattle"
+                },
+                "informationalOnly": true
+              },
+              {
+                "type": "functionCall",
+                "callId": "call_kBuAhnV3GlPLgnqSaCXXLX52",
+                "name": "DeleteFile",
+                "arguments": {
+                  "fileName": "test.txt"
+                },
+                "informationalOnly": true
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "contents": [
+              {
+                "type": "functionResult",
+                "callId": "call_8ZE2Wya1j39CVY7b0oX3OTmc",
+                "result": "The weather in Seattle is 72°F and sunny."
+              },
+              {
+                "type": "functionResult",
+                "callId": "call_kBuAhnV3GlPLgnqSaCXXLX52",
+                "result": "File 'test.txt' has been deleted."
+              }
+            ]
+          }
+        ],
+        "tools": [
+          "GetWeather",
+          "DeleteFile"
+        ]
+      },
+      "updates": [
+        {
+          "sequence": 0,
+          "value": {
+            "authorName": null,
+            "role": null,
+            "responseId": "",
+            "messageId": "",
+            "conversationId": null,
+            "createdAt": "1970-01-01T00:00:00.0000000+00:00",
+            "finishReason": null,
+            "modelId": null,
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 1,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 2,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": "-"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 3,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " The"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 4,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " weather"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 5,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " in"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 6,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " Seattle"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 7,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " is"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 8,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " "
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 9,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": "72"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 10,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": "°F"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 11,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " and"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 12,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " sunny"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 13,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": ".\n"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 14,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": "-"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 15,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " File"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 16,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " '"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 17,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": "test"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 18,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": ".txt"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 19,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": "'"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 20,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " has"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 21,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " been"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 22,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": " deleted"
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 23,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": null,
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "text",
+                "text": "."
+              }
+            ]
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 24,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": "stop",
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": []
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 25,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "messageId": "chatcmpl-EjVhSyjpemVkk3ZGVvlNemW6Uf6pf",
+            "conversationId": null,
+            "createdAt": "2026-11-12T20:28:42.0000000+00:00",
+            "finishReason": "stop",
+            "modelId": "gpt-5-mini-2025-08-07",
+            "contents": [
+              {
+                "type": "usage",
+                "details": {
+                  "InputTokenCount": 265,
+                  "OutputTokenCount": 25,
+                  "TotalTokenCount": 290,
+                  "CachedInputTokenCount": 0,
+                  "ReasoningTokenCount": 0,
+                  "inputAudioTokenCount": null,
+                  "inputTextTokenCount": null,
+                  "outputAudioTokenCount": null,
+                  "outputTextTokenCount": null,
+                  "AdditionalCounts": {
+                    "InputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
+                    "OutputTokenDetails.RejectedPredictionTokenCount": 0
+                  }
+                }
+              }
+            ]
+          },
+          "delayMs": null
+        }
+      ],
+      "outcome": "completed",
+      "errorType": null,
+      "errorMessage": null
+    }
+  ]
+}

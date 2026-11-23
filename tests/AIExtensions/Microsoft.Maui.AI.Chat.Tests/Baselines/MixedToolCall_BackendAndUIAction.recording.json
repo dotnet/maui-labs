@@ -1,0 +1,2975 @@
+{
+  "format": "maui-ai-chat-recording",
+  "schemaVersion": 1,
+  "metadata": {
+    "meaiVersion": "10.7.0.0",
+    "pipelineBoundary": "legacy-ordinal",
+    "sanitizerProfile": "legacy-import-v1"
+  },
+  "interactions": [
+    {
+      "sequence": 0,
+      "name": "legacy-0",
+      "request": {
+        "legacy": true
+      },
+      "updates": [
+        {
+          "sequence": 0,
+          "value": {
+            "authorName": null,
+            "role": null,
+            "responseId": "",
+            "messageId": "",
+            "conversationId": null,
+            "createdAt": "1970-01-01T00:00:00.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 1,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "messageId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:05.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 2,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "messageId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:05.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 3,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "messageId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:05.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 4,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "messageId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:05.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 5,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "messageId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:05.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 6,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "messageId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:05.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 7,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "messageId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:05.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 8,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "messageId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:05.0000000+00:00",
+            "finishReason": "tool_calls",
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 9,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "messageId": "chatcmpl-DPBADO9F0m963wPBBxw0iejuq1lir",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:05.0000000+00:00",
+            "finishReason": "tool_calls",
+            "modelId": "",
+            "contents": [
+              {
+                "type": "usage",
+                "details": {
+                  "InputTokenCount": 177,
+                  "OutputTokenCount": 820,
+                  "TotalTokenCount": 997,
+                  "CachedInputTokenCount": 0,
+                  "ReasoningTokenCount": 768,
+                  "inputAudioTokenCount": null,
+                  "inputTextTokenCount": null,
+                  "outputAudioTokenCount": null,
+                  "outputTextTokenCount": null,
+                  "AdditionalCounts": {
+                    "InputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
+                    "OutputTokenDetails.RejectedPredictionTokenCount": 0
+                  }
+                }
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 10,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "",
+            "messageId": "",
+            "conversationId": null,
+            "createdAt": "1970-01-01T00:00:00.0000000+00:00",
+            "finishReason": "tool_calls",
+            "modelId": "",
+            "contents": [
+              {
+                "type": "functionCall",
+                "callId": "call_RyJU8kgNr6QAW1v1jA0XBHIz",
+                "name": "GetUserLocation",
+                "arguments": {},
+                "informationalOnly": false
+              },
+              {
+                "type": "functionCall",
+                "callId": "call_cei0Dh7IshAHpChgGxqPet19",
+                "name": "GetWeather",
+                "arguments": {
+                  "city": ""
+                },
+                "informationalOnly": false
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        }
+      ],
+      "outcome": "completed",
+      "errorType": null,
+      "errorMessage": null,
+      "legacy": true
+    },
+    {
+      "sequence": 1,
+      "name": "legacy-1",
+      "request": {
+        "legacy": true
+      },
+      "updates": [
+        {
+          "sequence": 0,
+          "value": {
+            "authorName": null,
+            "role": null,
+            "responseId": "",
+            "messageId": "",
+            "conversationId": null,
+            "createdAt": "1970-01-01T00:00:00.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 1,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 2,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "I"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 3,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " ran"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 4,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " both"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 5,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " tools"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 6,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " in"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 7,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " parallel"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 8,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ".\n\n"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 9,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "-"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 10,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " Get"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 11,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "User"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 12,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Location"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 13,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " returned"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 14,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ":"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 15,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " Seattle"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 16,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ","
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 17,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " WA"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 18,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " ("
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 19,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "47"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 20,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "."
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 21,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "61"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 22,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "°"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 23,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "N"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 24,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ","
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 25,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " "
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 26,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "122"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 27,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "."
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 28,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "33"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 29,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "°"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 30,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "W"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 31,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ").\n"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 32,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "-"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 33,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " Get"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 34,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Weather"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 35,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " returned"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 36,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ":"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 37,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " \""
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 38,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "The"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 39,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " weather"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 40,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " in"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 41,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " "
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 42,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " is"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 43,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " "
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 44,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "72"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 45,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "°F"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 46,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " and"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 47,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " sunny"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 48,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ".\"\n\n"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 49,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Note"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 50,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ":"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 51,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " Get"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 52,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Weather"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 53,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " was"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 54,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " called"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 55,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " with"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 56,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " an"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 57,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " empty"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 58,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " city"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 59,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " parameter"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 60,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ","
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 61,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " so"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 62,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " its"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 63,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " output"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 64,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " omitted"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 65,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " the"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 66,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " city"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 67,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " name"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 68,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "."
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 69,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " It"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 70,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " reported"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 71,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " "
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 72,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "72"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 73,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "°F"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 74,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " and"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 75,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " sunny"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 76,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " —"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 77,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " which"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 78,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " likely"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 79,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " applies"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 80,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " to"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 81,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " your"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 82,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " location"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 83,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " ("
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 84,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Seattle"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 85,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "),"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 86,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " but"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 87,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " if"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 88,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " you"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 89,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "’d"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 90,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " like"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 91,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " exact"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 92,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ","
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 93,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " I"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 94,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " can"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 95,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " re"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 96,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "-run"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 97,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " Get"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 98,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Weather"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 99,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " now"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 100,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " using"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 101,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " \""
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 102,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Seattle"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 103,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ","
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 104,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " WA"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 105,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "\""
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 106,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " or"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 107,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " the"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 108,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " coordinates"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 109,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "."
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 110,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " Which"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 111,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " do"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 112,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " you"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 113,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " prefer"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 114,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "?"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 115,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": "stop",
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 116,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "messageId": "chatcmpl-DPBAOqFtlYSYWnfUdRFbX30DxuHs8",
+            "conversationId": null,
+            "createdAt": "2026-03-30T17:58:16.0000000+00:00",
+            "finishReason": "stop",
+            "modelId": "",
+            "contents": [
+              {
+                "type": "usage",
+                "details": {
+                  "InputTokenCount": 276,
+                  "OutputTokenCount": 635,
+                  "TotalTokenCount": 911,
+                  "CachedInputTokenCount": 0,
+                  "ReasoningTokenCount": 512,
+                  "inputAudioTokenCount": null,
+                  "inputTextTokenCount": null,
+                  "outputAudioTokenCount": null,
+                  "outputTextTokenCount": null,
+                  "AdditionalCounts": {
+                    "InputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
+                    "OutputTokenDetails.RejectedPredictionTokenCount": 0
+                  }
+                }
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        }
+      ],
+      "outcome": "completed",
+      "errorType": null,
+      "errorMessage": null,
+      "legacy": true
+    }
+  ],
+  "manifest": {
+    "redacted": 0,
+    "rejected": 0,
+    "legacyImport": true
+  }
+}

@@ -1,0 +1,150 @@
+// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+
+using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+
+namespace Microsoft.Maui.AI.Chat;
+
+internal sealed class UIActionHandler
+    : ContentBlockHandler<UIActionHandler.UIActionHandlerState>
+{
+    private readonly IReadOnlyDictionary<string, UIAgentOptions.UIActionRegistration> _actions;
+    private readonly IServiceProvider? _services;
+    private readonly ILogger _logger;
+
+    internal UIActionHandler(
+        IReadOnlyDictionary<string, UIAgentOptions.UIActionRegistration> actions,
+        IServiceProvider? services,
+        ILogger logger)
+    {
+        _actions = actions;
+        _services = services;
+        _logger = logger;
+    }
+
+    public override BlockMappingResult<UIActionHandlerState> Handle(
+        BlockMappingContext context,
+        UIActionHandlerState state)
+    {
+        if (state.Block?.Call is { } activeCall)
+        {
+            foreach (var content in context.UnhandledContents)
+            {
+                if (content is FunctionResultContent result
+                    && result.CallId == activeCall.CallId)
+                {
+                    context.MarkHandled(result);
+                    state.Block.SetResult(result);
+                    return BlockMappingResult<UIActionHandlerState>.Complete();
+                }
+            }
+
+            // Let a fresh handler state claim any later call. Reusing this active state would replace
+            // the block and mark the new call handled without emitting it.
+            return BlockMappingResult<UIActionHandlerState>.Pass();
+        }
+
+        // A UI action is building the block that shows its call.
+        if (!context.ClaimsUIActions)
+            return BlockMappingResult<UIActionHandlerState>.Pass();
+
+        foreach (var content in context.UnhandledContents)
+        {
+            if (!TryGetActionCall(content, out var call, out var registration))
+                continue;
+
+            context.MarkHandled(content);
+            var block = CreateBlock(context, call, registration);
+            foreach (var candidate in context.UnhandledContents)
+            {
+                if (candidate is FunctionResultContent result
+                    && result.CallId == call.CallId)
+                {
+                    context.MarkHandled(result);
+                    block.SetResult(result);
+                    break;
+                }
+            }
+            state.Block = block;
+            return BlockMappingResult<UIActionHandlerState>.Emit(block, state);
+        }
+
+        return BlockMappingResult<UIActionHandlerState>.Pass();
+    }
+
+    /// <summary>
+    /// Creates the block for a UI action. The other handlers build the block that shows its call, so a
+    /// handler for the action's name, such as a <c>[ToolBlock]</c>, shows its card inside the action
+    /// instead of replacing it, and maps the action's result into that card.
+    /// </summary>
+    private UIActionBlock CreateBlock(
+        BlockMappingContext context,
+        FunctionCallContent call,
+        UIAgentOptions.UIActionRegistration registration)
+    {
+        var created = context.CreateInnerBlock(call, claimUIActions: false, out var innerEntry);
+        if (created is not FunctionInvocationContentBlock innerBlock)
+        {
+            // Only a function block can show the action's result.
+            innerBlock = new FunctionInvocationContentBlock
+            {
+                Call = call,
+                Role = context.Update.Role,
+                AuthorName = context.Update.AuthorName,
+                CreatedAt = context.Update.CreatedAt,
+                LifecycleState = BlockLifecycleState.Inactive,
+            };
+            innerEntry = null;
+        }
+
+        innerBlock.Call ??= call;
+        return new UIActionBlock(
+            registration.Function,
+            registration.Mode,
+            innerBlock,
+            _services,
+            _logger,
+            innerEntry)
+        {
+            Id = string.IsNullOrEmpty(call.CallId) ? innerBlock.Id : call.CallId,
+        };
+    }
+
+    /// <summary>Gets the call to a registered UI action that a content item asks to run.</summary>
+    /// <remarks>
+    /// When one call of a response needs approval, <see cref="FunctionInvokingChatClient"/> turns every
+    /// call of the response into an approval request. It cannot invoke a UI action, so a UI action that
+    /// does not need approval itself runs as a UI action. One that does is left to the approval handler.
+    /// </remarks>
+    private bool TryGetActionCall(
+        AIContent content,
+        [NotNullWhen(true)] out FunctionCallContent? call,
+        [NotNullWhen(true)] out UIAgentOptions.UIActionRegistration? registration)
+    {
+        call = content switch
+        {
+            FunctionCallContent functionCall => functionCall,
+            ToolApprovalRequestContent { ToolCall: FunctionCallContent functionCall } => functionCall,
+            _ => null,
+        };
+        registration = null;
+        if (call is null
+            || call.InformationalOnly
+            || !_actions.TryGetValue(call.Name, out registration)
+            || (content is ToolApprovalRequestContent && registration.RequiresApproval))
+        {
+            call = null;
+            registration = null;
+            return false;
+        }
+
+        return true;
+    }
+
+    internal sealed class UIActionHandlerState
+    {
+        internal UIActionBlock? Block { get; set; }
+    }
+}

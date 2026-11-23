@@ -30,7 +30,9 @@ public partial class PlaygroundPageLayout : ContentView
         propertyChanged: (bindable, _, _) => ((PlaygroundPageLayout)bindable).DiagnosticsOpenChanged());
     public static readonly BindableProperty DiagnosticsAutomationPrefixProperty = BindableProperty.Create(
         nameof(DiagnosticsAutomationPrefix), typeof(string), typeof(PlaygroundPageLayout), "Chat");
-    private bool _isCompact;
+    private static readonly BindablePropertyKey IsCompactPropertyKey = BindableProperty.CreateReadOnly(
+        nameof(IsCompact), typeof(bool), typeof(PlaygroundPageLayout), false);
+    public static readonly BindableProperty IsCompactProperty = IsCompactPropertyKey.BindableProperty;
 
     public PlaygroundPageLayout()
     {
@@ -110,6 +112,9 @@ public partial class PlaygroundPageLayout : ContentView
         set => SetValue(DiagnosticsAutomationPrefixProperty, value);
     }
 
+    /// <summary>Gets whether the page is narrow, so the settings open over the content instead of beside it.</summary>
+    public bool IsCompact => (bool)GetValue(IsCompactProperty);
+
     private void BindDiagnostics(DiagnosticsViewModel? viewModel)
     {
         DiagnosticsToggle.IsVisible = viewModel is not null;
@@ -153,10 +158,10 @@ public partial class PlaygroundPageLayout : ContentView
         SettingsPanel.WidthRequest = layout.SettingsPanelWidth;
         SettingsPanel.Margin = new Thickness(compact ? 0 : 12);
         ResizeDiagnostics();
-        if (compact == _isCompact)
+        if (compact == IsCompact)
             return;
 
-        _isCompact = compact;
+        SetValue(IsCompactPropertyKey, compact);
         OpenSettingsButton.IsVisible = compact;
         CloseSettingsButton.IsVisible = compact;
         SettingsBackdrop.IsVisible = false;
@@ -176,7 +181,7 @@ public partial class PlaygroundPageLayout : ContentView
 
     private void OpenSettingsClicked(object? sender, EventArgs e)
     {
-        if (_isCompact)
+        if (IsCompact)
         {
             IsDiagnosticsOpen = false;
             SettingsBackdrop.IsVisible = true;
@@ -186,7 +191,7 @@ public partial class PlaygroundPageLayout : ContentView
 
     private void CloseSettingsClicked(object? sender, EventArgs e)
     {
-        if (_isCompact)
+        if (IsCompact)
         {
             SettingsBackdrop.IsVisible = false;
             SettingsPanel.IsVisible = false;
