@@ -147,7 +147,8 @@ jobs:
         with:
           global-json-file: global.json
       - name: Install pinned scenario workloads
-        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --from-rollback-file ${{ startsWith(matrix.maui-version, '10.') && 'eng/workloads/dotnet11-ga-macos-net10.json' || 'eng/workloads/dotnet11-ga.json' }}
+        # net10 apps import MonoTargets.Sdk.net10, which only the maui workload brings in.
+        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || (startsWith(matrix.maui-version, '10.') && 'macos maui' || 'macos') }} --from-rollback-file ${{ startsWith(matrix.maui-version, '10.') && 'eng/workloads/dotnet11-ga-macos-net10.json' || 'eng/workloads/dotnet11-ga.json' }}
       - name: Download requested product packages
         if: matrix.packages == true
         uses: actions/download-artifact@v8
