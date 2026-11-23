@@ -2320,6 +2320,44 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public async Task ProfilingBuildInjection_BundledHelper_CompilesInNet10App()
+	{
+		var injection = ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
+			"localhost", 9001, injectBootstrap: true);
+		Assert.NotNull(injection);
+		using var project = CreateTempFile("Consumer.csproj");
+		var projectDirectory = Path.GetDirectoryName(project.Path)!;
+		File.WriteAllText(project.Path, $"""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFramework>net10.0</TargetFramework>
+			  </PropertyGroup>
+			  <ItemGroup>
+			    <Reference Include="Microsoft.Maui.ProfilingHelper">
+			      <HintPath>{System.Security.SecurityElement.Escape(injection.AssemblyPath)}</HintPath>
+			    </Reference>
+			  </ItemGroup>
+			</Project>
+			""");
+		File.WriteAllText(Path.Combine(projectDirectory, "Consumer.cs"), """
+			public static class Consumer
+			{
+			    public static void Signal() => Microsoft.Maui.ProfilingHelper.MauiProfilingMarker.Complete();
+			}
+			""");
+		var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../.."));
+		var result = await ProcessRunner.RunAsync(
+			GetDotnetHostPath(),
+			["build", project.Path, "--nologo", "--disable-build-servers",
+				$"-p:RestoreConfigFile={Path.Combine(repoRoot, "NuGet.config")}"],
+			repoRoot,
+			timeout: TimeSpan.FromMinutes(2),
+			environmentVariablesToRemove: ProfileCommand.s_msbuildSdkEnvVars);
+
+		Assert.True(result.ExitCode == 0, result.StandardOutput + result.StandardError);
+	}
+
+	[Fact]
 	public void ProfilingInjectionAssets_AreSelfContainedAndConfigureIosLaunchEnvironment()
 	{
 		var buildDirectory = Path.GetFullPath(Path.Combine(

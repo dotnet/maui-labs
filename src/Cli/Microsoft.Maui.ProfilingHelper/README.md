@@ -2,6 +2,8 @@
 
 `Microsoft.Maui.ProfilingHelper` is the helper used by `maui profile` for zero-touch profiling.
 
+The helper targets .NET 9 and works in .NET 9 or later apps, independently of the runtime used by the CLI.
+
 In the normal CLI flow, **you do not need to reference this package or change your app code**. The `maui profile` command injects the helper into the target MAUI app at build time and uses it to:
 
 - register the `Microsoft.Maui.ProfilingHelper` `EventSource`
