@@ -59,11 +59,11 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
                     }
 
                     idx = AddWebViewBridge(
-                        async (script) =>
+                        script => RunOnMainThreadAsync(async () =>
                         {
                             var result = await wkWebView.EvaluateJavaScriptAsync(script);
                             return result?.ToString();
-                        },
+                        }),
                         () => wkWebView.Reload(),
                         (url) =>
                         {
@@ -238,11 +238,11 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
                     }
 
                     idx = AddWebViewBridge(
-                        async (script) =>
+                        script => RunOnMainThreadAsync(async () =>
                         {
                             var result = await wkWebView.EvaluateJavaScriptAsync(script);
                             return result?.ToString();
-                        },
+                        }),
                         () => wkWebView.Reload(),
                         (url) =>
                         {
