@@ -286,6 +286,14 @@ not implemented for tvOS. `simctl ui appearance` is unsupported on Apple TV, so 
 apply to the app, not the simulator system. Use agent element actions for app controls; physical Apple TVs
 use in-app screenshots and actions, not host `simctl` operations.
 
+For manual simulator navigation, use arrow keys to move focus, Return to select, and
+Escape to go back ([Apple's keyboard shortcuts](https://developer.apple.com/documentation/xcode/interacting-with-your-app-in-the-tvos-simulator)).
+DevFlow's key action (`maui_key` over MCP) operates on supported text controls; it does not inject
+these simulator shortcuts. Element actions do not validate real remote/focus navigation.
+The bundled [`maui-devflow-debug` Apple reference](../../plugins/dotnet-maui-tooling/skills/maui-devflow-debug/references/ios-and-mac.md#tvos-apple-tv)
+has the deployment and automation workflow. Updated CLI bundles distribute this guidance
+through `maui devflow init`; existing installations can use `maui devflow skills update`.
+
 ### 2b. Or, in a plain .NET app (no MAUI)
 
 The same agent, CLI and MCP tools work against apps that never reference MAUI. Reference
