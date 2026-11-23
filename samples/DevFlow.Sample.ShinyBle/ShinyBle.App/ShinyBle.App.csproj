@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net10.0-android</TargetFrameworks>
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+
+        <OutputType>Exe</OutputType>
+        <RootNamespace>ShinyBle.App</RootNamespace>
+        <UseMaui>true</UseMaui>
+        <SingleProject>true</SingleProject>
+
+        <ApplicationTitle>DevFlow BLE</ApplicationTitle>
+        <ApplicationId>com.companyname.devflowble</ApplicationId>
+        <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+        <ApplicationVersion>1</ApplicationVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#0B5FFF" />
+        <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#0B5FFF" BaseSize="128,128" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Maui.Controls" />
+        <PackageReference Include="Shiny.BluetoothLE" />
+        <PackageReference Include="Shiny.Hosting.Maui" />
+    </ItemGroup>
+
+    <!-- The agent and the plugin are debug-only, as they would be in a real app. -->
+    <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+        <ProjectReference Include="..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
+        <ProjectReference Include="..\ShinyBle.DevFlowPlugin\ShinyBle.DevFlowPlugin.csproj" />
+    </ItemGroup>
+
+</Project>

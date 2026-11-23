@@ -59,6 +59,9 @@ public class Program
 
 		try
 		{
+			var plugins = parseResult.GetValue(DevFlow.DevFlowCommands.HostPluginOption) ?? [];
+			if (parseResult.Errors.Count == 0 && plugins.Length > 0)
+				await DevFlow.DevFlowHostPlugins.Current.LoadAsync(plugins);
 			var exitCode = await parseResult.InvokeAsync();
 
 			// DevFlow command handlers swallow exceptions and signal failure via a flag
@@ -91,6 +94,11 @@ public class Program
 			}
 
 			return exitCode;
+		}
+		finally
+		{
+			if (DevFlow.DevFlowHostPlugins.TryGet(Services) is { } host)
+				await host.DisposeAsync();
 		}
 	}
 

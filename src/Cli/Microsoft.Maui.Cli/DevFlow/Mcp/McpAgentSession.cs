@@ -23,6 +23,7 @@ public class McpAgentSession
 		}
 	}
 	public string DefaultAgentHost { get; set; } = "localhost";
+	public string? HostDeviceId { get; set; }
 	AgentRegistration? DefaultAgent { get; set; }
 
 	/// <summary>Creates an agent client owned by the caller. Dispose it after the tool call completes.</summary>

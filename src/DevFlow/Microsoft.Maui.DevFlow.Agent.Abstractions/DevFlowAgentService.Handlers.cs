@@ -10,6 +10,7 @@ using System.Text;
 using Microsoft.Maui.DevFlow.Agent.Core.Profiling;
 using Microsoft.Maui.DevFlow.Logging;
 using Microsoft.Maui.DevFlow.Agent.Core.Network;
+using Microsoft.Maui.DevFlow.Extensibility;
 
 namespace Microsoft.Maui.DevFlow.Agent.Core;
 
@@ -347,6 +348,7 @@ public partial class DevFlowAgentService
 
     public async Task StopAsync()
     {
+        await StopPluginsAsync();
         await StopProfilerAsync();
         await StopPointerSessionsAsync();
         await StopBackendAsync();
@@ -356,8 +358,9 @@ public partial class DevFlowAgentService
     protected void RegisterRoutes()
     {
         // Canonical DevFlow v1 routes aligned with the formal spec.
-        _server.MapGet("/api/v1/agent/status", HandleStatus);
-        _server.MapGet("/api/v1/agent/capabilities", HandleCapabilities);
+        foreach (var route in CreateBuiltInAgentOperations().Routes)
+            _server.MapGet(route.Path, route.Handler);
+        _server.MapGet("/api/v1/operations", _ => Task.FromResult(HttpResponse.Json(BuildOperationMetadata())));
         _server.MapPost("/api/v1/agent/lease", HandleMutationLeaseControl, requiresMutationLease: false);
         _server.MapPost(
             "/api/v1/agent/recording",
@@ -504,37 +507,59 @@ public partial class DevFlowAgentService
 
     protected void RegisterExtensionRoutes()
     {
-        var namespaces = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var extension in _options.Extensions)
+            RegisterExtensionRoutes(extension);
+    }
+
+    private void RegisterExtensionRoutes(AgentExtension extension)
+    {
+        if (DevFlowProviderPolicy.IsBuiltIn(extension.Namespace) ||
+            extension.Namespace.StartsWith("devflow.", StringComparison.Ordinal) && _options.ProviderPolicy.GetBindings(extension.Namespace) is null)
+            throw new InvalidOperationException("Built-in provider identities cannot be replaced; other devflow.* providers require explicit registration grants.");
+        if (!_extensionNamespaces.Add(extension.Namespace))
+            throw new InvalidOperationException($"Duplicate extension namespace registration: {extension.Namespace}");
+
+        foreach (var route in extension.Routes)
+            if (!_options.ProviderPolicy.AllowsPath(extension.Namespace, route.Path))
+                throw new InvalidOperationException($"Route '{route.Path}' is outside the bindings approved for '{extension.Namespace}'.");
+        foreach (var stream in extension.Streams)
+            if (!_options.ProviderPolicy.AllowsPath(extension.Namespace, stream.WebSocketPath, webSocket: true))
+                throw new InvalidOperationException($"Stream '{stream.WebSocketPath}' is outside the bindings approved for '{extension.Namespace}'.");
+        _server.EnsureRoutesAvailable(extension.Routes.Select(r => (r.Method, r.Path))
+            .Concat(extension.Streams.Select(s => ("WS", s.WebSocketPath))));
+
+        foreach (var route in extension.Routes)
         {
-            if (!namespaces.Add(extension.Namespace))
-                throw new InvalidOperationException($"Duplicate extension namespace registration: {extension.Namespace}");
+            var key = $"{route.Method} {route.Path}";
+            if (!_extensionRouteKeys.Add(key))
+                throw new InvalidOperationException($"Duplicate extension route registration: {key}");
 
-            foreach (var route in extension.Routes)
+            switch (route.Method)
             {
-                var key = $"{route.Method} {route.Path}";
-                if (!seen.Add(key))
-                    throw new InvalidOperationException($"Duplicate extension route registration: {key}");
-
-                switch (route.Method)
-                {
-                    case "GET":
-                        _server.MapGet(route.Path, route.Handler);
-                        break;
-                    case "POST":
-                        _server.MapPost(route.Path, route.Handler, route.RequiresMutationLease);
-                        break;
-                    case "PUT":
-                        _server.MapPut(route.Path, route.Handler, route.RequiresMutationLease);
-                        break;
-                    case "DELETE":
-                        _server.MapDelete(route.Path, route.Handler, route.RequiresMutationLease);
-                        break;
-                    default:
-                        throw new InvalidOperationException($"Unsupported extension route method: {route.Method}");
-                }
+                case "GET":
+                    _server.MapGet(route.Path, route.Handler);
+                    break;
+                case "POST":
+                    _server.MapPost(route.Path, route.Handler, route.RequiresMutationLease);
+                    break;
+                case "PUT":
+                    _server.MapPut(route.Path, route.Handler, route.RequiresMutationLease);
+                    break;
+                case "DELETE":
+                    _server.MapDelete(route.Path, route.Handler, route.RequiresMutationLease);
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unsupported extension route method: {route.Method}");
             }
+        }
+
+        foreach (var stream in extension.Streams)
+        {
+            var descriptor = stream;
+            _server.MapWebSocket(
+                descriptor.WebSocketPath,
+                (client, networkStream, request, ct) => HandleExtensionStreamWebSocket(extension, descriptor, client, networkStream, request, ct),
+                _ => AdmitExtensionStream(extension));
         }
     }
 
@@ -565,12 +590,15 @@ public partial class DevFlowAgentService
     }
 
     protected Dictionary<string, object> BuildExtensionMetadata()
+        => BuildExtensionMetadata(_options.Extensions);
+
+    private static Dictionary<string, object> BuildExtensionMetadata(IEnumerable<AgentExtension> providers)
     {
         var extensions = new Dictionary<string, object>(StringComparer.Ordinal);
 
-        foreach (var extension in _options.Extensions.OrderBy(e => e.Namespace, StringComparer.Ordinal))
+        foreach (var extension in providers.OrderBy(e => e.Namespace, StringComparer.Ordinal))
         {
-            extensions[extension.Namespace] = new Dictionary<string, object?>
+            var metadata = new Dictionary<string, object?>
             {
                 ["version"] = extension.Version,
                 ["description"] = extension.Description,
@@ -591,9 +619,71 @@ public partial class DevFlowAgentService
                     }
                 }).ToArray()
             };
+
+            // Additive fields: older clients ignore them, and inline extensions without streams
+            // keep the descriptor (and its hash) they had before plugins existed.
+            if (extension.Streams.Count > 0)
+            {
+                metadata["streams"] = extension.Streams.Select(stream => new Dictionary<string, object?>
+                {
+                    ["name"] = stream.Name,
+                    ["description"] = stream.Description,
+                    ["path"] = stream.Path,
+                    ["webSocketPath"] = stream.WebSocketPath,
+                    ["columns"] = stream.Columns.ToArray()
+                }).ToArray();
+            }
+            if (!string.IsNullOrWhiteSpace(extension.ToolPrefix))
+                metadata["toolPrefix"] = extension.ToolPrefix;
+            if (extension.Plugin is not null || extension.Error is not null)
+                metadata["state"] = extension.State;
+            if (extension.Error is not null)
+                metadata["error"] = extension.Error;
+
+            extensions[extension.Namespace] = metadata;
         }
 
         return extensions;
+    }
+
+    private AgentExtension CreateBuiltInAgentOperations()
+    {
+        var agent = new AgentExtension("devflow.agent", "Built-in agent discovery")
+            { Bindings = _options.ProviderPolicy.GetBindings("devflow.agent"), ToolPrefix = "agent" };
+        agent.MapTool("status", "Read the selected app's agent status.", "GET", "/status", HandleStatus,
+            annotations: new() { ReadOnly = true, Idempotent = true });
+        agent.MapTool("capabilities", "Read the selected app's supported capabilities.", "GET", "/capabilities", HandleCapabilities,
+            annotations: new() { ReadOnly = true, Idempotent = true });
+        return agent;
+    }
+
+    private Dictionary<string, object> BuildOperationMetadata()
+    {
+        var actions = new AgentExtension("devflow.actions", "App actions registered with DevFlowActionAttribute")
+            { Bindings = _options.ProviderPolicy.GetBindings("devflow.actions"), ToolPrefix = "actions" };
+        foreach (var action in DiscoverActions())
+        {
+            actions.MapTool(action.Name, action.Description ?? $"Invoke app action '{action.Name}'.", "POST",
+                $"/{Uri.EscapeDataString(action.Name)}",
+                request =>
+                {
+                    request.RouteParams["name"] = action.Name;
+                    return HandleInvokeAction(request);
+                },
+                AgentJson.SerializeToElement(new Dictionary<string, object?>
+                {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object?>
+                    {
+                        ["args"] = new Dictionary<string, object?>
+                        {
+                            ["type"] = "array",
+                            ["description"] = "Positional arguments: " + string.Join(", ", action.Parameters.Select(p => $"{p.Name}: {p.Type}{(p.IsRequired ? " (required)" : "")}"))
+                        }
+                    }
+                }));
+        }
+        return BuildExtensionMetadata(_options.Extensions.Concat([CreateBuiltInAgentOperations(), actions]));
     }
 
     protected static string ComputeExtensionHash(Dictionary<string, object> metadata)
@@ -1741,6 +1831,7 @@ public partial class DevFlowAgentService
         _disposed = true;
         NetworkStore.OnRequestCaptured -= HandleCapturedNetworkRequest;
         AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoaded;
+        StopPluginsForDispose();
         StopAutoUiHooks();
         DisposePointerSessions();
         DisposeBackendResources();

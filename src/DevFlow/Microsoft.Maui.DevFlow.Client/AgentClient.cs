@@ -674,32 +674,137 @@ public class AgentClient : IDisposable
         return capabilities?.Extensions ?? new Dictionary<string, ExtensionDescriptor>();
     }
 
+    /// <summary>Discovers plugins and built-ins through the shared catalog, with older-agent compatibility.</summary>
+    public async Task<Dictionary<string, ExtensionDescriptor>> GetOperationProvidersAsync()
+    {
+        using var response = await _http.GetAsync($"{_baseUrl}/api/v1/operations");
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return await GetExtensionsAsync();
+        var body = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw ExtensionToolError(response.StatusCode, body);
+        return ProtocolJson.Deserialize<Dictionary<string, ExtensionDescriptor>>(body)
+            ?? throw new JsonException("The agent returned a null operation catalog.");
+    }
+
+    /// <summary>Plugins the agent could not load, with the reason.</summary>
+    public async Task<List<ExtensionLoadErrorInfo>> GetExtensionErrorsAsync()
+    {
+        var capabilities = await GetAsync<AgentCapabilitiesResponse>($"{AgentApi}/capabilities");
+        return capabilities?.ExtensionErrors ?? new List<ExtensionLoadErrorInfo>();
+    }
+
+    /// <summary>
+    /// Reads events from an extension stream after <paramref name="since"/>. Pass the returned
+    /// <see cref="ExtensionStreamPage.NextSequence"/> as <paramref name="since"/> to continue.
+    /// </summary>
+    public Task<ExtensionStreamPage> GetExtensionEventsAsync(string extensionNamespace, string stream, long since = 0, int limit = 100)
+        => ReadExtensionEventsAsync($"/api/v1/ext/{Uri.EscapeDataString(extensionNamespace)}/streams/{Uri.EscapeDataString(stream)}", since, limit);
+
+    /// <summary>Reads the polling binding advertised by a discovered stream, including approved non-extension routes.</summary>
+    public Task<ExtensionStreamPage> GetExtensionEventsAsync(ExtensionStreamInfo stream, long since = 0, int limit = 100)
+    {
+        if (stream is null) throw new ArgumentNullException(nameof(stream));
+        ValidateStreamBinding(stream.Path, "/api/v1/");
+        return ReadExtensionEventsAsync(stream.Path, since, limit);
+    }
+
+    private async Task<ExtensionStreamPage> ReadExtensionEventsAsync(string path, long since, int limit)
+    {
+        using var response = await _http.GetAsync($"{_baseUrl}{path}?since={since}&limit={limit}");
+        var body = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw ExtensionToolError(response.StatusCode, body);
+        return ProtocolJson.Deserialize<ExtensionStreamPage>(body)
+            ?? throw new JsonException("The extension stream returned a null page.");
+    }
+
+    /// <summary>
+    /// WebSocket URL for an extension stream. Without <paramref name="since"/> the feed starts with the
+    /// next event; with it, buffered events after that sequence are replayed first.
+    /// </summary>
+    public string GetExtensionStreamWebSocketUrl(string extensionNamespace, string stream, long? since = null)
+        => BuildExtensionStreamWebSocketUrl($"/ws/v1/ext/{Uri.EscapeDataString(extensionNamespace)}/streams/{Uri.EscapeDataString(stream)}", since);
+
+    /// <summary>Builds a URL from a discovered stream's WebSocket binding.</summary>
+    public string GetExtensionStreamWebSocketUrl(ExtensionStreamInfo stream, long? since = null)
+    {
+        if (stream is null) throw new ArgumentNullException(nameof(stream));
+        ValidateStreamBinding(stream.WebSocketPath, "/ws/v1/");
+        return BuildExtensionStreamWebSocketUrl(stream.WebSocketPath, since);
+    }
+
+    private static void ValidateStreamBinding(string path, string root)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !path.StartsWith(root, StringComparison.Ordinal) ||
+            path.Contains('?') || path.Contains('#') || path.Contains('\\') || path.Contains("//") ||
+            path.Any(char.IsControl) ||
+            path.Split('/').Any(s => Uri.UnescapeDataString(s).Split('/').Any(part => part is "." or ".." || part.Contains('\\'))))
+            throw new ArgumentException("Stream bindings must be absolute agent paths without traversal, a query, or a fragment.", nameof(path));
+    }
+
+    private string BuildExtensionStreamWebSocketUrl(string path, long? since)
+    {
+        var wsBase = _baseUrl.Replace("http://", "ws://").Replace("https://", "wss://");
+        var url = $"{wsBase}{path}";
+        return since.HasValue ? $"{url}?since={since.Value}" : url;
+    }
+
     public async Task<string> CallExtensionToolAsync(string method, string path, JsonElement? parameters = null)
     {
         if (string.IsNullOrWhiteSpace(path) || !path.StartsWith('/'))
             throw new ArgumentException("Extension tool path must be an absolute agent path.", nameof(path));
 
         var httpMethod = new HttpMethod(method);
-        using var response = await SendWithTransientRetriesAsync(httpMethod, () => SendExtensionToolRequestAsync(httpMethod, path, parameters));
+        var boundPath = ExtensionRouteBinding.Bind(path, parameters, out var routeValues);
+        using var response = await SendWithTransientRetriesAsync(httpMethod, () => SendExtensionToolRequestAsync(httpMethod, boundPath, parameters, routeValues));
         var body = await response.Content.ReadAsStringAsync();
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+            throw ExtensionToolError(response.StatusCode, body);
         return body;
     }
 
-    private async Task<HttpResponseMessage> SendExtensionToolRequestAsync(HttpMethod method, string path, JsonElement? parameters)
+    // Plugins explain a refused call in the error envelope ("lat and lng are required", "turn simulation
+    // on first"). Keep that text: it is what tells a CLI user or an AI agent how to fix the call.
+    private static HttpRequestException ExtensionToolError(HttpStatusCode statusCode, string body)
+    {
+        var message = $"Extension tool failed with HTTP {(int)statusCode} ({statusCode}).";
+        try
+        {
+            var envelope = ProtocolJson.ParseElement(body);
+            if (envelope.ValueKind == JsonValueKind.Object
+                && envelope.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(error.GetString()))
+                message = $"{error.GetString()} (HTTP {(int)statusCode})";
+        }
+        catch (JsonException)
+        {
+        }
+
+#if NET5_0_OR_GREATER
+        return new HttpRequestException(message, null, statusCode);
+#else
+        return new HttpRequestException(message);
+#endif
+    }
+
+    private async Task<HttpResponseMessage> SendExtensionToolRequestAsync(HttpMethod method, string path, JsonElement? parameters,
+        IReadOnlyDictionary<string, string> routeValues)
     {
         using var request = new HttpRequestMessage(method, $"{_baseUrl}{path}");
         if (parameters.HasValue && method != HttpMethod.Get)
             request.Content = new StringContent(parameters.Value.GetRawText(), Encoding.UTF8, "application/json");
         else if (parameters.HasValue && parameters.Value.ValueKind == JsonValueKind.Object)
-            request.RequestUri = new Uri($"{_baseUrl}{path}{BuildQueryString(parameters.Value)}");
+            request.RequestUri = new Uri($"{_baseUrl}{path}{BuildQueryString(parameters.Value, routeValues)}");
 
         return await _http.SendAsync(request);
     }
 
-    private static string BuildQueryString(JsonElement parameters)
+    private static string BuildQueryString(JsonElement parameters, IReadOnlyDictionary<string, string> routeValues)
     {
         var query = parameters.EnumerateObject()
+            .Where(property => !routeValues.ContainsKey(property.Name))
             .Select(property => $"{Uri.EscapeDataString(property.Name)}={Uri.EscapeDataString(FormatQueryValue(property.Value))}")
             .ToArray();
         return query.Length == 0 ? string.Empty : "?" + string.Join("&", query);
@@ -709,7 +814,8 @@ public class AgentClient : IDisposable
         => value.ValueKind switch
         {
             JsonValueKind.String => value.GetString() ?? string.Empty,
-            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.ToString(),
+            // GetRawText gives "true"/"false"; JsonElement.ToString() gives "True"/"False".
+            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.GetRawText(),
             JsonValueKind.Null => string.Empty,
             _ => value.GetRawText()
         };

@@ -590,16 +590,19 @@ public sealed class XamlSourcePropertyEditorTests : IDisposable
         => Assert.Equal(expected, InspectorServer.IsHostLocalPlatform(platform));
 
     [Theory]
-    [InlineData(@"C:\apps\DevFlow.Sample.exe", "DevFlow.Sample.csproj", "MauiTodo", true)]
-    [InlineData(@"C:\apps\MauiTodo.exe", "DevFlow.Sample.csproj", "MauiTodo", true)]
-    [InlineData(@"C:\apps\Other.exe", "DevFlow.Sample.csproj", "MauiTodo", false)]
+    [InlineData("DevFlow.Sample.exe", "DevFlow.Sample.csproj", "MauiTodo", true)]
+    [InlineData("MauiTodo.exe", "DevFlow.Sample.csproj", "MauiTodo", true)]
+    [InlineData("Other.exe", "DevFlow.Sample.csproj", "MauiTodo", false)]
     [InlineData(null, "DevFlow.Sample.csproj", "MauiTodo", false)]
     public void HostProcessLookup_RequiresMatchingProjectOrAppExecutable(
-        string? executablePath,
+        string? executableName,
         string? project,
         string? appName,
         bool expected)
-        => Assert.Equal(expected, InspectorServer.ExecutableMatchesAgent(executablePath, project, appName));
+    {
+        var executablePath = executableName is null ? null : Path.Combine(_tempRoot, "apps", executableName);
+        Assert.Equal(expected, InspectorServer.ExecutableMatchesAgent(executablePath, project, appName));
+    }
 
     [Fact]
     public async Task PersistAsync_RelativeProjectIdentity_MismatchedSessionIsForbidden()
