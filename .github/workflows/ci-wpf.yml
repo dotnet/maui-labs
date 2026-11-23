@@ -339,10 +339,8 @@ jobs:
       - name: Install existing WPF template workloads
         shell: pwsh
         run: |
-          $sdkVersion = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
-          $sdkDirectory = Join-Path $env:DOTNET_ROOT "sdk\$sdkVersion"
           $dotnet = Join-Path $env:DOTNET_ROOT 'dotnet.exe'
-          & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --version 10.0.203
+          & $dotnet workload install maui maui-tizen --version 10.0.203
           if ($LASTEXITCODE -ne 0) { throw 'Workload installation failed.' }
       - name: Restore and build the normal source consumer
         id: source-font-build
@@ -437,7 +435,9 @@ jobs:
       - name: Verify the packed WPF template and native fonts
         shell: pwsh
         run: |
-          $sdkVersion = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
+          # global.json rolls forward, so ask the host which SDK it actually resolved.
+          $sdkVersion = & (Join-Path $env:DOTNET_ROOT 'dotnet.exe') --version
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the .NET SDK version.' }
           $sdkDirectory = Join-Path $env:DOTNET_ROOT "sdk\$sdkVersion"
           eng\smoke-tests\wpf-template-smoke-test.ps1 -SdkDirectory $sdkDirectory -FontScenarios `
             -ArtifactsDirectory (Join-Path $env:RUNNER_TEMP 'wpf-font-package')

@@ -174,10 +174,9 @@ public partial class InspectorLayoutWorkspaceTests
             }
             """);
 
-        var recover = false;
         var failureStatus = 503;
         var failureBody = """{"ok":false,"reason":"capture-failed","retryable":true}""";
-        await _page.RouteAsync("**/api/state*", route => recover
+        await _page.RouteAsync("**/api/state*", route => route.Request.Url.Contains("fresh=1", StringComparison.Ordinal)
             ? route.FallbackAsync()
             : route.FulfillAsync(new()
         {
@@ -223,7 +222,9 @@ public partial class InspectorLayoutWorkspaceTests
         await _page.Locator(".devflow-element[data-id='layout-target']").ClickAsync();
         await Expect(status).ToContainTextAsync("LayoutTarget");
         var retryCapture = _page.Locator("#df-retry-capture");
-        recover = true;
+        // A safety poll before the click must not recover and hide the Retry button.
+        await AdvanceLayoutPollingAsync();
+        await Expect(_page.Locator("#df-health-banner")).ToBeVisibleAsync();
         await retryCapture.FocusAsync();
         await Expect(retryCapture).ToHaveAttributeAsync("aria-disabled", "false");
         await retryCapture.ClickAsync();
@@ -522,13 +523,17 @@ public partial class InspectorLayoutWorkspaceTests
     {
         var socketOpened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await _page.RouteWebSocketAsync("**/ws/events", _ => socketOpened.TrySetResult());
-        await PrepareLayoutWorkspaceAsync(eventsSupported: true);
-        await socketOpened.Task.WaitAsync(TimeSpan.FromSeconds(10));
         var stateRequests = 0;
         _page.Request += (_, request) =>
         {
             if (IsStateUrl(request.Url)) Interlocked.Increment(ref stateRequests);
         };
+        await PrepareLayoutWorkspaceAsync(eventsSupported: true);
+        await socketOpened.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await _page.RunAndWaitForResponseAsync(
+            () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
+            response => IsStateUrl(response.Url));
+        Interlocked.Exchange(ref stateRequests, 0);
         var overlay = _page.Locator("#df-disconnected-overlay");
 
         await _page.Clock.RunForAsync(6100);
