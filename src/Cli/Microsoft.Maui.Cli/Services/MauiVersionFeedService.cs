@@ -27,6 +27,7 @@ public interface IMauiVersionFeedService
 	Task<MauiPackageFeedVersion?> GetLatestVersionAsync(
 		MauiVersionChannel channel,
 		bool includePrerelease,
+		string? targetFramework = null,
 		CancellationToken cancellationToken = default);
 
 	string GetFeedUrl(MauiVersionChannel channel);
@@ -56,10 +57,18 @@ public sealed class MauiVersionFeedService : IMauiVersionFeedService
 	public async Task<MauiPackageFeedVersion?> GetLatestVersionAsync(
 		MauiVersionChannel channel,
 		bool includePrerelease,
+		string? targetFramework = null,
 		CancellationToken cancellationToken = default)
 	{
 		var versions = await GetVersionsAsync(channel, includePrerelease, cancellationToken);
-		return versions.LastOrDefault();
+		if (string.IsNullOrWhiteSpace(targetFramework))
+			return versions.LastOrDefault();
+
+		return versions.LastOrDefault(version =>
+			string.Equals(
+				MauiProjectVersionService.TryGetRequiredTargetFramework(version.Version),
+				targetFramework,
+				StringComparison.OrdinalIgnoreCase));
 	}
 
 	public async Task<IReadOnlyList<MauiPackageFeedVersion>> GetVersionsAsync(
