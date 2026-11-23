@@ -1,4 +1,6 @@
 #nullable enable
+using System.Collections.Generic;
+using System.Linq;
 using Comet;
 using Comet.Backend;
 using Microsoft.Maui.Graphics;
@@ -23,6 +25,119 @@ namespace Comet.Tests.Backend
 				root, v => new FakeBackendNode(v.GetType().Name), Ctx);
 
 		static FakeBackendNode Node(View v) => (FakeBackendNode)v.Node!;
+
+		[Fact]
+		public void RetainedLeafMeasurement_ReusesConstraints_InvalidatesMutations_AndStillArranges()
+		{
+			var node = new CachingFakeBackendNode("Text");
+			node.MeasureFunc = (width, _) => new Size(width, 24);
+
+			CometBackendLayoutEngine.MeasureNode(node, 200, 100);
+			CometBackendLayoutEngine.MeasureNode(node, 200, 100);
+			Assert.Equal(1, node.MeasureCount);
+
+			node.Arrange(new Rect(0, 0, 200, 24));
+			node.Arrange(new Rect(0, 0, 240, 24));
+			Assert.Equal(2, node.Log.Count(entry => entry.StartsWith("arrange ")));
+			Assert.Equal(240, node.ArrangedFrame!.Value.Width, 3);
+
+			foreach (var (id, value) in new[]
+			{
+				(PropertyIds.Text_Value, PropertyValue.From("cortado")),
+				(PropertyIds.Text_FontSize, PropertyValue.From(20d)),
+				(PropertyIds.Padding, PropertyValue.FromObject(new Microsoft.Maui.Thickness(4))),
+				(PropertyIds.IsVisible, PropertyValue.From(false)),
+			})
+			{
+				var before = node.MeasureCount;
+				node.ApplyProperty(id, in value);
+				CometBackendLayoutEngine.MeasureNode(node, 200, 100);
+				Assert.True(node.MeasureCount > before);
+			}
+
+			var beforeConstraintChange = node.MeasureCount;
+			CometBackendLayoutEngine.MeasureNode(node, 240, 100);
+
+			Assert.True(node.MeasureCount > beforeConstraintChange);
+		}
+
+		[Fact]
+		public void RefreshView_ContentFillsAllocatedGridRow()
+		{
+			var list = new CollectionView();
+			var refresh = new RefreshView();
+			refresh.Add(list);
+			var root = new Grid(
+				columns: new object[] { "*" },
+				rows: new object[] { 100, "*" })
+			{
+				new Text("header").Cell(row: 0),
+				refresh.Cell(row: 1),
+			};
+			Bridge(root);
+
+			CometBackendLayoutEngine.Layout(root, new Size(400, 800));
+
+			Assert.Equal(new Rect(0, 100, 400, 700), Node(refresh).ArrangedFrame);
+			Assert.Equal(new Rect(0, 0, 400, 700), Node(list).ArrangedFrame);
+		}
+
+		sealed class CachingFakeBackendNode : FakeBackendNode, IBackendMeasureCache
+		{
+			readonly BackendMeasureCache _cache = new();
+
+			public CachingFakeBackendNode(string kind)
+				: base(kind)
+			{
+			}
+
+			public int MeasureCount { get; private set; }
+
+			public override void ApplyProperty(PropertyId id, in PropertyValue value)
+			{
+				InvalidateMeasureCache();
+				base.ApplyProperty(id, in value);
+			}
+
+			public override Size Measure(double widthConstraint, double heightConstraint)
+			{
+				MeasureCount++;
+				return base.Measure(widthConstraint, heightConstraint);
+			}
+
+			Size IBackendMeasureCache.MeasureCached(double widthConstraint, double heightConstraint)
+				=> _cache.GetOrMeasure(widthConstraint, heightConstraint, Measure);
+
+			public void InvalidateMeasureCache()
+			{
+				_cache.Clear();
+			}
+		}
+
+		[Fact]
+		public void Diff_AddsAndRemovesTrailingBackendChildren()
+		{
+			var first = new Text("first");
+			var removed = new Text("removed");
+			var original = new Grid { first, removed };
+			var rootNode = Bridge(original);
+			var removedNode = Node(removed);
+
+			var withoutTrailing = new Grid { new Text("first") };
+			withoutTrailing.Diff(original, false);
+
+			Assert.Same(rootNode, withoutTrailing.Node);
+			Assert.Single(rootNode.Children);
+			Assert.True(removedNode.Disposed);
+
+			var added = new Text("added");
+			var restored = new Grid { new Text("first"), added };
+			restored.Diff(withoutTrailing, false);
+
+			Assert.Same(rootNode, restored.Node);
+			Assert.Equal(2, rootNode.Children.Count);
+			Assert.Same(Node(added), rootNode.Children[1]);
+		}
 
 		[Fact]
 		public void VStack_StacksChildrenAlongYWithSpacing()
@@ -223,6 +338,41 @@ namespace Comet.Tests.Backend
 		}
 
 		[Fact]
+		public void BottomAlignedGrid_UsesContentHeightAndFillsAvailableWidth()
+		{
+			var title = new Text("PHOTO");
+			var camera = new Text("CAMERA");
+			var gallery = new Text("GALLERY");
+			var content = new VStack(spacing: 1) { camera, gallery };
+			var panel = new Grid(rows: new object[] { 64, "Auto" })
+			{
+				title.Cell(row: 0),
+				content.Cell(row: 1),
+			}
+			.Bottom()
+			.FillHorizontal();
+			var root = new Grid
+			{
+				new Grid(),
+				panel,
+			};
+			Bridge(root);
+
+			Node(title).MeasureResult = new Size(50, 20);
+			Node(camera).MeasureResult = new Size(80, 28);
+			Node(gallery).MeasureResult = new Size(80, 28);
+
+			CometBackendLayoutEngine.Layout(root, new Size(412, 915));
+
+			var frame = Node(panel).ArrangedFrame!.Value;
+			Assert.Equal(412, frame.Width, 2);
+			Assert.Equal(121, frame.Height, 2);
+			Assert.Equal(794, frame.Y, 2);
+			Assert.True(Node(camera).ArrangedFrame!.Value.Width > 0);
+			Assert.True(Node(gallery).ArrangedFrame!.Value.Width > 0);
+		}
+
+		[Fact]
 		public void LayoutContent_PinsWidth_AndWrapsHeightToContent()
 		{
 			// The list-row / scroll-content model: width is pinned to the host, height grows to fit
@@ -267,6 +417,83 @@ namespace Comet.Tests.Backend
 
 			Assert.Equal(200, Node(text).LastMeasureWidth, 3);
 			Assert.Equal(60, size.Height, 3);
+		}
+
+		[Fact]
+		public void LayoutContent_RepeatedValueRangeRows_KeepCompleteTextGeometry()
+		{
+			var rows = new VStack(spacing: 1f);
+			var rowGeometry = new List<(Grid Row, Text Label, Text Range, HStack Trailing, Text Status, Text Chevron)>();
+
+			foreach (var (method, range) in new[]
+			{
+				("TURKISH", "5 g - 20 g"),
+				("ESPRESSO", "5 g - 30 g"),
+				("POUR OVER", "10 g - 60 g"),
+			})
+			{
+				var label = new Text(method);
+				var value = new Text(range);
+				var status = new Text("AUTO");
+				var chevron = new Text(">");
+				var trailing = new HStack(spacing: 8f)
+				{
+					status,
+					chevron,
+				}.Center();
+				var row = new Grid(
+					columns: new object[] { "*", "Auto" },
+					rows: new object[] { "Auto", "Auto" },
+					columnSpacing: 8f)
+				{
+					label.Cell(row: 0, column: 0),
+					value.Cell(row: 1, column: 0),
+					trailing.Cell(row: 0, column: 1, rowSpan: 2),
+				}
+				.Padding(new Microsoft.Maui.Thickness(16))
+				.MinimumHeight(80);
+
+				rows.Add(row);
+				rowGeometry.Add((row, label, value, trailing, status, chevron));
+			}
+
+			Bridge(rows);
+			foreach (var geometry in rowGeometry)
+			{
+				Node(geometry.Label).MeasureResult = new Size(82, 12);
+				Node(geometry.Range).MeasureResult = new Size(92, 22);
+				Node(geometry.Status).MeasureResult = new Size(30, 12);
+				Node(geometry.Chevron).MeasureResult = new Size(24, 24);
+				Assert.Equal(62, CometBackendLayoutEngine.Measure(geometry.Trailing).Width, 3);
+			}
+
+			var size = CometBackendLayoutEngine.LayoutContent(rows, 402);
+
+			Assert.Equal(402, size.Width, 3);
+			Assert.Equal(242, size.Height, 3);
+			double expectedRowY = 0;
+			foreach (var geometry in rowGeometry)
+			{
+				var rowFrame = Node(geometry.Row).ArrangedFrame!.Value;
+				var labelFrame = Node(geometry.Label).ArrangedFrame!.Value;
+				var rangeFrame = Node(geometry.Range).ArrangedFrame!.Value;
+				var trailingFrame = Node(geometry.Trailing).ArrangedFrame!.Value;
+				var statusFrame = Node(geometry.Status).ArrangedFrame!.Value;
+				var chevronFrame = Node(geometry.Chevron).ArrangedFrame!.Value;
+
+				Assert.Equal(402, rowFrame.Width, 3);
+				Assert.Equal(80, rowFrame.Height, 3);
+				Assert.Equal(expectedRowY, rowFrame.Y, 3);
+				Assert.True(labelFrame.Width >= 82, $"Label clipped: {labelFrame}");
+				Assert.True(rangeFrame.Width >= 92, $"Range clipped: {rangeFrame}");
+				Assert.True(rangeFrame.Y >= labelFrame.Bottom, $"Text rows overlap: {labelFrame}, {rangeFrame}");
+				Assert.True(
+					trailingFrame.X >= 300,
+					$"Trailing content did not stay at the row edge: row={rowFrame}, label={labelFrame}, range={rangeFrame}, trailing={trailingFrame}, status={statusFrame}, chevron={chevronFrame}");
+				Assert.True(statusFrame.Width >= 30, $"Status clipped: {statusFrame}");
+				Assert.True(chevronFrame.X >= statusFrame.Right, $"Trailing children overlap: {statusFrame}, {chevronFrame}");
+				expectedRowY = rowFrame.Bottom + 1;
+			}
 		}
 
 		[Fact]

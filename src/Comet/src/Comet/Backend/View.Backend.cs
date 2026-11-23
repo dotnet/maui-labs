@@ -8,9 +8,10 @@ namespace Comet
 {
 	/// <summary>
 	/// Backend-bridge surface on <see cref="View"/>. Materializes a view's renderable
-	/// state into the platform-agnostic <see cref="ICometBackendNode"/> protocol,
-	/// emitting <em>only</em> properties the view actually set (defaults never cross the
-	/// boundary). This is the seam that replaces the MAUI <c>PropertyMapper</c> path.
+	/// state into the platform-agnostic <see cref="ICometBackendNode"/> protocol. Initial
+	/// materialization emits only explicitly set properties; retained-node updates also
+	/// emit protocol defaults for properties removed by the replacement declaration.
+	/// This is the seam that replaces the MAUI <c>PropertyMapper</c> path.
 	/// </summary>
 	/// <remarks>
 	/// Phase 1 reads values through the existing typed accessors and emits set-only
@@ -46,8 +47,23 @@ namespace Comet
 			if (node is null)
 				return;
 
+			// A replacement can already have been materialized by an owning retained
+			// container before reconciliation reaches it. That speculative generation is
+			// obsolete once we preserve the old native node; release it before overwriting
+			// Node or its registry identity becomes unreachable.
+			if (Node is { } replacementNode && !ReferenceEquals(replacementNode, node))
+				Backend.CometBackendBridge.ReleaseMaterializedNode(this);
+
 			oldView.Node = null;
 			Node = node;
+			Backend.CometBackendBridge.TransferMaterializationRegistration(oldView, this);
+			Backend.CometBackendBridge.TransferMaterializedNodeRegistration(oldView, this, node);
+
+			// Own-content nodes can materialize their replacement generation from
+			// OnOwnerViewChanged. Move the stable registry identity first so those
+			// children attach beneath the replacement owner rather than as roots.
+			DevTools.CometDevRegistry.TransferIdentity(oldView, this);
+
 			node.SetEventSink(new ViewEventSink(this));
 			// Always re-point the node's owner reference to this new view; only a hot reload
 			// (code changed) invalidates the node's materialized content — an ordinary
@@ -84,6 +100,12 @@ namespace Comet
 			if (!IsVisible)
 				node.ApplyProperty(PropertyIds.IsVisible, PropertyValue.From(false));
 
+			// AutomationId is an automation selector, not a spoken accessibility name.
+			// Like other bridge properties, it crosses only when explicitly set. Removal
+			// from a retained view is handled by ApplyChangedProperties below.
+			if (!string.IsNullOrEmpty(AutomationId))
+				node.ApplyProperty(PropertyIds.AutomationId, PropertyValue.From(AutomationId));
+
 			if (this.GetBackground() is SolidPaint { Color: { } bg })
 				node.ApplyProperty(PropertyIds.BackgroundColor, PropertyValue.From(bg));
 
@@ -111,8 +133,29 @@ namespace Comet
 			// Surface styling read from the canonical styling vocabulary (ClipShape / Shadow /
 			// Border), so .ClipShape/.Shadow/.RoundedBorder, ButtonStyles, ViewModifier and the
 			// .CornerRadius/.Elevation/.Border sugar all flow to the backend through one path.
-			if (this.GetClipShape() is { } clip && ToCornerRadii(clip) is { IsZero: false } corners)
-				node.ApplyProperty(PropertyIds.CornerRadius, PropertyValue.FromObject(corners));
+			if (this.GetClipShape() is { } clip)
+			{
+				if (clip is Circle or Ellipse)
+				{
+					node.ApplyProperty(PropertyIds.ClipShape, PropertyValue.From(true));
+					node.ApplyProperty(PropertyIds.CornerRadius, PropertyValue.FromObject(default(CornerRadii)));
+				}
+				else if (ToCornerRadii(clip) is { IsZero: false } corners)
+				{
+					node.ApplyProperty(PropertyIds.ClipShape, PropertyValue.From(false));
+					node.ApplyProperty(PropertyIds.CornerRadius, PropertyValue.FromObject(corners));
+				}
+				else
+				{
+					node.ApplyProperty(PropertyIds.ClipShape, PropertyValue.From(false));
+					node.ApplyProperty(PropertyIds.CornerRadius, PropertyValue.FromObject(default(CornerRadii)));
+				}
+			}
+			else
+			{
+				node.ApplyProperty(PropertyIds.ClipShape, PropertyValue.From(false));
+				node.ApplyProperty(PropertyIds.CornerRadius, PropertyValue.FromObject(default(CornerRadii)));
+			}
 
 			if (this.GetShadow() is { } shadow && shadow.Radius > 0)
 				node.ApplyProperty(PropertyIds.Shadow, PropertyValue.From((double)shadow.Radius));
@@ -199,12 +242,14 @@ namespace Comet
 		}
 
 		/// <summary>
-		/// Applies the minimal set of property changes between an old view instance and
-		/// this one onto the (transferred) <paramref name="node"/>. Phase 1 re-emits the
-		/// full set-only patch; the generator will narrow this to a per-bit comparison.
+		/// Applies this declaration to a retained node. The property-state tracker clears
+		/// every property emitted by the previous declaration but omitted by this one, then
+		/// replays this declaration's explicit values.
 		/// </summary>
 		protected internal virtual void ApplyChangedProperties(View old, ICometBackendNode node)
-			=> ApplyAllSetProperties(node);
+		{
+			BackendPropertyState.Apply(this, node);
+		}
 
 		/// <summary>
 		/// Pushes the current property values to this view's backend node after a reactive
@@ -215,7 +260,7 @@ namespace Comet
 		internal void UpdateBackendNode()
 		{
 			if (Node is { } node)
-				ApplyAllSetProperties(node);
+				BackendPropertyState.Apply(this, node);
 		}
 
 		/// <summary>

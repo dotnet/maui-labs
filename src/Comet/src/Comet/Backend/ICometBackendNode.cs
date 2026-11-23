@@ -13,10 +13,10 @@ namespace Comet.Backend
 	/// <remarks>
 	/// <para>
 	/// Nodes are <em>retained</em>: created once per Comet view instance and kept
-	/// across rebuilds, so the diff applies the minimal patch set rather than
-	/// re-emitting the tree. Only properties a view actually set are ever applied
-	/// (see the generated <c>ApplyAllSetProperties</c> / <c>ApplyChangedProperties</c>),
-	/// which is how default values stop crossing the boundary.
+	/// across rebuilds, so the diff applies property patches rather than re-emitting
+	/// the tree. Explicit declarative properties are tracked per retained node; when a
+	/// later declaration omits one, its protocol default is emitted once to clear stale
+	/// native state.
 	/// </para>
 	/// <para>
 	/// Layout is computed in C# by Comet's Yoga engine; the backend is a positioned
@@ -26,7 +26,7 @@ namespace Comet.Backend
 	/// </remarks>
 	public interface ICometBackendNode : IDisposable
 	{
-		/// <summary>Applies a single typed property value. Called only for set/changed properties.</summary>
+		/// <summary>Applies a single typed property value or a reset to its protocol default.</summary>
 		void ApplyProperty(PropertyId id, in PropertyValue value);
 
 		/// <summary>Inserts a child node at the given index in this node's child list.</summary>
@@ -85,4 +85,43 @@ namespace Comet.Backend
 	/// views it needs itself.
 	/// </summary>
 	public interface IBackendManagesOwnContent { }
+
+	/// <summary>
+	/// Marks an own-content node that deliberately keeps logical children from the
+	/// outgoing owner after its retained backend node transfers to a replacement view.
+	/// For unkeyed persistent-control swaps, the reconciler keeps that outgoing owner out
+	/// of normal old-tree disposal because disposing it would also dispose logical children
+	/// the node still hosts. A keyed declaration is a complete replacement owner instead;
+	/// such a node must reconcile or re-home any retained children in
+	/// <see cref="ICometBackendNode.OnOwnerViewChanged"/>.
+	/// </summary>
+	public interface IBackendRetainsLogicalContentOnOwnerTransfer : IBackendManagesOwnContent { }
+
+	/// <summary>
+	/// Marks an own-content node whose single live content subtree participates in the
+	/// normal logical diff before the retained owner node is transferred. Dynamic owners
+	/// with inactive slots (dialogs, lists, tabs, and navigation stacks) must not implement
+	/// this contract because their content is materialized only by their own lifecycle.
+	/// </summary>
+	public interface IBackendReconcilesOwnContent : IBackendManagesOwnContent { }
+
+	/// <summary>
+	/// Optional lifecycle for retained content that can be detached from its native host
+	/// without being disposed. Route caches use it to pause inactive subtree layout and
+	/// deliver appearance callbacks again when that subtree is shown.
+	/// </summary>
+	internal interface IBackendContentActivation
+	{
+		void SetContentActive(bool active);
+	}
+
+	/// <summary>
+	/// Optional constraint-keyed intrinsic measurement cache for retained backend leaves.
+	/// Property and structural mutations must invalidate the cache before the next layout.
+	/// </summary>
+	internal interface IBackendMeasureCache
+	{
+		Size MeasureCached(double widthConstraint, double heightConstraint);
+		void InvalidateMeasureCache();
+	}
 }

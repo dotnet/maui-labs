@@ -1,4 +1,5 @@
 #nullable enable
+using System.ComponentModel;
 using Comet.Backend;
 
 namespace Comet
@@ -6,7 +7,7 @@ namespace Comet
 	// Backend property emission + dismiss write-back for Drawer.
 	public partial class Drawer
 	{
-		bool _hooked;
+		PropertyChangedEventHandler? _isOpenChanged;
 
 		protected internal override void ApplyAllSetProperties(ICometBackendNode node)
 		{
@@ -16,11 +17,11 @@ namespace Comet
 			// button toggling IsOpen slides the drawer without a full re-render.
 			node.ApplyProperty(PropertyIds.Drawer_IsOpen, PropertyValue.From(IsOpen.Peek()));
 
-			if (!_hooked)
+			if (_isOpenChanged is null)
 			{
-				_hooked = true;
-				IsOpen.PropertyChanged += (_, _) =>
+				_isOpenChanged = (_, _) =>
 					Node?.ApplyProperty(PropertyIds.Drawer_IsOpen, PropertyValue.From(IsOpen.Peek()));
+				IsOpen.PropertyChanged += _isOpenChanged;
 			}
 		}
 
@@ -31,6 +32,16 @@ namespace Comet
 				IsOpen.Value = false;
 			else if (id == Backend.EventIds.DrawerOpened)
 				IsOpen.Value = true;
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing && _isOpenChanged is not null)
+			{
+				IsOpen.PropertyChanged -= _isOpenChanged;
+				_isOpenChanged = null;
+			}
+			base.Dispose(disposing);
 		}
 	}
 }

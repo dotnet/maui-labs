@@ -22,7 +22,12 @@ namespace Comet
 				node.ApplyProperty(PropertyIds.Text_LineBreak, PropertyValue.From((int)lineBreak));
 
 			if (this.GetEnvironment<string>(EnvironmentKeys.Fonts.Family) is { Length: > 0 } family)
-				node.ApplyProperty(PropertyIds.Text_FontFamily, PropertyValue.From(family));
+			{
+				var registration = FontFamilyRegistry.Resolve(family);
+				node.ApplyProperty(PropertyIds.Text_FontFamily, PropertyValue.From(registration.FaceName));
+				if (registration.PreferredWeight is { } registeredWeight)
+					node.ApplyProperty(PropertyIds.Text_FontWeight, PropertyValue.From((int)registeredWeight));
+			}
 		}
 	}
 }

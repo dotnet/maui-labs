@@ -14,14 +14,15 @@ namespace Comet.Platform.SwiftUI
 	/// directly since SwiftUI has no LocalContentColor inheritance from the capsule.
 	/// <see cref="Comet.Fab.ExtendedSignal"/> drives <c>fabExtended</c> on the native node so the
 	/// shim can animate label show/hide.</summary>
-	sealed class SwiftUIFabNode : ICometBackendNode, IBackendManagesOwnContent, ISwiftUINativeNode
+	sealed class SwiftUIFabNode : ICometBackendNode, IBackendRetainsLogicalContentOnOwnerTransfer, ISwiftUINativeNode
 	{
 		// FAB content insets (matches the "fab" shim render: .padding(.horizontal, 16) + HStack spacing 8).
 		const double PadH = 16, Gap = 8;
 
-		readonly Fab _fab;
+		Fab _fab;
 		readonly BackendContext _context;
 		readonly CometNode _native;
+		readonly FabExtendedStateBinding _extendedBinding;
 		ICometEventSink? _sink;
 
 		public CometNode Native => _native;
@@ -36,30 +37,14 @@ namespace Comet.Platform.SwiftUI
 			_native = CometSwiftUIHost.MakeNode("fab");
 			CometSwiftUIHost.SetTapHandler(_native, () => _sink?.OnEvent(EventIds.Clicked));
 			BuildContent();
-
-			// Subscribe to the reactive extended signal so the shim can animate the label —
-			// AND contract the frame itself (see ApplyExtendedFrame): the shim only hides the
-			// label; the capsule keeps whatever frame we set.
-			if (fab.ExtendedSignal is { } sig)
+			_extendedBinding = new FabExtendedStateBinding(
+				fab,
+				value =>
 			{
-				_extended = sig.Peek();
-				CometSwiftUIHost.SetBool(_native, "fabextended", _extended);
-				sig.PropertyChanged += (_, __) =>
-				{
-					_extended = sig.Peek();
-					ThreadHelper.RunOnMainThread(() =>
-					{
-						CometSwiftUIHost.SetBool(_native, "fabextended", _extended);
-						ApplyExtendedFrame();
-					});
-				};
-			}
-			else
-			{
-				// No reactive signal → use the static extended value.
-				_extended = fab.Extended;
-				CometSwiftUIHost.SetBool(_native, "fabextended", _extended);
-			}
+				_extended = value;
+				CometSwiftUIHost.SetBool(_native, "fabextended", value);
+				ApplyExtendedFrame();
+			});
 		}
 
 		void BuildContent()
@@ -151,7 +136,25 @@ namespace Comet.Platform.SwiftUI
 		}
 
 		public void SetEventSink(ICometEventSink? sink) => _sink = sink;
-		public void Dispose() { }
+
+		public void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is not Fab fab)
+				return;
+
+			_fab = fab;
+			_extendedBinding.TransferOwner(fab);
+			if (!isHotReload && string.IsNullOrEmpty(newView.GetKey()))
+				return;
+			CometSwiftUIHost.ClearChildren(_native);
+			BuildContent();
+			ApplyExtendedFrame();
+		}
+
+		public void Dispose()
+		{
+			_extendedBinding.Dispose();
+		}
 	}
 }
 #endif

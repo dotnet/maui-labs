@@ -28,12 +28,41 @@ namespace Comet.Platform.SwiftUI
 		{
 			// Let the dev agent's /ui/screenshot endpoint snapshot the rendered SwiftUI window.
 			Comet.DevTools.CometDevRegistry.ScreenshotProvider = () => CometSwiftUIHost.ScreenshotPng()?.ToArray();
+			Comet.DevTools.CometDevRegistry.NativeWindowMetricsProvider = () =>
+			{
+				var window = CurrentWindow();
+				if (window is null)
+					return null;
+				var bounds = window.Bounds;
+				var insets = window.SafeAreaInsets;
+				var safeAreaFrame = window.SafeAreaLayoutGuide.LayoutFrame;
+				return new Comet.DevTools.CometDevRegistry.NativeWindowMetrics
+				{
+					Size = new Microsoft.Maui.Graphics.Size(bounds.Width, bounds.Height),
+					SafeAreaInsets = new Microsoft.Maui.Thickness(
+						insets.Left, insets.Top, insets.Right, insets.Bottom),
+					SafeAreaLayoutFrame = new Microsoft.Maui.Graphics.Rect(
+						safeAreaFrame.X,
+						safeAreaFrame.Y,
+						safeAreaFrame.Width,
+						safeAreaFrame.Height),
+					Units = "points",
+					Scale = UIScreen.MainScreen.Scale,
+					Source = "UIWindow.Bounds, UIWindow.SafeAreaInsets, and UIWindow.SafeAreaLayoutGuide.LayoutFrame",
+				};
+			};
 
 			// Drive Comet's animation engine (view.Animate/FadeTo/…) from CADisplayLink —
 			// the iOS twin of the Compose backend's ChoreographerTicker.
 			Backend.CometAnimationDriver.Initialize(new DisplayLinkTicker());
 
 			var root = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, _context);
+			CometSwiftUIHost.SetSystemThemeChangedHandler(
+				root.Native, Comet.Styles.ThemeManager.NotifySystemThemeChanged);
+			// The Yoga host lays out in raw UIWindow coordinates and the Comet tree consumes
+			// published safe-area insets explicitly. Tell the native host not to apply a second
+			// SwiftUI safe-area transform. Native-layout hosts retain UIHostingController defaults.
+			CometSwiftUIHost.SetBool(root.Native, "manualsafearealayout", UseYogaLayout);
 			var controller = CometSwiftUIHost.HostController(root.Native);
 
 			if (UseYogaLayout)
@@ -65,13 +94,30 @@ namespace Comet.Platform.SwiftUI
 			// scene geometry) lands with the first adaptive iOS sample.
 			CometWindowMetrics.Shared.Update(size);
 			// Safe area from the key window (notch / home indicator), same per-pass cadence.
-			if (UIApplication.SharedApplication.KeyWindow is { } window)
+			if (CurrentWindow() is { } window)
 			{
 				var sa = window.SafeAreaInsets;
 				CometWindowMetrics.Shared.UpdateSafeArea(new Microsoft.Maui.Thickness(
 					sa.Left, sa.Top, sa.Right, sa.Bottom));
 			}
 			CometBackendLayoutEngine.Layout(_layoutRoot, size);
+		}
+
+		static UIWindow? CurrentWindow()
+		{
+			UIWindow? fallback = null;
+			foreach (var scene in UIApplication.SharedApplication.ConnectedScenes)
+			{
+				if (scene is not UIWindowScene windowScene)
+					continue;
+				foreach (var window in windowScene.Windows)
+				{
+					if (window.IsKeyWindow)
+						return window;
+					fallback ??= window;
+				}
+			}
+			return fallback;
 		}
 	}
 }

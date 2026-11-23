@@ -14,7 +14,7 @@ namespace Comet.Platform.Compose
 	/// signal back). Same own-content shape as <see cref="ComposeNavigationSuiteNode"/>:
 	/// MutableState drives the swap, both panes materialize once, panes are Yoga-laid to their
 	/// slot and re-flowed on window-metrics changes and after every reactive flush.</summary>
-	sealed class ComposeListDetailNode : ComposeNode, IBackendManagesOwnContent
+	sealed class ComposeListDetailNode : ComposeNode, IBackendRetainsLogicalContentOnOwnerTransfer
 	{
 		ListDetail _listDetail;
 		readonly BackendContext _context;
@@ -48,7 +48,7 @@ namespace Comet.Platform.Compose
 			if (newView is not ListDetail listDetail)
 				return;
 			_listDetail = listDetail;
-			if (!isHotReload)
+			if (!isHotReload && string.IsNullOrEmpty(newView.GetKey()))
 				return;
 			_built = false;
 			_listNode = _detailNode = null;

@@ -19,6 +19,7 @@ namespace Comet.Platform.Compose
 		IconToggleButton _control;
 		readonly BackendContext _context;
 		readonly MutableState<bool> _checked = new(false);
+		readonly MutableState<int> _contentVersion = new(0);
 		ComposeNode? _iconNode;
 
 		public ComposeIconToggleNode(IconToggleButton control, BackendContext context)
@@ -35,6 +36,7 @@ namespace Comet.Platform.Compose
 			_control = control;
 			_checked.Value = control.IsChecked;
 			_iconNode = null;   // the icon slot view was rebuilt with the owner
+			_contentVersion.Value++;
 		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
@@ -48,6 +50,7 @@ namespace Comet.Platform.Compose
 
 		public override void Render(IComposer composer)
 		{
+			_ = _contentVersion.Value;
 			_iconNode ??= (ComposeNode)CometBackendBridge.Materialize(_control.IconView, _context, _control);
 			var button = new AndroidX.Compose.IconToggleButton(_checked.Value, v => _control.OnChange(v))
 			{
