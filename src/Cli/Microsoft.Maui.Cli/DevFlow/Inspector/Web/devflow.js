@@ -22,6 +22,7 @@ import {
 import { createPropertyGridController } from './inspector-properties.js';
 import { createElementTreeController } from './inspector-tree.js';
 import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layoutRootElementId } from './inspector-layout.js';
+import { createExtensionsPanel } from './inspector-extensions.js';
 import {
   SCREENSHOT_SCALE_BUCKETS,
   isDefaultScreenshotScale,
@@ -36,7 +37,6 @@ import {
   updateInspectorPresentationState,
 } from './inspector-presentation.js';
 import { createViewportController } from './inspector-viewport-controller.js';
-import { createExtensionsPanel } from './inspector-extensions.js';
 
 (function () {
   'use strict';
