@@ -33,15 +33,9 @@ class FilePickerImplementation : IFilePicker
         return tcs.Task;
     }
 
-#if NET10_0
-    public Task<IEnumerable<FileResult?>> PickMultipleAsync(PickOptions? options = null)
-    {
-        var tcs = new TaskCompletionSource<IEnumerable<FileResult?>>();
-#else
     public Task<IEnumerable<FileResult>?> PickMultipleAsync(PickOptions? options = null)
     {
         var tcs = new TaskCompletionSource<IEnumerable<FileResult>?>();
-#endif
 
         CoreFoundation.DispatchQueue.MainQueue.DispatchAsync(() =>
         {
