@@ -1,59 +1,163 @@
 # Microsoft.Maui.Build.AppProjectReference
 
-`Microsoft.Maui.Build.AppProjectReference` lets a consuming project (a test project, packaging project, etc.) declare a MAUI/.NET app project as a build-time dependency and consume the resulting platform artifacts (`.apk`, `.app`, `.ipa`, `.msix`, `.appinstaller`, `.exe`, `.dll`) as MSBuild items.
+`Microsoft.Maui.Build.AppProjectReference` lets a test, packaging, or tooling
+project build a MAUI/.NET app project and consume its final application
+artifacts as MSBuild items.
 
-The package projects each `<MauiAppProjectReference>` item into a real `<ProjectReference>` once its build assets are imported, so project-graph builds, IDE solution explorer, and external project-graph analyzers (e.g. `@nx/dotnet`) see a real project edge while the reference-stripping plumbing is applied automatically. The app project is also restored before the package invokes its child build, so clean builds do not require a separate restore of the app project.
+> [!WARNING]
+> This package is experimental. Its API may change before a stable release.
 
-## Basic usage (recommended)
+## Basic usage
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="Microsoft.Maui.Build.AppProjectReference" Version="0.1.0-preview" PrivateAssets="all" />
+  <PackageReference Include="Microsoft.Maui.Build.AppProjectReference"
+                    Version="0.1.0-preview"
+                    PrivateAssets="all" />
 
-  <MauiAppProjectReference Include="..\MyApp\MyApp.csproj" />
+  <MauiAppProjectReference Include="..\MyApp\MyApp.csproj"
+                           SetTargetFramework="TargetFramework=net11.0-android" />
 </ItemGroup>
 ```
 
-That single line is all you need for the common case. Supply a `TargetFramework` for multi-TFM apps:
+For a multi-targeted app, specify the app target framework. Add a runtime
+identifier or child-build properties when required:
 
 ```xml
 <MauiAppProjectReference Include="..\MyApp\MyApp.csproj"
-                         TargetFramework="net10.0-android"
-                         RuntimeIdentifier="android-arm64" />
+                         SetTargetFramework="TargetFramework=net11.0-ios;RuntimeIdentifier=iossimulator-arm64"
+                         AdditionalProperties="EnableCodeSigning=false" />
 ```
 
-Pass arbitrary properties through to the child build:
+## .NET 11 and later
+
+.NET 11 Android and Apple application SDKs expose final outputs through the
+standard `GetApplicationArtifacts` target and `@(ApplicationArtifact)` items.
+The package therefore expands the short form above into the equivalent standard
+project reference:
+
+```xml
+<ProjectReference Include="..\MyApp\MyApp.csproj"
+                  ReferenceOutputAssembly="false"
+                  BuildReference="true"
+                  PrivateAssets="all"
+                  IncludeAssets="none"
+                  SkipGetTargetFrameworkProperties="true"
+                  Targets="GetApplicationArtifacts"
+                  OutputItemType="MauiAppArtifact"
+                  SetTargetFramework="TargetFramework=net11.0-android" />
+```
+
+This is intentionally a normal buildable project reference:
+
+- `ReferenceOutputAssembly="false"` prevents the app assembly from becoming a
+  compiler reference. `ReferenceOutput` is not a supported `ProjectReference`
+  metadata name.
+- `BuildReference="true"` is required. Setting it to `false` prevents MSBuild
+  from invoking `GetApplicationArtifacts`.
+- `Targets="GetApplicationArtifacts"` asks the app SDK to build and return its
+  authoritative final artifacts.
+- `OutputItemType="MauiAppArtifact"` routes those target outputs away from
+  compiler references and into the package's compatible item name.
+- `PrivateAssets="all"` prevents the app reference from flowing to downstream
+  consumers, while `IncludeAssets="none"` prevents its NuGet assets from
+  becoming assets of the host.
+- `SkipGetTargetFrameworkProperties="true"` plus `SetTargetFramework` avoids
+  compatibility negotiation between a plain test TFM and a platform app TFM.
+
+The .NET 11 implementation does not inject targets into the app, override its
+output paths, run a second child build, or scan output directories. This also
+means it does not return stale artifacts from earlier builds. For example,
+Apple `.ipa` output requires `BuildIpa=true` in the same invocation:
 
 ```xml
 <MauiAppProjectReference Include="..\MyApp\MyApp.csproj"
-                         TargetFramework="net10.0-ios"
-                         RuntimeIdentifier="iossimulator-arm64"
-                         Properties="EnableCodeSigning=false;ApplicationId=com.example.app" />
+                         SetTargetFramework="TargetFramework=net11.0-ios;RuntimeIdentifier=ios-arm64"
+                         AdditionalProperties="BuildIpa=true" />
 ```
 
-The host project build will:
+Android currently returns APK/AAB artifacts. Apple platforms return `.app`
+bundles and, when enabled, `.ipa`, `.pkg`, and `.xcarchive` artifacts. A
+referenced SDK must implement `GetApplicationArtifacts`; Windows application
+SDKs do not currently provide this common contract.
 
-1. Build the referenced app project with the supplied MSBuild properties.
-2. Locate produced app artifacts such as `.apk`, `.aab`, `.app`, `.ipa`, `.msix`, `.appinstaller`, `.exe`, or `.dll`.
-3. Expose the located artifacts as `@(MauiAppArtifact)` items with metadata.
-4. Set `$(MauiAppArtifacts)` and `$(MauiAppArtifactPaths)` for simple target consumption.
+Set `MauiAppRefUseProjectReferenceArtifacts=false` in the host project when a
+.NET 11 host must reference an older app SDK or another SDK that does not
+implement `GetApplicationArtifacts`.
 
-## Implicit defaults
+Visual Studio builds use the legacy implementation because Visual Studio's
+project build manager builds the default project-reference targets rather than
+the `Targets` metadata used by command-line MSBuild. Command-line and static
+graph builds use the .NET 11 implementation.
 
-Each `<MauiAppProjectReference>` is projected into a `<ProjectReference>` with these defaults. Any user-supplied value on the source item wins.
+## .NET 10 and earlier
 
-| Metadata | Default | Why |
-| --- | --- | --- |
-| `ReferenceOutputAssembly` | `false` | The host project should not consume the app's compile-time output. |
-| `BuildReference` | `false` | The package invokes the child build itself; we do not want the implicit dependent build. |
-| `PrivateAssets` | `all` | Avoid leaking the reference into transitive consumers. |
-| `SkipGetTargetFrameworkProperties` | `true` | Avoid TFM negotiation between host and app. |
-| `IncludeAssets` | `none` | Belt-and-suspenders to keep the app's outputs out of the host's compile/runtime sets. |
-| `MauiAppProjectReference` (marker) | `true` | Identifies the projected reference for our resolve target. |
+The package automatically imports its legacy implementation for hosts targeting
+.NET 10 or earlier. That path builds the child project, uses deterministic
+package-owned output directories, and discovers `.apk`, `.aab`, `.app`, `.ipa`,
+`.msix`, `.appinstaller`, `.exe`, and `.dll` outputs.
 
-## Explicit `<ProjectReference>` form (escape hatch)
+Legacy-only metadata includes:
 
-If you already maintain ProjectReference declarations (or generate projects programmatically), you can mark a vanilla `<ProjectReference>` with `MauiAppProjectReference="true"`. You own the metadata on that item; the package does not apply implicit defaults to it.
+| Metadata | Purpose |
+| --- | --- |
+| `ExpectedArtifact` | Explicit artifact path when discovery should not infer it. |
+| `ArtifactName` | Name used for deterministic platform outputs such as `.app` bundles. |
+| `OutputRoot` | Per-reference output root. |
+| `SetPlatformOutputPaths` | Set to `false` to avoid overriding platform output properties. |
+
+## Reference metadata
+
+| Metadata | Purpose |
+| --- | --- |
+| `SetTargetFramework` | .NET 11 target framework and optional RID, for example `TargetFramework=net11.0-ios;RuntimeIdentifier=iossimulator-arm64`. |
+| `SetConfiguration` | Optional .NET 11 child configuration, for example `Configuration=Release`. |
+| `SetPlatform` | Optional .NET 11 child platform. |
+| `AdditionalProperties` | Additional .NET 11 child-build global properties. |
+| `Targets` | Optional .NET 11 target override. Defaults to `GetApplicationArtifacts`. |
+| `TargetFramework` | Legacy app target framework, for example `net10.0-android`. |
+| `RuntimeIdentifier` | Legacy runtime identifier. |
+| `Configuration` | Legacy child configuration. Defaults to the host configuration. |
+| `BuildTarget` | Legacy child target. Defaults to `Build`. |
+| `Properties` | Legacy semicolon-delimited child-build global properties. |
+| `ReferenceName` | Legacy friendly artifact source name. |
+
+The .NET 11 short form intentionally uses standard `ProjectReference` metadata
+so graph construction and command-line builds observe the same configuration.
+`OutputItemType` is fixed to `MauiAppArtifact` for the short form.
+
+## Consuming artifacts
+
+Artifacts are exposed as `@(MauiAppArtifact)` after
+`BuildAppProjectReferences`:
+
+```xml
+<Target Name="UseMauiAppProjectReferences"
+        AfterTargets="BuildAppProjectReferences">
+  <Message Importance="High"
+           Text="%(MauiAppArtifact.ReferenceName): %(MauiAppArtifact.Identity) [%(MauiAppArtifact.ArtifactType)]" />
+</Target>
+```
+
+`$(MauiAppArtifacts)` contains item identities and
+`$(MauiAppArtifactPaths)` contains full paths separated by semicolons.
+
+On .NET 11, platform-owned metadata is preserved. Common values include
+`PackageFormat`, `ApplicationId`, `ApplicationTitle`, `ApplicationName`,
+`ApplicationDisplayVersion`, and `ApplicationVersion`. Android additionally
+provides values such as `Signed`, `PackageId`, and `Abi`; Apple provides values
+such as `BundleIdentifier`, `PlatformName`, and `IsDirectory`. The package maps
+`PackageFormat` to its compatibility metadata `ArtifactType`, `Installable`,
+and `Launchable`.
+
+## Explicit project reference
+
+On .NET 11, the expanded `ProjectReference` form shown above can be used
+directly without a package-specific marker. Use `OutputItemType="MauiAppArtifact"`
+to retain the package's consuming-item convention.
+
+For .NET 10 and earlier, mark an explicit reference with
+`MauiAppProjectReference="true"` and use the legacy metadata:
 
 ```xml
 <ProjectReference Include="..\MyApp\MyApp.csproj"
@@ -61,45 +165,13 @@ If you already maintain ProjectReference declarations (or generate projects prog
                   BuildReference="false"
                   PrivateAssets="all"
                   MauiAppProjectReference="true"
-                  TargetFramework="net10.0-android"
-                  RuntimeIdentifier="android-arm64"
-                  Properties="ApplicationId=com.example.myapp;AndroidPackageFormat=apk" />
+                  TargetFramework="net10.0-android" />
 ```
 
-## Key metadata
+## Authoritative references
 
-| Metadata | Purpose |
-| --- | --- |
-| `TargetFramework` | Target framework to build in the app project, for example `net10.0-android`. |
-| `RuntimeIdentifier` | Optional runtime identifier, for example `iossimulator-arm64`. |
-| `Configuration` | Child build configuration. Defaults to the host project configuration. |
-| `BuildTarget` | Child target to run before artifact discovery. Defaults to `Build`. |
-| `Properties` | Semicolon-delimited extra child MSBuild properties. |
-| `ExpectedArtifact` | Explicit artifact path when discovery should not infer output files. |
-| `ArtifactName` | Name used for deterministic platform outputs such as `.app` bundles. |
-| `OutputRoot` | Per-reference output root. Defaults under `$(BaseIntermediateOutputPath)maui-app-refs`. |
-| `SetPlatformOutputPaths` | Set to `false` to avoid overriding platform output properties. |
-| `ReferenceName` | Friendly name on `@(MauiAppArtifact)` items. Defaults to the project filename. |
-
-`Properties` and `AdditionalProperties` are forwarded before package-managed child build properties. If a duplicate key is also set from metadata or defaults (e.g. `Configuration` or `MauiAppRefOutputRoot`), the package-managed value is appended later and wins. Use the dedicated metadata above to change those values.
-
-## Consuming built app artifacts
-
-Downstream targets can consume `@(MauiAppArtifact)` after `BuildAppProjectReferences` runs:
-
-```xml
-<Target Name="UseMauiAppProjectReferences" AfterTargets="BuildAppProjectReferences">
-  <Message Importance="High"
-           Text="%(MauiAppArtifact.ReferenceName): %(MauiAppArtifact.Identity) [%(MauiAppArtifact.ArtifactType)]" />
-</Target>
-```
-
-Each artifact item includes metadata such as `ReferenceName`, `ProjectPath`, `TargetFramework`, `TargetPlatformIdentifier`, `RuntimeIdentifier`, `Configuration`, `ApplicationId`, `ArtifactType`, `Installable`, and `Launchable`.
-
-For simple property-based consumers, `$(MauiAppArtifactPaths)` contains the resolved artifact paths separated by semicolons.
-
-## Important defaults
-
-- `MauiAppRefBuildOnBuild=true`: app artifacts are prepared during the host project build. `dotnet test` normally builds first, so artifact items are available to later build/test targets.
-- `MauiAppRefSetPlatformOutputPaths=true`: platform output properties are set to deterministic locations under `MauiAppRefOutputRoot`.
-- `MauiAppRefFailIfNoArtifacts=true`: declared app references must produce at least one artifact.
+- [MSBuild `ProjectReference` metadata](https://learn.microsoft.com/visualstudio/msbuild/common-msbuild-project-items#projectreference)
+- [.NET for Android `GetApplicationArtifacts`](https://github.com/dotnet/android/blob/main/Documentation/docs-mobile/building-apps/build-targets.md#getapplicationartifacts)
+- [.NET for Android `ApplicationArtifact`](https://github.com/dotnet/android/blob/main/Documentation/docs-mobile/building-apps/build-items.md#applicationartifact)
+- [.NET for Apple `GetApplicationArtifacts`](https://github.com/dotnet/macios/blob/main/docs/building-apps/build-targets.md#getapplicationartifacts)
+- [.NET for Apple `ApplicationArtifact`](https://github.com/dotnet/macios/blob/main/docs/building-apps/build-items.md#applicationartifact)
