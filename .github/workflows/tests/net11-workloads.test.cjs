@@ -39,6 +39,8 @@ test("WPF build and template smoke isolate the SDK from machine-wide workloads",
   const wpf = read(".github/workflows/ci-wpf.yml");
   assert.match(wpf, /project-name: wpf\n\s+additional-dotnet-version: 10\.0\.403\n\s+isolated-dotnet: true/);
   assert.match(wpf, /template-smoke:[\s\S]*?uses: actions\/setup-dotnet@v5\n\s+env:\n\s+DOTNET_INSTALL_DIR: \$\{\{ runner\.temp \}\}\/maui-ci-dotnet\n\s+with:\n\s+global-json-file: global\.json\n\s+dotnet-version: 10\.0\.403/);
+  assert.match(wpf, /& \$dotnet workload install maui maui-tizen --from-rollback-file eng\/workloads\/dotnet11-ga\.json/);
+  assert.doesNotMatch(wpf, /Join-Path \$sdkDirectory 'dotnet\.dll'/);
 });
 
 test("Windows workload jobs use an isolated SDK and install the net10 runtime when needed", () => {

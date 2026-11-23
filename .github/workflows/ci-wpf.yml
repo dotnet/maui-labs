@@ -437,9 +437,6 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-      - name: Use a file-based .NET SDK
-        shell: pwsh
-        run: '"DOTNET_INSTALL_DIR=$(Join-Path $env:RUNNER_TEMP ''maui-labs-dotnet'')" >> $env:GITHUB_ENV'
       - uses: actions/setup-dotnet@v5
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/maui-ci-dotnet
@@ -450,7 +447,7 @@ jobs:
         shell: pwsh
         run: |
           $dotnet = Join-Path $env:DOTNET_ROOT 'dotnet.exe'
-          & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --from-rollback-file eng/workloads/dotnet11-ga.json
+          & $dotnet workload install maui maui-tizen --from-rollback-file eng/workloads/dotnet11-ga.json
           if ($LASTEXITCODE -ne 0) { throw 'Workload installation failed.' }
       - name: Restore and build the normal source consumer
         id: source-font-build
