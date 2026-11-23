@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'src/Testing/**'
+      - '.github/workflows/ci-testing.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -16,6 +17,7 @@ on:
     branches: [main]
     paths:
       - 'src/Testing/**'
+      - '.github/workflows/ci-testing.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -48,8 +50,10 @@ jobs:
           dotnet-version: '11.0.x'
           dotnet-quality: 'preview'
 
+      # Pin a workload set whose packs are mirrored to the internal feeds; the
+      # 11.0.0 GA browser-wasm pack (pulled in by wasm-tools on Windows) is not.
       - name: Install MAUI workload
-        run: dotnet workload install maui
+        run: dotnet workload install maui --version 11.0.100-rc.3.26524.4
 
       - name: Build runtime
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
