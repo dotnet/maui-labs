@@ -1,5 +1,7 @@
 using System.Buffers.Binary;
+using System.Text;
 using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
+using Microsoft.Maui.DevFlow.Driver;
 using Xunit.Abstractions;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests;
@@ -74,6 +76,87 @@ public class TvOSTests : IntegrationTestBase
 
         var (width, height) = ReadPngSize(png);
         Assert.True(width >= 1280 && height >= 720, $"Expected a TV-sized capture, got {width}x{height}.");
+    }
+
+    [TvOSFact]
+    public async Task Screenshot_Fullscreen_CapturesDisplay()
+    {
+        var png = await Client.FullscreenScreenshotAsync(scale: "native");
+
+        var (width, height) = ReadPngSize(png);
+        Assert.True(width >= 1280 && height >= 720, $"Expected a TV-sized capture, got {width}x{height}.");
+    }
+
+    [TvOSFact]
+    public async Task CliScreenshot_CapturesSelectedSimulatorWithRequestedSize()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, $"tvos-{Guid.NewGuid():N}.png");
+        try
+        {
+            var result = await InvokeCliCommandAsync("ui", "screenshot", "--output", path, "--max-width", "320");
+
+            Assert.True(result.ExitCode == 0, result.Stderr);
+            var (width, height) = ReadPngSize(await File.ReadAllBytesAsync(path));
+            Assert.Equal(320, width);
+            Assert.Equal(180, height);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TvOSFact]
+    public async Task CliRecording_StartAndStop_PersistsTvOSTargetAndProducesVideo()
+    {
+        await ReturnToMainPageAsync();
+        Assert.False(RecordingStateManager.IsRecording(), "Another recording is active; do not interrupt it.");
+        var path = Path.Combine(AppContext.BaseDirectory, $"tvos-{Guid.NewGuid():N}.mp4");
+        try
+        {
+            var start = await InvokeCliCommandAsync(
+                "recording", "start", "--platform", "tvos", "--device", App.DeviceId!,
+                "--output", path, "--timeout", "30");
+            Assert.True(start.ExitCode == 0, start.Stderr);
+            var state = RecordingStateManager.Load();
+            Assert.Equal("tvos", state?.Platform);
+            Assert.Equal(App.DeviceId, state?.Serial);
+
+            Assert.True(await Client.TapAsync((await FindElementAsync("CounterButton")).Id));
+            Assert.NotNull(await Client.ScreenshotAsync());
+            var stop = await InvokeCliCommandAsync("recording", "stop");
+
+            Assert.True(stop.ExitCode == 0, stop.Stderr);
+            var video = await File.ReadAllBytesAsync(path);
+            Assert.True(video.Length > 32, "Recording should contain a video, not an empty file.");
+            Assert.Equal("ftyp", Encoding.ASCII.GetString(video, 4, 4));
+            Assert.Null(RecordingStateManager.Load());
+        }
+        finally
+        {
+            if (RecordingStateManager.Load()?.OutputFile == path)
+                await InvokeCliCommandAsync("recording", "stop");
+            File.Delete(path);
+        }
+    }
+
+    [TvOSFact]
+    public async Task CliTheme_Auto_ChangesAppTheme()
+    {
+        var original = await Client.GetThemeAsync();
+        Assert.NotNull(original);
+        try
+        {
+            var result = await InvokeCliCommandWithLeaseAsync("theme", "set", "dark");
+
+            Assert.True(result.ExitCode == 0, result.Stderr);
+            Assert.Equal(DevFlowTheme.Dark, (await Client.GetThemeAsync())?.Theme);
+        }
+        finally
+        {
+            var restored = await Client.SetThemeAsync(original.RequestedTheme ?? original.Theme);
+            Assert.True(restored.Success, restored.Message);
+        }
     }
 
     [TvOSFact]

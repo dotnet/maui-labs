@@ -11,11 +11,11 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 /// MAUI has no tvOS backend of its own; the sample runs on the community Platform.Maui.TvOS
 /// backend. Set <c>DEVFLOW_TEST_TVOS_BACKEND_PROJECT</c> to a mauiplatforms checkout's
 /// <c>src/Platform.Maui.TvOS/Platform.Maui.TvOS.csproj</c> to build against it instead of the
-/// nuget.org package (needed on tvOS 27, see the sample's project file).
+/// published package.
 /// </remarks>
 public sealed class TvOSSimulatorFixture : AppFixtureBase
 {
-    const string TargetFramework = "net10.0-tvos";
+    const string TargetFramework = "net11.0-tvos";
 
     string? _simulatorUdid;
     bool _weBootedSimulator;
@@ -102,11 +102,11 @@ public sealed class TvOSSimulatorFixture : AppFixtureBase
                 : arguments + $" \"-p:RestoreAdditionalProjectSources={backendSource}\"";
         }
 
-        // The backend checkout defaults to its own (newer) .NET; build it for .NET 10 with the
+        // Build the backend checkout for .NET 11 with the
         // matching MAUI. These must be global properties: restore ignores per-reference ones.
         return arguments
             + $" \"-p:PlatformMauiTvOSProject={Path.GetFullPath(backendProject)}\""
-            + " -p:BaseTargetFramework=net10.0 -p:MauiVersion=10.0.120";
+            + " -p:BaseTargetFramework=net11.0 -p:MauiVersion=11.0.10";
     }
 
     async Task<(string Udid, bool AlreadyBooted)> FindOrBootSimulatorAsync()

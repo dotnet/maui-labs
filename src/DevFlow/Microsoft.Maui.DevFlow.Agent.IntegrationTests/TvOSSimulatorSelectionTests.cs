@@ -89,7 +89,7 @@ public class TvOSSimulatorSelectionTests
     }
 
     [Fact]
-    public void CreateBuildArguments_BuildsLocalBackendForNet10()
+    public void CreateBuildArguments_BuildsLocalBackendForNet11()
     {
         var project = Path.Combine(Path.GetTempPath(), "mauiplatforms", "Platform.Maui.TvOS.csproj");
 
@@ -97,7 +97,7 @@ public class TvOSSimulatorSelectionTests
 
         Assert.Contains("-p:RuntimeIdentifier=tvossimulator-x64", arguments);
         Assert.Contains($"\"-p:PlatformMauiTvOSProject={project}\"", arguments);
-        Assert.Contains("-p:BaseTargetFramework=net10.0", arguments);
-        Assert.Contains("-p:MauiVersion=10.0.120", arguments);
+        Assert.Contains("-p:BaseTargetFramework=net11.0", arguments);
+        Assert.Contains("-p:MauiVersion=11.0.10", arguments);
     }
 }

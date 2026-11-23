@@ -150,14 +150,10 @@ jobs:
 
       # Use Arcade's dotnet wrapper for workload-related setup so SDK resolution
       # matches the later cibuild invocation.
-      # tvOS builds on macOS only: its Windows workload installers are not on the dnceng feeds.
       - name: Install workloads from GA manifests (Windows)
         if: inputs.install-workloads && runner.os == 'Windows'
-        run: |
-          $workloads = '${{ inputs.workloads }}' -split '\s+' | Where-Object { $_ -and $_ -ne 'tvos' }
-          & eng\common\dotnet.cmd workload install @workloads --from-rollback-file ${{ inputs.workload-rollback-file }}
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        shell: pwsh
+        run: eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --from-rollback-file ${{ inputs.workload-rollback-file }}
+        shell: cmd
 
       - name: Install workloads from GA manifests (Unix)
         if: inputs.install-workloads && runner.os != 'Windows'

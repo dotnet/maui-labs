@@ -40,7 +40,7 @@ public static class AgentServiceExtensions
 
         if (options.EnableFileLogging)
         {
-            var logDir = Path.Combine(GetCacheDirectory(builder.Services), "mauidevflow-logs");
+            var logDir = Path.Combine(AgentFileSystem.GetCacheDirectory(builder.Services), "mauidevflow-logs");
             var logProvider = new FileLogProvider(logDir, options.MaxLogFileSize, options.MaxLogFiles);
             service.SetLogProvider(logProvider);
 
@@ -228,17 +228,6 @@ public static class AgentServiceExtensions
         public void Initialize(IServiceProvider services) => start();
     }
 #endif
-
-    private static string GetCacheDirectory(IServiceCollection services)
-    {
-#if TVOS
-        // MAUI Essentials has no tvOS implementation, so FileSystem.CacheDirectory throws there.
-        // InternetCache is Library/Caches on Apple platforms, the same folder Essentials uses on iOS.
-        return Environment.GetFolderPath(Environment.SpecialFolder.InternetCache);
-#else
-        return AgentFileSystem.GetCacheDirectory(services);
-#endif
-    }
 
     private static Application? ResolveCurrentApplication()
     {

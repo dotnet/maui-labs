@@ -794,6 +794,9 @@ public class DevFlowCliCommandTests
     [Theory]
     [InlineData("ios", "Virtual", null, null, true)]
     [InlineData("ios", "Physical", null, null, false)]
+    [InlineData("tvos", "Virtual", null, null, false)]
+    [InlineData("tvos", "Physical", null, null, false)]
+    [InlineData("tvossimulator", "Virtual", null, "TV-SIMULATOR-UDID", false)]
     [InlineData("ios", null, null, "A-SIMULATOR-UDID", true)]
     [InlineData("android", "Virtual", null, null, true)]
     [InlineData("android", "Physical", null, null, false)]
@@ -826,6 +829,16 @@ public class DevFlowCliCommandTests
             simulatorUdid: null);
 
         Assert.False(actual);
+    }
+
+    [Fact]
+    public async Task ThemeHostSelector_TvOSSystemScope_ReportsUnsupported()
+    {
+        var result = await ThemeHostSelector.SetHostThemeAsync(
+            "tvos", "Virtual", DevFlowTheme.Dark, null, "TV-SIMULATOR-UDID", "--scope app");
+
+        Assert.False(result.Success);
+        Assert.Contains("--scope app", result.Message);
     }
 
     // ========== device/platform info ==========

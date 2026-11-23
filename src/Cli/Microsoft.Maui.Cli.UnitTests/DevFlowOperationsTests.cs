@@ -323,6 +323,98 @@ public sealed class ThemeOperationsTests
 [Collection("CLI")]
 public sealed class ScreenshotOperationsTests
 {
+    [Theory]
+    [InlineData("iOS")]
+    [InlineData("tvOS")]
+    public async Task FullCapture_UsesSelectedSimulatorAndPreservesSizing(string platform)
+    {
+        await using var server = new MockAgentServer
+        {
+            AgentStatusResponse = JsonSerializer.Serialize(new AgentStatus
+            {
+                Device = new() { Platform = platform, DeviceType = "Virtual", Id = "SELECTED-SIMULATOR" }
+            })
+        };
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port);
+        var captures = 0;
+        var operations = new ScreenshotOperations(client, (udid, maxWidth, scale) =>
+        {
+            Assert.Equal("SELECTED-SIMULATOR", udid);
+            Assert.Equal(300, maxWidth);
+            Assert.Equal("native", scale);
+            captures++;
+            return Task.FromResult<byte[]?>(MockAgentResponses.ScreenshotPng);
+        });
+
+        var result = await operations.CaptureAsync(null, null, null, 300, "native");
+
+        Assert.True(result.Success);
+        Assert.Equal(1, captures);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/screenshot");
+    }
+
+    [Theory]
+    [InlineData(null, 42L, null)]
+    [InlineData(null, null, 7L)]
+    [InlineData(2, null, null)]
+    public async Task ScopedCapture_DoesNotReplaceAgentSnapshotWithSimulatorDisplay(
+        int? window, long? epoch, long? generation)
+    {
+        await using var server = new MockAgentServer();
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port);
+        var operations = new ScreenshotOperations(client, (_, _, _) =>
+            throw new InvalidOperationException("Must not capture the simulator"));
+
+        var result = await operations.CaptureAsync(window, null, null, null, null, epoch, generation);
+
+        Assert.True(result.Success);
+        Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/screenshot");
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/agent/status");
+    }
+
+    [Fact]
+    public async Task FullCapture_PhysicalTvOS_DoesNotCaptureUnrelatedSimulator()
+    {
+        await using var server = new MockAgentServer
+        {
+            AgentStatusResponse = JsonSerializer.Serialize(new AgentStatus
+            {
+                Device = new() { Platform = "tvOS", DeviceType = "Physical" }
+            })
+        };
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port);
+        var operations = new ScreenshotOperations(client, (_, _, _) =>
+            throw new InvalidOperationException("Must not capture the simulator"));
+
+        var result = await operations.CaptureAsync(null, null, null, null, null);
+
+        Assert.True(result.Success);
+        Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/screenshot");
+    }
+
+    [Fact]
+    public async Task FullCapture_SimctlUnavailable_FallsBackToAgent()
+    {
+        await using var server = new MockAgentServer
+        {
+            AgentStatusResponse = JsonSerializer.Serialize(new AgentStatus
+            {
+                Device = new() { Platform = "tvOS", DeviceType = "Virtual", Id = "SELECTED-TV" }
+            })
+        };
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port);
+        var operations = new ScreenshotOperations(client, (_, _, _) => Task.FromResult<byte[]?>(null));
+
+        var result = await operations.CaptureAsync(null, null, null, null, null);
+
+        Assert.True(result.Success);
+        Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/screenshot");
+    }
+
     [Fact]
     public async Task ElementCapture_ForwardsScopingWithoutSimulatorProbe()
     {

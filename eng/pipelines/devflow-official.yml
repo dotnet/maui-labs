@@ -113,7 +113,7 @@ extends:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
             # DevFlow packages are built on Windows, including Apple library TFMs.
-            - script: eng\common\dotnet.cmd workload install maui maui-android ios maccatalyst macos maui-tizen --from-rollback-file eng\workloads\dotnet11-ga.json
+            - script: eng\common\dotnet.cmd workload install maui maui-android ios maccatalyst macos tvos maui-tizen --from-rollback-file eng\workloads\dotnet11-ga.json
               displayName: Install MAUI and Apple workloads
             - pwsh: |
                 $arguments = @(

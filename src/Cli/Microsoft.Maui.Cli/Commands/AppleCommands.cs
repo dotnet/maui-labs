@@ -216,7 +216,7 @@ public static class AppleCommands
 
 	static Command CreateSimulatorCommand()
 	{
-		var simCommand = new Command("simulator", "Manage iOS simulators");
+		var simCommand = new Command("simulator", "Manage Apple simulators (including iOS and tvOS)");
 
 		// maui apple simulator list
 		var listCommand = new Command("list", "List simulator devices");

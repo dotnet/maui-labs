@@ -16,6 +16,29 @@ namespace Microsoft.Maui.Cli.UnitTests.Providers.Apple;
 /// </summary>
 public sealed class AppleProviderDeviceTests
 {
+	[Theory]
+	[InlineData("iOS", "com.apple.CoreSimulator.SimDeviceType.iPhone-17", "ios", "phone")]
+	[InlineData("iOS", "com.apple.CoreSimulator.SimDeviceType.iPad-Pro", "ios", "tablet")]
+	[InlineData("tvOS", "com.apple.CoreSimulator.SimDeviceType.Apple-TV-4K", "tvos", "tv")]
+	public void SimulatorDevice_PreservesPlatformAndIdiom(
+		string platform, string deviceType, string expectedPlatform, string expectedIdiom)
+	{
+		var device = AppleProvider.ToSimulatorDevice(new SimulatorInfo
+		{
+			Name = "Simulator",
+			Udid = "SIMULATOR-UDID",
+			Platform = platform,
+			DeviceTypeIdentifier = deviceType,
+			IsBooted = true,
+			OSVersion = "27.2"
+		});
+
+		Assert.Equal(expectedPlatform, device.Platform);
+		Assert.Equal(expectedIdiom, device.Idiom);
+		Assert.Equal("SIMULATOR-UDID", device.EmulatorId);
+		Assert.Equal(DeviceState.Booted, device.State);
+	}
+
 	[Fact]
 	public void GetDevices_ConnectedIPhone_ReportsPhysicalIosDevice()
 	{

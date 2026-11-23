@@ -832,13 +832,13 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                         ["earliestBeginDate"] = req.EarliestBeginDate?.ToString() ?? ""
                     });
                 }
-                tcs.TrySetResult(new Dictionary<string, object?> { ["platform"] = "iOS", ["type"] = "BGTaskScheduler", ["supported"] = true, ["runSupported"] = IsJobRunSupported, ["jobs"] = jobs });
+                tcs.TrySetResult(new Dictionary<string, object?> { ["platform"] = PlatformName, ["type"] = "BGTaskScheduler", ["supported"] = true, ["runSupported"] = IsJobRunSupported, ["jobs"] = jobs });
             });
             return await tcs.Task;
         }
         catch (Exception ex)
         {
-            return new Dictionary<string, object?> { ["platform"] = "iOS", ["type"] = "BGTaskScheduler", ["supported"] = true, ["runSupported"] = IsJobRunSupported, ["error"] = ex.Message, ["jobs"] = Array.Empty<object>() };
+            return new Dictionary<string, object?> { ["platform"] = PlatformName, ["type"] = "BGTaskScheduler", ["supported"] = true, ["runSupported"] = IsJobRunSupported, ["error"] = ex.Message, ["jobs"] = Array.Empty<object>() };
         }
 #else
         return await base.GetPlatformJobsAsync();
@@ -1419,6 +1419,13 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
             return null;
         }
 
+#if TVOS
+        // The focused control can be enlarged beyond its untransformed local bounds.
+        var windowRect = view.ConvertRectToView(view.Bounds, window);
+        return CaptureAppleScreenRect(
+            window.ConvertRectToCoordinateSpace(windowRect, window.Screen.CoordinateSpace),
+            window);
+#else
         using var format = new UIKit.UIGraphicsImageRendererFormat
         {
             Scale = window.Screen.Scale,
@@ -1435,6 +1442,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
         });
         using var pngData = image.AsPNG();
         return pngData?.ToArray();
+#endif
     }
 
     private static byte[]? CaptureAppleScreenRect(
@@ -2019,8 +2027,6 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
         => DispatchAsync(() => CaptureAllWindowsComposited());
 
 #if TVOS
-    // tvOS apps run on MAUI's platform-neutral assemblies, whose VisualDiagnostics capture
-    // returns nothing, so render the element's UIView directly.
     protected override Task<byte[]?> CaptureElementScreenshotAsync(VisualElement element)
         => DispatchAsync(() => CaptureAppleView(element.Handler?.PlatformView as UIKit.UIView));
 #endif

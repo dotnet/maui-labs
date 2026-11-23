@@ -26,7 +26,7 @@ public sealed class DevFlowRecordingCommandTests : IDisposable
             return platform switch
             {
                 "android" => new TestAndroidDriver(this),
-                "ios" => new TestIosDriver(this),
+                "ios" or "tvos" => new TestIosDriver(this, platform),
                 _ => throw new InvalidOperationException($"Unexpected recording driver: {platform}"),
             };
         };
@@ -35,6 +35,7 @@ public sealed class DevFlowRecordingCommandTests : IDisposable
     [Theory]
     [InlineData("android", "emulator-5556")]
     [InlineData("ios", "11111111-2222-3333-4444-555555555555")]
+    [InlineData("tvos", "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")]
     public async Task StartThenStop_WithoutPlatformOrDevice_UsesPersistedRecording(string platform, string device)
     {
         var output = Path.Combine(_directory, "capture.mp4");
@@ -51,7 +52,7 @@ public sealed class DevFlowRecordingCommandTests : IDisposable
         Assert.Equal(0, stop.ExitCode);
         Assert.Contains("Recording saved:", stop.StdOut);
         Assert.Equal(new[] { platform, platform }, _createdPlatforms);
-        Assert.Equal((platform, platform == "android" ? device : null), Assert.Single(_stops));
+        Assert.Equal((platform, device), Assert.Single(_stops));
         Assert.Null(LoadState());
     }
 
@@ -155,16 +156,15 @@ public sealed class DevFlowRecordingCommandTests : IDisposable
         public override Task<string> StopRecordingAsync() => Task.FromResult(test.Stop("android", Serial));
     }
 
-    private sealed class TestIosDriver(DevFlowRecordingCommandTests test) : iOSSimulatorAppDriver
+    private sealed class TestIosDriver(DevFlowRecordingCommandTests test, string platform) : iOSSimulatorAppDriver
     {
         public override Task StartRecordingAsync(string outputFile, int timeoutSeconds = 30)
         {
             Assert.False(string.IsNullOrWhiteSpace(DeviceUdid));
-            // Match the real iOS driver: stop uses the saved PID, not a saved UDID.
-            test.SaveState("ios", null, outputFile);
+            test.SaveState(platform, DeviceUdid, outputFile);
             return Task.CompletedTask;
         }
 
-        public override Task<string> StopRecordingAsync() => Task.FromResult(test.Stop("ios", DeviceUdid));
+        public override Task<string> StopRecordingAsync() => Task.FromResult(test.Stop(platform, DeviceUdid));
     }
 }
