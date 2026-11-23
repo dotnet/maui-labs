@@ -31,9 +31,8 @@
     <MicrosoftAspNetCoreComponentsWebViewVersion Condition="$(TargetFramework.StartsWith('net10.0'))">$(MicrosoftAspNetCoreComponentsWebViewNet10Version)</MicrosoftAspNetCoreComponentsWebViewVersion>
     <MicrosoftMauiControlsMapsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsMapsVersion>
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
-    <!-- Community desktop backends consume the .NET 11 public extensibility
-         contracts while the rest of the multi-product repository retains its
-         established MAUI 10 compatibility baseline. -->
+    <!-- Community desktop backends pin their extensibility contracts separately
+         from the shared MAUI 10 compatibility baseline. -->
     <CommunityPlatformMauiVersion>11.0.10</CommunityPlatformMauiVersion>
     <CommunityPlatformAspNetCoreComponentsWebViewVersion>11.0.0</CommunityPlatformAspNetCoreComponentsWebViewVersion>
   </PropertyGroup>

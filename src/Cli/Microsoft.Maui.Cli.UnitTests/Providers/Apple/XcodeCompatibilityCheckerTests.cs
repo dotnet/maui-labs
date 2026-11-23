@@ -39,7 +39,7 @@ public sealed class XcodeCompatibilityCheckerTests : IDisposable
 	[Fact]
 	public void CheckXcodeCompatibility_WithLegacyRecommendedVersion_ReturnsOk()
 	{
-		CreateSdkPack("Microsoft.iOS.Sdk.net10.0_26.5", "26.5.10284", "26.5", useLegacyProperty: true);
+		CreateSdkPack("Microsoft.iOS.Sdk.net11.0_26.5", "26.5.10284", "26.5", useLegacyProperty: true);
 		var environment = CreateEnvironment(selectedVersion: "26.5");
 
 		var result = new XcodeCompatibilityChecker(environment).CheckXcodeCompatibility();

@@ -49,7 +49,7 @@ dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.cs
 
 Use `net11.0-ios27.2` or `net11.0-macos27.2` for those platforms.
 The pinned GA workload set provides OS 27.2 reference packs for .NET 11.
-`UseNet11AppleTargets` adds those targets while retaining the default .NET 10
+`UseNet11AppleTargets` selects those Apple targets instead of the default Apple
 targets; it does not install or select Xcode. Install the matching workloads with
 `dotnet workload install maui macos --from-rollback-file eng/workloads/dotnet11-ga.json`.
 

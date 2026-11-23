@@ -128,9 +128,9 @@ public static class GestureManager
         var recognizer = new MacOSTapGestureRecognizer(virtualView, tap)
         {
             NumberOfClicksRequired = (nint)tap.NumberOfTapsRequired,
+            ButtonMask = (nuint)tap.Buttons,
         };
         view.AddGestureRecognizer(recognizer);
-        recognizer.UpdateButtonMask();
 
         // AppKit delivers events only to the hit-test view's own gesture recognizers,
         // not ancestors. Intercept child hit testing so clicks on child views
@@ -187,12 +187,6 @@ internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
 {
     readonly View _view;
     readonly TapGestureRecognizer _tapGesture;
-    static readonly System.Reflection.MethodInfo? _sendTapped =
-        typeof(TapGestureRecognizer).GetMethod(
-            "SendTapped",
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.Public |
-            System.Reflection.BindingFlags.NonPublic);
     bool _isConnected;
 
     public MacOSTapGestureRecognizer(View view, TapGestureRecognizer tapGesture)
@@ -208,11 +202,8 @@ internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
     void OnTapGesturePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(TapGestureRecognizer.Buttons))
-            UpdateButtonMask();
+            ButtonMask = (nuint)_tapGesture.Buttons;
     }
-
-    internal void UpdateButtonMask() =>
-        ButtonMask = (nuint)_tapGesture.Buttons;
 
     public void Disconnect()
     {
