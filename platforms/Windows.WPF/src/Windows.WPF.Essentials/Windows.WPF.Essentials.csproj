@@ -1,7 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFrameworks>net10.0-windows10.0.17763.0;net11.0-windows10.0.17763.0</TargetFrameworks>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <WindowsSdkPackageVersion>$(MicrosoftWindowsSdkNetRefVersion)</WindowsSdkPackageVersion>
+    <MauiVersion Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net10.0-'))">$(Maui10Version)</MauiVersion>
+    <MauiVersion Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.0-'))">$(Maui11Version)</MauiVersion>
     <UseWPF>true</UseWPF>
     <UseMaui>true</UseMaui>
     <SkipValidateMauiImplicitPackageReferences>true</SkipValidateMauiImplicitPackageReferences>
@@ -22,10 +26,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Windows.WPF\Windows.WPF.csproj" />
+    <InternalsVisibleTo Include="Microsoft.Maui.Platforms.Windows.WPF.Essentials.Tests" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net10.0-'))">
+    <Compile Include="..\..\..\Shared\Essentials\EssentialsInitializer.cs" Link="Hosting\EssentialsInitializer.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\..\Shared\Essentials\EssentialsInitializer.cs" Link="Hosting\EssentialsInitializer.cs" />
     <None Include="../../README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 

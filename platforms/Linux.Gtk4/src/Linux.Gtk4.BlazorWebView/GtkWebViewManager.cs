@@ -1,3 +1,4 @@
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using System.Text.Encodings.Web;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Components;
@@ -123,11 +124,23 @@ public class GtkWebViewManager : WebViewManager
 				// WebKit API calls must be on the GTK main thread
 				GLib.Functions.IdleAdd(0, () =>
 				{
-					_webview.EvaluateJavascriptAsync(script);
+					_ = EvaluateMessageAsync(script);
 					return false;
 				});
 			}
 		}
 		catch (ChannelClosedException) { }
+	}
+
+	private async Task EvaluateMessageAsync(string script)
+	{
+		try
+		{
+			await _webview.RunJavaScriptAsync(script);
+		}
+		catch (Exception ex)
+		{
+			System.Diagnostics.Debug.WriteLine($"WebView message evaluation failed: {ex.Message}");
+		}
 	}
 }

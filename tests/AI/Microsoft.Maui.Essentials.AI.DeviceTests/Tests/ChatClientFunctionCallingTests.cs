@@ -390,7 +390,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 
 		var options = new ChatOptions { Tools = [weatherTool] };
 		var response = await client.GetResponseAsync(
-			[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options);
+			(ChatMessage[])[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options);
 
 		Assert.NotNull(response);
 		Assert.NotEmpty(response.Messages);
@@ -617,7 +617,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		ChatRole? toolCallRole = null;
 
 		await foreach (var update in client.GetStreamingResponseAsync(
-			[new ChatMessage(ChatRole.User, "What's the weather in Portland?")], options))
+			(ChatMessage[])[new ChatMessage(ChatRole.User, "What's the weather in Portland?")], options))
 		{
 			foreach (var content in update.Contents)
 			{
@@ -1243,7 +1243,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		bool hasText = false;
 		ChatMessage? textMessage = null;
 
-		await foreach (var update in client.GetStreamingResponseAsync([turn1UserMessage], options))
+		await foreach (var update in client.GetStreamingResponseAsync(new[] { turn1UserMessage }, options))
 		{
 			foreach (var content in update.Contents)
 			{
@@ -1312,7 +1312,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		var history = new List<ChatMessage> { turn1UserMessage };
 		ChatMessage? textMessage = null;
 
-		await foreach (var update in client.GetStreamingResponseAsync([turn1UserMessage], toolOptions))
+		await foreach (var update in client.GetStreamingResponseAsync(new[] { turn1UserMessage }, toolOptions))
 		{
 			foreach (var content in update.Contents)
 			{
@@ -1415,7 +1415,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		var allTextDeltas = new List<string>();
 
 		await foreach (var update in client.GetStreamingResponseAsync(
-			[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options))
+			(ChatMessage[])[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options))
 		{
 			foreach (var content in update.Contents)
 			{
@@ -1453,7 +1453,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		var streamLog = new List<(string Type, string Snippet)>();
 
 		await foreach (var update in client.GetStreamingResponseAsync(
-			[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options))
+			(ChatMessage[])[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options))
 		{
 			foreach (var content in update.Contents)
 			{
@@ -1515,7 +1515,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		var streamLog = new List<(string Type, string Snippet)>();
 
 		await foreach (var update in ficc.GetStreamingResponseAsync(
-			[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options))
+			(ChatMessage[])[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options))
 		{
 			foreach (var content in update.Contents)
 			{
@@ -1575,7 +1575,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		var functionCallsSeen = new List<FunctionCallContent>();
 
 		await foreach (var update in ficc.GetStreamingResponseAsync(
-			[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options))
+			(ChatMessage[])[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options))
 		{
 			foreach (var content in update.Contents.OfType<FunctionCallContent>())
 			{
@@ -1617,7 +1617,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		ChatMessage? textMessage = null;
 
 		await foreach (var update in client.GetStreamingResponseAsync(
-			[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options))
+			(ChatMessage[])[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options))
 		{
 			foreach (var content in update.Contents)
 			{
@@ -1711,7 +1711,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		var rawLog = new List<(string Type, string Value)>();
 
 		await foreach (var update in client.GetStreamingResponseAsync(
-			[new ChatMessage(ChatRole.User, "What are famous landmarks in Africa?")], options))
+			(ChatMessage[])[new ChatMessage(ChatRole.User, "What are famous landmarks in Africa?")], options))
 		{
 			foreach (var content in update.Contents)
 			{
@@ -1828,7 +1828,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		bool toolCallSeen = false;
 
 		await foreach (var update in pipeline.GetStreamingResponseAsync(
-			[new ChatMessage(ChatRole.User, "what are landmarks in africa")], options))
+			(ChatMessage[])[new ChatMessage(ChatRole.User, "what are landmarks in africa")], options))
 		{
 			foreach (var content in update.Contents)
 			{
@@ -1957,7 +1957,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			var allContent = new List<(string Type, string Value)>();
 
 			await foreach (var update in client.GetStreamingResponseAsync(
-				[new ChatMessage(ChatRole.User, "what are landmarks in africa")], options))
+				(ChatMessage[])[new ChatMessage(ChatRole.User, "what are landmarks in africa")], options))
 			{
 				foreach (var content in update.Contents)
 				{

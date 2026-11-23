@@ -24,7 +24,12 @@ public static class MauiProgram
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
             });
 
+#if NET11_0_OR_GREATER
+        builder.Services.AddMauiBlazorWebView()
+            .UsePlatformHandler<Microsoft.AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler>();
+#else
         builder.Services.AddMauiBlazorWebView();
+#endif
         builder.Services.AddWpfBlazorWebView();
         builder.Services.AddSingleton<TodoService>();
         builder.Services.AddHttpClient();

@@ -112,19 +112,21 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		void UpdateVirtualViewFrame(PlatformView platformView)
 		{
-			if (VirtualView == null) return;
+			// Can run from a queued dispatcher callback after disconnect, where the
+			// strongly-typed VirtualView getter throws instead of returning null.
+			if (((IElementHandler)this).VirtualView is not IWindow window) return;
 			double w = platformView.ActualWidth;
 			double h = platformView.ActualHeight;
 			if (w <= 0 || h <= 0) return;
 			double x = double.IsNaN(platformView.Left) ? 0 : platformView.Left;
 			double y = double.IsNaN(platformView.Top) ? 0 : platformView.Top;
-			VirtualView.FrameChanged(new Microsoft.Maui.Graphics.Rect(x, y, w, h));
+			window.FrameChanged(new Microsoft.Maui.Graphics.Rect(x, y, w, h));
 
 			// MAUI's cross-platform layout isn't driven by WPF's layout pass on the root
 			// Content, so pages (FlyoutPage / ContentPage / Shell) never receive a non-zero
 			// Frame. Manually measure + arrange the root content whenever the window resizes
 			// so VisualElement.Bounds are correct for layout, hit-testing, and inspection.
-			if (VirtualView.Content is IView content)
+			if (window.Content is IView content)
 			{
 				var size = new Microsoft.Maui.Graphics.Size(w, h);
 				var bounds = new Microsoft.Maui.Graphics.Rect(0, 0, w, h);
@@ -180,7 +182,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			if (container != null && handler.VirtualView.Content is IView content)
 			{
 				var platformEl = (FrameworkElement)content.ToPlatform(handler.MauiContext);
-				container.AddPage(platformEl);
+				container.SetRootPage(platformEl);
 			}
 		}
 

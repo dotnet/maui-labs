@@ -39,10 +39,12 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v6
+      - name: Select Xcode 27.2
+        run: sudo xcode-select -s /Applications/Xcode_27.2.app/Contents/Developer
       - name: Run Swift bridge tests
         run: swift test --package-path src/AI/AppleNative
 
-  # Step 1: Build on Xcode 27 — compiles Swift xcframeworks, produces .resources.zip,
+  # Step 1: Build on Xcode 27.2 — compiles Swift xcframeworks, produces .resources.zip,
   # and uploads them as native-apple-essentialsai artifact via _build.yml.
   build-macos:
     uses: ./.github/workflows/_build.yml
@@ -50,9 +52,10 @@ jobs:
       project-path: src/AI/EssentialsAI.slnf
       project-name: essentialsai
       os: '["xcode-27"]'
+      xcode-version: '27.2'
       run-tests: true
       pack: true
-      workload-version: '10.0.401'
+      build-arguments: /p:UseNet11AppleTargets=true
       skip-xcode-version-validation: true
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
@@ -65,9 +68,11 @@ jobs:
       project-path: src/AI/EssentialsAI.slnf
       project-name: essentialsai
       os: '["windows-2025-vs2026"]'
+      additional-dotnet-version: 10.0.403
+      isolated-dotnet: true
       run-tests: true
       pack: true
-      workload-version: '10.0.401'
+      build-arguments: /p:UseNet11AppleTargets=true
       pre-build-artifact: native-apple-essentialsai
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
@@ -77,10 +82,10 @@ jobs:
     with:
       project-path: tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj
       project-name: essentialsai
-      target-framework: net10.0-maccatalyst27.0
+      target-framework: net11.0-maccatalyst27.2
       filter: 'RequiresModel!=true'
       os: xcode-27
-      workload-version: '10.0.401'
+      xcode-version: '27.2'
 
   # Step 4: Run model-free Windows device tests. Hosted runners do not have
   # Windows AI models, but they can execute readiness, policy, lifecycle, and
@@ -94,4 +99,3 @@ jobs:
       filter: 'RequiresModel!=true'
       os: windows-2025-vs2026
       workloads: maui
-      workload-version: '10.0.401'

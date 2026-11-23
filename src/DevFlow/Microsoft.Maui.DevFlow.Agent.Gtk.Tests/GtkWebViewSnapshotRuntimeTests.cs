@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.Maui.DevFlow.Blazor.Gtk;
 using Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 
 namespace Microsoft.Maui.DevFlow.Agent.Gtk.Tests;
 
@@ -15,16 +16,19 @@ public class GtkWebViewSnapshotRuntimeTests
         GtkBlazorWebView.InitializeWebKit();
         using var window = global::Gtk.Window.New();
         using var wrapper = global::Gtk.Box.New(global::Gtk.Orientation.Vertical, 0);
-        using var view = new WebKit.WebView();
+        using var view = WebKit.WebView.New();
         view.SetHexpand(true);
         view.SetVexpand(true);
         wrapper.Append(view);
         window.SetDefaultSize(320, 240);
         window.SetChild(wrapper);
         var loaded = false;
-        void OnLoadChanged(WebKit.WebView sender, WebKit.WebView.LoadChangedSignalArgs args)
-            => loaded |= args.LoadEvent == WebKit.LoadEvent.Finished;
-        view.OnLoadChanged += OnLoadChanged;
+        void OnLoadChanged(WebKit.WebView sender, GtkWebViewSignals.LoadChangedArgs args)
+        {
+            using var signalArgs = args;
+            loaded |= args.LoadEvent == WebKit.LoadEvent.Finished;
+        }
+        GtkWebViewSignals.LoadChanged.Connect(view, OnLoadChanged);
         try
         {
             Assert.Throws<InvalidOperationException>(() => { _ = WebKitSnapshot.CaptureAsync(view, CancellationToken.None); });
@@ -51,7 +55,7 @@ public class GtkWebViewSnapshotRuntimeTests
         }
         finally
         {
-            view.OnLoadChanged -= OnLoadChanged;
+            GtkWebViewSignals.LoadChanged.Disconnect(view, OnLoadChanged);
             window.SetChild(null);
             wrapper.Remove(view);
             window.Destroy();
@@ -65,7 +69,7 @@ public class GtkWebViewSnapshotRuntimeTests
         global::Gtk.Functions.Init();
         GtkBlazorWebView.InitializeWebKit();
         using var window = global::Gtk.Window.New();
-        using var view = new WebKit.WebView();
+        using var view = WebKit.WebView.New();
         using var service = new GtkBlazorWebViewDebugService();
         var previousContext = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(new GtkRuntimeSynchronizationContext());
@@ -103,13 +107,77 @@ public class GtkWebViewSnapshotRuntimeTests
     }
 
     [GtkSnapshotFact]
+    public void Bridge_RepeatedEvaluationSnapshotAndNavigation_StaysResponsiveAcrossDocuments()
+    {
+        global::Gtk.Module.Initialize();
+        global::Gtk.Functions.Init();
+        GtkBlazorWebView.InitializeWebKit();
+        using var window = global::Gtk.Window.New();
+        using var view = WebKit.WebView.New();
+        using var service = new GtkBlazorWebViewDebugService();
+        var previousContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new GtkRuntimeSynchronizationContext());
+        try
+        {
+            window.SetDefaultSize(320, 240);
+            window.SetChild(view);
+            window.Present();
+            var bridge = new GtkBlazorWebViewDebugService.GtkWebViewBridge(service, view, "lifetime");
+            service.AddBridge(bridge);
+
+            for (var document = 0; document < 4; document++)
+            {
+                view.LoadHtml(
+                    $"<html><title>Document {document}</title><body>JSC lifetime {document}</body></html>",
+                    null);
+                PumpUntil(() => bridge.IsReady);
+
+                for (var evaluation = 0; evaluation < 40; evaluation++)
+                {
+                    var result = bridge.EvaluateJavaScriptAsync(
+                        $"'document-{document}-value-{evaluation}'");
+                    PumpUntil(() => result.IsCompleted);
+                    Assert.Equal(
+                        $"document-{document}-value-{evaluation}",
+                        result.GetAwaiter().GetResult());
+                }
+
+                var capture = bridge.SendCdpCommandAsync(
+                    """{"id":93,"method":"Page.captureScreenshot","params":{"format":"png"}}""");
+                PumpUntil(() => capture.IsCompleted);
+                using var response = System.Text.Json.JsonDocument.Parse(capture.GetAwaiter().GetResult());
+                Assert.False(string.IsNullOrEmpty(
+                    response.RootElement.GetProperty("result").GetProperty("data").GetString()));
+
+                var collect = Task.Run(() =>
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                });
+                PumpUntil(() => collect.IsCompleted);
+                collect.GetAwaiter().GetResult();
+                DrainPendingMainContextCallbacks();
+            }
+
+            service.RemoveBridge(bridge);
+        }
+        finally
+        {
+            service.Dispose();
+            window.SetChild(null);
+            window.Destroy();
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+    }
+
+    [GtkSnapshotFact]
     public void NativeSnapshot_CanceledDuringViewTeardown_CompletesWithoutAnImage()
     {
         global::Gtk.Module.Initialize();
         global::Gtk.Functions.Init();
         GtkBlazorWebView.InitializeWebKit();
         using var window = global::Gtk.Window.New();
-        using var view = new WebKit.WebView();
+        using var view = WebKit.WebView.New();
         using var cancellation = new CancellationTokenSource();
         window.SetDefaultSize(320, 240);
         window.SetChild(view);
@@ -142,7 +210,7 @@ public class GtkWebViewSnapshotRuntimeTests
         global::Gtk.Functions.Init();
         GtkBlazorWebView.InitializeWebKit();
         using var window = global::Gtk.Window.New();
-        using var view = new WebKit.WebView();
+        using var view = WebKit.WebView.New();
         using var service = new GtkBlazorWebViewDebugService();
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         var requested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -268,6 +336,13 @@ public class GtkWebViewSnapshotRuntimeTests
             if (!timedOut)
                 GLib.Functions.SourceRemove(timeout);
         }
+    }
+
+    static void DrainPendingMainContextCallbacks()
+    {
+        var context = GLib.MainContext.Default();
+        for (var iteration = 0; iteration < 100 && context.Pending(); iteration++)
+            context.Iteration(false);
     }
 }
 

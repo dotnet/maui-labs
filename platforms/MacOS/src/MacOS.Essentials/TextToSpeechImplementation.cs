@@ -1,4 +1,6 @@
+#if !NET11_0_OR_GREATER
 using System.Reflection;
+#endif
 using AppKit;
 using Microsoft.Maui.Media;
 
@@ -11,17 +13,21 @@ class TextToSpeechImplementation : ITextToSpeech
     readonly Lazy<NSSpeechSynthesizer> _synthesizer = new(() =>
         new NSSpeechSynthesizer { Delegate = new SpeechDelegate() });
 
+#if !NET11_0_OR_GREATER
     static readonly ConstructorInfo? _localeCtor = typeof(Locale)
         .GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic, null,
             new[] { typeof(string), typeof(string), typeof(string), typeof(string) }, null);
+#endif
 
     static Locale CreateLocale(string language, string? country, string name, string id)
     {
+#if NET11_0_OR_GREATER
+        return new Locale(language, country, name, id);
+#else
         if (_localeCtor is not null)
             return (Locale)_localeCtor.Invoke(new object?[] { language, country, name, id });
-        // Fallback: create via reflection on fields if constructor changes
-        var locale = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(Locale));
-        return (Locale)locale;
+        throw new MissingMethodException(typeof(Locale).FullName, ".ctor(string,string,string,string)");
+#endif
     }
 
     public Task<IEnumerable<Locale>> GetLocalesAsync() =>

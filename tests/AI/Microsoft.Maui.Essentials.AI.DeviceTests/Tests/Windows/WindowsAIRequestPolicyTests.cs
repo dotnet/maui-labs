@@ -46,7 +46,7 @@ public class WindowsAIRequestPolicyTests
 	public void BlankUserTurn_IsNotMistakenForMissingPrompt(bool unknownOnly)
 	{
 		var (_, history) = WindowsAIChatClient.NormalizeChatMessages(
-			[new(ChatRole.User, unknownOnly ? [new CustomContent()] : [])]);
+			(ChatMessage[])[new(ChatRole.User, unknownOnly ? [new CustomContent()] : [])]);
 		Assert.Equal("User: ", WindowsAIChatClient.ConvertToPrompt(history));
 	}
 
@@ -55,14 +55,14 @@ public class WindowsAIRequestPolicyTests
 	{
 		AIContent content = new DataContent(ReadOnlyMemory<byte>.Empty, "image/png");
 		Assert.Throws<ArgumentException>(() =>
-			WindowsAIChatClient.NormalizeChatMessages([new(ChatRole.User, [content])]));
+			WindowsAIChatClient.NormalizeChatMessages((ChatMessage[])[new(ChatRole.User, [content])]));
 	}
 
 	[Fact]
 	public void UnknownCustomContent_OmitsOnlyUnknownNeighbors()
 	{
 		var text = WindowsAIChatClient.ConvertToPrompt(
-			[new(ChatRole.User, [new CustomContent(), new TextContent("Keep"), new CustomContent()])]);
+			(ChatMessage[])[new(ChatRole.User, [new CustomContent(), new TextContent("Keep"), new CustomContent()])]);
 		Assert.Equal("User: Keep", text);
 	}
 

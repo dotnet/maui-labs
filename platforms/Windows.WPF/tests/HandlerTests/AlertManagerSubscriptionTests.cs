@@ -7,6 +7,7 @@ namespace HandlerTests;
 
 public class AlertManagerSubscriptionTests
 {
+#if NET10_0
     [Fact]
     public void Register_RegistersTheSubscriptionConsumedByMaui()
     {
@@ -27,4 +28,15 @@ public class AlertManagerSubscriptionTests
             subscription.GetType().BaseType!.GetGenericTypeDefinition());
         Assert.Same(subscription, provider.GetRequiredService(subscriptionType));
     }
+#else
+    [Fact]
+    public void Register_RegistersPublicTypedSubscription()
+    {
+        var services = new ServiceCollection();
+        WPFDialogService.Register(services);
+
+        using var provider = services.BuildServiceProvider();
+        Assert.NotNull(provider.GetRequiredService<Microsoft.Maui.Controls.Platform.IAlertManagerSubscription>());
+    }
+#endif
 }

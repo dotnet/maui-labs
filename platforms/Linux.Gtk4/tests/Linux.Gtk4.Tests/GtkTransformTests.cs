@@ -15,7 +15,7 @@ public class GtkTransformTests
 		Gtk.Module.Initialize();
 
 		using var services = new ServiceCollection().BuildServiceProvider();
-		using var panel = new GtkLayoutPanel();
+		using var panel = GtkLayoutPanel.NewWithProperties([]);
 		using var window = Gtk.Window.New();
 		var view = new Button();
 		var handler = new TransformHandler();

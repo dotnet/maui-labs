@@ -1,8 +1,11 @@
 using System.Reflection;
+using System.Collections.Specialized;
 using System.Text;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using WebKit;
 using WebView = WebKit.WebView;
@@ -49,6 +52,8 @@ public sealed class GtkBlazorWebView : IDisposable
 	private readonly IServiceProvider _serviceProvider;
 	private GtkWebViewManager? _webViewManager;
 	private UserContentManager? _userContentManager;
+	private readonly Microsoft.Maui.Platforms.Shared.RootComponentReconciler<RootComponent> _rootComponentReconciler = new();
+	private RootComponent[] _desiredRootComponents = [];
 	private bool _disposed;
 	private string? _hostPage;
 	private static int _moduleInitialized;
@@ -78,6 +83,7 @@ public sealed class GtkBlazorWebView : IDisposable
 		_serviceProvider = serviceProvider;
 		WebKitWebView = CreateWebView();
 		RootComponents = new RootComponentsCollection();
+		RootComponents.CollectionChanged += OnRootComponentsCollectionChanged;
 	}
 
 	internal WebView WebKitWebView { get; }
@@ -106,12 +112,13 @@ public sealed class GtkBlazorWebView : IDisposable
 		if (_disposed)
 			return;
 		_disposed = true;
+		RootComponents.CollectionChanged -= OnRootComponentsCollectionChanged;
 
 		if (_userContentManager != null)
 		{
 			// The detailed signal connection is independent of the registered JS
 			// message handler and must be disconnected before releasing its owner.
-			UserContentManager.ScriptMessageReceivedSignal.Disconnect(_userContentManager, HandleScriptMessage);
+			GtkWebViewSignals.ScriptMessageReceived.Disconnect(_userContentManager, HandleScriptMessage);
 			_userContentManager.UnregisterScriptMessageHandler(InteropName, null);
 			_userContentManager = null;
 		}
@@ -127,13 +134,12 @@ public sealed class GtkBlazorWebView : IDisposable
 				catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"GtkBlazorWebView: DisposeAsync failed: {ex.Message}"); }
 			}).Wait(TimeSpan.FromSeconds(5));
 		}
-
 		WebKitWebView.Dispose();
 	}
 
 	private WebView CreateWebView()
 	{
-		var webView = new WebView();
+		var webView = WebView.New();
 
 		// Make web view transparent for Blazor styling
 		webView.SetBackgroundColor(new Gdk.RGBA { Red = 0, Blue = 0, Green = 0, Alpha = 0 });
@@ -146,7 +152,7 @@ public sealed class GtkBlazorWebView : IDisposable
 
 		// Handle JS→.NET messages
 		_userContentManager = webView.GetUserContentManager();
-		UserContentManager.ScriptMessageReceivedSignal.Connect(
+		GtkWebViewSignals.ScriptMessageReceived.Connect(
 			_userContentManager,
 			HandleScriptMessage,
 			after: false,
@@ -170,9 +176,13 @@ public sealed class GtkBlazorWebView : IDisposable
 
 	private void HandleScriptMessage(
 		UserContentManager ucm,
-		UserContentManager.ScriptMessageReceivedSignalArgs args)
+		GtkWebViewSignals.ScriptMessageArgs args)
 	{
-		var result = args.Value;
+		using var signalArgs = args;
+		// The message JSCValue is only valid while its JavaScript context lives. Release GirCore's
+		// wrapper here, on the GTK thread, instead of leaving it to a finalizer whose queued
+		// toggle-ref removal can run after navigation has destroyed that context.
+		using var result = args.Value;
 		_webViewManager?.MessageReceivedInternal(AppOriginUri, result.ToString());
 	}
 
@@ -238,15 +248,56 @@ public sealed class GtkBlazorWebView : IDisposable
 			contentRootDir,
 			hostPageRelativePath);
 
-		foreach (var rootComponent in RootComponents)
-		{
-			_ = rootComponent.AddToWebViewManagerAsync(_webViewManager);
-		}
-
-		_webViewManager.Navigate(StartPath);
+		SynchronizeRootComponents(navigate: true);
 	}
 
-	private static IFileProvider CreateFileProvider(string contentRootDir)
+	private void OnRootComponentsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs eventArgs)
+		=> SynchronizeRootComponents();
+
+	internal void SetRootComponents(IEnumerable<RootComponent> components)
+	{
+		RootComponents.CollectionChanged -= OnRootComponentsCollectionChanged;
+		try
+		{
+			RootComponents.Clear();
+			foreach (var component in components)
+				RootComponents.Add(component);
+		}
+		finally
+		{
+			RootComponents.CollectionChanged += OnRootComponentsCollectionChanged;
+		}
+		SynchronizeRootComponents();
+	}
+
+	private async void SynchronizeRootComponents(bool navigate = false)
+	{
+		var manager = _webViewManager;
+		if (manager == null || _disposed)
+			return;
+
+		Volatile.Write(ref _desiredRootComponents, RootComponents.ToArray());
+		try
+		{
+			await manager.Dispatcher.InvokeAsync(async () =>
+			{
+				await _rootComponentReconciler.SynchronizeAsync(
+					() => _disposed ? [] : Volatile.Read(ref _desiredRootComponents),
+					item => item.AddToWebViewManagerAsync(manager),
+					item => item.RemoveFromWebViewManagerAsync(manager));
+				if (navigate && !_disposed)
+					manager.Navigate(StartPath);
+			});
+		}
+		catch (Exception ex)
+		{
+			_serviceProvider.GetService<ILogger<GtkBlazorWebView>>()?
+				.LogError(ex, "GTK Blazor root component synchronization failed.");
+			System.Diagnostics.Trace.TraceError($"GTK Blazor root component synchronization failed: {ex}");
+		}
+	}
+
+	internal static IFileProvider CreateFileProvider(string contentRootDir)
 	{
 		string contentRoot = System.IO.Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!;
 		string bundleRootDir = System.IO.Path.Combine(contentRoot, contentRootDir);
@@ -256,6 +307,14 @@ public sealed class GtkBlazorWebView : IDisposable
 
 		return new NullFileProvider();
 	}
+
+#if NET11_0_OR_GREATER
+	internal Task<bool> TryDispatchAsync(Action<IServiceProvider> workItem)
+	{
+		ArgumentNullException.ThrowIfNull(workItem);
+		return _webViewManager?.TryDispatchAsync(workItem) ?? Task.FromResult(false);
+	}
+#endif
 
 	private static void FinishUriSchemeRequest(URISchemeRequest request, uint statusCode, string statusText, string message)
 	{

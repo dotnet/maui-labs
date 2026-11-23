@@ -8,20 +8,57 @@ namespace UITests.Helpers;
 /// </summary>
 public class AppLauncher : IDisposable
 {
+    // Optional overrides so the suite can run against an externally provisioned gallery
+    // (for example one built for net10.0 or net11.0 against locally packed WPF packages).
+    const string GalleryExeEnvVar = "MAUI_WPF_UITESTS_GALLERY_EXE";
+    const string GalleryProjectEnvVar = "MAUI_WPF_UITESTS_GALLERY_PROJECT";
+    const string ScreenshotDirEnvVar = "MAUI_WPF_UITESTS_SCREENSHOT_DIR";
+    const string WpfBackendModuleName = "Microsoft.Maui.Platforms.Windows.WPF.dll";
+
     Process? _dotnetProcess;
     readonly string _wpfProjectPath;
+    readonly string? _wpfExePath;
     readonly string? _winuiExePath;
     readonly string _screenshotDir;
 
     public AppLauncher(string? wpfProjectPath = null, string? winuiExePath = null)
     {
         var repoRoot = FindRepoRoot();
+        _wpfExePath = Environment.GetEnvironmentVariable(GalleryExeEnvVar) is { Length: > 0 } exe ? exe : null;
         _wpfProjectPath = wpfProjectPath
+            ?? (Environment.GetEnvironmentVariable(GalleryProjectEnvVar) is { Length: > 0 } project ? project : null)
             ?? Path.Combine(repoRoot, "samples", "ControlGallery", "ControlGallery.csproj");
         _winuiExePath = winuiExePath
             ?? @"D:\repos\davidortinau\ControlGallery\src\ControlGallery\bin\Debug\net10.0-windows10.0.19041.0\win-x64\ControlGallery.exe";
-        _screenshotDir = Path.Combine(repoRoot, "tests", "UITests", "Screenshots");
+        _screenshotDir = Environment.GetEnvironmentVariable(ScreenshotDirEnvVar) is { Length: > 0 } screenshots
+            ? screenshots
+            : Path.Combine(repoRoot, "platforms", "Windows.WPF", "tests", "UITests", "Screenshots");
         Directory.CreateDirectory(_screenshotDir);
+    }
+
+    /// <summary>
+    /// True when the process hosts the MAUI WPF backend, independent of its target framework,
+    /// so net10.0 and net11.0 galleries are both recognized and WinUI galleries are skipped.
+    /// </summary>
+    public bool IsWpfGalleryProcess(Process p)
+    {
+        try
+        {
+            if (_wpfExePath != null &&
+                !string.Equals(p.MainModule?.FileName, Path.GetFullPath(_wpfExePath), StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            foreach (ProcessModule module in p.Modules)
+            {
+                if (string.Equals(module.ModuleName, WpfBackendModuleName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Debug.WriteLine($"Could not inspect gallery process {p.Id}: {ex.Message}");
+        }
+        return false;
     }
 
     public string ScreenshotDir => _screenshotDir;
@@ -31,11 +68,11 @@ public class AppLauncher : IDisposable
         var dir = AppDomain.CurrentDomain.BaseDirectory;
         while (dir != null)
         {
-            if (File.Exists(Path.Combine(dir, "Maui.WPF.sln")))
+            if (File.Exists(Path.Combine(dir, "MauiLabs.slnx")))
                 return dir;
             dir = Path.GetDirectoryName(dir);
         }
-        return @"D:\repos\rmarinho\maui.wpf";
+        throw new DirectoryNotFoundException("Could not locate the maui-labs repository root.");
     }
 
     public Process LaunchWpf(bool build = false)
@@ -43,6 +80,26 @@ public class AppLauncher : IDisposable
         // Check if already running
         var existing = FindWpfProcess();
         if (existing != null) return existing;
+
+        if (_wpfExePath != null)
+        {
+            if (!File.Exists(_wpfExePath))
+                throw new FileNotFoundException($"{GalleryExeEnvVar} points to a missing file", _wpfExePath);
+
+            _dotnetProcess = Process.Start(new ProcessStartInfo
+            {
+                FileName = _wpfExePath,
+                WorkingDirectory = Path.GetDirectoryName(_wpfExePath),
+                UseShellExecute = false,
+            });
+
+            return WaitForWpfProcess(TimeSpan.FromSeconds(30))
+                ?? throw new TimeoutException("WPF ControlGallery process did not create a window within timeout");
+        }
+
+        if (!File.Exists(_wpfProjectPath))
+            throw new FileNotFoundException(
+                $"Provision ControlGallery and set {GalleryExeEnvVar} or {GalleryProjectEnvVar}.", _wpfProjectPath);
 
         if (build)
         {
@@ -88,18 +145,16 @@ public class AppLauncher : IDisposable
     /// Find the ControlGallery process with a visible main window (the WPF one).
     /// dotnet run spawns a child process, so we look for ControlGallery by name.
     /// </summary>
-    static Process? FindWpfProcess()
+    Process? FindWpfProcess()
     {
         foreach (var p in Process.GetProcessesByName("ControlGallery"))
         {
             try
             {
                 p.Refresh();
-                if (p.MainWindowHandle == IntPtr.Zero || string.IsNullOrEmpty(p.MainWindowTitle))
+                if (p.MainWindowHandle == IntPtr.Zero)
                     continue;
-                // Skip WinUI processes (different TFM path)
-                var path = p.MainModule?.FileName ?? "";
-                if (path.Contains("net10.0-windows10.0", StringComparison.OrdinalIgnoreCase))
+                if (!IsWpfGalleryProcess(p))
                     continue;
                 return p;
             }
@@ -108,7 +163,7 @@ public class AppLauncher : IDisposable
         return null;
     }
 
-    static Process? WaitForWpfProcess(TimeSpan timeout)
+    Process? WaitForWpfProcess(TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)

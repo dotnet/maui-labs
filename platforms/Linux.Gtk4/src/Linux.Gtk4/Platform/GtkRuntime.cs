@@ -26,6 +26,24 @@ internal static class GtkRuntime
 	private static readonly string LogPrefix = $"[{typeof(GtkRuntime).Assembly.GetName().Name}]";
 
 	private static bool _verified;
+	private static uint _majorVersion;
+	private static uint _minorVersion;
+
+	internal static bool SupportsAccessibleHelpText
+	{
+		get
+		{
+			EnsureSupported();
+			return IsVersionAtLeast(_majorVersion, _minorVersion, 4, 16);
+		}
+	}
+
+	internal static bool IsVersionAtLeast(
+		uint major,
+		uint minor,
+		uint requiredMajor,
+		uint requiredMinor) =>
+		major > requiredMajor || (major == requiredMajor && minor >= requiredMinor);
 
 	/// <summary>
 	/// Throws <see cref="PlatformNotSupportedException"/> with a friendly, logged
@@ -59,6 +77,8 @@ internal static class GtkRuntime
 				inner: null);
 		}
 
+		_majorVersion = major;
+		_minorVersion = minor;
 		_verified = true;
 	}
 

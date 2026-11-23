@@ -149,14 +149,7 @@ namespace Microsoft.Maui.Handlers.WPF
 					}
 					mi.Click += (s, e) =>
 					{
-						si.Command?.Execute(si.CommandParameter);
-						try
-						{
-							var method = typeof(Microsoft.Maui.Controls.SwipeItem).GetMethod("OnInvoked",
-								System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-							method?.Invoke(si, null);
-						}
-						catch { }
+						((Microsoft.Maui.ISwipeItem)si).OnInvoked();
 					};
 					menu.Items.Add(mi);
 				}

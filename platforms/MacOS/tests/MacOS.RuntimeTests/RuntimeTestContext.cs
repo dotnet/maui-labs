@@ -170,10 +170,14 @@ public sealed class RuntimeTestContext
 
         using var image = Runtime.GetINativeObject<CGImage>(imageHandle, owns: true)
             ?? throw new InvalidOperationException("Could not create the window image.");
-        using var nativeImage = new NSImage(image, new CGSize(image.Width, image.Height));
-        using var tiff = nativeImage.AsTiff()
-            ?? throw new InvalidOperationException("Could not encode the window image.");
-        using var bitmap = new NSBitmapImageRep(tiff);
+        // WindowServer uses the display profile; pixel assertions use sRGB colors.
+        using var colorSpace = CGColorSpace.CreateSrgb();
+        using var graphics = new CGBitmapContext(IntPtr.Zero, image.Width, image.Height,
+            8, checked(image.Width * 4), colorSpace, CGImageAlphaInfo.PremultipliedLast);
+        graphics.DrawImage(new CGRect(0, 0, image.Width, image.Height), image);
+        using var normalized = graphics.ToImage()
+            ?? throw new InvalidOperationException("Could not normalize the window image.");
+        using var bitmap = new NSBitmapImageRep(normalized);
         return SaveBitmap(bitmap, name);
     }
 

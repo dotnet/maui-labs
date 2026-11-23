@@ -30,7 +30,7 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		protected override void OnActivated(EventArgs args)
 		{
 			base.OnActivated(args);
-			MauiWPFApplication.Current.Services?.InvokeLifecycleEvents<WPFLifecycle.OnActivated>(del => del(this, args));
+			(System.Windows.Application.Current as MauiWPFApplication)?.Services?.InvokeLifecycleEvents<WPFLifecycle.OnActivated>(del => del(this, args));
 		}
 
 		protected override void OnDeactivated(EventArgs e)

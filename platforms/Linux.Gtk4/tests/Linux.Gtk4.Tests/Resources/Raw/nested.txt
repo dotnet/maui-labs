@@ -1,0 +1,1 @@
+GTK resource pipeline acceptance

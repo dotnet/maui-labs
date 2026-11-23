@@ -101,6 +101,9 @@ public static class MenuBarManager
 
                 nsMenuItem.Submenu = submenu;
                 mainMenu.AddItem(nsMenuItem);
+                if (string.Equals(menuBarItem.Text, "Window", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(menuBarItem.Text, Localize("Window"), StringComparison.OrdinalIgnoreCase))
+                    NSApplication.SharedApplication.WindowsMenu = submenu;
                 if (menuBarItem.Text != null)
                     customTitles.Add(menuBarItem.Text);
             }
