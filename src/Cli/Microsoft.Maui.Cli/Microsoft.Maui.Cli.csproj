@@ -30,6 +30,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" />
+    <PackageReference Include="OpenTelemetry" />
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
@@ -41,6 +43,12 @@
     <!-- XenoAtom.Terminal.UI requires .NET 10 (uses C# 14 extension members).
          On net9.0 we fall back to JSON output for the network monitor. -->
     <PackageReference Include="XenoAtom.Terminal.UI" Condition="'$(TargetFramework)' == 'net10.0'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="MauiCliTelemetryConnectionString" Value="$(MauiCliTelemetryConnectionString)"
+                      Condition="'$(MauiCliTelemetryConnectionString)' != ''" />
+    <RuntimeHostConfigurationOption Include="Azure.Monitor.OpenTelemetry.Exporter.ShutdownDrainBudgetMilliseconds" Value="0" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">

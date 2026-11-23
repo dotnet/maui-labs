@@ -17,21 +17,21 @@
       <Sha>d15964ef4f0a6d0740b655ba7c6be9b96be8b187</Sha>
     </Dependency>
     <!-- dotnet/runtime -->
-    <Dependency Name="Microsoft.Extensions.Http" Version="10.0.5">
+    <Dependency Name="Microsoft.Extensions.Http" Version="10.0.10">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>f7d90799ce4ef09a0bb257852a57248d2a8fb8dd</Sha>
     </Dependency>
-    <Dependency Name="Microsoft.Extensions.Hosting" Version="10.0.5">
+    <Dependency Name="Microsoft.Extensions.Hosting" Version="10.0.10">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>f7d90799ce4ef09a0bb257852a57248d2a8fb8dd</Sha>
     </Dependency>
-    <Dependency Name="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5">
+    <Dependency Name="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>f7d90799ce4ef09a0bb257852a57248d2a8fb8dd</Sha>
     </Dependency>
-    <Dependency Name="System.Text.Json" Version="10.0.5">
+    <Dependency Name="System.Text.Json" Version="10.0.10">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>f7d90799ce4ef09a0bb257852a57248d2a8fb8dd</Sha>
     </Dependency>
     <Dependency Name="Xamarin.Apple.Tools.MaciOS" Version="1.0.0-preview.1.26521.1">
       <Uri>https://github.com/dotnet/macios-devtools</Uri>
