@@ -93,7 +93,7 @@ test("GA net11 Apple lanes select Xcode 27.2", () => {
   assert.match(official, /\^Xcode 27\\\.2/);
 });
 
-test("MAUI iOS keeps the released net10 override required by the hosted actool runtime", () => {
+test("iOS integration uses GA net11 while retaining the net10 compatibility manifest", () => {
   const text = read(".github/workflows/devflow-integration.yml");
   const rollback = JSON.parse(read("eng/workloads/dotnet11-ga.json"));
   const iosRollback = JSON.parse(read("eng/workloads/dotnet11-ga-ios-net10.json"));
@@ -110,11 +110,13 @@ test("MAUI iOS keeps the released net10 override required by the hosted actool r
   delete rollback["microsoft.net.sdk.ios"];
   assert.deepEqual(iosRollback, rollback);
   assert.match(text, /DOTNET_WORKLOAD_ROLLBACK_FILE: eng\/workloads\/dotnet11-ga\.json/);
-  assert.match(text, /DEVFLOW_TEST_IOS_VERSION: \$\{\{ inputs\.ios-runtime \|\| '26\.2' \}\}/);
-  assert.match(text, /if \[\[ "\$\{\{ matrix\.framework \}\}" == maui \]\]; then\n\s+CANDIDATES=\(\/Applications\/Xcode_26\.4\.app \/Applications\/Xcode_26\.4\.1\.app\)\n\s+else\n\s+CANDIDATES=\(\/Applications\/Xcode_26\.0\.app \/Applications\/Xcode_26\.app\)/);
-  assert.match(text, /if \[\[ "\$\{\{ matrix\.framework \}\}" == maui \]\]; then[\s\S]*?workload install .* mobile-librarybuilder-net10 --from-rollback-file eng\/workloads\/dotnet11-ga-ios-net10\.json\n\s+else\n\s+dotnet workload install .* --from-rollback-file \$\{\{ env\.DOTNET_WORKLOAD_ROLLBACK_FILE \}\}/);
+  assert.match(text, /ios:\n[\s\S]*?runs-on: xcode-27/);
+  assert.match(text, /DEVFLOW_TEST_IOS_VERSION: \$\{\{ inputs\.ios-runtime \|\| '27\.2' \}\}/);
+  assert.match(text, /for candidate in \/Applications\/Xcode_27\.2\.app \/Applications\/Xcode_27\.2\.0\.app/);
+  assert.match(text, /dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file \$\{\{ env\.DOTNET_WORKLOAD_ROLLBACK_FILE \}\}/);
+  assert.doesNotMatch(text, /dotnet11-ga-ios-net10\.json/);
   assert.match(text, /name: Verify SDK-matching iOS simulator runtime\n\s+if: matrix\.framework == 'maui'/);
-  assert.match(text, /runtime\["version"\] == "26\.4\.1" and runtime\["isAvailable"\]/);
+  assert.match(text, /runtime\["version"\]\.startswith\("27\.2"\) and runtime\["isAvailable"\]/);
   assert.doesNotMatch(text, /xcodebuild -downloadPlatform/);
 });
 
@@ -183,14 +185,17 @@ test("community packages use GA servicing releases", () => {
   assert.match(versions, /<CommunityPlatformAspNetCoreComponentsWebViewVersion>11\.0\.0<\/CommunityPlatformAspNetCoreComponentsWebViewVersion>/);
 });
 
-test("GA Apple targets are additive and leave .NET 10 defaults intact", () => {
-  for (const file of [
-    "src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj",
-    "samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj",
-    "tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj",
+test("AI Apple libraries retain net10 compatibility while app heads use net11", () => {
+  for (const [file, defaults] of [
+    ["src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj",
+      "net10.0-ios;net11.0-ios;net10.0-maccatalyst;net11.0-maccatalyst;net10.0-macos;net11.0-macos"],
+    ["samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj",
+      "net11.0-ios;net11.0-maccatalyst"],
+    ["tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj",
+      "net11.0-ios;net11.0-maccatalyst"],
   ]) {
     const text = read(file);
-    assert.match(text, /<TargetFrameworks Condition="!\$\(\[MSBuild\]::IsOSPlatform\('linux'\)\)">\$\(TargetFrameworks\);net10\.0-ios;net10\.0-maccatalyst/);
+    assert.ok(text.includes(`<TargetFrameworks Condition="'$(UseNet11AppleTargets)' != 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);${defaults}</TargetFrameworks>`));
     assert.match(text, /<TargetFrameworks Condition="'\$\(UseNet11AppleTargets\)' == 'true'[^"]*">\$\(TargetFrameworks\);net11\.0-ios27\.2;net11\.0-maccatalyst27\.2/);
     assert.doesNotMatch(text, /net11\.0-(?:ios|maccatalyst|macos)27\.0|net10\.0-(?:ios|maccatalyst|macos)27\./);
   }
