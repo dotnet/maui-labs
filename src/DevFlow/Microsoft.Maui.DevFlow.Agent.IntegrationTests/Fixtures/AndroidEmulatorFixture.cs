@@ -848,8 +848,19 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
         return apks[0];
     }
 
-    Task InstallApkAsync(string apkPath) =>
-        AdbCheckedAsync($"install -r \"{apkPath}\"", timeoutSeconds: 120);
+    async Task InstallApkAsync(string apkPath)
+    {
+        try
+        {
+            await AdbCheckedAsync($"install -r \"{apkPath}\"", timeoutSeconds: 120);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE", StringComparison.Ordinal))
+        {
+            // A cached emulator snapshot can hold a build signed with another debug key.
+            await AdbCheckedAsync($"uninstall {PackageId}", timeoutSeconds: 60);
+            await AdbCheckedAsync($"install \"{apkPath}\"", timeoutSeconds: 120);
+        }
+    }
 
     async Task LaunchAppAsync()
     {
