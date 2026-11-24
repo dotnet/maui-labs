@@ -63,6 +63,15 @@ dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.cs
 See the [Gemini Nano Android guide](../../docs/ai/gemini-nano-android.md) for
 the native bridge, model readiness, and validation details.
 
+Source builds serialize this library's target frameworks: AGP 8.12.0 creates
+`GRADLE_USER_HOME/android/FakeDependency.jar` without cross-process locking, so
+concurrent .NET 10/.NET 11 Android builds can read an unfinished jar on a cold
+Gradle home. Native outputs are already isolated per target framework; changing
+those output paths does not isolate this shared jar. Builds using
+`EssentialsAIAndroidNativeArtifactsPath` retain parallel target-framework builds.
+Separate, concurrent build invocations should use separate `GRADLE_USER_HOME`
+directories.
+
 The official pipeline's Android dependency step queries the SDK path resolved by
 `InstallAndroidDependencies` and exports it as `ANDROID_HOME` and
 `ANDROID_SDK_ROOT` for subsequent steps. This lets the standalone Kotlin bridge
