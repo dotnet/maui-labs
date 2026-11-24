@@ -7,7 +7,9 @@ No cloud service is used.
 
 > **Experimental:** this package ships as a preview. APIs may change.
 
-## Platform support
+## Requirements and platform support
+
+Supports .NET 10 and .NET 11 with matching MAUI workloads.
 
 | Platform | Chat (`IChatClient`) | Image input | Embeddings (`IEmbeddingGenerator`) |
 |----------|---------------------|-------------|-----------------------------------|

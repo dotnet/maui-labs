@@ -45,6 +45,11 @@ jobs:
         if: runner.os == 'macOS'
         run: sudo xcode-select -s /Applications/Xcode_27.2.app/Contents/Developer
 
+      - name: Use a file-based .NET SDK on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '"DOTNET_INSTALL_DIR=$(Join-Path $env:RUNNER_TEMP ''maui-labs-dotnet'')" >> $env:GITHUB_ENV'
+
       - name: Setup .NET 11
         uses: actions/setup-dotnet@v5
         env:
@@ -59,7 +64,7 @@ jobs:
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
 
       - name: Run tests
-        run: dotnet test Microsoft.Maui.Testing.Tests/Microsoft.Maui.Testing.Tests.csproj
+        run: dotnet test --project Microsoft.Maui.Testing.Tests/Microsoft.Maui.Testing.Tests.csproj
 
       - name: Pack
         shell: pwsh
@@ -77,13 +82,18 @@ jobs:
           $project = Join-Path $validationRoot 'MauiTestingSmoke'
           $templatePackage = Resolve-Path 'artifacts/packages/Microsoft.Maui.Testing.Templates.*.nupkg'
           $localPackages = (Resolve-Path 'artifacts/packages').Path
+          $versions = [xml](Get-Content '../../eng/Versions.props')
+          $mauiVersion = $versions.SelectSingleNode("/Project/PropertyGroup[@Label='Dotnet MAUI']/MicrosoftMauiControlsVersion").InnerText.Trim()
 
           dotnet new install $templatePackage --debug:custom-hive $hive
           dotnet new mauitest -n MauiTestingSmoke -o $project --debug:custom-hive $hive --no-restore
           dotnet restore (Join-Path $project 'MauiTestingSmoke.csproj') `
             --configfile ../../NuGet.config `
-            "-p:RestoreAdditionalProjectSources=$localPackages"
-          dotnet build (Join-Path $project 'MauiTestingSmoke.csproj') --no-restore -p:ValidateXcodeVersion=false
+            "-p:RestoreAdditionalProjectSources=$localPackages" `
+            "-p:MauiVersion=$mauiVersion"
+          dotnet build (Join-Path $project 'MauiTestingSmoke.csproj') --no-restore `
+            -p:ValidateXcodeVersion=false `
+            "-p:MauiVersion=$mauiVersion"
 
       - name: Upload packages
         uses: actions/upload-artifact@v7

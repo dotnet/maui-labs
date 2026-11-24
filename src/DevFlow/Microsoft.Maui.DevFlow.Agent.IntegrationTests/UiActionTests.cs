@@ -717,7 +717,13 @@ public class UiActionTests : IntegrationTestBase
         var target = await FindRawTouchTargetAsync();
         var viewport = await FindElementAsync("GestureScrollView");
         Assert.True(await Client.ScrollAsync(target.Id, animated: false, scrollToPosition: "end"));
-        Assert.True(await Client.ScrollAsync(viewport.Id, deltaY: -16, animated: false));
+        target = await FindElementAsync("RawTouchTarget");
+        viewport = await FindElementAsync("GestureScrollView");
+        var targetBounds = Assert.IsType<BoundsInfo>(target.WindowBounds);
+        var viewportBounds = Assert.IsType<BoundsInfo>(viewport.WindowBounds);
+        var scrollDelta = targetBounds.Y + targetBounds.Height
+            - (viewportBounds.Y + viewportBounds.Height + 16);
+        Assert.True(await Client.ScrollAsync(viewport.Id, deltaY: scrollDelta, animated: false));
         await WaitForAsync(async () =>
         {
             target = await FindElementAsync("RawTouchTarget");
@@ -847,7 +853,14 @@ public class UiActionTests : IntegrationTestBase
 
     private async Task<ElementInfo> FindCanvasTargetAsync(string automationId)
     {
-        await NavigateToPageAsync("//canvastaps", "SkiaCanvas");
+        try
+        {
+            await NavigateToPageAsync("//canvastaps", "SkiaCanvas", timeoutMs: 15000);
+        }
+        catch (TimeoutException)
+        {
+            await NavigateToPageAsync("//canvastaps", "SkiaCanvas", timeoutMs: 15000);
+        }
         await Client.ScrollAsync(automationId);
         await SettleAsync();
         return await FindElementAsync(automationId);
@@ -959,15 +972,18 @@ public class UiActionTests : IntegrationTestBase
         Assert.Contains("x and y must be given together", await response.Content.ReadAsStringAsync());
     }
 
-    // Two overlays can cover SkiaCanvas, each with a toggle and a "<prefix>: shown|hidden
+    // Several overlays can cover SkiaCanvas, each with a toggle and a "<prefix>: shown|hidden
     // touches=N" status. "SkiaOverlay" is a second SKCanvasView: it takes touches only through a
     // listener (Android) or a recognizer (iOS) and is neither clickable nor a control. "Listener"
     // is a plain Label — a type a touch normally passes — that the app gives a native touch
     // listener on Android, with no MAUI gesture recognizer. Nothing on either view says it would
-    // take a finger's touch, but both would.
+    // take a finger's touch, but both would. "GraphicsOverlay" replaces the exact WindowOverlay
+    // graphics surface's passive MAUI listener with an app-installed consuming listener.
     private static (string Toggle, string Status, string Prefix) OverlayIds(string overlay) => overlay switch
     {
         "SkiaOverlay" => ("SkiaOverlayToggle", "SkiaOverlayStatus", "overlay"),
+        "GraphicsOverlay" => ("GraphicsOverlayToggle", "GraphicsOverlayStatus", "graphics overlay"),
+        "PassiveGraphicsOverlay" => ("PassiveGraphicsOverlayToggle", "GraphicsOverlayStatus", "graphics overlay"),
         _ => ("ListenerOverlayToggle", "ListenerOverlayStatus", "label overlay"),
     };
 
@@ -992,6 +1008,8 @@ public class UiActionTests : IntegrationTestBase
     [InlineData("SkiaOverlay", "drag")]
     [InlineData("ListenerOverlay", "tap")]
     [InlineData("ListenerOverlay", "drag")]
+    [InlineData("GraphicsOverlay", "tap")]
+    [InlineData("GraphicsOverlay", "drag")]
     public async Task PointTouch_OnACanvasUnderAListenerOnlyOverlay_IsRefusedWithoutTouching(string overlay, string kind)
     {
         if (!SupportsRawTouchInjection)
@@ -1000,11 +1018,9 @@ public class UiActionTests : IntegrationTestBase
             return;
         }
 
-        // The label's listener is attached natively on Android only; elsewhere a label lets a
-        // finger's touch through, as the agent does.
-        if (overlay == "ListenerOverlay" && Platform != "android")
+        if (overlay != "SkiaOverlay" && Platform != "android")
         {
-            Output.WriteLine($"The label overlay has no touch listener on {Platform}.");
+            Output.WriteLine($"The {overlay} native listener fixture is Android-only.");
             return;
         }
 
@@ -1040,6 +1056,31 @@ public class UiActionTests : IntegrationTestBase
         finally
         {
             await SetOverlayAsync(overlay, shown: false);
+        }
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task PointTap_OnACanvasUnderAPassiveGraphicsOverlay_IsDelivered()
+    {
+        if (Platform != "android")
+            return;
+
+        await FindCanvasTargetAsync("SkiaCanvas");
+        await SetOverlayAsync("PassiveGraphicsOverlay", shown: true);
+        try
+        {
+            var canvas = await FindElementAsync("SkiaCanvas");
+            var before = (await FindElementAsync("SkiaStatusLabel")).Text;
+            var result = await TapAtFractionAsync(canvas, 0.5, 0.5);
+
+            Assert.True(result.Success, result.Error);
+            await WaitForAsync(async () => (await FindElementAsync("SkiaStatusLabel")).Text != before);
+            Assert.Equal("graphics overlay: shown touches=0", (await FindElementAsync("GraphicsOverlayStatus")).Text);
+        }
+        finally
+        {
+            await SetOverlayAsync("PassiveGraphicsOverlay", shown: false);
         }
     }
 

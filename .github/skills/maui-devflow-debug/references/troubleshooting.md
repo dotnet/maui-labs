@@ -14,7 +14,7 @@ Always pass `--json` to any `maui` command an agent will parse, and `--ci` for
 non-interactive failure-fast runs.
 
 The full `--json` error envelope contract (schema, code categories, worked examples, PowerShell and Bash consumers) is documented in
-[`src/Cli/README.md` — Error envelope](../../../../src/Cli/README.md#error-envelope).
+[`src/Cli/README.md` — Error envelope](https://github.com/dotnet/maui-labs/blob/main/src/Cli/README.md#error-envelope).
 
 **Quick reference** — when a non-DevFlow command fails with `--json`, stdout is a top-level JSON object (no `"error"` wrapper). Note: `maui devflow ...` uses a different JSON error shape and writes errors to stderr.
 
@@ -94,7 +94,7 @@ Fix: `dotnet workload install maui` (installs all MAUI workloads).
 
 **SDK version mismatch:**
 ```
-error : The current .NET SDK does not support targeting .NET 10.0
+error : The current .NET SDK does not support targeting .NET 11.0
 ```
 Fix: Install the required .NET SDK version, or check `global.json` for version pins.
 

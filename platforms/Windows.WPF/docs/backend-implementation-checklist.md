@@ -578,7 +578,7 @@ D:\repos\rmarinho\maui.wpf\
 ├── README.md
 ├── build.slnf                     # Solution filter for CI (libraries only)
 ├── .github/
-│   ├── workflows/build.yml        # CI: windows-latest, .NET 10, build + NuGet publish
+│   ├── workflows/build.yml        # CI: windows-latest, .NET 11, build + NuGet publish
 │   └── copilot-instructions.md
 ├── samples/
 │   ├── Maui.Controls.Sample/      # ControlGallery — comprehensive demo

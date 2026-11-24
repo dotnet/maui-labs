@@ -63,6 +63,7 @@ public abstract class AppFixtureBase : IAppFixture
 
     protected abstract Task InitializePlatformAsync();
     protected abstract Task DisposePlatformAsync();
+    protected virtual string? GetPlatformStartupFailure() => null;
 
     public virtual Task ResetPermissionAsync(PermissionService permission)
         => throw new NotSupportedException($"Permission reset is not supported by the {Platform} integration fixture.");
@@ -104,6 +105,10 @@ public abstract class AppFixtureBase : IAppFixture
 
         while (DateTime.UtcNow < deadline)
         {
+            var platformFailure = GetPlatformStartupFailure();
+            if (platformFailure != null)
+                throw new InvalidOperationException(platformFailure);
+
             try
             {
                 var status = await Client.GetStatusAsync();

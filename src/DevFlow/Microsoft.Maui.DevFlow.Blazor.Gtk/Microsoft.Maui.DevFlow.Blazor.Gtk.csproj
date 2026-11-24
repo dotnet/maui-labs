@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <NoWarn>$(NoWarn);CA1416</NoWarn>
@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Text.Json" />
     <Compile Include="..\Microsoft.Maui.DevFlow.Blazor\WebViewNavigation.cs" Link="WebViewNavigation.cs" />
     <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Agent.Gtk.Tests" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />

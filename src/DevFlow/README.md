@@ -238,7 +238,7 @@ capture is enabled.
 
 MAUI has no tvOS backend of its own. Apps that run MAUI on tvOS through a community backend
 such as [Platform.Maui.TvOS](https://github.com/shinyorg/mauiplatforms) use the standard
-`Microsoft.Maui.DevFlow.Agent` package, which has a `net10.0-tvos` target built and packed
+`Microsoft.Maui.DevFlow.Agent` package, which has `net10.0-tvos` and `net11.0-tvos` targets built and packed
 alongside the other Apple targets, including in the Windows signing build. Register it in
 the backend's `CreateMauiApp`:
 

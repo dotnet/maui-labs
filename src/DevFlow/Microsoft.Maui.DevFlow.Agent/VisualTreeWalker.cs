@@ -621,12 +621,15 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             return IsAppleViewVisible(control)
                 && control.Enabled
                 && (control.AllTargets.Count > 0
+#if IOS || MACCATALYST
                     || control is UIKit.UIButton
                     {
                         Menu: not null,
                         ShowsMenuAsPrimaryAction: true
                     } && (OperatingSystem.IsIOSVersionAtLeast(17, 4)
-                        || OperatingSystem.IsMacCatalystVersionAtLeast(17, 4)));
+                        || OperatingSystem.IsMacCatalystVersionAtLeast(17, 4))
+#endif
+                    );
 
         return nativeElement is UIKit.UIBarButtonItem
         {
@@ -762,6 +765,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             if (!CanInvokeRegisteredNativeElement(control))
                 return $"Native element '{elementId}' is not visible, enabled, and actionable";
 
+#if IOS || MACCATALYST
             if (control is UIKit.UIButton
                 {
                     Menu: not null,
@@ -777,6 +781,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
 
                 return $"Native menu launcher '{elementId}' requires iOS or Mac Catalyst 17.4 or later for programmatic invocation";
             }
+#endif
 
 #if TVOS
             // A Siri Remote select press raises PrimaryActionTriggered; TouchUpInside comes from

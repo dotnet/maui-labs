@@ -20,7 +20,7 @@ internal static class NativePreferenceKeys
         if (representation is null)
             return Array.Empty<string>();
 
-        return representation.Keys.Select(key => key.ToString()).ToArray();
+        return representation.Keys.Select(key => key.ToString()).OfType<string>().ToArray();
 #elif ANDROID
         // Mirror Essentials' default or private named SharedPreferences store.
         var context = global::Android.App.Application.Context;

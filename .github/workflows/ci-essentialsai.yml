@@ -95,7 +95,7 @@ jobs:
     with:
       project-path: tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj
       project-name: essentialsai
-      target-framework: net10.0-windows10.0.19041.0
+      target-framework: net11.0-windows10.0.19041.0
       filter: 'RequiresModel!=true'
       os: windows-2025-vs2026
       workloads: maui

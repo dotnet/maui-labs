@@ -49,7 +49,7 @@ dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.cs
 
 Use `net11.0-ios27.2` or `net11.0-macos27.2` for those platforms.
 The pinned GA workload set provides OS 27.2 reference packs for .NET 11.
-`UseNet11AppleTargets` adds those targets while retaining the default .NET 10
+`UseNet11AppleTargets` selects those Apple targets instead of the default Apple
 targets; it does not install or select Xcode. Install the matching workloads with
 `dotnet workload install maui macos --from-rollback-file eng/workloads/dotnet11-ga.json`.
 
@@ -57,7 +57,7 @@ targets; it does not install or select Xcode. Install the matching workloads wit
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
-  -f net10.0-android
+  -f net11.0-android
 ```
 
 See the [Gemini Nano Android guide](../../docs/ai/gemini-nano-android.md) for
@@ -77,7 +77,7 @@ does not depend on Java being present on the agent's `PATH`.
 
 ```powershell
 dotnet build src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj `
-  -f net10.0-windows10.0.19041.0
+  -f net11.0-windows10.0.19041.0
 ```
 
 Build and package Windows app heads on Windows. See the Windows platform guide
@@ -85,11 +85,11 @@ for MSIX, capability, runtime, and physical-device validation requirements.
 
 ### Full product
 
-The library always targets `net10.0` and Android. The default .NET 10 Apple
-targets are added on non-Linux hosts; `UseNet11AppleTargets=true` also adds the
-.NET 11 OS 27.2 targets. Windows is appended only on Windows hosts.
+The library always targets `net10.0`/`net11.0` and Android. Apple targets are added on
+non-Linux hosts, using either the default reference packs or the OS 27.2 packs
+(net11 only) when `UseNet11AppleTargets=true`. Windows is appended only on Windows hosts.
 The Chat Playground and device tests use the same platform conditions, without
-the portable `net10.0` target or native macOS app target.
+the portable `net11.0` target or native macOS app target.
 
 ```bash
 dotnet build src/AI/EssentialsAI.slnf
@@ -111,7 +111,7 @@ or download those artifacts by itself. See
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj \
-  -p:TargetFrameworks=net10.0 -p:IsTestProject=true
+  -p:TargetFrameworks=net11.0 -p:IsTestProject=true
 ```
 
 The overrides keep the build portable and enable Arcade's test infrastructure
