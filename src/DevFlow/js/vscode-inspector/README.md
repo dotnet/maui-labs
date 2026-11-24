@@ -14,7 +14,7 @@ of the browser, VS Code, GitHub Copilot desktop, and Copilot CLI hosts.
 
 Requirements:
 
-- Node.js 20 or later;
+- Node.js 22 or later;
 - VS Code 1.134 or later; and
 - a trusted VS Code workspace.
 
@@ -29,6 +29,12 @@ code --install-extension vscode-inspector/dist/maui-devflow-inspector.vsix --for
 ```
 
 Reload the VS Code window after reinstalling the VSIX.
+
+The workspace temporarily overrides VSCE's `minimatch` to fix
+[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249). Once a VSCE release
+includes the [upstream upgrade](https://github.com/microsoft/vscode-vsce/pull/1356), upgrade VSCE
+and remove the override. Use npm 10 or npm 11.18+ when updating the lockfile: some npm 11 versions
+can ignore workspace overrides ([npm/cli#9514](https://github.com/npm/cli/issues/9514)).
 
 On Windows, both `node --version` and `cmd /c node --version` must work. If only PowerShell can
 find Node, npm lifecycle scripts cannot run; add the Node installation directory to `PATH` and

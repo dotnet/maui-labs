@@ -10,6 +10,11 @@
   "engines": {
     "node": ">=20"
   },
+  "overrides": {
+    "@vscode/vsce": {
+      "minimatch": "^11.0.1"
+    }
+  },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test:inspector && npm run test --workspaces --if-present",
