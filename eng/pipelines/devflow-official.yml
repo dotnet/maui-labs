@@ -127,6 +127,7 @@ extends:
                 )
                 & eng/common/dotnet.ps1 @arguments
               displayName: Install Android SDK dependencies
+            - template: /eng/pipelines/install-dotnet-test-runtimes.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -219,6 +220,7 @@ extends:
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
             - template: /eng/pipelines/install-dotnet-sdk.yml@self
+            - template: /eng/pipelines/install-dotnet-test-runtimes.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -434,6 +436,11 @@ extends:
               displayName: Provision .NET SDK via Arcade
             - script: eng\common\dotnet.cmd workload install maui --from-rollback-file eng\workloads\dotnet11-ga.json
               displayName: Install MAUI workload
+            - template: /eng/pipelines/install-dotnet-test-runtimes.yml@self
+              parameters:
+                runtimes:
+                - dotnet
+                - windowsdesktop
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -461,6 +468,7 @@ extends:
               displayName: Provision .NET SDK via Arcade
             - script: eng\common\dotnet.cmd workload install maui macos --from-rollback-file eng\workloads\dotnet11-ga.json
               displayName: Install MAUI and macOS workloads
+            - template: /eng/pipelines/install-dotnet-test-runtimes.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
