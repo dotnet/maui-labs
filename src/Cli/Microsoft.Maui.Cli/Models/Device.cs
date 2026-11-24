@@ -25,6 +25,15 @@ public record Device
 	public required string Id { get; init; }
 
 	/// <summary>
+	/// Hardware serial number reported by the device itself (Android <c>ro.serialno</c>).
+	/// Unlike <see cref="Id"/>, this is the same for every transport (USB, wireless debugging)
+	/// that connects to the same physical device.
+	/// </summary>
+	[JsonPropertyName("serial_number")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? SerialNumber { get; init; }
+
+	/// <summary>
 	/// Emulator/AVD identifier if applicable (e.g., AVD name for Android emulators).
 	/// </summary>
 	[JsonPropertyName("emulator_id")]

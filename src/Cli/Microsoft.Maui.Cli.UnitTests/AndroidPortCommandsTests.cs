@@ -297,6 +297,25 @@ public class AndroidPortCommandsTests
 	}
 
 	[Fact]
+	public async Task Forward_SamePhoneOverUsbAndWireless_UsesUsbTransport()
+	{
+		var fake = new FakeAndroidProvider
+		{
+			Devices =
+			{
+				new Device { Name = "Pixel", Id = "adb-3A021FDH2000LA-AbCdEf._adb-tls-connect._tcp", Platforms = new[] { "android" }, State = DeviceState.Connected },
+				new Device { Name = "Pixel", Id = "3A021FDH2000LA", Platforms = new[] { "android" }, State = DeviceState.Connected }
+			}
+		};
+
+		var (exitCode, _, _) = await InvokePortAsync(fake, "android port forward 8080 --json");
+
+		Assert.Equal(0, exitCode);
+		var call = Assert.Single(fake.AddedForwardPorts);
+		Assert.Equal("3A021FDH2000LA", call.Serial);
+	}
+
+	[Fact]
 	public async Task Forward_UnknownDeviceSelector_Fails()
 	{
 		var fake = WithOnlineDevice();

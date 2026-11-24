@@ -308,6 +308,129 @@ public class AndroidDevFlowPortForwarderTests
 		Assert.Contains("RZ8T123456A", resolution.Error);
 	}
 
+	const string UsbSerial = "3A021FDH2000LA";
+	const string WirelessTransport = "adb-3A021FDH2000LA-AbCdEf._adb-tls-connect._tcp";
+
+	[Fact]
+	public async Task EnsureAsync_WithUsbAndWirelessTransportsOfSamePhone_SelectsUsbTransport()
+	{
+		var provider = CreateProvider(
+			Device(WirelessTransport, isEmulator: false),
+			Device(UsbSerial, isEmulator: false));
+		var runner = new FakeAdbRunner();
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest
+		{
+			AgentPorts = [9223],
+			EnsureBrokerReverse = true,
+			Repair = true
+		});
+
+		Assert.Equal(AndroidDevFlowForwardingStatus.Repaired, report.Status);
+		Assert.Equal(UsbSerial, report.SelectedSerial);
+		Assert.Contains($"-s {UsbSerial} forward tcp:9223 tcp:9223", runner.Commands);
+		Assert.Contains($"-s {UsbSerial} reverse tcp:19223 tcp:19223", runner.Commands);
+		Assert.DoesNotContain(runner.Commands, c => c.Contains(WirelessTransport, StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public async Task EnsureAsync_WithUsbAndIpTransportSharingSerialNumber_SelectsUsbTransport()
+	{
+		var provider = CreateProvider(
+			Device("192.168.1.20:41234", isEmulator: false) with { SerialNumber = UsbSerial },
+			Device(UsbSerial, isEmulator: false) with { SerialNumber = UsbSerial });
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", new FakeAdbRunner());
+
+		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest { AgentPorts = [9223], Repair = true });
+
+		Assert.True(report.IsReady);
+		Assert.Equal(UsbSerial, report.SelectedSerial);
+	}
+
+	[Fact]
+	public async Task EnsureAsync_WithDualTransportPhoneAndAnotherDevice_ReportsMultipleDevices()
+	{
+		var provider = CreateProvider(
+			Device(UsbSerial, isEmulator: false),
+			Device(WirelessTransport, isEmulator: false),
+			Device("emulator-5554"));
+		var runner = new FakeAdbRunner();
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest { AgentPorts = [9223] });
+
+		Assert.Equal(AndroidDevFlowForwardingStatus.MultipleDevices, report.Status);
+		Assert.Equal([$"--device {UsbSerial}", "--device emulator-5554"], report.Suggestions);
+		Assert.Empty(runner.Commands);
+	}
+
+	[Theory]
+	[InlineData(WirelessTransport, WirelessTransport)]
+	[InlineData(UsbSerial, UsbSerial)]
+	public async Task EnsureAsync_WithExplicitTransportOfDualTransportPhone_UsesThatTransport(string requested, string expected)
+	{
+		var provider = CreateProvider(
+			Device(UsbSerial, isEmulator: false),
+			Device(WirelessTransport, isEmulator: false));
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", new FakeAdbRunner());
+
+		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest { DeviceSerial = requested, AgentPorts = [9223] });
+
+		Assert.Equal(expected, report.SelectedSerial);
+	}
+
+	[Fact]
+	public async Task EnsureAsync_WithPhysicalSerialOfWirelessOnlyPhone_SelectsWirelessTransport()
+	{
+		var provider = CreateProvider(Device(WirelessTransport, isEmulator: false), Device("emulator-5554"));
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", new FakeAdbRunner());
+
+		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest { DeviceSerial = UsbSerial, AgentPorts = [9223] });
+
+		Assert.Equal(WirelessTransport, report.SelectedSerial);
+	}
+
+	[Fact]
+	public async Task ResolveDeviceForForwardedPortAsync_TreatsTransportsOfSamePhoneAsOneOwner()
+	{
+		var provider = CreateProvider(
+			Device(WirelessTransport, isEmulator: false),
+			Device(UsbSerial, isEmulator: false));
+		var runner = new FakeAdbRunner(forwardPortsBySerial: new Dictionary<string, HashSet<int>>
+		{
+			[UsbSerial] = [10223],
+			[WirelessTransport] = [10223]
+		});
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var resolution = await forwarder.ResolveDeviceForForwardedPortAsync(10223);
+
+		Assert.True(resolution.IsResolved, resolution.Error);
+		Assert.Equal(UsbSerial, resolution.Serial);
+	}
+
+	[Fact]
+	public async Task ResolveDeviceForForwardedPortAsync_IgnoresUninspectableTransportOfOwningPhone()
+	{
+		var provider = CreateProvider(
+			Device(UsbSerial, isEmulator: false),
+			Device(WirelessTransport, isEmulator: false));
+		var runner = new FakeAdbRunner(
+			forwardPortsBySerial: new Dictionary<string, HashSet<int>>
+			{
+				[UsbSerial] = [10223],
+				[WirelessTransport] = []
+			},
+			forwardListFailures: new HashSet<string> { WirelessTransport });
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var resolution = await forwarder.ResolveDeviceForForwardedPortAsync(10223);
+
+		Assert.True(resolution.IsResolved, resolution.Error);
+		Assert.Equal(UsbSerial, resolution.Serial);
+	}
+
 	static FakeAndroidProvider CreateProvider(params Device[] devices)
 		=> new()
 		{
