@@ -33,7 +33,7 @@ before(async () => {
     };
 
     if (req.method === "GET" && p === "/api/agents") {
-      return json([{ id: "x", project: "", tfm: "net10.0-windows", platform: "windows", appName: "Fake", port: PORT }]);
+      return json([{ id: "x", project: "", tfm: "net11.0-windows", platform: "windows", appName: "Fake", port: PORT }]);
     }
     if (req.method === "GET" && p === "/api/v1/agent/status") {
       return json({

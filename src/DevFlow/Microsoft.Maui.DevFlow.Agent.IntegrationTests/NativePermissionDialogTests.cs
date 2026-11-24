@@ -123,7 +123,8 @@ public class NativePermissionDialogTests : IntegrationTestBase
                 driver.GetAccessibilityTreeAsync);
             LogDialog(dialog);
             var whileUsing = FindButton(dialog, label =>
-                label.Contains("While Using", StringComparison.OrdinalIgnoreCase));
+                label.Contains("While Using", StringComparison.OrdinalIgnoreCase)
+                || label.Contains("WhileUsing", StringComparison.OrdinalIgnoreCase));
 
             var result = await driver.PressAlertButtonSafelyAsync(dialog, whileUsing.Label);
             Assert.True(result.Success, result.Message);

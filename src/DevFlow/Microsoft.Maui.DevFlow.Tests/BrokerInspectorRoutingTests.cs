@@ -83,7 +83,7 @@ public class BrokerInspectorRoutingTests
     public void AgentIds_SameBuildDifferentProcesses_CanCoexist()
     {
         const string project = "DevFlow.Sample";
-        const string tfm = "net10.0-android";
+        const string tfm = "net11.0-android";
         const string sessionId = "sample-session";
 
         var first = AgentRegistration.ComputeId(project, tfm, sessionId, processId: 1001);
@@ -111,7 +111,7 @@ public class BrokerInspectorRoutingTests
     public void AgentIds_WithoutProcessIdentity_UseProjectAndFrameworkId()
     {
         const string project = "DevFlow.Sample";
-        const string tfm = "net10.0-windows10.0.19041.0";
+        const string tfm = "net11.0-windows10.0.19041.0";
 
         var legacy = AgentRegistration.ComputeId(project, tfm);
         Assert.Matches("^[0-9a-f]{32}$", legacy);

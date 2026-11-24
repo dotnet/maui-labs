@@ -68,10 +68,10 @@ maui devflow mcp        # MCP server for AI agents
 
 | Platform | UI framework | Roots walked |
 |---|---|---|
-| `net10.0-android` | `Android.Views` | activity decor view + dialogs |
-| `net10.0-ios` | UIKit | connected scenes → `UIWindow` |
-| `net10.0-maccatalyst` | UIKit | connected scenes → `UIWindow` |
-| `net10.0-macos` | AppKit | application windows |
+| `net11.0-android` | `Android.Views` | activity decor view + dialogs |
+| `net11.0-ios` | UIKit | connected scenes → `UIWindow` |
+| `net11.0-maccatalyst` | UIKit | connected scenes → `UIWindow` |
+| `net11.0-macos` | AppKit | application windows |
 
 Elements are identified by whatever the platform already offers: `View.Tag` then the resource-entry
 name on Android, `AccessibilityIdentifier` on UIKit, `NSView.Identifier` on AppKit. Give your views

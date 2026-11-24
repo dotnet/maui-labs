@@ -120,7 +120,7 @@ extends:
                   'build'
                   '-t:InstallAndroidDependencies'
                   '-f'
-                  'net10.0-android'
+                  'net11.0-android'
                   "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
                   '-p:AcceptAndroidSDKLicenses=true'
                   'src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj'
@@ -199,7 +199,7 @@ extends:
                 $(_OfficialBuildArgs)
               displayName: Build and Test AppProjectReference
 
-          # The Linux GTK4 NuGet packages are pure managed (net10.0) assemblies
+          # The Linux GTK4 NuGet packages are pure managed (net11.0) assemblies
           # using GirCore for GTK/WebKit bindings, so they build and pack on Windows.
           # Running on Windows is required so MicroBuild/ESRP can sign the DLLs —
           # signing does not execute on Linux agents.
@@ -266,7 +266,7 @@ extends:
                 set -euo pipefail
                 android_sdk=$(.dotnet/dotnet build \
                   -t:InstallAndroidDependencies \
-                  -f net10.0-android \
+                  -f net11.0-android \
                   -p:AcceptAndroidSDKLicenses=true \
                   -getProperty:AndroidSdkDirectory \
                   src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj)
@@ -343,7 +343,7 @@ extends:
                   'build'
                   '-t:InstallAndroidDependencies'
                   '-f'
-                  'net10.0-android'
+                  'net11.0-android'
                   '-p:AcceptAndroidSDKLicenses=true'
                   '-getProperty:AndroidSdkDirectory,JavaSdkDirectory'
                   'src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj'

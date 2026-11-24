@@ -18,6 +18,10 @@ public partial class CanvasTapTestPage : ContentPage
     private int _chartSelections;
     private int _overlayTouches;
     private int _listenerOverlayTouches;
+#if ANDROID
+    private WindowOverlay? _graphicsOverlay;
+    private int _graphicsOverlayTouches;
+#endif
 
     public CanvasTapTestPage()
     {
@@ -97,6 +101,52 @@ public partial class CanvasTapTestPage : ContentPage
     private void ShowListenerOverlayStatus() =>
         ListenerOverlayStatusLabel.Text =
             $"label overlay: {(ListenerOverlay.IsVisible ? "shown" : "hidden")} touches={_listenerOverlayTouches}";
+
+    private void OnGraphicsOverlayToggleClicked(object? sender, EventArgs e)
+    {
+#if ANDROID
+        var window = Window ?? throw new InvalidOperationException("The canvas page has no window.");
+        if (_graphicsOverlay is { } existing)
+        {
+            window.RemoveOverlay(existing);
+            _graphicsOverlay = null;
+        }
+        else
+        {
+            var overlay = new WindowOverlay(window);
+            if (!window.AddOverlay(overlay) || overlay.GraphicsView is not { } graphicsView)
+                throw new InvalidOperationException("The graphics overlay could not be initialized.");
+            _graphicsOverlay = overlay;
+            if (sender is Button { CommandParameter: "consuming" })
+                graphicsView.SetOnTouchListener(new KeepingTouchListener(() =>
+                {
+                    _graphicsOverlayTouches++;
+                    ShowGraphicsOverlayStatus();
+                }));
+        }
+        _graphicsOverlayTouches = 0;
+        ShowGraphicsOverlayStatus();
+#endif
+    }
+
+    protected override void OnDisappearing()
+    {
+#if ANDROID
+        if (_graphicsOverlay is { } overlay && Window is { } window)
+        {
+            window.RemoveOverlay(overlay);
+            _graphicsOverlay = null;
+            ShowGraphicsOverlayStatus();
+        }
+#endif
+        base.OnDisappearing();
+    }
+
+#if ANDROID
+    private void ShowGraphicsOverlayStatus() =>
+        GraphicsOverlayStatusLabel.Text =
+            $"graphics overlay: {(_graphicsOverlay != null ? "shown" : "hidden")} touches={_graphicsOverlayTouches}";
+#endif
 
     private void OnChartSelectionChanged(object? sender, ChartSelectionChangedEventArgs e)
     {

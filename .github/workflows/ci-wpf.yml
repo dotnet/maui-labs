@@ -281,33 +281,18 @@ jobs:
           - maui: '10.0.41'
             framework: net10.0-windows10.0.17763.0
             version-property: Maui10Version
-            devflow-maui: '10.0.41'
-            extensions-version: '10.0.5'
-            webview-version: '10.0.3'
           - maui: '10.0.60'
             framework: net10.0-windows10.0.17763.0
             version-property: Maui10Version
-            devflow-maui: '10.0.60'
-            extensions-version: '10.0.5'
-            webview-version: '10.0.3'
           - maui: '10.0.70'
             framework: net10.0-windows10.0.17763.0
             version-property: Maui10Version
-            devflow-maui: '10.0.70'
-            extensions-version: '10.0.5'
-            webview-version: '10.0.3'
           - maui: '10.0.110'
             framework: net10.0-windows10.0.17763.0
             version-property: Maui10Version
-            devflow-maui: '10.0.110'
-            extensions-version: '10.0.5'
-            webview-version: '10.0.3'
           - maui: '11.0.10'
             framework: net11.0-windows10.0.17763.0
             version-property: Maui11Version
-            devflow-maui: '11.0.10'
-            extensions-version: '11.0.0'
-            webview-version: '11.0.0'
     uses: ./.github/workflows/_build.yml
     permissions:
       contents: read
@@ -322,20 +307,7 @@ jobs:
         ["-f", "${{ matrix.framework }}",
          "-p:UseMaui=false",
          "-p:${{ matrix.version-property }}=${{ matrix.maui }}",
-         "-p:DevFlowMauiMinVersion=${{ matrix.devflow-maui }}",
-         "-p:MicrosoftMauiControlsVersion=${{ matrix.devflow-maui }}",
-         "-p:MicrosoftAspNetCoreComponentsWebViewVersion=${{ matrix.webview-version }}",
-         "-p:MicrosoftExtensionsDependencyInjectionVersion=${{ matrix.extensions-version }}",
-         "-p:MicrosoftExtensionsConfigurationVersion=${{ matrix.extensions-version }}",
-         "-p:MicrosoftExtensionsHttpVersion=${{ matrix.extensions-version }}",
-         "-p:MicrosoftExtensionsHostingVersion=${{ matrix.extensions-version }}",
-         "-p:MicrosoftExtensionsLoggingAbstractionsVersion=${{ matrix.extensions-version }}",
-         "-p:MicrosoftExtensionsLoggingConsoleVersion=${{ matrix.extensions-version }}",
-         "-p:MicrosoftExtensionsLoggingVersion=${{ matrix.extensions-version }}",
-         "-p:MicrosoftExtensionsLoggingDebugVersion=${{ matrix.extensions-version }}",
-         "-p:MicrosoftExtensionsConfigurationJsonVersion=${{ matrix.extensions-version }}",
-         "-p:MicrosoftExtensionsConfigurationUserSecretsVersion=${{ matrix.extensions-version }}",
-         "-p:SystemTextJsonVersion=${{ matrix.extensions-version }}",
+         "-p:MicrosoftMauiControlsNet10Version=${{ startsWith(matrix.maui, '10.') && matrix.maui || '10.0.41' }}",
          "--filter", "FullyQualifiedName~AlertManagerSubscriptionTests"]
 
   handler-tests:
@@ -446,10 +418,8 @@ jobs:
       - name: Install existing WPF template workloads
         shell: pwsh
         run: |
-          $sdkVersion = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
-          $sdkDirectory = Join-Path $env:DOTNET_ROOT "sdk\$sdkVersion"
           $dotnet = Join-Path $env:DOTNET_ROOT 'dotnet.exe'
-          & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --from-rollback-file eng/workloads/dotnet11-ga.json
+          & $dotnet workload install maui maui-tizen --from-rollback-file eng/workloads/dotnet11-ga.json
           if ($LASTEXITCODE -ne 0) { throw 'Workload installation failed.' }
       - name: Restore and build the normal source consumer
         id: source-font-build

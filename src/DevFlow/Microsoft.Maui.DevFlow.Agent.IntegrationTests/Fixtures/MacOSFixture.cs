@@ -16,10 +16,10 @@ public sealed class MacOSFixture : AppFixtureBase
 
     protected override async Task InitializePlatformAsync()
     {
-        if (TestFramework.IsNative && TestDotNet.IsEleven)
+        if (TestFramework.IsNative && !TestDotNet.IsEleven)
         {
             throw new InvalidOperationException(
-                "DEVFLOW_TEST_DOTNET=11 targets the MAUI-on-AppKit sample; the native AppKit sample is net10.0 only.");
+                "The native AppKit sample requires DEVFLOW_TEST_DOTNET=11; only the MAUI-on-AppKit sample retains net10.0 support.");
         }
 
         await WithBuildLockAsync(async () =>

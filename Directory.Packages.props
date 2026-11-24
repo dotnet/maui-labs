@@ -8,7 +8,6 @@
   <!-- .NET MAUI (versions from eng/Versions.props, flowing via maestro) -->
   <ItemGroup Label="MAUI">
     <PackageVersion Include="Microsoft.Maui.Controls" Version="$(MicrosoftMauiControlsVersion)" />
-    <PackageVersion Include="Microsoft.Maui.Controls.Compatibility" Version="$(MicrosoftMauiControlsCompatibilityVersion)" />
     <PackageVersion Include="Microsoft.Maui.Core" Version="$(MicrosoftMauiControlsVersion)" />
     <PackageVersion Include="Microsoft.Maui.Essentials" Version="$(MicrosoftMauiEssentialsVersion)" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="$(MicrosoftAspNetCoreComponentsWebViewVersion)" />
@@ -91,11 +90,18 @@
   <!-- EssentialsAI dependencies -->
   <ItemGroup Label="EssentialsAI Android UI"
              Condition="$(MSBuildProjectName.StartsWith('Microsoft.Maui.Essentials.AI')) or '$(MSBuildProjectName)' == 'AIExtensions.Sample.ChatPlayground' or '$(MSBuildProjectName)' == 'EssentialsAISample'">
-    <PackageVersion Include="Xamarin.AndroidX.Fragment.Ktx" Version="1.8.9" />
+    <PackageVersion Include="Xamarin.AndroidX.Fragment.Ktx" Version="1.8.9.4" />
   </ItemGroup>
   <ItemGroup Label="EssentialsAI Android"
              Condition="$(MSBuildProjectName.StartsWith('Microsoft.Maui.Essentials.AI')) or '$(MSBuildProjectName)' == 'AIExtensions.Sample.ChatPlayground'">
-    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Process" Version="2.9.2.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Collection.Ktx" Version="1.6.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Common" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.LiveData.Core" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Process" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.ViewModel" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.ViewModel.Android" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.ViewModelSavedState" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.ViewModelSavedState.Android" Version="2.11.0.1" />
     <PackageVersion Include="Xamarin.Firebase.Encoders" Version="117.0.0.21" />
     <PackageVersion Include="Xamarin.Firebase.Encoders.JSON" Version="118.0.1.13" />
     <PackageVersion Include="Xamarin.Google.Android.DataTransport.TransportApi" Version="4.0.0.3" />

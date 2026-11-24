@@ -588,9 +588,9 @@ tests/
 
 ## Prerequisites
 
-### .NET 10 SDK
+### .NET 11 SDK
 
-Install the latest .NET 10 SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/10.0).
+Install the latest .NET 11 SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/11.0).
 
 ### Workloads
 

@@ -8,6 +8,7 @@
          asset, which cannot carry those annotations and so would silently weaken their NativeAOT
          and trimming builds. Nothing here needs a post-net8.0 API. -->
     <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
     <!-- Only pack from the DevFlow pipeline job; the Cli job includes this project
          transitively as a ProjectReference but the DevFlow job owns the package. -->
     <IsPackable>false</IsPackable>
@@ -42,7 +43,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="System.Text.Json" VersionOverride="$(SystemTextJsonCompatibilityVersion)" />
   </ItemGroup>
 
 </Project>

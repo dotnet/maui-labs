@@ -6,6 +6,7 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 /// Those backends ship net10.0 assets (MAUI 10 compatibility) and net11.0 assets (MAUI 11 public
 /// extensibility contracts), and their DevFlow samples multi-target both. Set
 /// <c>DEVFLOW_TEST_DOTNET=11</c> to drive the net11.0 build; the default is <c>10</c>.
+/// The plain .NET native AppKit sample targets net11.0 only and requires an explicit <c>11</c>.
 /// </summary>
 public static class TestDotNet
 {

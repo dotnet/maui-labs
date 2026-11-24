@@ -25,7 +25,7 @@ test("Stable agent identity ignores process-specific ids and ports", () => {
     id: "old",
     port: 9001,
     project: "C:\\src\\App.csproj",
-    tfm: "net10.0-windows10.0.19041.0",
+    tfm: "net11.0-windows10.0.19041.0",
     platform: "Windows",
     appName: "MauiTodo",
     sessionId: "worktree-a",
@@ -41,7 +41,7 @@ test("Stable agent identity ignores process-specific ids and ports", () => {
 test("Relative project identities cannot identify a replacement process across worktrees", () => {
   for (const project of ["DevFlow.Sample.csproj", "samples/DevFlow.Sample.csproj", "C:DevFlow.Sample.csproj"]) {
     for (const sessionId of ["dwampledevflowsamplecsproj", undefined]) {
-      const selected = { project, tfm: "net10.0", platform: "Windows", appName: "MauiTodo", sessionId };
+      const selected = { project, tfm: "net11.0", platform: "Windows", appName: "MauiTodo", sessionId };
       assert.equal(sameAgentIdentity(selected, { ...selected }), false);
     }
   }
@@ -49,7 +49,7 @@ test("Relative project identities cannot identify a replacement process across w
 
 test("Replacement identity requires non-empty matching session metadata", () => {
   const selected = {
-    project: "C:/src/App.csproj", tfm: "net10.0", platform: "Windows", appName: "App",
+    project: "C:/src/App.csproj", tfm: "net11.0", platform: "Windows", appName: "App",
   };
   for (const sessionId of [undefined, "", " "])
     assert.equal(sameAgentIdentity({ ...selected, sessionId }, { ...selected, sessionId }), false);
@@ -212,7 +212,7 @@ test("A relative-project target reconnects by exact id but requires a choice for
     sessionId: "dwampledevflowsamplecsproj",
     appName: "MauiTodo",
     platform: "Windows",
-    tfm: "net10.0",
+    tfm: "net11.0",
   };
   const other = { ...selected, id: "other-worktree" };
   let agents = [selected];

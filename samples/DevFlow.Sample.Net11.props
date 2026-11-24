@@ -2,14 +2,14 @@
   <!--
     The DevFlow integration samples multi-target net10.0 (the backends' MAUI 10 compatibility
     assets) and net11.0 (the backends' MAUI 11 public-contract assets), so the integration suite
-    can drive both. Repository-wide central transitive pinning would downgrade the backends'
-    MAUI 11 / Microsoft.Extensions 11 dependencies to the MAUI 10 baseline, so these sample
-    apps resolve their transitive graph normally, and net11.0 lifts the packages the samples
-    reference directly to the matching .NET 11 versions.
+    can drive both. Repository-wide central transitive pinning can downgrade the backends'
+    servicing dependencies to the repository's compatibility baseline, so these sample
+    apps resolve their transitive graph normally. Their direct .NET 11 Extensions references
+    follow the current repository version.
   -->
   <PropertyGroup>
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
-    <DevFlowSampleExtensions11Version Condition="'$(DevFlowSampleExtensions11Version)' == ''">11.0.0</DevFlowSampleExtensions11Version>
+    <DevFlowSampleExtensions11Version Condition="'$(DevFlowSampleExtensions11Version)' == ''">$(MicrosoftExtensionsHttpVersion)</DevFlowSampleExtensions11Version>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' != '' and $([MSBuild]::GetTargetFrameworkVersion('$(TargetFramework)')) == '11.0'">

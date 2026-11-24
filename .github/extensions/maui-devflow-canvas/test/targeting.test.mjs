@@ -5,7 +5,7 @@ import { agentIdentityKey, resolveAgentTarget } from "../targeting.mjs";
 const todo = {
   id: "todo-old",
   project: "C:\\src\\MauiTodo.csproj",
-  tfm: "net10.0-windows10.0.19041.0",
+  tfm: "net11.0-windows10.0.19041.0",
   platform: "Windows",
   appName: "MauiTodo",
   sessionId: "worktree-a",

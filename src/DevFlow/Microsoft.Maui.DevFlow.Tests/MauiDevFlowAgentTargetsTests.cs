@@ -54,7 +54,7 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
             <Project>
               <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
               <PropertyGroup>
-                <TargetFramework>net10.0</TargetFramework>
+                <TargetFramework>net11.0</TargetFramework>
                 <Configuration>{{configuration}}</Configuration>
                 <DevFlowXamlSourceMapsEnabled>{{enabled}}</DevFlowXamlSourceMapsEnabled>
                 <EnableDefaultMauiItems>false</EnableDefaultMauiItems>
@@ -94,15 +94,15 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
         Assert.Contains("InitializeComponent", generated);
         Assert.Contains("CounterBtn", generated);
         var editorConfig = File.ReadAllText(Path.Combine(
-            _projectDirectory, "obj", configuration, "net10.0", "Test.GeneratedMSBuildEditorConfig.editorconfig"));
+            _projectDirectory, "obj", configuration, "net11.0", "Test.GeneratedMSBuildEditorConfig.editorconfig"));
         var expectSourceMaps = enabled == "true" || (enabled == "" && configuration == "Debug");
         Assert.Equal(expectSourceMaps,
             editorConfig.Contains("build_metadata.AdditionalFiles.DevFlowXaml = true", StringComparison.Ordinal));
     }
 
     [Theory]
-    [InlineData("net10.0")]
-    [InlineData("net10.0-windows")]
+    [InlineData("net11.0")]
+    [InlineData("net11.0-windows")]
     public void CoreSourceMapTarget_ImportsWithoutPrivateMauiTargets(string targetFramework)
     {
         var targetPath = Path.Combine(
@@ -141,14 +141,14 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
     }
 
     [Theory]
-    [InlineData("net10.0", true)]
+    [InlineData("net11.0", true)]
     [InlineData("net11.0", false)]
-    [InlineData("net10.0-macos", true)]
+    [InlineData("net11.0-macos", true)]
     [InlineData("net11.0-macos", false)]
-    [InlineData("net10.0-android", true)]
-    [InlineData("net10.0-ios", false)]
-    [InlineData("net10.0-maccatalyst", true)]
-    [InlineData("net10.0-windows", false)]
+    [InlineData("net11.0-android", true)]
+    [InlineData("net11.0-ios", false)]
+    [InlineData("net11.0-maccatalyst", true)]
+    [InlineData("net11.0-windows", false)]
     public void CoreSourceMapTarget_PreservesMauiPipeline_ForEveryTfm(string targetFramework, bool importBeforeMaui)
     {
         var import = $"""<Import Project="{SecurityElement.Escape(Path.Combine(CoreBuildPath, "Microsoft.Maui.DevFlow.Agent.Core.targets"))}" />""";
@@ -436,7 +436,7 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
     private static DateTime SentinelTimestampUtc { get; } = new(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private string GetGeneratedFilePath(string configuration) =>
-        Path.Combine(_projectDirectory, "obj", configuration, "net10.0", "Microsoft.Maui.DevFlowPort.g.cs");
+        Path.Combine(_projectDirectory, "obj", configuration, "net11.0", "Microsoft.Maui.DevFlowPort.g.cs");
 
     private void CreateTestProject(string relativeTargetPath, string? additionalProperties = null)
     {
@@ -452,7 +452,7 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
         File.WriteAllText(ProjectFilePath, $$"""
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup>
-                <TargetFramework>net10.0</TargetFramework>
+                <TargetFramework>net11.0</TargetFramework>
             {{additionalProperties}}
               </PropertyGroup>
               <Import Project="{{escapedTargetFilePath}}" />

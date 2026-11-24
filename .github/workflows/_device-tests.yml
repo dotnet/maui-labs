@@ -14,7 +14,7 @@ on:
       target-framework:
         required: true
         type: string
-        description: 'Target framework to run tests against (e.g. net10.0-maccatalyst, net10.0-android)'
+        description: 'Target framework to run tests against (e.g. net11.0-maccatalyst, net11.0-android)'
       filter:
         required: false
         type: string
@@ -70,6 +70,11 @@ jobs:
           developer_dir="$(cd /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer && pwd -P)"
           sudo xcode-select -s "$developer_dir"
           echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+
+      - name: Use a file-based .NET SDK on Windows
+        if: inputs.install-workloads && runner.os == 'Windows'
+        shell: pwsh
+        run: '"DOTNET_INSTALL_DIR=$(Join-Path $env:RUNNER_TEMP ''maui-labs-dotnet'')" >> $env:GITHUB_ENV'
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
