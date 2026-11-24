@@ -1,0 +1,580 @@
+[CmdletBinding()]
+param(
+    [string] $ArtifactsDirectory,
+    [string] $DotNet = 'dotnet',
+    [ValidateSet('all', 'gtk', 'wpf', 'appkit', 'switch')]
+    [string] $Backend = 'gtk',
+    [ValidateSet('net10.0-macos', 'net11.0-macos')]
+    [string] $AppKitTargetFramework = 'net11.0-macos',
+    [switch] $KeepArtifacts
+)
+
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+$repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$fixture = Join-Path $repo 'platforms\Shared\ResourceAcceptance'
+$version = '9.8.7-resource-smoke'
+$mauiVersion = '11.0.10'
+if (-not $ArtifactsDirectory) {
+    $ArtifactsDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "community-resources-$([Guid]::NewGuid().ToString('N'))"
+}
+if (Test-Path -LiteralPath $ArtifactsDirectory) {
+    throw "Use a new artifacts directory to avoid stale resource results: $ArtifactsDirectory"
+}
+$work = (New-Item -ItemType Directory -Path $ArtifactsDirectory).FullName
+$packages = New-Item -ItemType Directory -Path (Join-Path $work 'packages')
+$restore = New-Item -ItemType Directory -Path (Join-Path $work 'restore')
+$env:DOTNET_CLI_HOME = (New-Item -ItemType Directory -Path (Join-Path $work 'dotnet-home')).FullName
+$env:NUGET_PACKAGES = $restore.FullName
+$env:NUGET_HTTP_CACHE_PATH = (New-Item -ItemType Directory -Path (Join-Path $work 'http-cache')).FullName
+
+function Invoke-DotNet {
+    param(
+        [string[]] $Arguments,
+        [switch] $ExpectFailure,
+        [string] $ExpectedErrorCode = ''
+    )
+
+    if ($ExpectedErrorCode) {
+        if (-not $ExpectFailure) { throw 'ExpectedErrorCode requires ExpectFailure.' }
+        & $DotNet @Arguments 2>&1 | Tee-Object -Variable commandOutput
+    }
+    else {
+        & $DotNet @Arguments
+    }
+    $exitCode = $LASTEXITCODE
+    if ($ExpectFailure) {
+        if ($exitCode -eq 0) {
+            throw "dotnet $($Arguments -join ' ') unexpectedly succeeded"
+        }
+        if ($ExpectedErrorCode -and
+            ($commandOutput -join "`n") -notmatch "\berror $([regex]::Escape($ExpectedErrorCode)):") {
+            throw "dotnet failed without the expected error $ExpectedErrorCode (exit $exitCode)."
+        }
+        # A rejected collision passes the assertion, including for PowerShell CI's exit-code wrapper.
+        $global:LASTEXITCODE = 0
+        return
+    }
+    if ($exitCode -ne 0) {
+        throw "dotnet $($Arguments -join ' ') failed with exit code $exitCode"
+    }
+}
+
+function Add-PackageSource {
+    param([string] $Destination)
+
+    [xml] $config = Get-Content (Join-Path $repo 'NuGet.config') -Raw
+    $source = $config.CreateElement('add')
+    $source.SetAttribute('key', 'community-resource-acceptance')
+    $source.SetAttribute('value', $packages.FullName)
+    $config.configuration.packageSources.AppendChild($source) | Out-Null
+    $config.Save($Destination)
+}
+
+function Set-Tokens {
+    param(
+        [string] $Path,
+        [hashtable] $Tokens
+    )
+
+    $text = [System.IO.File]::ReadAllText($Path)
+    foreach ($entry in $Tokens.GetEnumerator()) {
+        $text = $text.Replace($entry.Key, $entry.Value)
+    }
+    [System.IO.File]::WriteAllText($Path, $text)
+}
+
+function Assert-SingleFile {
+    param(
+        [string] $Root,
+        [string] $RelativePath,
+        [byte[]] $ExpectedBytes
+    )
+
+    $normalized = $RelativePath.Replace('\', [System.IO.Path]::DirectorySeparatorChar).Replace('/', [System.IO.Path]::DirectorySeparatorChar).Normalize()
+    $matches = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Where-Object {
+        $_.FullName.Normalize().EndsWith($normalized, [StringComparison]::Ordinal)
+    })
+    if ($matches.Count -ne 1) {
+        throw "Expected exactly one '$RelativePath' below '$Root'; found $($matches.Count)."
+    }
+    $actual = [System.IO.File]::ReadAllBytes($matches[0].FullName)
+    if (-not [System.Linq.Enumerable]::SequenceEqual[byte]($actual, $ExpectedBytes)) {
+        throw "Unexpected bytes in '$($matches[0].FullName)'."
+    }
+    return $matches[0].FullName
+}
+
+function Assert-NoFile {
+    param(
+        [string] $Root,
+        [string] $RelativePath
+    )
+
+    $normalized = $RelativePath.Replace('\', [System.IO.Path]::DirectorySeparatorChar).Replace('/', [System.IO.Path]::DirectorySeparatorChar).Normalize()
+    $matches = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Where-Object {
+        $_.FullName.Normalize().EndsWith($normalized, [StringComparison]::Ordinal)
+    })
+    if ($matches.Count -ne 0) {
+        throw "Expected '$RelativePath' to be absent below '$Root'; found $($matches.Count)."
+    }
+}
+
+function Assert-PngDimensions {
+    param(
+        [string] $Root,
+        [string] $RelativePath,
+        [int] $Width,
+        [int] $Height
+    )
+
+    $normalized = $RelativePath.Replace('\', [System.IO.Path]::DirectorySeparatorChar).Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+    $matches = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Where-Object {
+        $_.FullName.EndsWith($normalized, [StringComparison]::Ordinal)
+    })
+    if ($matches.Count -ne 1) {
+        throw "Expected exactly one '$RelativePath' below '$Root'; found $($matches.Count)."
+    }
+    $path = $matches[0].FullName
+    $bytes = [System.IO.File]::ReadAllBytes($path)
+    if ($bytes.Length -lt 24 -or
+        $bytes[0] -ne 0x89 -or $bytes[1] -ne 0x50 -or $bytes[2] -ne 0x4E -or $bytes[3] -ne 0x47) {
+        throw "Expected '$path' to be a PNG."
+    }
+    $actualWidth = (([int] $bytes[16]) -shl 24) -bor (([int] $bytes[17]) -shl 16) -bor (([int] $bytes[18]) -shl 8) -bor ([int] $bytes[19])
+    $actualHeight = (([int] $bytes[20]) -shl 24) -bor (([int] $bytes[21]) -shl 16) -bor (([int] $bytes[22]) -shl 8) -bor ([int] $bytes[23])
+    if ($actualWidth -ne $Width -or $actualHeight -ne $Height) {
+        throw "Expected '$path' to be ${Width}x${Height}; found ${actualWidth}x${actualHeight}."
+    }
+}
+
+function Assert-Icns {
+    param(
+        [string] $Root,
+        [string] $RelativePath
+    )
+
+    $normalized = $RelativePath.Replace('\', [System.IO.Path]::DirectorySeparatorChar).Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+    $matches = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Where-Object {
+        $_.FullName.EndsWith($normalized, [StringComparison]::Ordinal)
+    })
+    if ($matches.Count -ne 1) {
+        throw "Expected exactly one '$RelativePath' below '$Root'; found $($matches.Count)."
+    }
+    $bytes = [System.IO.File]::ReadAllBytes($matches[0].FullName)
+    if ($bytes.Length -lt 8 -or
+        $bytes[0] -ne 0x69 -or $bytes[1] -ne 0x63 -or
+        $bytes[2] -ne 0x6E -or $bytes[3] -ne 0x73) {
+        throw "Expected '$($matches[0].FullName)' to be an icns file."
+    }
+}
+
+function Assert-AppKitStandardResources {
+    param(
+        [string] $Root,
+        [string] $FixtureRoot,
+        [string] $TargetFramework = 'net11.0-macos'
+    )
+
+    if ($TargetFramework -eq 'net10.0-macos') {
+        Assert-SingleFile $Root 'Images/pipeline.svg' ([System.IO.File]::ReadAllBytes((Join-Path $FixtureRoot 'Consumer/Resources/Images/pipeline.svg'))) | Out-Null
+        Assert-SingleFile $Root 'Images/splash.svg' ([System.IO.File]::ReadAllBytes((Join-Path $FixtureRoot 'Consumer/Resources/Splash/splash.svg'))) | Out-Null
+    } else {
+        Assert-PngDimensions $Root 'Images/pipeline.png' 16 16
+        Assert-PngDimensions $Root 'Images/pipeline@2x.png' 32 32
+        Assert-PngDimensions $Root 'Images/splash.png' 128 128
+        Assert-PngDimensions $Root 'Images/splash@2x.png' 256 256
+        Assert-NoFile $Root 'Images/pipeline.svg'
+        Assert-NoFile $Root 'Images/splash.svg'
+    }
+    Assert-SingleFile $Root 'Fonts/OpenSans-Regular.ttf' ([System.IO.File]::ReadAllBytes((Join-Path $FixtureRoot 'Consumer/Resources/Fonts/OpenSans-Regular.ttf'))) | Out-Null
+    Assert-Icns $Root 'AppIcon.icns'
+    Assert-NoFile $Root 'AppIcon/appicon.svg'
+    Assert-NoFile $Root 'AppIcon/appicon.png'
+    Assert-NoFile $Root 'Splash/splash.svg'
+}
+
+function Assert-BackendIdentity {
+    param(
+        [string] $Root,
+        [string] $Expected
+    )
+
+    $matches = @(Get-ChildItem -LiteralPath $Root -File -Recurse -Filter 'resource-acceptance-backend.txt')
+    if ($matches.Count -ne 1 -or ([System.IO.File]::ReadAllText($matches[0].FullName).Trim() -cne $Expected)) {
+        throw "Expected exactly one backend identity '$Expected' below '$Root'."
+    }
+}
+
+function Copy-Fixture {
+    param([string] $Destination)
+
+    New-Item -ItemType Directory -Path $Destination | Out-Null
+    Copy-Item (Join-Path $fixture 'ReferencedAssets') $Destination -Recurse
+    Copy-Item (Join-Path $fixture 'Consumer') $Destination -Recurse
+}
+
+function Get-ResourcePublishArguments {
+    param(
+        [string] $BackendName,
+        [string] $Project,
+        [string] $Destination
+    )
+
+    $arguments = @('publish', $Project, '--no-restore', "-p:PublishDir=$Destination")
+    if ($BackendName -ne 'appkit') {
+        $arguments += '--no-build'
+    }
+    return $arguments
+}
+
+function Invoke-BackendAcceptance {
+    param(
+        [string] $Name,
+        [string] $PackageId,
+        [string] $Project,
+        [string] $TargetFramework,
+        [string] $PlatformProperties,
+        [string] $ExpectedBackendIdentity,
+        [string] $RuntimeIdentifier = '',
+        [string] $ConsumerMauiVersion = $mauiVersion
+    )
+
+    Write-Host "=== $Name resource acceptance ==="
+    $packArguments = @('pack', $Project, '-c', 'Release', '-o', $packages.FullName,
+        "-p:PackageVersion=$version", '-v:minimal')
+    if ($Name -eq 'appkit') {
+        $packArguments += "-p:TargetFrameworks=$TargetFramework"
+    }
+    Invoke-DotNet $packArguments
+
+    $root = Join-Path $work $Name
+    Copy-Fixture $root
+    '<Project />' | Set-Content (Join-Path $root 'Directory.Build.props')
+    '<Project />' | Set-Content (Join-Path $root 'Directory.Build.targets')
+    '<Project />' | Set-Content (Join-Path $root 'Directory.Packages.props')
+    $config = Join-Path $root 'NuGet.config'
+    Add-PackageSource $config
+
+    $tokens = @{
+        '__TARGET_FRAMEWORK__' = $TargetFramework
+        '__MAUI_VERSION__' = $ConsumerMauiVersion
+        '__BACKEND_PACKAGE__' = $PackageId
+        '__BACKEND_VERSION__' = $version
+        '__PLATFORM_PROPERTIES__' = $PlatformProperties
+        '__PLATFORM_RESOURCE_ITEMS__' = if ($Name.StartsWith('gtk', [StringComparison]::Ordinal)) {
+            @'
+    <MauiImage Include="Resources/Images/pipeline.svg" BaseSize="16,16" />
+    <MauiFont Include="Resources/Fonts/OpenSans-Regular.ttf" />
+    <MauiIcon Include="Resources/AppIcon/appicon.svg" />
+    <MauiSplashScreen Include="Resources/Splash/splash.svg" Color="#512BD4" BaseSize="128,128" />
+'@
+        } elseif ($Name -eq 'appkit') {
+            @'
+    <MauiImage Include="Resources/Images/pipeline.svg" BaseSize="16,16" />
+    <MauiFont Include="Resources/Fonts/OpenSans-Regular.ttf" />
+    <MauiIcon Include="Resources/AppIcon/appicon.png" />
+    <MauiSplashScreen Include="Resources/Splash/splash.svg" Color="#512BD4" BaseSize="128,128" />
+    <BundleResource Remove="Resources/AppIcon/appicon.svg" />
+'@
+        } else { '' }
+    }
+    $libraryProject = Join-Path $root 'ReferencedAssets\ReferencedAssets.csproj'
+    $consumerProject = Join-Path $root 'Consumer\Consumer.csproj'
+    Set-Tokens $libraryProject $tokens
+    Set-Tokens $consumerProject $tokens
+
+    $restoreArguments = @('--configfile', $config, '--packages', $restore.FullName)
+    $buildArguments = @('-c', 'Release', '-m:1', '-nr:false')
+    if ($RuntimeIdentifier) {
+        $restoreArguments += @('-r', $RuntimeIdentifier)
+        $buildArguments += @('-r', $RuntimeIdentifier)
+    }
+    Invoke-DotNet (@('restore', $consumerProject) + $restoreArguments)
+    Invoke-DotNet (@('build', $consumerProject, '--no-restore') + $buildArguments)
+
+    $output = Join-Path $root 'Consumer\bin\Release'
+    $backendIdentity = @(Get-ChildItem -LiteralPath $output -File -Recurse -Filter 'resource-acceptance-backend.txt')
+    if ($backendIdentity.Count -ne 1 -or ([System.IO.File]::ReadAllText($backendIdentity[0].FullName).Trim() -cne $ExpectedBackendIdentity)) {
+        throw "Expected exactly one backend identity '$ExpectedBackendIdentity' for $Name."
+    }
+    $payloadV1 = [System.Text.Encoding]::UTF8.GetBytes("referenced-payload-v1`n")
+    $unicode = [System.Text.Encoding]::UTF8.GetBytes("héllo from the referenced asset library`n")
+    $local = [System.Text.Encoding]::UTF8.GetBytes("consumer-local-v1`n")
+    Assert-SingleFile $output 'Shared/Nested/payload.bin' $payloadV1 | Out-Null
+    Assert-SingleFile $output 'Shared/Unicode/café.txt' $unicode | Out-Null
+    Assert-SingleFile $output 'Shared/zero.bin' ([byte[]]::new(0)) | Out-Null
+    Assert-SingleFile $output 'App/local.txt' $local | Out-Null
+    if ($Name.StartsWith('gtk', [StringComparison]::Ordinal)) {
+        Assert-SingleFile $output 'OpenSans-Regular.ttf' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Fonts\OpenSans-Regular.ttf'))) | Out-Null
+        Assert-SingleFile $output 'hicolor/scalable/apps/appicon.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\AppIcon\appicon.svg'))) | Out-Null
+        Assert-SingleFile $output 'splash/splash.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Splash\splash.svg'))) | Out-Null
+        if ($TargetFramework -eq 'net11.0') {
+            Assert-PngDimensions $output 'pipeline.png' 16 16
+            Assert-PngDimensions $output 'pipeline@2x.png' 32 32
+        } else {
+            Assert-SingleFile $output 'pipeline.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Images\pipeline.svg'))) | Out-Null
+        }
+    } elseif ($Name -eq 'appkit') {
+        Assert-AppKitStandardResources $output $root $TargetFramework
+    }
+
+    $payload = Join-Path $root 'ReferencedAssets\Resources\Raw\Nested\payload.bin'
+    [System.IO.File]::WriteAllText($payload, "referenced-payload-v2`n")
+    Invoke-DotNet (@('build', $consumerProject, '--no-restore') + $buildArguments)
+    $payloadV2 = [System.Text.Encoding]::UTF8.GetBytes("referenced-payload-v2`n")
+    Assert-SingleFile $output 'Shared/Nested/payload.bin' $payloadV2 | Out-Null
+
+    $libraryText = [System.IO.File]::ReadAllText($libraryProject)
+    $libraryText = $libraryText.Replace('Shared/Nested/payload.bin', 'Shared/Renamed/payload.bin')
+    [System.IO.File]::WriteAllText($libraryProject, $libraryText)
+    Invoke-DotNet (@('build', $consumerProject, '--no-restore') + $buildArguments)
+    Assert-SingleFile $output 'Shared/Renamed/payload.bin' $payloadV2 | Out-Null
+    Assert-NoFile $output 'Shared/Nested/payload.bin'
+
+    [xml] $libraryXml = [System.IO.File]::ReadAllText($libraryProject)
+    $zeroAsset = $libraryXml.SelectSingleNode('/Project/ItemGroup/MauiAsset[@LogicalName="Shared/zero.bin"]')
+    if ($null -eq $zeroAsset) {
+        throw "The fixture must contain the zero-byte asset before testing its removal."
+    }
+    $zeroAsset.ParentNode.RemoveChild($zeroAsset) | Out-Null
+    $libraryXml.Save($libraryProject)
+    Invoke-DotNet (@('build', $consumerProject, '--no-restore') + $buildArguments)
+    Assert-NoFile $output 'Shared/zero.bin'
+
+    $publish = Join-Path $root 'publish'
+    Invoke-DotNet ((Get-ResourcePublishArguments $Name $consumerProject $publish) + $buildArguments +
+        @("-flp:logfile=$root/publish.log;verbosity=diagnostic"))
+    $publishedResources = $publish
+    if ($Name -eq 'appkit') {
+        $installers = @(Get-ChildItem -LiteralPath $publish -File -Recurse -Filter '*.pkg')
+        if ($installers.Count -ne 1) {
+            throw "Expected exactly one published AppKit installer; found $($installers.Count)."
+        }
+        $publishedResources = Join-Path $root 'installed-package'
+        & pkgutil --expand-full $installers[0].FullName $publishedResources
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not expand the published AppKit installer (exit $LASTEXITCODE)."
+        }
+    }
+    Assert-SingleFile $publishedResources 'Shared/Renamed/payload.bin' $payloadV2 | Out-Null
+    Assert-SingleFile $publishedResources 'Shared/Unicode/café.txt' $unicode | Out-Null
+    Assert-SingleFile $publishedResources 'App/local.txt' $local | Out-Null
+    if ($Name.StartsWith('gtk', [StringComparison]::Ordinal)) {
+        Assert-SingleFile $publishedResources 'OpenSans-Regular.ttf' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Fonts\OpenSans-Regular.ttf'))) | Out-Null
+        Assert-SingleFile $publishedResources 'hicolor/scalable/apps/appicon.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\AppIcon\appicon.svg'))) | Out-Null
+        Assert-SingleFile $publishedResources 'splash/splash.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Splash\splash.svg'))) | Out-Null
+        if ($TargetFramework -eq 'net11.0') {
+            Assert-PngDimensions $publishedResources 'pipeline.png' 16 16
+            Assert-PngDimensions $publishedResources 'pipeline@2x.png' 32 32
+        } else {
+            Assert-SingleFile $publishedResources 'pipeline.svg' ([System.IO.File]::ReadAllBytes((Join-Path $root 'Consumer\Resources\Images\pipeline.svg'))) | Out-Null
+        }
+    } elseif ($Name -eq 'appkit') {
+        Assert-AppKitStandardResources $publishedResources $root $TargetFramework
+    }
+    Assert-NoFile $publishedResources 'Shared/Nested/payload.bin'
+    Assert-NoFile $publishedResources 'Shared/zero.bin'
+
+    $collision = Join-Path $root 'Consumer\Resources\Raw\collision.bin'
+    [System.IO.File]::WriteAllText($collision, "collision`n")
+    $consumerText = [System.IO.File]::ReadAllText($consumerProject)
+    $consumerText = $consumerText.Replace(
+        '    <MauiAsset Include="Resources/Raw/local.txt" LogicalName="App/local.txt" />',
+        "    <MauiAsset Include=`"Resources/Raw/local.txt`" LogicalName=`"App/local.txt`" />$([Environment]::NewLine)    <MauiAsset Include=`"Resources/Raw/collision.bin`" LogicalName=`"Shared/Renamed/payload.bin`" />")
+    [System.IO.File]::WriteAllText($consumerProject, $consumerText)
+    $collisionPublish = Join-Path $root 'collision-publish'
+    $collisionCode = if ($Name -eq 'appkit') { 'MAUIAPPKIT001' } else { 'NETSDK1152' }
+    Invoke-DotNet (@('publish', $consumerProject, '--no-restore', "-p:PublishDir=$collisionPublish") + $buildArguments) `
+        -ExpectFailure -ExpectedErrorCode $collisionCode
+
+    $standardItems = if ($Name.StartsWith('gtk', [StringComparison]::Ordinal) -or $Name -eq 'appkit') {
+        ', standard image/font/icon/splash outputs'
+    } else { '' }
+    $publishMode = if ($Name -eq 'appkit') { 'supported publish and installer payload' } else { 'no-build publish' }
+    Write-Host "PASS ${Name}: referenced-library bytes/names${standardItems}, incremental mutation, stale removal, $publishMode, and collision failure."
+}
+
+function Invoke-BackendSwitchAcceptance {
+    Write-Host '=== same-consumer backend switch acceptance ==='
+    $gtkProject = Join-Path $repo 'platforms\Linux.Gtk4\src\Linux.Gtk4\Linux.Gtk4.csproj'
+    $wpfProject = Join-Path $repo 'platforms\Windows.WPF\src\Windows.WPF\Windows.WPF.csproj'
+    Invoke-DotNet @('pack', $gtkProject, '-c', 'Release', '-o', $packages.FullName,
+        "-p:PackageVersion=$version", '-v:minimal')
+    Invoke-DotNet @('pack', $wpfProject, '-c', 'Release', '-o', $packages.FullName,
+        "-p:PackageVersion=$version", '-v:minimal')
+
+    $root = Join-Path $work 'backend-switch'
+    Copy-Fixture $root
+    '<Project />' | Set-Content (Join-Path $root 'Directory.Build.props')
+    '<Project />' | Set-Content (Join-Path $root 'Directory.Build.targets')
+    '<Project />' | Set-Content (Join-Path $root 'Directory.Packages.props')
+    $config = Join-Path $root 'NuGet.config'
+    Add-PackageSource $config
+    $libraryProject = Join-Path $root 'ReferencedAssets\ReferencedAssets.csproj'
+    $consumerProject = Join-Path $root 'Consumer\Consumer.csproj'
+
+    function Set-BackendProjects {
+        param(
+            [string] $TargetFramework,
+            [string] $PackageId,
+            [string] $PlatformProperties,
+            [string] $ConsumerMauiVersion = $mauiVersion
+        )
+
+        Copy-Item (Join-Path $fixture 'ReferencedAssets\ReferencedAssets.csproj') $libraryProject -Force
+        Copy-Item (Join-Path $fixture 'Consumer\Consumer.csproj') $consumerProject -Force
+        $tokens = @{
+            '__TARGET_FRAMEWORK__' = $TargetFramework
+            '__MAUI_VERSION__' = $ConsumerMauiVersion
+            '__BACKEND_PACKAGE__' = $PackageId
+            '__BACKEND_VERSION__' = $version
+            '__PLATFORM_PROPERTIES__' = $PlatformProperties
+            '__PLATFORM_RESOURCE_ITEMS__' = ''
+        }
+        Set-Tokens $libraryProject $tokens
+        Set-Tokens $consumerProject $tokens
+    }
+
+    Set-BackendProjects `
+        -TargetFramework 'net11.0' `
+        -PackageId 'Microsoft.Maui.Platforms.Linux.Gtk4' `
+        -PlatformProperties ''
+    Invoke-DotNet @('restore', $consumerProject, '--configfile', $config, '--packages', $restore.FullName)
+    Invoke-DotNet @('build', $consumerProject, '--no-restore', '-c', 'Release', '-m:1', '-nr:false')
+    $gtkOutput = Join-Path $root 'Consumer\bin\Release\net11.0'
+    Assert-BackendIdentity $gtkOutput 'linux'
+    if (-not (Test-Path (Join-Path $gtkOutput 'Microsoft.Maui.Platforms.Linux.Gtk4.dll'))) {
+        throw 'GTK backend switch stage did not contain the GTK backend assembly.'
+    }
+    Assert-NoFile $gtkOutput 'Microsoft.Maui.Platforms.Windows.WPF.dll'
+
+    $wpfPlatformProperties = '<UseWPF>true</UseWPF><RuntimeIdentifier>win-x64</RuntimeIdentifier><EnableWindowsTargeting>true</EnableWindowsTargeting><PublishReadyToRun>false</PublishReadyToRun><EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition><EnableDefaultPageItems>false</EnableDefaultPageItems>'
+    Set-BackendProjects `
+        -TargetFramework 'net11.0-windows10.0.17763.0' `
+        -PackageId 'Microsoft.Maui.Platforms.Windows.WPF' `
+        -PlatformProperties $wpfPlatformProperties
+    Invoke-DotNet @('restore', $consumerProject, '--configfile', $config, '--packages', $restore.FullName, '-r', 'win-x64')
+    Invoke-DotNet @('build', $consumerProject, '--no-restore', '-c', 'Release', '-r', 'win-x64', '-m:1', '-nr:false')
+    $wpfOutput = Join-Path $root 'Consumer\bin\Release\net11.0-windows10.0.17763.0\win-x64'
+    Assert-BackendIdentity $wpfOutput 'wpf'
+    if (-not (Test-Path (Join-Path $wpfOutput 'Microsoft.Maui.Platforms.Windows.WPF.dll'))) {
+        throw 'WPF backend switch stage did not contain the WPF backend assembly.'
+    }
+    Assert-NoFile $wpfOutput 'Microsoft.Maui.Platforms.Linux.Gtk4.dll'
+    Assert-SingleFile $wpfOutput 'Shared/Nested/payload.bin' ([System.Text.Encoding]::UTF8.GetBytes("referenced-payload-v1`n")) | Out-Null
+
+    Set-BackendProjects `
+        -TargetFramework 'net10.0' `
+        -PackageId 'Microsoft.Maui.Platforms.Linux.Gtk4' `
+        -PlatformProperties '' `
+        -ConsumerMauiVersion '10.0.110'
+    Invoke-DotNet @('restore', $consumerProject, '--configfile', $config, '--packages', $restore.FullName)
+    Invoke-DotNet @('build', $consumerProject, '--no-restore', '-c', 'Release', '-m:1', '-nr:false')
+    $gtk10Output = Join-Path $root 'Consumer\bin\Release\net10.0'
+    Assert-BackendIdentity $gtk10Output ''
+    if (-not (Test-Path (Join-Path $gtk10Output 'Microsoft.Maui.Platforms.Linux.Gtk4.dll'))) {
+        throw 'GTK .NET 10 compatibility stage did not contain the GTK backend assembly.'
+    }
+
+    Set-BackendProjects `
+        -TargetFramework 'net10.0-windows10.0.17763.0' `
+        -PackageId 'Microsoft.Maui.Platforms.Windows.WPF' `
+        -PlatformProperties $wpfPlatformProperties `
+        -ConsumerMauiVersion '10.0.110'
+    Invoke-DotNet @('restore', $consumerProject, '--configfile', $config, '--packages', $restore.FullName, '-r', 'win-x64')
+    Invoke-DotNet @('build', $consumerProject, '--no-restore', '-c', 'Release', '-r', 'win-x64', '-m:1', '-nr:false')
+    $wpf10Output = Join-Path $root 'Consumer\bin\Release\net10.0-windows10.0.17763.0\win-x64'
+    Assert-BackendIdentity $wpf10Output ''
+    if (-not (Test-Path (Join-Path $wpf10Output 'Microsoft.Maui.Platforms.Windows.WPF.dll'))) {
+        throw 'WPF .NET 10 compatibility stage did not contain the WPF backend assembly.'
+    }
+    Assert-NoFile $wpf10Output 'Microsoft.Maui.Platforms.Linux.Gtk4.dll'
+
+    Set-BackendProjects `
+        -TargetFramework 'net11.0' `
+        -PackageId 'Microsoft.Maui.Platforms.Linux.Gtk4' `
+        -PlatformProperties ''
+    Invoke-DotNet @('restore', $consumerProject, '--configfile', $config, '--packages', $restore.FullName)
+    Invoke-DotNet @('build', $consumerProject, '--no-restore', '-c', 'Release', '-m:1', '-nr:false')
+    Assert-BackendIdentity $gtkOutput 'linux'
+    Assert-NoFile $gtkOutput 'Microsoft.Maui.Platforms.Windows.WPF.dll'
+    Assert-SingleFile $gtkOutput 'Shared/Nested/payload.bin' ([System.Text.Encoding]::UTF8.GetBytes("referenced-payload-v1`n")) | Out-Null
+    $publish = Join-Path $root 'gtk-return-publish'
+    Invoke-DotNet @('publish', $consumerProject, '--no-build', '--no-restore', '-c', 'Release',
+        "-p:PublishDir=$publish", '-m:1', '-nr:false')
+    if (-not (Test-Path (Join-Path $publish 'Microsoft.Maui.Platforms.Linux.Gtk4.dll'))) {
+        throw 'GTK return publish did not contain the GTK backend assembly.'
+    }
+    Assert-NoFile $publish 'Microsoft.Maui.Platforms.Windows.WPF.dll'
+    Assert-SingleFile $publish 'Shared/Nested/payload.bin' ([System.Text.Encoding]::UTF8.GetBytes("referenced-payload-v1`n")) | Out-Null
+
+    Write-Host 'PASS backend-switch: one consumer switched GTK/WPF and back on .NET 11 without leakage, published without rebuilding, and retained .NET 10 package compatibility.'
+}
+
+try {
+    if ($Backend -in @('all', 'gtk')) {
+        Invoke-BackendAcceptance `
+            -Name 'gtk' `
+            -PackageId 'Microsoft.Maui.Platforms.Linux.Gtk4' `
+            -Project (Join-Path $repo 'platforms\Linux.Gtk4\src\Linux.Gtk4\Linux.Gtk4.csproj') `
+            -TargetFramework 'net11.0' `
+            -PlatformProperties '' `
+            -ExpectedBackendIdentity 'linux'
+
+        Invoke-BackendAcceptance `
+            -Name 'gtk-net10' `
+            -PackageId 'Microsoft.Maui.Platforms.Linux.Gtk4' `
+            -Project (Join-Path $repo 'platforms\Linux.Gtk4\src\Linux.Gtk4\Linux.Gtk4.csproj') `
+            -TargetFramework 'net10.0' `
+            -PlatformProperties '' `
+            -ExpectedBackendIdentity '' `
+            -ConsumerMauiVersion '10.0.110'
+    }
+
+    if ($Backend -in @('all', 'wpf')) {
+        Invoke-BackendAcceptance `
+            -Name 'wpf' `
+            -PackageId 'Microsoft.Maui.Platforms.Windows.WPF' `
+            -Project (Join-Path $repo 'platforms\Windows.WPF\src\Windows.WPF\Windows.WPF.csproj') `
+            -TargetFramework 'net11.0-windows10.0.17763.0' `
+            -PlatformProperties '<UseWPF>true</UseWPF><RuntimeIdentifier>win-x64</RuntimeIdentifier><EnableWindowsTargeting>true</EnableWindowsTargeting><PublishReadyToRun>false</PublishReadyToRun><EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition><EnableDefaultPageItems>false</EnableDefaultPageItems>' `
+            -ExpectedBackendIdentity 'wpf' `
+            -RuntimeIdentifier 'win-x64'
+
+        Invoke-BackendAcceptance `
+            -Name 'wpf-net10' `
+            -PackageId 'Microsoft.Maui.Platforms.Windows.WPF' `
+            -Project (Join-Path $repo 'platforms\Windows.WPF\src\Windows.WPF\Windows.WPF.csproj') `
+            -TargetFramework 'net10.0-windows10.0.17763.0' `
+            -PlatformProperties '<UseWPF>true</UseWPF><RuntimeIdentifier>win-x64</RuntimeIdentifier><EnableWindowsTargeting>true</EnableWindowsTargeting><PublishReadyToRun>false</PublishReadyToRun><EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition><EnableDefaultPageItems>false</EnableDefaultPageItems>' `
+            -ExpectedBackendIdentity '' `
+            -RuntimeIdentifier 'win-x64' `
+            -ConsumerMauiVersion '10.0.110'
+    }
+
+    if ($Backend -in @('all', 'appkit')) {
+        Invoke-BackendAcceptance `
+            -Name 'appkit' `
+            -PackageId 'Microsoft.Maui.Platforms.MacOS' `
+            -Project (Join-Path $repo 'platforms\MacOS\src\MacOS\MacOS.csproj') `
+            -TargetFramework $AppKitTargetFramework `
+            -PlatformProperties '<UseMaui>true</UseMaui><RuntimeIdentifier>osx-arm64</RuntimeIdentifier><ApplicationId>com.microsoft.maui.resourceacceptance</ApplicationId><ApplicationTitle>Resource Acceptance</ApplicationTitle><ApplicationVersion>1</ApplicationVersion><ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>' `
+            -ExpectedBackendIdentity 'macos' `
+            -RuntimeIdentifier 'osx-arm64' `
+            -ConsumerMauiVersion $(if ($AppKitTargetFramework -eq 'net10.0-macos') { '10.0.110' } else { $mauiVersion })
+    }
+
+    if ($Backend -in @('all', 'switch')) {
+        Invoke-BackendSwitchAcceptance
+    }
+}
+finally {
+    if ($KeepArtifacts) {
+        Write-Host "Artifacts: $work"
+    }
+    else {
+        Remove-Item -LiteralPath $work -Recurse -Force
+    }
+}

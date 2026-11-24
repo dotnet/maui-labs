@@ -37,9 +37,10 @@ internal class MacOSWebViewManager : WebViewManager
     protected override void SendMessage(string message)
     {
         var messageJSStringLiteral = JavaScriptEncoder.Default.Encode(message);
-        _webview.EvaluateJavaScript(
-            $"__dispatchMessageCallback(\"{messageJSStringLiteral}\")",
-            (NSObject? result, NSError? error) => { });
+        _webview.BeginInvokeOnMainThread(() =>
+            _webview.EvaluateJavaScript(
+                $"__dispatchMessageCallback(\"{messageJSStringLiteral}\")",
+                (NSObject? result, NSError? error) => { }));
     }
 
     internal void MessageReceivedInternal(Uri uri, string message)
@@ -51,4 +52,7 @@ internal class MacOSWebViewManager : WebViewManager
     {
         return TryGetResponseContent(uri, allowFallbackOnHostPage, out statusCode, out statusMessage, out content, out headers);
     }
+
+    internal Task<bool> TryDispatchAsyncInternal(Action<IServiceProvider> workItem)
+        => TryDispatchAsync(workItem);
 }

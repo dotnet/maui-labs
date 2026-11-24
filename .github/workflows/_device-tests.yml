@@ -35,16 +35,16 @@ on:
         type: string
         default: 'maui macos maccatalyst'
         description: 'Space-separated list of workloads to install (only used when install-workloads is true)'
-      workload-version:
+      workload-rollback-file:
         required: false
         type: string
-        default: '10.0.203'
-        description: 'Workload version to install (pinned for reproducibility)'
+        default: 'eng/workloads/dotnet11-ga.json'
+        description: 'Pinned GA manifests matching workload set 11.0.100.1.'
       xcode-version:
         required: false
         type: string
         default: ''
-        description: 'Xcode version to select on macOS (e.g. "26.3"). Empty uses runner default.'
+        description: 'Xcode version to select on macOS (e.g. "27.2"). Empty uses runner default.'
       native-deps:
         required: false
         type: string
@@ -60,26 +60,32 @@ jobs:
   device-tests:
     runs-on: ${{ inputs.os }}
     env:
-      UseXcode27Preview: ${{ endsWith(inputs.target-framework, '27.0') && 'true' || 'false' }}
+      UseNet11AppleTargets: ${{ endsWith(inputs.target-framework, '27.2') && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Select Xcode
         if: inputs.xcode-version != '' && runner.os == 'macOS'
-        run: sudo xcode-select -s /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer
+        run: |
+          developer_dir="$(cd /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer && pwd -P)"
+          sudo xcode-select -s "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.os == 'Windows' && format('{0}/maui-ci-dotnet', runner.temp) || '' }}
         with:
           global-json-file: global.json
+          dotnet-version: ${{ runner.os == 'Windows' && '10.0.403' || '' }}
 
       - name: Install native dependencies
         if: inputs.native-deps != ''
         run: ${{ inputs.native-deps }}
 
-      - name: Install workloads
+      - name: Install workloads from GA manifests
         if: inputs.install-workloads
-        run: dotnet workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
+        run: dotnet workload install ${{ inputs.workloads }} --from-rollback-file ${{ inputs.workload-rollback-file }}
 
       - name: Build and run device tests
         shell: pwsh

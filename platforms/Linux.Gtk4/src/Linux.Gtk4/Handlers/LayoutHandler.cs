@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui;
+using Microsoft.Maui.Controls;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
@@ -45,7 +46,7 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 
 	protected override GtkLayoutPanel CreatePlatformView()
 	{
-		return new GtkLayoutPanel();
+		return GtkLayoutPanel.NewWithProperties([]);
 	}
 
 	public override void SetVirtualView(IView view)

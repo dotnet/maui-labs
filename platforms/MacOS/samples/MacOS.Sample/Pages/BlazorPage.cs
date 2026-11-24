@@ -1,4 +1,3 @@
-#if MACAPP
 using Microsoft.Maui.Platforms.MacOS.Platform;
 using Microsoft.Maui.Platforms.MacOS.Controls;
 using Microsoft.Maui.Controls;
@@ -54,4 +53,3 @@ public class BlazorPage : ContentPage
 		}));
 	}
 }
-#endif

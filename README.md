@@ -15,6 +15,7 @@ At a glance:
 | [Go](#go) | Single-file Comet app server and companion app for rapid prototyping. |
 | [DevFlow](#devflow) | Runtime app automation, inspection, debugging, and MCP tooling for .NET MAUI apps — and for plain .NET Android, iOS, Mac Catalyst and macOS apps. |
 | [AI Extensions](#ai-extensions) | Source-generated `Microsoft.Extensions.AI` tool bindings for MAUI and .NET apps. |
+| [Linux GTK4 Backend](#linux-gtk4-backend) | Native GTK4 backend for running MAUI apps on Linux desktops. |
 | [macOS AppKit Backend](#macos-appkit-backend) | Native AppKit backend for running MAUI apps as macOS apps without Mac Catalyst. |
 | [WPF Backend](#wpf-backend) | WPF-based Windows desktop backend for .NET MAUI apps. |
 | [Essentials.AI](#essentialsai) | On-device AI APIs for chat completion, embeddings, and tool calling in MAUI apps. |
@@ -109,6 +110,20 @@ Source-generated AI tool discovery — annotate methods or property accessors wi
 |---------|-------------|
 | [![NuGet: Microsoft.Maui.AI.Attributes](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Attributes.svg?label=Microsoft.Maui.AI.Attributes)](https://www.nuget.org/packages/Microsoft.Maui.AI.Attributes/) | Source-generated AI tool contexts for `Microsoft.Extensions.AI` |
 
+### Linux GTK4 Backend
+
+A native GTK4 backend for .NET MAUI on Linux desktops, including GTK controls,
+Shell/navigation, WebKitGTK Blazor Hybrid hosting, Linux Essentials services, and
+AppImage/Deb/Flatpak packaging targets. The backend ships .NET 10 compatibility
+and .NET 11 assets; see the [GTK contributor guide](platforms/Linux.Gtk4/README.md)
+for requirements and resource-processing details.
+
+| Package | Description |
+|---------|-------------|
+| [![NuGet: Microsoft.Maui.Platforms.Linux.Gtk4](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.Linux.Gtk4.svg?label=Microsoft.Maui.Platforms.Linux.Gtk4)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.Linux.Gtk4/) | Core GTK4 backend |
+| [![NuGet: Microsoft.Maui.Platforms.Linux.Gtk4.Essentials](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.svg?label=Microsoft.Maui.Platforms.Linux.Gtk4.Essentials)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.Linux.Gtk4.Essentials/) | Linux Essentials implementations |
+| [![NuGet: Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView.svg?label=Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView/) | Blazor Hybrid via WebKitGTK |
+
 ### macOS AppKit Backend
 
 A native macOS AppKit backend for .NET MAUI — run MAUI apps as true AppKit apps with NSWindow, NSButton, NSScrollView, native menu bar, sidebar flyout, and more. An alternative to Mac Catalyst.
@@ -129,6 +144,7 @@ A native macOS AppKit backend for .NET MAUI — run MAUI apps as true AppKit app
 
 A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI apps on Windows desktops using native WPF controls with 22+ fully implemented controls, Shell navigation, Blazor WebView, and 14 Essentials APIs.
 
+- **.NET 11 and .NET 10** — public MAUI 11 backend contracts and processed resources, with an isolated .NET 10 compatibility lane
 - **22+ controls** — Label, Button, Entry, Editor, Image, CheckBox, Switch, Slider, Picker, DatePicker, and more
 - **Navigation** — Shell (flyout + tabs + URI routing), NavigationPage, TabbedPage, FlyoutPage, modal pages
 - **Blazor WebView** — via WebView2 and AspNetCore.Components.WebView.Wpf

@@ -4,7 +4,7 @@ The DevFlow CLI includes an [MCP (Model Context Protocol)](https://modelcontextp
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (see `global.json` for exact version)
+- [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) (see `global.json` for the pinned version)
 - [Node.js](https://nodejs.org/) (for the MCP Inspector)
 - The `maui` CLI built from source (see [Building](#build-the-cli) below)
 

@@ -9,6 +9,7 @@ on:
       - 'platforms/Windows.WPF/**'
       - 'src/DevFlow/**'
       - 'platforms/Shared/Essentials*/**'
+      - 'platforms/Shared/ResourceAcceptance/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -23,6 +24,7 @@ on:
       - 'platforms/Windows.WPF/**'
       - 'src/DevFlow/**'
       - 'platforms/Shared/Essentials*/**'
+      - 'platforms/Shared/ResourceAcceptance/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -60,6 +62,9 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: fixed/global.json
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.403
       - name: Verify native layout regression before and after
         shell: pwsh
         run: |
@@ -82,7 +87,8 @@ jobs:
               } elseif ($variant -eq 'cached-measure') {
                 $filter = 'FullyQualifiedName~NestedFlexLayout_WidthChanges'
               }
-              dotnet test "$relative\HandlerTests.csproj" -c Release -p:UseMaui=false -p:MauiVersion=${{ matrix.maui }} -p:MicrosoftMauiControlsVersion=${{ matrix.maui }} -m:1 -nr:false --filter $filter --logger 'trx;LogFileName=layouts.trx' --results-directory $output *> "$output\process.log"
+              $framework = if ($variant -eq 'fixed') { @('-f', 'net10.0-windows10.0.17763.0') } else { @() }
+              dotnet test "$relative\HandlerTests.csproj" @framework -c Release -p:UseMaui=false -p:MauiVersion=${{ matrix.maui }} -p:MicrosoftMauiControlsVersion=${{ matrix.maui }} -m:1 -nr:false --filter $filter --logger 'trx;LogFileName=layouts.trx' --results-directory $output *> "$output\process.log"
               $exitCode = $LASTEXITCODE
               if (!(Test-Path "$output\layouts.trx")) {
                 Get-Content "$output\process.log"
@@ -124,9 +130,13 @@ jobs:
           path: layout-runtime-evidence
 
   essentials-runtime:
-    name: Essentials WPF regression
+    name: Essentials WPF regression - ${{ matrix.framework }}
     runs-on: windows-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [net10.0-windows10.0.17763.0, net11.0-windows10.0.17763.0]
     permissions:
       contents: read
     steps:
@@ -134,17 +144,20 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.403
       - name: Exercise WPF Essentials
         shell: pwsh
         run: >-
           dotnet test platforms\Windows.WPF\tests\Essentials.Tests\Windows.WPF.Essentials.Tests.csproj
-          --configuration Release -p:UseMaui=false -m:1 -nr:false
+          -f ${{ matrix.framework }} --configuration Release -p:UseMaui=false -m:1 -nr:false
           --logger "trx;LogFileName=essentials-wpf.trx"
           --results-directory artifacts\TestResults\essentials
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: essentials-wpf-results
+          name: essentials-wpf-results-${{ matrix.framework }}
           path: artifacts/TestResults/essentials/*.trx
           if-no-files-found: error
 
@@ -168,6 +181,9 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: fixed/global.json
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.403
       - name: Verify native WPF section navigation before and after
         shell: pwsh
         run: |
@@ -189,7 +205,8 @@ jobs:
               } elseif ($variant -eq 'followup-baseline') {
                 $filter = 'FullyQualifiedName~TabPopulation_WhenVisibleSectionsChange|FullyQualifiedName~NativeTabSelection_WhenKeyboardFocused'
               }
-              dotnet test "$relative\HandlerTests.csproj" -c Release -p:UseMaui=false -m:1 -nr:false --filter $filter --logger 'trx;LogFileName=sections.trx' --results-directory $env:SHELL_SECTION_RESULTS *> "$env:SHELL_SECTION_RESULTS\process.log"
+              $framework = if ($variant -eq 'fixed') { @('-f', 'net10.0-windows10.0.17763.0') } else { @() }
+              dotnet test "$relative\HandlerTests.csproj" @framework -c Release -p:UseMaui=false -m:1 -nr:false --filter $filter --logger 'trx;LogFileName=sections.trx' --results-directory $env:SHELL_SECTION_RESULTS *> "$env:SHELL_SECTION_RESULTS\process.log"
               $exitCode = $LASTEXITCODE
               if (!(Test-Path "$env:SHELL_SECTION_RESULTS\sections.trx")) { throw "$variant produced no test results" }
               [xml]$results = Get-Content "$env:SHELL_SECTION_RESULTS\sections.trx"
@@ -238,6 +255,9 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: fixed/global.json
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.403
       - name: Verify native enabled-state baseline and fix with identical tests
         shell: pwsh
         run: >
@@ -257,25 +277,74 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110']
+        include:
+          - maui: '10.0.41'
+            framework: net10.0-windows10.0.17763.0
+            version-property: Maui10Version
+            devflow-maui: '10.0.41'
+            extensions-version: '10.0.5'
+            webview-version: '10.0.3'
+          - maui: '10.0.60'
+            framework: net10.0-windows10.0.17763.0
+            version-property: Maui10Version
+            devflow-maui: '10.0.60'
+            extensions-version: '10.0.5'
+            webview-version: '10.0.3'
+          - maui: '10.0.70'
+            framework: net10.0-windows10.0.17763.0
+            version-property: Maui10Version
+            devflow-maui: '10.0.70'
+            extensions-version: '10.0.5'
+            webview-version: '10.0.3'
+          - maui: '10.0.110'
+            framework: net10.0-windows10.0.17763.0
+            version-property: Maui10Version
+            devflow-maui: '10.0.110'
+            extensions-version: '10.0.5'
+            webview-version: '10.0.3'
+          - maui: '11.0.10'
+            framework: net11.0-windows10.0.17763.0
+            version-property: Maui11Version
+            devflow-maui: '11.0.10'
+            extensions-version: '11.0.0'
+            webview-version: '11.0.0'
     uses: ./.github/workflows/_build.yml
     permissions:
       contents: read
     with:
       project-path: platforms/Windows.WPF/tests/HandlerTests/HandlerTests.csproj
       project-name: wpf-registration-${{ matrix.maui }}
+      additional-dotnet-version: 10.0.403
       os: '["windows-latest"]'
       install-workloads: false
       test-only: true
       test-arguments-json: >-
-        ["-p:UseMaui=false",
-         "-p:MauiVersion=${{ matrix.maui }}",
-         "-p:MicrosoftMauiControlsVersion=${{ matrix.maui }}",
+        ["-f", "${{ matrix.framework }}",
+         "-p:UseMaui=false",
+         "-p:${{ matrix.version-property }}=${{ matrix.maui }}",
+         "-p:DevFlowMauiMinVersion=${{ matrix.devflow-maui }}",
+         "-p:MicrosoftMauiControlsVersion=${{ matrix.devflow-maui }}",
+         "-p:MicrosoftAspNetCoreComponentsWebViewVersion=${{ matrix.webview-version }}",
+         "-p:MicrosoftExtensionsDependencyInjectionVersion=${{ matrix.extensions-version }}",
+         "-p:MicrosoftExtensionsConfigurationVersion=${{ matrix.extensions-version }}",
+         "-p:MicrosoftExtensionsHttpVersion=${{ matrix.extensions-version }}",
+         "-p:MicrosoftExtensionsHostingVersion=${{ matrix.extensions-version }}",
+         "-p:MicrosoftExtensionsLoggingAbstractionsVersion=${{ matrix.extensions-version }}",
+         "-p:MicrosoftExtensionsLoggingConsoleVersion=${{ matrix.extensions-version }}",
+         "-p:MicrosoftExtensionsLoggingVersion=${{ matrix.extensions-version }}",
+         "-p:MicrosoftExtensionsLoggingDebugVersion=${{ matrix.extensions-version }}",
+         "-p:MicrosoftExtensionsConfigurationJsonVersion=${{ matrix.extensions-version }}",
+         "-p:MicrosoftExtensionsConfigurationUserSecretsVersion=${{ matrix.extensions-version }}",
+         "-p:SystemTextJsonVersion=${{ matrix.extensions-version }}",
          "--filter", "FullyQualifiedName~AlertManagerSubscriptionTests"]
 
   handler-tests:
     runs-on: windows-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [net10.0-windows10.0.17763.0, net11.0-windows10.0.17763.0]
     permissions:
       contents: read
     steps:
@@ -283,23 +352,26 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.403
       - name: Run WPF handler and native dialog regression tests
         shell: pwsh
         run: >
           dotnet test platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj
-          -c Release -p:UseMaui=false -m:1 -nr:false
+          -f ${{ matrix.framework }} -c Release -p:UseMaui=false -m:1 -nr:false
           --logger "trx;LogFileName=wpf-handler-tests.trx"
           --results-directory artifacts\TestResults\WpfHandlers
       - name: Verify native fonts from isolated working directories
         shell: pwsh
         run: >
           eng\smoke-tests\wpf-font-smoke-test.ps1
-          -TestAssembly artifacts\bin\HandlerTests\Release\net10.0-windows\HandlerTests.dll
+          -TestAssembly artifacts\bin\HandlerTests\Release\${{ matrix.framework }}\HandlerTests.dll
       - name: Verify published fonts without rebuilding
         shell: pwsh
         run: |
           dotnet publish platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj `
-            -c Release --no-build --no-restore -p:UseMaui=false -m:1 -nr:false `
+            -f ${{ matrix.framework }} -c Release --no-build --no-restore -p:UseMaui=false -m:1 -nr:false `
             -o artifacts\publish\WpfFonts
           if ($LASTEXITCODE -ne 0) { throw 'Publishing font tests failed.' }
           eng\smoke-tests\wpf-font-smoke-test.ps1 `
@@ -309,7 +381,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: wpf-handler-tests
+          name: wpf-handler-tests-${{ matrix.framework }}
           path: |
             artifacts/TestResults/WpfHandlers/*.trx
             artifacts/TestResults/WpfFonts/**
@@ -321,10 +393,42 @@ jobs:
     with:
       project-path: platforms/Windows.WPF/Windows.WPF.slnx
       project-name: wpf
+      additional-dotnet-version: 10.0.403
+      isolated-dotnet: true
       os: '["windows-latest"]'
       install-workloads: true
       run-tests: true
       pack: true
+
+  resource-acceptance:
+    name: Package-only WPF resource acceptance
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install pinned MAUI workload
+        shell: pwsh
+        run: ./eng/common/dotnet.ps1 workload install maui maui-tizen --from-rollback-file eng/workloads/dotnet11-ga.json
+      - name: Verify referenced-library assets, mutation, publish, and collisions
+        shell: pwsh
+        run: |
+          ./eng/smoke-tests/community-resource-acceptance.ps1 -Backend wpf -ArtifactsDirectory artifacts/resource-acceptance/wpf -KeepArtifacts
+          ./eng/smoke-tests/community-resource-acceptance.ps1 -Backend switch -ArtifactsDirectory artifacts/resource-acceptance/switch -KeepArtifacts
+      - name: Upload resource acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wpf-resource-acceptance
+          path: |
+            artifacts/resource-acceptance/**
+            !artifacts/resource-acceptance/**/restore/**
+            !artifacts/resource-acceptance/**/http-cache/**
+            !artifacts/resource-acceptance/**/dotnet-home/**
+          if-no-files-found: error
 
   template-smoke:
     runs-on: windows-latest
@@ -334,13 +438,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/maui-ci-dotnet
         with:
           global-json-file: global.json
+          dotnet-version: 10.0.403
       - name: Install existing WPF template workloads
         shell: pwsh
         run: |
+          $sdkVersion = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
+          $sdkDirectory = Join-Path $env:DOTNET_ROOT "sdk\$sdkVersion"
           $dotnet = Join-Path $env:DOTNET_ROOT 'dotnet.exe'
-          & $dotnet workload install maui maui-tizen --version 10.0.203
+          & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --from-rollback-file eng/workloads/dotnet11-ga.json
           if ($LASTEXITCODE -ne 0) { throw 'Workload installation failed.' }
       - name: Restore and build the normal source consumer
         id: source-font-build
@@ -435,7 +544,9 @@ jobs:
       - name: Verify the packed WPF template and native fonts
         shell: pwsh
         run: |
-          $sdkVersion = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
+          # global.json rolls forward, so ask the host which SDK it actually resolved.
+          $sdkVersion = & (Join-Path $env:DOTNET_ROOT 'dotnet.exe') --version
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the .NET SDK version.' }
           $sdkDirectory = Join-Path $env:DOTNET_ROOT "sdk\$sdkVersion"
           eng\smoke-tests\wpf-template-smoke-test.ps1 -SdkDirectory $sdkDirectory -FontScenarios `
             -ArtifactsDirectory (Join-Path $env:RUNNER_TEMP 'wpf-font-package')
@@ -465,4 +576,7 @@ jobs:
           }
       - name: Verify sample packaged asset build and publish runtime paths
         shell: pwsh
-        run: eng\smoke-tests\wpf-assets-smoke-test.ps1 -RuntimeIdentifier win-x64
+        run: |
+          foreach ($framework in @('net10.0-windows10.0.17763.0', 'net11.0-windows10.0.17763.0')) {
+            eng\smoke-tests\wpf-assets-smoke-test.ps1 -RuntimeIdentifier win-x64 -TargetFramework $framework
+          }

@@ -150,6 +150,9 @@ public class WpfAgentService : MauiDevFlowAgentService
                 return true;
             }
 
+            if (platformView is DependencyObject element && TrySelectContainingListItem(element))
+                return true;
+
             if (platformView is UIElement ui)
             {
                 ui.Focus();
@@ -157,6 +160,29 @@ public class WpfAgentService : MauiDevFlowAgentService
             }
         }
         catch { }
+        return false;
+    }
+
+    // A real click on templated item content selects its row, which is how CollectionView and
+    // ListView items navigate; focusing the inner element alone would report success without effect.
+    static bool TrySelectContainingListItem(DependencyObject element)
+    {
+        for (var current = element; current != null; current = System.Windows.Media.VisualTreeHelper.GetParent(current))
+        {
+            if (current is System.Windows.Controls.ListBoxItem item)
+            {
+                if (System.Windows.Controls.ItemsControl.ItemsControlFromItemContainer(item) is not System.Windows.Controls.ListBox listBox)
+                    return false;
+                if (listBox.SelectionMode == System.Windows.Controls.SelectionMode.Single)
+                    listBox.SelectedItem = listBox.ItemContainerGenerator.ItemFromContainer(item);
+                else
+                    item.IsSelected = !item.IsSelected;
+                item.Focus();
+                return true;
+            }
+            if (current is System.Windows.Controls.ListBox)
+                return false;
+        }
         return false;
     }
 

@@ -61,7 +61,7 @@ public class TimePickerHandler : GtkViewHandler<ITimePicker, Gtk.Box>
 		if (parent == null)
 			return;
 
-		var dialog = new Gtk.Window();
+		var dialog = Gtk.Window.New();
 		dialog.SetTitle("Select Time");
 		dialog.SetModal(true);
 		dialog.SetTransientFor(parent);

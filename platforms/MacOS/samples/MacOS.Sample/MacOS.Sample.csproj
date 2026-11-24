@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
+  <Import Project="..\..\src\MacOS\buildTransitive\Microsoft.Maui.Platforms.MacOS.props"
+          Condition="Exists('..\..\src\MacOS\buildTransitive\Microsoft.Maui.Platforms.MacOS.props')" />
+
   <PropertyGroup>
-    <TargetFramework>net10.0-macos</TargetFramework>
+    <TargetFrameworks>net10.0-macos;net11.0-macos</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <Nullable>enable</Nullable>
     <UseMaui>true</UseMaui>
@@ -32,8 +35,14 @@
 
   <ItemGroup>
     <PackageReference Include="AathifMahir.Maui.MauiIcons.Cupertino" />
-    <PackageReference Include="Microsoft.Maui.Controls" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
+    <PackageReference Include="Microsoft.Maui.Controls">
+      <VersionOverride Condition="'$(TargetFramework)' == 'net10.0-macos'">$(MacOSMaui10Version)</VersionOverride>
+      <VersionOverride Condition="'$(TargetFramework)' == 'net11.0-macos'">$(MacOSMaui11Version)</VersionOverride>
+    </PackageReference>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui">
+      <VersionOverride Condition="'$(TargetFramework)' == 'net10.0-macos'">$(MacOSBlazorWebView10Version)</VersionOverride>
+      <VersionOverride Condition="'$(TargetFramework)' == 'net11.0-macos'">$(MacOSBlazorWebView11Version)</VersionOverride>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -48,9 +57,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <BundleResource Include="wwwroot\**" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
     <MauiIcon Include="Resources\AppIcon\appicon.png" />
+    <MauiImage Include="Resources\Images\*" />
     <MauiFont Include="Resources\Fonts\*" />
+    <MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiSplashScreen Include="Resources\Splash\splash.png" Color="#512BD4" />
   </ItemGroup>
 
 </Project>

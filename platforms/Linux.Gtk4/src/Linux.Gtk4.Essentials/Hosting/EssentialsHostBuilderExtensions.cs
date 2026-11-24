@@ -64,8 +64,12 @@ public static class EssentialsHostBuilderExtensions
 		builder.Services.TryAddSingleton<Microsoft.Maui.Devices.Sensors.IGeocoding, LinuxGeocoding>();
 		builder.Services.TryAddSingleton<Microsoft.Maui.Accessibility.ISemanticScreenReader, LinuxSemanticScreenReader>();
 
+#if NET10_0
+		// MAUI 10 has no public DI-to-static-facade bridge. Keep the compatibility
+		// initializer isolated to the net10 asset; MAUI 11 supplies this itself.
 		builder.Services.TryAddEnumerable(
 			ServiceDescriptor.Singleton<IMauiInitializeService, EssentialsInitializer>());
+#endif
 
 		return builder;
 	}
