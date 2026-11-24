@@ -214,7 +214,8 @@ public static partial class AndroidCommands
 		{
 			startNameArg,
 			new Option<bool>("--cold-boot") { Description = "Perform a cold boot" },
-			new Option<bool>("--wait") { Description = "Wait for boot completion" }
+			new Option<bool>("--wait") { Description = "Wait for boot completion" },
+			new Option<bool>("--no-window") { Description = "Run without an emulator window (for CI/headless environments)" }
 		};
 		startCommand.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
 		{
@@ -225,6 +226,7 @@ public static partial class AndroidCommands
 			var name = parseResult.GetValue(startNameArg);
 			var coldBoot = parseResult.GetOption<bool>("cold-boot");
 			var wait = parseResult.GetOption<bool>("wait");
+			var noWindow = parseResult.GetOption<bool>("no-window");
 			var formatter = Program.GetFormatter(parseResult);
 
 			try
@@ -273,13 +275,13 @@ public static partial class AndroidCommands
 				{
 					await spectre.StatusAsync($"Starting {name}...", async () =>
 					{
-						await androidProvider.StartAvdAsync(name, coldBoot, wait, cancellationToken);
+						await androidProvider.StartAvdAsync(name, coldBoot, wait, cancellationToken, noWindow);
 					});
 				}
 				else
 				{
 					formatter.WriteProgress($"Starting {name}...");
-					await androidProvider.StartAvdAsync(name, coldBoot, wait, cancellationToken);
+					await androidProvider.StartAvdAsync(name, coldBoot, wait, cancellationToken, noWindow);
 				}
 
 				if (useJson)
