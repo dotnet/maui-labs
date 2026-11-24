@@ -330,47 +330,42 @@ public sealed class XamlSourceMapGenerator : IIncrementalGenerator
         builder.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"Microsoft.Maui.DevFlow.Analyzers\", \"1.0.0\")]");
         builder.AppendLine("    internal sealed class __DevFlowXamlSourceMapProvider : global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.IXamlSourceMapProvider");
         builder.AppendLine("    {");
-        builder.AppendLine("        private static readonly global::System.Collections.Generic.Dictionary<string, (string File, string Xaml)> _sources =");
-        builder.AppendLine("            new global::System.Collections.Generic.Dictionary<string, (string, string)>(global::System.StringComparer.Ordinal)");
+        builder.AppendLine("        public global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap? GetMap(string fullTypeName)");
         builder.AppendLine("        {");
+        builder.AppendLine("            (string File, string Xaml)? entry = fullTypeName switch");
+        builder.AppendLine("            {");
         foreach (var model in unique.Values)
         {
             builder.AppendLine(
-                $"            [{SymbolDisplay.FormatLiteral(model.FullTypeName, true)}] = "
+                $"                {SymbolDisplay.FormatLiteral(model.FullTypeName, true)} => "
                 + $"({SymbolDisplay.FormatLiteral(model.Path, true)}, "
                 + $"{SymbolDisplay.FormatLiteral(model.Xaml, true)}),");
         }
-        builder.AppendLine("        };");
-        builder.AppendLine("        private static readonly global::System.Collections.Generic.IReadOnlyDictionary<string, string> _namespaces =");
+        builder.AppendLine("                _ => null");
+        builder.AppendLine("            };");
+        builder.AppendLine("            if (entry is null) return null;");
+        builder.AppendLine("            return global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap.Parse(entry.Value.Xaml, entry.Value.File, null, GetNamespaces(), GetTypes());");
+        builder.AppendLine("        }");
+        builder.AppendLine("        private static global::System.Collections.Generic.IReadOnlyDictionary<string, string> GetNamespaces() =>");
         builder.AppendLine("            new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.Ordinal)");
-        builder.AppendLine("        {");
+        builder.AppendLine("            {");
         foreach (var mapping in namespaceMetadata.PrefixMappings)
         {
             builder.AppendLine(
                 $"            [{SymbolDisplay.FormatLiteral(mapping.Prefix, true)}] = "
                 + $"{SymbolDisplay.FormatLiteral(mapping.XmlNamespace, true)},");
         }
-        builder.AppendLine("        };");
-        builder.AppendLine("        private static readonly global::System.Collections.Generic.IReadOnlyDictionary<string, string> _types =");
+        builder.AppendLine("            };");
+        builder.AppendLine("        private static global::System.Collections.Generic.IReadOnlyDictionary<string, string> GetTypes() =>");
         builder.AppendLine("            new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.Ordinal)");
-        builder.AppendLine("        {");
+        builder.AppendLine("            {");
         foreach (var mapping in typeMappings.OrderBy(static mapping => mapping.Key, StringComparer.Ordinal))
         {
             builder.AppendLine(
                 $"            [{SymbolDisplay.FormatLiteral(mapping.Key, true)}] = "
                 + $"{SymbolDisplay.FormatLiteral(mapping.Value, true)},");
         }
-        builder.AppendLine("        };");
-        builder.AppendLine("        private readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap> _cache =");
-        builder.AppendLine("            new global::System.Collections.Concurrent.ConcurrentDictionary<string, global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap>(global::System.StringComparer.Ordinal);");
-        builder.AppendLine("        public global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap? GetMap(string fullTypeName)");
-        builder.AppendLine("        {");
-        builder.AppendLine("            if (_cache.TryGetValue(fullTypeName, out var cached)) return cached;");
-        builder.AppendLine("            if (!_sources.TryGetValue(fullTypeName, out var entry)) return null;");
-        builder.AppendLine("            var map = global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap.Parse(entry.Xaml, entry.File, null, _namespaces, _types);");
-        builder.AppendLine("            if (map is not null) _cache[fullTypeName] = map;");
-        builder.AppendLine("            return map;");
-        builder.AppendLine("        }");
+        builder.AppendLine("            };");
         builder.AppendLine("    }");
         builder.AppendLine("    internal static class __DevFlowXamlSourceMapModuleInit");
         builder.AppendLine("    {");
