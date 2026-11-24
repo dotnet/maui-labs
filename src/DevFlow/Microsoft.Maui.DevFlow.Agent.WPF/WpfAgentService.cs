@@ -79,7 +79,10 @@ public class WpfAgentService : MauiDevFlowAgentService
         return base.GetNativeWindowSize(window);
     }
 
-    protected override Task<bool> TryNativeScroll(VisualElement element, double deltaX, double deltaY)
+    protected override async Task<bool> TryNativeScroll(VisualElement element, double deltaX, double deltaY)
+        => await TryNativeScrollMeasured(element, deltaX, deltaY) is not null;
+
+    protected override Task<ScrollMovement?> TryNativeScrollMeasured(VisualElement element, double deltaX, double deltaY)
     {
         var target = element;
         while (target != null)
@@ -90,16 +93,21 @@ public class WpfAgentService : MauiDevFlowAgentService
                 scroll ??= FindAncestor<ScrollViewer>(d);
                 if (scroll != null)
                 {
+                    // The ScrollViewer applies the offset on its next layout pass and clamps it to
+                    // [0, ScrollableWidth/Height]; the movement is that clamped target.
+                    var newX = ScrollMovement.ClampOffset(scroll.HorizontalOffset, deltaX, 0, scroll.ScrollableWidth);
+                    var newY = ScrollMovement.ClampOffset(scroll.VerticalOffset, -deltaY, 0, scroll.ScrollableHeight);
+                    var movement = new ScrollMovement(newX - scroll.HorizontalOffset, scroll.VerticalOffset - newY);
                     if (deltaX != 0)
-                        scroll.ScrollToHorizontalOffset(Math.Max(0, scroll.HorizontalOffset + deltaX));
+                        scroll.ScrollToHorizontalOffset(newX);
                     if (deltaY != 0)
-                        scroll.ScrollToVerticalOffset(Math.Max(0, scroll.VerticalOffset - deltaY));
-                    return Task.FromResult(true);
+                        scroll.ScrollToVerticalOffset(newY);
+                    return Task.FromResult<ScrollMovement?>(movement);
                 }
             }
             target = target.Parent as VisualElement;
         }
-        return Task.FromResult(false);
+        return Task.FromResult<ScrollMovement?>(null);
     }
 
     protected override bool TryNativeTap(VisualElement ve)
