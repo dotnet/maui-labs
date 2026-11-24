@@ -4,6 +4,9 @@
     <TargetFrameworks Condition="'$(UseNet11AppleTargets)' != 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net11.0-ios;net10.0-maccatalyst;net11.0-maccatalyst;net10.0-macos;net11.0-macos</TargetFrameworks>
     <TargetFrameworks Condition="'$(UseNet11AppleTargets)' == 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net11.0-ios27.2;net11.0-maccatalyst27.2;net11.0-macos27.2</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0;net11.0-windows10.0.19041.0</TargetFrameworks>
+    <!-- AGP creates Gradle user home's FakeDependency.jar without cross-process locking.
+         Serialize source-built native bridges across TFMs to avoid a cold-cache creation race. -->
+    <BuildInParallel Condition="'$(TargetFramework)' == '' and '$(EssentialsAIAndroidNativeArtifactsPath)' == ''">false</BuildInParallel>
     <AssemblyName>Microsoft.Maui.Essentials.AI</AssemblyName>
     <RootNamespace>Microsoft.Maui.Essentials.AI</RootNamespace>
     <UseMaui>true</UseMaui>

@@ -325,7 +325,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             _page.Request += (_, request) => _pendingRequests.TryAdd(request, 0);
             _page.RequestFinished += (sender, request) => _pendingRequests.TryRemove(request, out _);
             _page.RequestFailed += (sender, request) => _pendingRequests.TryRemove(request, out _);
-            // Track timers and pagehide solely for teardown; leave normal Inspector behavior intact.
+            // Observe socket readiness before app startup; track timers and pagehide for teardown.
             await Page.AddInitScriptAsync("""
                 window.fixtureIntervals = [];
                 window.fixtureTimeouts = [];
@@ -347,6 +347,22 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                   if (type === 'pagehide') window.fixturePagehide.push(handler);
                   return originalAddEventListener(type, handler, ...args);
                 };
+                const NativeWebSocket = window.WebSocket;
+                window.WebSocket = new Proxy(NativeWebSocket, {
+                  construct(target, argumentsList) {
+                    const socket = Reflect.construct(target, argumentsList);
+                    if (new URL(socket.url).pathname.endsWith('/ws/events')) {
+                      window.fixtureUiEventSocket = socket;
+                      // Observe after devflow's onopen so readiness includes its clear handler.
+                      queueMicrotask(() => {
+                        socket.addEventListener('open', () => {
+                          socket.fixtureOpenHandled = true;
+                        }, { once: true });
+                      });
+                    }
+                    return socket;
+                  },
+                });
                 """);
             await Page.GotoAsync($"http://localhost:{_inspector.Port}/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
             await Page.WaitForFunctionAsync("""
@@ -3010,10 +3026,46 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
+    public async Task UiEventSocket_InFlightUnsupportedCheckDrainsBeforeEnablingSupport()
+    {
+        var supportCheckStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSupportCheck = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await Page.RouteAsync("**/api/eventSupport", async route =>
+        {
+            supportCheckStarted.TrySetResult();
+            await releaseSupportCheck.Task;
+            await route.FulfillAsync(new()
+            {
+                ContentType = "application/json",
+                Body = """{"supported":false}""",
+            });
+        }, new() { Times = 1 });
+        try
+        {
+            await Page.ReloadAsync(new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await supportCheckStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var socketReady = WaitForUiEventSocketAsync();
+            // Flush preceding browser commands while the initial support check is still held.
+            await Page.EvaluateAsync("() => undefined");
+            releaseSupportCheck.TrySetResult();
+            await socketReady;
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            releaseSupportCheck.TrySetResult();
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
     public async Task RemoteTapLifecycle_RendersAtCorrelatedPreviewCoordinates()
     {
         _versionedTreeEnabled = true;
+        _supportsUiEvents = true;
         await Page.ReloadAsync(new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+        // Exercise a connection that opens before the test starts waiting for it.
+        await Page.WaitForFunctionAsync(
+            "() => window.fixtureUiEventSocket?.fixtureOpenHandled === true");
         await WaitForUiEventSocketAsync();
         var frameId = await CurrentPreviewFrameIdAsync();
         await PublishUiEventAsync("ui-action-started", new
@@ -3821,34 +3873,18 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
 
     private async Task WaitForUiEventSocketAsync()
     {
-        var marker = Guid.NewGuid().ToString("N");
+        // Drain an initial unsupported capability check before asking online to recheck it.
+        // Otherwise connectEvents ignores online while that check is still in flight.
+        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
         _supportsUiEvents = true;
-        await Page.EvaluateAsync(
-            """
-            marker => {
-              const NativeWebSocket = window.WebSocket;
-              const ObservedWebSocket = new Proxy(NativeWebSocket, {
-                construct(target, argumentsList) {
-                  const socket = Reflect.construct(target, argumentsList);
-                  // Register after devflow's onopen so the marker proves its clear handler ran.
-                  queueMicrotask(() => {
-                    socket.addEventListener('open', () => {
-                      document.body.dataset.fixtureUiEventSocketOpen = marker;
-                      if (window.WebSocket === ObservedWebSocket)
-                        window.WebSocket = NativeWebSocket;
-                    }, { once: true });
-                  });
-                  return socket;
-                },
-              });
-              window.WebSocket = ObservedWebSocket;
-              window.dispatchEvent(new Event('online'));
-            }
-            """,
-            marker);
+        await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
         await Page.WaitForFunctionAsync(
-            "marker => document.body.dataset.fixtureUiEventSocketOpen === marker",
-            marker);
+            """
+            () => {
+              const socket = window.fixtureUiEventSocket;
+              return socket?.readyState === WebSocket.OPEN && socket.fixtureOpenHandled === true;
+            }
+            """);
         for (var attempt = 0; attempt < 100; attempt++)
         {
             if (_eventSockets.Keys.Any(socket => socket.State == WebSocketState.Open))
