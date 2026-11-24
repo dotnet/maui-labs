@@ -59,11 +59,11 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
                     }
 
                     idx = AddWebViewBridge(
-                        async (script) =>
+                        script => RunOnMainThreadAsync(async () =>
                         {
                             var result = await wkWebView.EvaluateJavaScriptAsync(script);
                             return result?.ToString();
-                        },
+                        }),
                         () => wkWebView.Reload(),
                         (url) =>
                         {
@@ -189,23 +189,29 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
 
     public override void ConfigureHandler()
     {
-        Log("[BlazorDevFlow] ConfigureHandler called, appending to macOS BlazorWebViewHandler mapper");
+        Log("[BlazorDevFlow] ConfigureHandler called, appending to the MAUI view mapper for the macOS BlazorWebViewHandler");
 
-        MacOSBlazorHandler.Mapper.AppendToMapping("ChobitsuDebug", async (handler, view) =>
+        // The AppKit handler's own static Mapper (and its generic base class) has a different
+        // signature in the backend's net10.0 and net11.0 assets, so this net10.0-compiled agent
+        // hooks MAUI's stable shared ViewMapper and reaches the handler only through IViewHandler.
+        ViewHandler.ViewMapper.AppendToMapping("ChobitsuDebug", async (viewHandler, view) =>
         {
+            if (viewHandler is not MacOSBlazorHandler handler)
+                return;
+
             Log("[BlazorDevFlow] ChobitsuDebug mapper callback triggered");
 
-            if (handler.PlatformView is WKWebView wkWebView)
+            if (viewHandler.PlatformView is WKWebView wkWebView)
             {
-                var automationId = (handler.VirtualView as VisualElement)?.AutomationId;
+                var automationId = (viewHandler.VirtualView as VisualElement)?.AutomationId;
                 await Task.Delay(100);
-                if (!ReferenceEquals(handler.PlatformView, wkWebView))
+                if (!ReferenceEquals(viewHandler.PlatformView, wkWebView))
                 {
                     Log($"[BlazorDevFlow] Skipping superseded WKWebView (automationId={automationId})");
                     return;
                 }
 
-                var visualElement = handler.VirtualView as VisualElement;
+                var visualElement = viewHandler.VirtualView as VisualElement;
                 EventHandler<HandlerChangingEventArgs>? handlerChanging = null;
                 Action<WKWebView>? platformViewDisconnected = null;
                 var idx = -1;
@@ -232,11 +238,11 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
                     }
 
                     idx = AddWebViewBridge(
-                        async (script) =>
+                        script => RunOnMainThreadAsync(async () =>
                         {
                             var result = await wkWebView.EvaluateJavaScriptAsync(script);
                             return result?.ToString();
-                        },
+                        }),
                         () => wkWebView.Reload(),
                         (url) =>
                         {
@@ -272,7 +278,7 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
             }
             else
             {
-                Log($"[BlazorDevFlow] PlatformView is not WKWebView: {handler.PlatformView?.GetType().Name ?? "null"}");
+                Log($"[BlazorDevFlow] PlatformView is not WKWebView: {viewHandler.PlatformView?.GetType().Name ?? "null"}");
             }
         });
     }

@@ -27,7 +27,7 @@ public class BorderHandler : GtkViewHandler<IBorderView, Platform.GtkLayoutPanel
 
 	protected override Platform.GtkLayoutPanel CreatePlatformView()
 	{
-		return new Platform.GtkLayoutPanel();
+		return Platform.GtkLayoutPanel.NewWithProperties([]);
 	}
 
 	public override Size GetDesiredSize(double widthConstraint, double heightConstraint)

@@ -42,6 +42,7 @@ internal class MacOSModalManager
 
 	public int ModalCount => _modalStack.Count;
 	public bool HasModals => _modalStack.Count > 0;
+	public Page? TopModal => _modalStack.Count == 0 ? null : _modalStack[^1].Page;
 
 	public void UpdateParentWindow(NSWindow parentWindow)
 	{
@@ -65,6 +66,9 @@ internal class MacOSModalManager
 
 	public void PushModal(Page page, IMauiContext mauiContext, bool animated)
 	{
+		if (_modalStack.Any(entry => ReferenceEquals(entry.Page, page)))
+			return;
+
 		var style = MacOSPage.GetModalPresentationStyle(page);
 
 		switch (style)

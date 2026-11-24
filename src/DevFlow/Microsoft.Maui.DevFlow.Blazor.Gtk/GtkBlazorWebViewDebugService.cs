@@ -1,3 +1,4 @@
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Components.WebView.Maui;
@@ -162,7 +163,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
             _captureScreenshot = captureScreenshot;
             _lifetimeToken = _lifetimeCts.Token;
             if (_webView != null)
-                _webView.OnLoadChanged += OnLoadChanged;
+                GtkWebViewSignals.LoadChanged.Connect(_webView, OnLoadChanged);
         }
 
         internal async Task InitializeAsync()
@@ -199,8 +200,9 @@ public class GtkBlazorWebViewDebugService : IDisposable
             }
         }
 
-        private void OnLoadChanged(global::WebKit.WebView sender, global::WebKit.WebView.LoadChangedSignalArgs args)
+        private void OnLoadChanged(global::WebKit.WebView sender, GtkWebViewSignals.LoadChangedArgs args)
         {
+            using var signalArgs = args;
             if (_disposed)
                 return;
             if (args.LoadEvent == global::WebKit.LoadEvent.Started)
@@ -225,8 +227,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
                 var evaluation = _evaluateJavaScript != null ? _evaluateJavaScript(script) : DispatchOnUiAsync(async () =>
                 {
                     if (_webView == null) return null;
-                    var value = await _webView.EvaluateJavascriptAsync(script);
-                    return value?.ToString();
+                    return await _webView.EvaluateJavaScriptToStringAsync(script);
                 });
                 return await evaluation.WaitAsync(_lifetimeToken);
             }
@@ -545,7 +546,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
                 if (_disposed) return;
                 _disposed = true;
                 if (_webView != null)
-                    _webView.OnLoadChanged -= OnLoadChanged;
+                    GtkWebViewSignals.LoadChanged.Disconnect(_webView, OnLoadChanged);
                 _lifetimeCts.Cancel();
                 _lifetimeCts.Dispose();
                 _drainCts?.Cancel();

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
 
 using Microsoft.Maui.Platforms.MacOS.Platform;
 

@@ -7,7 +7,7 @@ agent wire protocol: `AgentClient`, the element and protocol DTOs, and their ser
 
 The package targets `netstandard2.0` as well as modern .NET, so a .NET Framework test harness (for
 example Visual Studio Apex tests) drives a running app through exactly the same protocol code as a
-.NET 10 `dotnet watch` or VS Code test run. The DTOs are defined once, here, so the harnesses cannot
+.NET 11 `dotnet watch` or VS Code test run. The DTOs are defined once, here, so the harnesses cannot
 drift in how they serialize or interpret the protocol.
 
 Use [`Microsoft.Maui.DevFlow.Driver`](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Driver/)
@@ -41,6 +41,25 @@ await client.FillAsync("NameEntry", "Ada Lovelace");
 
 // Inspect the visual tree
 var tree = await client.GetTreeAsync(maxDepth: 3);
+
+// Request a bounded high-DPI screenshot. The result reports the actual size chosen.
+var screenshot = await client.ScreenshotResultAsync(
+    window: null,
+    elementId: null,
+    selector: null,
+    maxWidth: null,
+    scale: null,
+    captureEpoch: null,
+    registryGeneration: null,
+    resolution: new ScreenshotResolutionOptions
+    {
+        TargetScale = 2,
+        MaxPixelWidth = 1600,
+        MaxPixelHeight = 1200,
+        MaxPixels = 2_000_000,
+        MaxEncodedBytes = 64 * 1024 * 1024
+    });
+Console.WriteLine($"{screenshot.PixelWidth}x{screenshot.PixelHeight} @ {screenshot.CaptureScale}x");
 ```
 
 ## Requirements

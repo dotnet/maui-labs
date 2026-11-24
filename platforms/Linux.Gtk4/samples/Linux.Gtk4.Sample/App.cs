@@ -67,12 +67,30 @@ class MainShell : FlyoutPage
 		var menuItems = _pages.Select(p => p.name).ToList();
 		var menuList = new CollectionView
 		{
+			AutomationId = "sample-menu",
 			ItemsSource = menuItems,
 			SelectionMode = SelectionMode.Single,
 			SelectedItem = menuItems[0],
 			VerticalOptions = LayoutOptions.Fill,
 			Header = "GTK4 Demo",
 		};
+
+#if MAUIDEVFLOW
+		menuList.ItemTemplate = new DataTemplate(() =>
+		{
+			var label = new Label { Padding = new Thickness(12, 8) };
+			label.SetBinding(Label.TextProperty, ".");
+			label.BindingContextChanged += (_, _) =>
+			{
+				if (label.BindingContext is string name)
+					label.AutomationId = $"sample-menu-{Array.FindIndex(_pages, page => page.name == name)}";
+			};
+			var tap = new TapGestureRecognizer();
+			tap.Tapped += (_, _) => menuList.SelectedItem = label.BindingContext;
+			label.GestureRecognizers.Add(tap);
+			return label;
+		});
+#endif
 
 		menuList.SelectionChanged += (s, e) =>
 		{

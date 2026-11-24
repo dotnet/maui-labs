@@ -1,0 +1,1 @@
+WPF standard MauiAsset pipeline

@@ -1,6 +1,9 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Formats.Tar;
+using System.IO.Compression;
+using System.Runtime.InteropServices;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.Services;
@@ -209,5 +212,75 @@ public class JdkManagerValidateInstallPathTests
 			? "C:\\Users\\test\\jdk-17"
 			: "/Users/test/jdk-17";
 		JdkManager.ValidateInstallPath(validPath); // Should not throw
+	}
+}
+
+public class JdkManagerTests
+{
+	[Theory]
+	[InlineData("WINDOWS", Architecture.X64, "windows-x64.zip")]
+	[InlineData("WINDOWS", Architecture.Arm64, "windows-aarch64.zip")]
+	[InlineData("OSX", Architecture.X64, "macOS-x64.tar.gz")]
+	[InlineData("OSX", Architecture.Arm64, "macOS-aarch64.tar.gz")]
+	[InlineData("LINUX", Architecture.X64, "linux-x64.tar.gz")]
+	[InlineData("LINUX", Architecture.Arm64, "linux-aarch64.tar.gz")]
+	public void GetDownloadUrl_UsesMicrosoftLatestBuild(string platformName, Architecture architecture, string artifact)
+	{
+		var platform = OSPlatform.Create(platformName);
+		foreach (var version in new[] { 17, 21 })
+		{
+			Assert.Equal($"https://aka.ms/download-jdk/microsoft-jdk-{version}-{artifact}",
+				JdkManager.GetDownloadUrl(version, platform, architecture));
+		}
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task ExtractArchive_ValidatesAndNormalizesJdkHome(bool containsJava)
+	{
+		var root = Path.Combine(Path.GetTempPath(), "maui-jdk-tests", Guid.NewGuid().ToString("N"));
+		var archivePath = Path.Combine(root, "jdk-archive");
+		var targetPath = Path.Combine(root, "jdk");
+		var java = OperatingSystem.IsWindows() ? "java.exe" : "java";
+		var archiveHome = OperatingSystem.IsMacOS() ? "./jdk-21.0.13.1+2/Contents/Home" : "jdk-21.0.13.1+2";
+		var entryName = containsJava ? $"{archiveHome}/bin/{java}" : $"{archiveHome}/release";
+		Directory.CreateDirectory(root);
+
+		try
+		{
+			using (var file = File.Create(archivePath))
+			{
+				if (OperatingSystem.IsWindows())
+				{
+					using var archive = new ZipArchive(file, ZipArchiveMode.Create);
+					using var entry = archive.CreateEntry(entryName).Open();
+					entry.WriteByte(1);
+				}
+				else
+				{
+					using var gzip = new GZipStream(file, CompressionMode.Compress);
+					using var archive = new TarWriter(gzip);
+					using var contents = new MemoryStream(new byte[] { 1 });
+					archive.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, entryName) { DataStream = contents });
+				}
+			}
+
+			if (containsJava)
+			{
+				await JdkManager.ExtractArchiveAsync(archivePath, targetPath, CancellationToken.None);
+				Assert.True(File.Exists(Path.Combine(targetPath, "bin", java)));
+			}
+			else
+			{
+				var error = await Assert.ThrowsAsync<MauiToolException>(
+					() => JdkManager.ExtractArchiveAsync(archivePath, targetPath, CancellationToken.None));
+				Assert.Equal(ErrorCodes.JdkInstallFailed, error.Code);
+			}
+		}
+		finally
+		{
+			Directory.Delete(root, recursive: true);
+		}
 	}
 }

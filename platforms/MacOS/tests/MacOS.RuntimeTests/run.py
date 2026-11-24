@@ -136,6 +136,7 @@ class RuntimeRunner:
         self.maui_version = maui_version
         if maui_version and not re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?", maui_version):
             raise ValueError("Invalid MAUI version.")
+        self.framework = "net10.0-macos" if maui_version.startswith("10.") else "net11.0-macos"
         self.env = dict(os.environ)
         self.env.setdefault("NUGET_PACKAGES", str(REPO / ".packages"))
         self.completed = []
@@ -191,6 +192,10 @@ class RuntimeRunner:
             raise ValueError("Build selector must match the registered scenario.")
         if self.maui_version:
             properties["MicrosoftMauiControlsVersion"] = self.maui_version
+            if self.framework.startswith("net10.0"):
+                properties["MacOSMaui10Version"] = self.maui_version
+            elif self.framework.startswith("net11.0"):
+                properties["MacOSMaui11Version"] = self.maui_version
         arguments = []
         for key, value in properties.items():
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) or "\n" in str(value):
@@ -199,13 +204,15 @@ class RuntimeRunner:
         binlog = directory / "build.binlog"
         log = directory / "build.log"
         self.command([REPO / "eng/common/dotnet.sh", "publish" if publish else "build",
-                      self.project, "-c", configuration, "-m:1", "-nr:false", f"-bl:{binlog}",
+                      self.project, "-c", configuration, "-f", self.framework,
+                      "-m:1", "-nr:false", f"-bl:{binlog}",
                       *arguments, *extra_args], log)
         output = read_build_output(metadata, log, binlog, app_root)
         executable = output.executable
         (directory / "build-output.json").write_text(json.dumps({
             "executable": str(output.executable), "bundle": str(output.bundle),
-            "properties": properties, "configuration": configuration, "publish": publish
+            "properties": properties, "configuration": configuration, "framework": self.framework,
+            "publish": publish
         }, indent=2))
         self.command([executable, "--list"], directory / "registry.json", timeout=30)
         registry = json.loads((directory / "registry.json").read_text())

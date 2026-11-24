@@ -21,15 +21,15 @@ dotnet build src/Comet.SourceGenerator/Comet.SourceGenerator.csproj -c Release
 dotnet build src/Comet/Comet.csproj -c Release
 
 # Build the sample
-dotnet build sample/CometTodoApp/CometTodoApp.csproj -f net10.0-ios -c Debug
+dotnet build sample/CometTodoApp/CometTodoApp.csproj -f net11.0-ios -c Debug
 
 # Run on Mac Catalyst
-dotnet build sample/CometTodoApp/CometTodoApp.csproj -t:Run -f net10.0-maccatalyst
+dotnet build sample/CometTodoApp/CometTodoApp.csproj -t:Run -f net11.0-maccatalyst
 ```
 
 ## Platforms
 
 | Platform | TFM |
 |----------|-----|
-| iOS | net10.0-ios |
-| Mac Catalyst | net10.0-maccatalyst |
+| iOS | net11.0-ios |
+| Mac Catalyst | net11.0-maccatalyst |

@@ -24,8 +24,19 @@
       ]
     },
     "ui.screenshot": {
+      "version": 3,
+      "features": [
+        "element",
+        "fullscreen",
+        "selector",
+        "capture-epoch",
+        "resolution-hints"
+      ]
+    },
+    "ui.events": {
       "version": 1,
-      "features": ["element", "fullscreen", "selector"]
+      "supported": true,
+      "features": ["stream", "subscribe", "action-lifecycle"]
     },
     "ui.menus": {
       "version": 1,

@@ -46,6 +46,22 @@ internal static partial class NativeUi
 
     public static double DisplayDensity => UIScreen.MainScreen.Scale;
 
+    public static double GetCaptureDensity(object? viewObject)
+        => viewObject switch
+        {
+            UIWindow window => window.Screen.Scale,
+            UIView view => view.Window?.Screen.Scale ?? DisplayDensity,
+            _ => DisplayDensity
+        };
+
+    public static double ScreenCaptureDensity
+        => GetCaptureDensity(GetRoots().FirstOrDefault());
+
+    public static (double Width, double Height) GetCaptureLogicalSize(object? viewObject)
+        => viewObject is UIView view
+            ? (view.Bounds.Width, view.Bounds.Height)
+            : (0, 0);
+
     public static IReadOnlyList<object> GetRoots()
     {
         var roots = new List<object>();
@@ -196,11 +212,14 @@ internal static partial class NativeUi
         for (nuint i = 0; i < targets.Count; i++)
         {
             var entry = targets.GetItem<NSObject>(i);
+            if (entry is null) continue;
+
             var target = entry.ValueForKey(new NSString("target"));
             var action = entry.ValueForKey(new NSString("action"));
-            if (target == null || action == null) continue;
+            var actionName = action?.ToString();
+            if (target is null || string.IsNullOrEmpty(actionName)) continue;
 
-            var selector = new Selector(action.ToString());
+            var selector = new Selector(actionName);
             if (target.RespondsToSelector(selector))
                 target.PerformSelector(selector, recognizer, 0);
         }
@@ -413,7 +432,7 @@ internal static partial class NativeUi
         var renderer = new UIGraphicsImageRenderer(view.Bounds.Size, new UIGraphicsImageRendererFormat
         {
             Opaque = false,
-            Scale = UIScreen.MainScreen.Scale,
+            Scale = (System.Runtime.InteropServices.NFloat)GetCaptureDensity(view),
         });
 
         using var image = renderer.CreateImage(context =>

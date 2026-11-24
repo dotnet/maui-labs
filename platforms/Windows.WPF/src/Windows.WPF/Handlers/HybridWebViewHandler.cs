@@ -73,14 +73,11 @@ namespace Microsoft.Maui.Handlers.WPF
 
 				if (messageType == "__InvokeDotNet")
 				{
-					HandleInvokeDotNet(messageContent);
+					_ = HandleInvokeDotNetAsync(messageContent);
 				}
 				else if (messageType == "__RawMessage")
 				{
-					// Fire RawMessageReceived on the virtual view
-					var rmrMethod = VirtualView?.GetType().GetMethod("OnRawMessageReceived",
-						BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-					rmrMethod?.Invoke(VirtualView, new object[] { messageContent });
+					((IHybridWebView?)VirtualView)?.RawMessageReceived(Uri.UnescapeDataString(messageContent));
 				}
 			}
 			catch (Exception ex)
@@ -89,16 +86,10 @@ namespace Microsoft.Maui.Handlers.WPF
 			}
 		}
 
-		void HandleInvokeDotNet(string content)
+		async Task HandleInvokeDotNetAsync(string content)
 		{
 			try
 			{
-				// Get the invoke target from the virtual view
-				var targetProp = VirtualView?.GetType().GetProperty("JSInvokeTarget",
-					BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-				var target = targetProp?.GetValue(VirtualView);
-				if (target == null) return;
-
 				// Parse: methodName|callbackId|jsonArgs
 				var parts = content.Split(new[] { '|' }, 3);
 				if (parts.Length < 2) return;
@@ -106,6 +97,23 @@ namespace Microsoft.Maui.Handlers.WPF
 				var methodName = parts[0];
 				var callbackId = parts[1];
 				var jsonArgs = parts.Length > 2 ? parts[2] : "[]";
+
+				string resultJson;
+#if NET11_0_OR_GREATER
+				var hybridWebView = (IHybridWebView?)VirtualView;
+				if (hybridWebView == null)
+					return;
+
+				using (var document = JsonDocument.Parse(jsonArgs))
+				{
+					var paramValues = document.RootElement.ValueKind == JsonValueKind.Array
+						? document.RootElement.EnumerateArray().Select(value => value.GetRawText()).ToArray()
+						: [];
+					resultJson = await hybridWebView.Invoker.InvokeMethodAsync(methodName, paramValues) ?? "null";
+				}
+#else
+				var target = ((IHybridWebView?)VirtualView)?.InvokeJavaScriptTarget;
+				if (target == null) return;
 
 				var method = target.GetType().GetMethod(methodName,
 					BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
@@ -125,12 +133,13 @@ namespace Microsoft.Maui.Handlers.WPF
 				}
 
 				var result = method.Invoke(target, args);
+				resultJson = result != null ? JsonSerializer.Serialize(result) : "null";
+#endif
 
 				if (!string.IsNullOrEmpty(callbackId))
 				{
-					var resultJson = result != null ? JsonSerializer.Serialize(result) : "null";
 					var js = $"window.__HybridWebView__DispatchResult('{callbackId}', {resultJson})";
-					_ = PlatformView.ExecuteScriptAsync(js);
+					await PlatformView.ExecuteScriptAsync(js);
 				}
 			}
 			catch (Exception ex)
@@ -213,7 +222,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 				if (!string.IsNullOrEmpty(body))
 				{
-					HandleInvokeDotNet(body);
+					_ = HandleInvokeDotNetAsync(body);
 				}
 
 				var responseBytes = Encoding.UTF8.GetBytes("{}");

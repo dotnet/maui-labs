@@ -19,14 +19,15 @@ public sealed partial class ImageSettingsViewModel : ObservableObject
 
     public IReadOnlyList<ImageGeneratorOption> Generators { get; }
     public IReadOnlyList<ImageSizeOption> ImageSizes { get; } =
-    [
+    new ImageSizeOption[]
+    {
         new("Provider default", null),
         new("1024 x 1024", new Size(1024, 1024)),
         new("1536 x 1024", new Size(1536, 1024)),
         new("1024 x 1536", new Size(1024, 1536)),
-    ];
+    };
     public IReadOnlyList<string> MediaTypes { get; } =
-        ["Provider default", "image/png", "image/jpeg", "image/webp"];
+        new[] { "Provider default", "image/png", "image/jpeg", "image/webp" };
 
     [ObservableProperty] private ImageGeneratorOption? selectedOption;
     [ObservableProperty] private ImageSizeOption? selectedSize;

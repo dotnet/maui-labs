@@ -63,7 +63,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
             }
 
             var projectPath = GetSampleProjectPath("android");
-            await BuildSampleAsync(projectPath, "net10.0-android",
+            await BuildSampleAsync(projectPath, "net11.0-android",
                 $"-p:EmbedAssembliesIntoApk=true -p:MauiDevFlowPort={AgentPort}");
 
             var apkPath = FindApk();
@@ -833,7 +833,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
 
     static string FindApk()
     {
-        var binDir = Path.Combine(GetSampleBuildOutputRoot("android"), "net10.0-android");
+        var binDir = Path.Combine(GetSampleBuildOutputRoot("android"), "net11.0-android");
 
         if (!Directory.Exists(binDir))
             throw new InvalidOperationException($"Android build output not found at: {binDir}");
@@ -848,8 +848,19 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
         return apks[0];
     }
 
-    Task InstallApkAsync(string apkPath) =>
-        AdbCheckedAsync($"install -r \"{apkPath}\"", timeoutSeconds: 120);
+    async Task InstallApkAsync(string apkPath)
+    {
+        try
+        {
+            await AdbCheckedAsync($"install -r \"{apkPath}\"", timeoutSeconds: 120);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE", StringComparison.Ordinal))
+        {
+            // A cached emulator snapshot can hold a build signed with another debug key.
+            await AdbCheckedAsync($"uninstall {PackageId}", timeoutSeconds: 60);
+            await AdbCheckedAsync($"install \"{apkPath}\"", timeoutSeconds: 120);
+        }
+    }
 
     async Task LaunchAppAsync()
     {

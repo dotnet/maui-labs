@@ -12,7 +12,7 @@ public class LinuxDeviceInfo : IDeviceInfo
 	public string Name => Environment.MachineName;
 	public string VersionString => Environment.OSVersion.VersionString;
 	public Version Version => Environment.OSVersion.Version;
-	public DevicePlatform Platform => DevicePlatform.Create("Linux");
+	public DevicePlatform Platform => DevicePlatform.Create("GTK");
 	public DeviceIdiom Idiom => DeviceIdiom.Desktop;
 	public DeviceType DeviceType => DeviceType.Physical;
 

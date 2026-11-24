@@ -205,7 +205,7 @@ class DetailView : View
 **Symptom**: Building `Comet.Tests.csproj` fails with:
 
 ```
-error CS0006: Metadata file 'src/Comet/bin/Release/net10.0-maccatalyst/Comet.dll' could not be found
+error CS0006: Metadata file 'src/Comet/bin/Release/net11.0-maccatalyst/Comet.dll' could not be found
 ```
 
 **Root cause**: The test project uses a direct DLL reference to the Mac Catalyst
@@ -240,7 +240,7 @@ dotnet build src/Comet/Comet.csproj -c Release
 
 Source generators cache their output. A clean build forces full regeneration.
 
-### "Build fails on net10.0-windows but I'm on macOS"
+### "Build fails on net11.0-windows but I'm on macOS"
 
 **Symptom**: Building Comet on macOS produces errors for the Windows target
 framework.
@@ -249,13 +249,13 @@ framework.
 buildable. Use a specific target framework:
 
 ```bash
-dotnet build src/Comet/Comet.csproj -c Release -f net10.0-maccatalyst
+dotnet build src/Comet/Comet.csproj -c Release -f net11.0-maccatalyst
 ```
 
 Or build for iOS:
 
 ```bash
-dotnet build src/Comet/Comet.csproj -c Release -f net10.0-ios
+dotnet build src/Comet/Comet.csproj -c Release -f net11.0-ios
 ```
 
 

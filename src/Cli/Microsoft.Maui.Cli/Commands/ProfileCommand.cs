@@ -67,7 +67,7 @@ public static class ProfileCommand
 		};
 		var frameworkOption = new Option<string?>("--framework", "-f")
 		{
-			Description = "Target framework to profile (for example net10.0-android)"
+			Description = "Target framework to profile (for example net11.0-android)"
 		};
 		var deviceOption = new Option<string?>("--device", "-d")
 		{
@@ -178,7 +178,7 @@ public static class ProfileCommand
 		};
 		var frameworkOption = new Option<string?>("--framework", "-f")
 		{
-			Description = "Target framework to profile (for example net10.0-android)"
+			Description = "Target framework to profile (for example net11.0-android)"
 		};
 		var deviceOption = new Option<string?>("--device", "-d")
 		{
@@ -308,7 +308,7 @@ public static class ProfileCommand
 					ErrorCodes.PlatformNotSupported,
 					$"Manual profiling for target framework '{framework}' is not implemented yet because it targets platform '{platform}'.",
 					[
-						"Choose an Android or iOS simulator target framework such as --framework net10.0-ios.",
+						"Choose an Android or iOS simulator target framework such as --framework net11.0-ios.",
 						"Or pass --platform android/ios to filter the available target frameworks."
 					]);
 			}
@@ -430,7 +430,7 @@ public static class ProfileCommand
 					ErrorCodes.PlatformNotSupported,
 					$"Startup profiling for target framework '{framework}' is not implemented yet because it targets platform '{platform}'.",
 					[
-						"Choose an Android or iOS simulator target framework such as --framework net10.0-ios.",
+						"Choose an Android or iOS simulator target framework such as --framework net11.0-ios.",
 						"Or pass --platform android/ios to filter the available target frameworks.",
 						"Mac Catalyst support can be added in a future iteration."
 					]);

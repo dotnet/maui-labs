@@ -4,7 +4,7 @@ Set up a .NET MAUI macOS (AppKit) app from scratch, or add macOS support to an e
 
 ## Overview
 
-The macOS backend runs as a separate **app head project** that references your shared MAUI code. This is similar to how MAUI uses platform-specific head projects, but since the macOS/AppKit backend is a community package (not built into the MAUI workload), you create a standalone `net10.0-macos` project that links to your shared pages, resources, and platform code.
+The macOS backend runs as a separate **app head project** that references your shared MAUI code. This is similar to how MAUI uses platform-specific head projects, but since the macOS/AppKit backend is a community package (not built into the MAUI workload), you create a standalone `net11.0-macos` project that links to your shared pages, resources, and platform code.
 
 ```
 MyApp/
@@ -31,7 +31,7 @@ MyApp/
 
 ## Step 1: Create the macOS App Head Project
 
-Create a new class library targeting `net10.0-macos`:
+Create a new class library targeting `net11.0-macos`:
 
 ```xml
 <!-- MyApp.MacOS/MyApp.MacOS.csproj -->
@@ -39,18 +39,18 @@ Create a new class library targeting `net10.0-macos`:
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0-macos</TargetFramework>
+    <TargetFramework>net11.0-macos</TargetFramework>
     <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
     <RootNamespace>MyApp</RootNamespace>
 
-    <!-- Prevent MAUI's default single-project processing -->
-    <UseMaui>false</UseMaui>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <!-- Platform NuGet packages -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.31" />
+    <PackageReference Include="Microsoft.Maui.Controls" Version="11.0.10" />
     <PackageReference Include="Microsoft.Maui.Platforms.MacOS" Version="0.2.0-beta.6" />
   </ItemGroup>
 
@@ -90,15 +90,22 @@ Link your shared pages, view models, and helpers from the main MAUI project:
   <!-- Fonts -->
   <MauiFont Include="..\MyApp\Resources\Fonts\*" />
 
-  <!-- Blazor wwwroot (if applicable) -->
-  <BundleResource Include="..\MyApp\wwwroot\**"
-                  Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
+  <!-- Images and raw app-package files -->
+  <MauiImage Include="..\MyApp\Resources\Images\*" />
+  <MauiAsset Include="..\MyApp\Resources\Raw\**\*"
+             LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+
+  <!-- Processed as an AppKit bundle image; macOS has no OS launch-screen UI -->
+  <MauiSplashScreen Include="..\MyApp\Resources\Splash\splash.png" />
 </ItemGroup>
 ```
 
+Razor projects expose `wwwroot` through standard static web assets. The AppKit
+package consumes those generated `MauiAsset` items automatically.
+
 ### App Icon
 
-The `MauiIcon` item is automatically processed into a macOS `.icns` file at build time. The build targets use `sips` and `iconutil` to generate all required icon sizes (16×16 through 512×512 with @2x variants) from your source PNG or SVG.
+The `MauiIcon` item is automatically processed into a macOS `.icns` file at build time. The build targets use `sips` and `iconutil` to generate all required icon sizes (16×16 through 512×512 with @2x variants) from a source PNG.
 
 ## Step 3: Create Platform Bootstrap Files
 
@@ -216,10 +223,10 @@ public class MacOSApp : Application
 dotnet build MyApp.MacOS/MyApp.MacOS.csproj
 
 # The app bundle is created at:
-# MyApp.MacOS/bin/Debug/net10.0-macos/osx-arm64/MyApp.app
+# MyApp.MacOS/bin/Debug/net11.0-macos/osx-arm64/MyApp.app
 
 # Launch
-open MyApp.MacOS/bin/Debug/net10.0-macos/osx-arm64/MyApp.app
+open MyApp.MacOS/bin/Debug/net11.0-macos/osx-arm64/MyApp.app
 ```
 
 ## Conditional Compilation

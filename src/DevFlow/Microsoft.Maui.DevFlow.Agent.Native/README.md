@@ -68,10 +68,10 @@ maui devflow mcp        # MCP server for AI agents
 
 | Platform | UI framework | Roots walked |
 |---|---|---|
-| `net10.0-android` | `Android.Views` | activity decor view + dialogs |
-| `net10.0-ios` | UIKit | connected scenes → `UIWindow` |
-| `net10.0-maccatalyst` | UIKit | connected scenes → `UIWindow` |
-| `net10.0-macos` | AppKit | application windows |
+| `net11.0-android` | `Android.Views` | activity decor view + dialogs |
+| `net11.0-ios` | UIKit | connected scenes → `UIWindow` |
+| `net11.0-maccatalyst` | UIKit | connected scenes → `UIWindow` |
+| `net11.0-macos` | AppKit | application windows |
 
 Elements are identified by whatever the platform already offers: `View.Tag` then the resource-entry
 name on Android, `AccessibilityIdentifier` on UIKit, `NSView.Identifier` on AppKit. Give your views
@@ -82,6 +82,11 @@ those and the same automation ids work across all four.
 Supported everywhere: visual tree, query and CSS selectors, hit-testing, tap, fill, clear, focus,
 key, gesture, scroll, batch, property get/set, screenshots (page, element, full screen), logs,
 network capture, profiling, DevFlow actions, and extensions.
+
+Continuous pointer sessions are supported on Android with real window-dispatched `MotionEvent`
+down/move/up/cancel input. The plain .NET UIKit and AppKit backends report `ui.pointerStream` as
+unsupported because they do not have a safe persistent native-touch injection path; clients keep
+the existing named-gesture fallback.
 
 AppKit full-window screenshots include native chrome and attached sheets without activating
 the app. ScreenCaptureKit is awaited rather than blocking the UI thread; macOS 14.0–14.1 uses

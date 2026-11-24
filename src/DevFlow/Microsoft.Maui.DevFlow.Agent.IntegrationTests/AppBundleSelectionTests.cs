@@ -19,10 +19,10 @@ public class AppBundleSelectionTests
     static string ForeignArch => HostArch == "arm64" ? "x64" : "arm64";
 
     static string BundleUnderRid(string ridPrefix, string arch) =>
-        Path.Combine("bin", "Debug", "net10.0-macos", $"{ridPrefix}-{arch}", "Sample.app");
+        Path.Combine("bin", "Debug", "net11.0-macos", $"{ridPrefix}-{arch}", "Sample.app");
 
     static string UniversalBundle() =>
-        Path.Combine("bin", "Debug", "net10.0-macos", "Sample.app");
+        Path.Combine("bin", "Debug", "net11.0-macos", "Sample.app");
 
     [Theory]
     [InlineData("osx")]

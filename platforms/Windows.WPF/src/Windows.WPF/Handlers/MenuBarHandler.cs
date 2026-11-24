@@ -133,18 +133,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 			wpfItem.Click += (s, e) =>
 			{
-				try
-				{
-					var cmd = flyoutItem.Command;
-					if (cmd?.CanExecute(flyoutItem.CommandParameter) == true)
-						cmd.Execute(flyoutItem.CommandParameter);
-
-					// Also invoke Clicked event via reflection
-					var method = typeof(Microsoft.Maui.Controls.MenuFlyoutItem).GetMethod("OnClicked",
-						System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-					method?.Invoke(flyoutItem, null);
-				}
-				catch { }
+				((Microsoft.Maui.IMenuElement)flyoutItem).Clicked();
 			};
 
 			return wpfItem;

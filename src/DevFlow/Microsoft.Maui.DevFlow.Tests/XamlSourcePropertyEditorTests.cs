@@ -60,6 +60,24 @@ public sealed class XamlSourcePropertyEditorTests : IDisposable
     }
 
     [Fact]
+    public async Task PersistAsync_ProjectWideCustomPrefix_PreservesEditPath()
+    {
+        var (sourcePath, xaml) = await CreateProjectAsync("""
+            <ContentPage x:Class="TestApp.MainPage">
+                <widgets:CustomView>
+                    <Label Text="Original" />
+                </widgets:CustomView>
+            </ContentPage>
+            """);
+        var element = CreateElement(sourcePath, xaml, "<Label");
+
+        var result = await CreateEditor(sourcePath).PersistAsync(element, "Text", "Updated");
+
+        Assert.Equal(XamlSourceEditStatus.Success, result.Status);
+        Assert.Contains("Text=\"Updated\"", await File.ReadAllTextAsync(sourcePath));
+    }
+
+    [Fact]
     public async Task PersistAsync_AtomicReplacement_PreservesFilePermissions()
     {
         var (sourcePath, xaml) = await CreateProjectAsync("""

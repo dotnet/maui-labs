@@ -7,6 +7,98 @@ namespace Microsoft.Maui.DevFlow.Agent.Native;
 /// </summary>
 internal static partial class NativeUi
 {
+    public static bool PointerSessionsSupported
+    {
+        get
+        {
+#if ANDROID
+            return true;
+#else
+            return false;
+#endif
+        }
+    }
+
+    public static string PointerSessionUnsupportedReason
+    {
+        get
+        {
+#if IOS || MACCATALYST
+            return "The native UIKit agent has no safe persistent UITouch injection path.";
+#elif MACOS
+            return "The native AppKit agent has no safe persistent pointer injection path.";
+#else
+            return "Continuous pointer injection is not supported by this native backend.";
+#endif
+        }
+    }
+
+    public static bool TryStartPointerSession(
+        double x,
+        double y,
+        out object? state,
+        out string? detail,
+        out string? error,
+        out string? reason)
+    {
+#if ANDROID
+        return TryStartAndroidPointerSession(x, y, out state, out detail, out error, out reason);
+#else
+        state = null;
+        detail = null;
+        error = PointerSessionUnsupportedReason;
+        reason = "not_supported";
+        return false;
+#endif
+    }
+
+    public static bool TryMovePointerSession(
+        object state,
+        double x,
+        double y,
+        double elapsedMs,
+        out string? error)
+    {
+#if ANDROID
+        return TryMoveAndroidPointerSession(state, x, y, elapsedMs, out error);
+#else
+        error = PointerSessionUnsupportedReason;
+        return false;
+#endif
+    }
+
+    public static bool TryEndPointerSession(
+        object state,
+        double x,
+        double y,
+        double elapsedMs,
+        out string? detail,
+        out string? error)
+    {
+#if ANDROID
+        return TryEndAndroidPointerSession(state, x, y, elapsedMs, out detail, out error);
+#else
+        detail = null;
+        error = PointerSessionUnsupportedReason;
+        return false;
+#endif
+    }
+
+    public static bool TryCancelPointerSession(
+        object state,
+        string reason,
+        out string? detail,
+        out string? error)
+    {
+#if ANDROID
+        return TryCancelAndroidPointerSession(state, reason, out detail, out error);
+#else
+        detail = null;
+        error = PointerSessionUnsupportedReason;
+        return false;
+#endif
+    }
+
     /// <summary>
     /// Walks up from <paramref name="viewObject"/> looking for the first ancestor (or the view itself)
     /// matching <paramref name="predicate"/>, then — when nothing was supplied at all — searches down

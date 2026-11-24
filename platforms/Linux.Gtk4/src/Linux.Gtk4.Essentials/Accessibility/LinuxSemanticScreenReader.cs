@@ -1,4 +1,5 @@
 using Microsoft.Maui.Accessibility;
+using Microsoft.Maui.Dispatching;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Accessibility;
 
@@ -6,14 +7,24 @@ public class LinuxSemanticScreenReader : ISemanticScreenReader
 {
 	public void Announce(string text)
 	{
-		// Best-effort: try to use AT-SPI2 via speech-dispatcher
-		try
+		if (string.IsNullOrWhiteSpace(text))
+			return;
+
+		var dispatcher = Application.Current?.Dispatcher;
+		if (dispatcher is not null && dispatcher.IsDispatchRequired)
 		{
-			var psi = new System.Diagnostics.ProcessStartInfo("spd-say")
-				{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
-			psi.ArgumentList.Add(text);
-			System.Diagnostics.Process.Start(psi);
+			dispatcher.Dispatch(() => AnnounceCore(text));
+			return;
 		}
-		catch { }
+
+		AnnounceCore(text);
+	}
+
+	static void AnnounceCore(string text)
+	{
+		var window = (Gtk.Application.GetDefault() as Gtk.Application)?.GetActiveWindow()
+			?? throw new InvalidOperationException(
+				"A running GTK application window is required for semantic announcements.");
+		window.Announce(text, Gtk.AccessibleAnnouncementPriority.Medium);
 	}
 }

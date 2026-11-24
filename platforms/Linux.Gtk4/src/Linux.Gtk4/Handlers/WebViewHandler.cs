@@ -1,3 +1,4 @@
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using Microsoft.Maui;
 using WebKit;
 
@@ -32,7 +33,7 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 	protected override WebKit.WebView CreatePlatformView()
 	{
 		EnsureWebKitInitialized();
-		var webView = new WebKit.WebView();
+		var webView = WebKit.WebView.New();
 
 		var settings = webView.GetSettings();
 		settings.SetEnableJavascript(true);
@@ -44,14 +45,14 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 	protected override void ConnectHandler(WebKit.WebView platformView)
 	{
 		base.ConnectHandler(platformView);
-		platformView.OnLoadChanged += OnLoadChanged;
-		platformView.OnLoadFailed += OnLoadFailed;
+		GtkWebViewSignals.LoadChanged.Connect(platformView, OnLoadChanged);
+		GtkWebViewSignals.LoadFailed.Connect(platformView, OnLoadFailed);
 	}
 
 	protected override void DisconnectHandler(WebKit.WebView platformView)
 	{
-		platformView.OnLoadChanged -= OnLoadChanged;
-		platformView.OnLoadFailed -= OnLoadFailed;
+		GtkWebViewSignals.LoadChanged.Disconnect(platformView, OnLoadChanged);
+		GtkWebViewSignals.LoadFailed.Disconnect(platformView, OnLoadFailed);
 		base.DisconnectHandler(platformView);
 	}
 
@@ -120,11 +121,7 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 		if (handler.PlatformView == null || arg is not string script || string.IsNullOrWhiteSpace(script))
 			return;
 
-		_ = handler.PlatformView.EvaluateJavascriptAsync(script).ContinueWith(t =>
-		{
-			if (t.IsFaulted)
-				System.Diagnostics.Debug.WriteLine($"WebView Eval failed: {t.Exception?.InnerException?.Message}");
-		}, TaskScheduler.Default);
+		_ = handler.EvaluateAndDiscardAsync(script);
 	}
 
 	public static void MapEvaluateJavaScriptAsync(WebViewHandler handler, IWebView webView, object? arg)
@@ -143,8 +140,8 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 	{
 		try
 		{
-			var result = await PlatformView.EvaluateJavascriptAsync(request.Script);
-			request.SetResult(result?.ToString() ?? string.Empty);
+			var result = await PlatformView.EvaluateJavaScriptToStringAsync(request.Script);
+			request.SetResult(result ?? string.Empty);
 		}
 		catch (Exception ex)
 		{
@@ -152,8 +149,21 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 		}
 	}
 
-	void OnLoadChanged(WebKit.WebView sender, WebKit.WebView.LoadChangedSignalArgs args)
+	async Task EvaluateAndDiscardAsync(string script)
 	{
+		try
+		{
+			await PlatformView.RunJavaScriptAsync(script);
+		}
+		catch (Exception ex)
+		{
+			System.Diagnostics.Debug.WriteLine($"WebView Eval failed: {ex.Message}");
+		}
+	}
+
+	void OnLoadChanged(WebKit.WebView sender, GtkWebViewSignals.LoadChangedArgs args)
+	{
+		using var signalArgs = args;
 		UpdateNavigationState();
 
 		if (args.LoadEvent == WebKit.LoadEvent.Finished)
@@ -162,8 +172,9 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 		}
 	}
 
-	bool OnLoadFailed(WebKit.WebView sender, WebKit.WebView.LoadFailedSignalArgs args)
+	bool OnLoadFailed(WebKit.WebView sender, GtkWebViewSignals.LoadFailedArgs args)
 	{
+		using var signalArgs = args;
 		UpdateNavigationState();
 		var failedUrl = string.IsNullOrWhiteSpace(args.FailingUri) ? _lastUrl : args.FailingUri;
 		VirtualView?.Navigated(_currentNavigationEvent, failedUrl, WebNavigationResult.Failure);

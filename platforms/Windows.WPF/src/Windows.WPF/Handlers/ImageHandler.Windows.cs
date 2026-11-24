@@ -15,8 +15,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		/// <summary>
 		/// Resolves a MAUI image file name to a full path on disk.
-		/// Searches app directory, Resources/Images, and subdirectories.
-		/// Handles SVG-to-PNG fallback (MAUI build converts SVGs, but WPF doesn't).
+		/// Searches the processed application output and Resources/Images subdirectories.
 		/// </summary>
 		internal static string? ResolveImagePath(string fileName)
 		{
@@ -42,57 +41,7 @@ namespace Microsoft.Maui.Handlers.WPF
 				if (found != null) return found;
 			}
 
-			// Try SVG fallback: if asking for .png, try .svg
-			var ext = Path.GetExtension(fileName);
-			if (ext.Equals(".png", StringComparison.OrdinalIgnoreCase))
-			{
-				var svgName = Path.ChangeExtension(fileName, ".svg");
-				foreach (var path in new[] { Path.Combine(appDir, svgName), Path.Combine(appDir, "Resources", "Images", svgName) })
-				{
-					if (File.Exists(path)) return path;
-				}
-				if (Directory.Exists(imagesDir))
-				{
-					var found = Directory.EnumerateFiles(imagesDir, svgName, SearchOption.AllDirectories).FirstOrDefault();
-					if (found != null) return found;
-				}
-			}
-
 			return null;
-		}
-
-		/// <summary>
-		/// Renders an SVG file to a WPF BitmapSource using SkiaSharp-free approach.
-		/// Falls back to a placeholder if SVG rendering isn't available.
-		/// </summary>
-		internal static System.Windows.Media.ImageSource? RenderSvgToBitmap(string svgPath, int width = 256, int height = 256)
-		{
-			try
-			{
-				// Use Svg.Skia or SharpVectors if available; otherwise use a simple approach
-				// For now, try loading as XAML DrawingGroup (works for simple SVGs)
-				var svgContent = File.ReadAllText(svgPath);
-				
-				// Create a placeholder DrawingImage with a robot-like icon
-				var dg = new DrawingGroup();
-				using (var ctx = dg.Open())
-				{
-					// Draw a simple robot placeholder
-					var pen = new Pen(Brushes.Gray, 2);
-					ctx.DrawRoundedRectangle(Brushes.Purple, pen, new System.Windows.Rect(width * 0.25, width * 0.15, width * 0.5, width * 0.6), 10, 10);
-					ctx.DrawEllipse(Brushes.White, null, new System.Windows.Point(width * 0.4, width * 0.35), width * 0.06, width * 0.06);
-					ctx.DrawEllipse(Brushes.White, null, new System.Windows.Point(width * 0.6, width * 0.35), width * 0.06, width * 0.06);
-					ctx.DrawLine(new Pen(Brushes.White, 2), new System.Windows.Point(width * 0.4, width * 0.55), new System.Windows.Point(width * 0.6, width * 0.55));
-				}
-				dg.Freeze();
-				var drawingImage = new DrawingImage(dg);
-				drawingImage.Freeze();
-				return drawingImage;
-			}
-			catch
-			{
-				return null;
-			}
 		}
 
 		public static void MapSource(ImageHandler handler, IImage image)
@@ -113,20 +62,14 @@ namespace Microsoft.Maui.Handlers.WPF
 				var fileName = fileImageSource.File;
 				if (!string.IsNullOrEmpty(fileName))
 				{
+					if (Path.GetExtension(fileName).Equals(".svg", StringComparison.OrdinalIgnoreCase))
+						throw new NotSupportedException(
+							"Runtime SVG loading is not supported by the WPF backend. Add the SVG as a MauiImage and use its processed bitmap name.");
 					try
 					{
 						var resolvedPath = ResolveImagePath(fileName);
 						if (resolvedPath != null)
 						{
-							if (resolvedPath.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
-							{
-								var svgSource = RenderSvgToBitmap(resolvedPath);
-								if (svgSource != null)
-								{
-									handler.PlatformView.Source = svgSource;
-									return;
-								}
-							}
 							handler.PlatformView.Source = new BitmapImage(new Uri(resolvedPath, UriKind.Absolute));
 						}
 						else
