@@ -35,35 +35,21 @@ public static class DevFlowAgentHost
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        log ??= static message => Console.WriteLine(message);
-
-        var metadata = ReadAssemblyMetadata();
-        var project = metadata.Project ?? "unknown";
-        var tfm = metadata.Tfm ?? "unknown";
-        var sessionId = metadata.SessionId;
+        log ??= DefaultLog;
 
         // Always register with the broker for discoverability. When a custom port is set we tell the
         // broker our port so it uses that instead of assigning from the pool; the agent stays visible
         // to `maui devflow list` regardless of how the port was configured.
         BrokerRegistration? brokerRegistration = null;
-        var hasCustomPort = options.Port != AgentOptions.DefaultPort;
+        int? assignedPort = null;
         try
         {
-            var (platform, appName) = hostIdentityProvider?.Invoke() ?? GetDefaultHostIdentity();
-            brokerRegistration = new BrokerRegistration(project, tfm, platform, appName, sessionId);
-
-            if (hasCustomPort)
-                brokerRegistration.CurrentPort = options.Port;
+            brokerRegistration = CreateRegistration(options, hostIdentityProvider);
 
             // Task.Run avoids a deadlock: TryRegisterAsync awaits internally, and callers typically
             // bootstrap on the main thread, whose SynchronizationContext would deadlock if we blocked
             // on it directly. Do not "simplify" this to a direct GetAwaiter().GetResult().
-            var assignedPort = Task.Run(() => brokerRegistration.TryRegisterAsync(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult();
-            if (assignedPort.HasValue)
-            {
-                options.Port = assignedPort.Value;
-                log($"[Microsoft.Maui.DevFlow] Broker assigned port {assignedPort.Value}");
-            }
+            assignedPort = Task.Run(() => brokerRegistration.TryRegisterAsync(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
@@ -72,12 +58,82 @@ public static class DevFlowAgentHost
             brokerRegistration = null;
         }
 
+        return ApplyRegistration(options, log, brokerRegistration, assignedPort);
+    }
+
+    /// <summary>
+    /// Asynchronous <see cref="Configure"/> for hosts that cannot block while registering, such as
+    /// single-threaded WebAssembly in a browser.
+    /// </summary>
+    public static async Task<DevFlowAgentHostContext> ConfigureAsync(
+        AgentOptions options,
+        Func<(string Platform, string AppName)>? hostIdentityProvider = null,
+        Action<string>? log = null)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        log ??= DefaultLog;
+
+        BrokerRegistration? brokerRegistration = null;
+        int? assignedPort = null;
+        try
+        {
+            brokerRegistration = CreateRegistration(options, hostIdentityProvider);
+            assignedPort = await brokerRegistration.TryRegisterAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (Exception ex)
+        {
+            log($"[Microsoft.Maui.DevFlow] Broker registration failed: {ex.Message}");
+            brokerRegistration?.Dispose();
+            brokerRegistration = null;
+        }
+
+        return ApplyRegistration(options, log, brokerRegistration, assignedPort);
+    }
+
+    private static BrokerRegistration CreateRegistration(
+        AgentOptions options,
+        Func<(string Platform, string AppName)>? hostIdentityProvider)
+    {
+        var metadata = ReadAssemblyMetadata();
+        var (platform, appName) = hostIdentityProvider?.Invoke() ?? GetDefaultHostIdentity();
+        var registration = new BrokerRegistration(
+            metadata.Project ?? "unknown",
+            metadata.Tfm ?? "unknown",
+            platform,
+            appName,
+            metadata.SessionId)
+        {
+            UseTunnel = options.UseBrokerTunnel
+        };
+
+        if (options.Port != AgentOptions.DefaultPort)
+            registration.CurrentPort = options.Port;
+        return registration;
+    }
+
+    private static DevFlowAgentHostContext ApplyRegistration(
+        AgentOptions options,
+        Action<string> log,
+        BrokerRegistration? brokerRegistration,
+        int? assignedPort)
+    {
+        var metadata = ReadAssemblyMetadata();
+        var hasCustomPort = options.Port != AgentOptions.DefaultPort;
+        if (assignedPort.HasValue)
+        {
+            options.Port = assignedPort.Value;
+            log($"[Microsoft.Maui.DevFlow] Broker assigned port {assignedPort.Value}");
+        }
+
         // Fall back to the build-injected metadata port only when the broker didn't assign one.
         if (!hasCustomPort && brokerRegistration?.AssignedPort == null && metadata.Port.HasValue)
             options.Port = metadata.Port.Value;
 
         return new DevFlowAgentHostContext(metadata, brokerRegistration);
     }
+
+    private static void DefaultLog(string message) => Console.WriteLine(message);
 
     /// <summary>
     /// Reads one metadata value from the entry/app assembly, falling back to loaded assemblies on platforms
@@ -142,6 +198,7 @@ public static class DevFlowAgentHost
         if (OperatingSystem.IsMacOS()) return "macOS";
         if (OperatingSystem.IsWindows()) return "Windows";
         if (OperatingSystem.IsLinux()) return "Linux";
+        if (OperatingSystem.IsBrowser()) return "Browser";
         return "Unknown";
     }
 }

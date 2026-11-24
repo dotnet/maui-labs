@@ -51,6 +51,13 @@ public record AgentRegistration
     [JsonPropertyName("processId")]
     public int? ProcessId { get; init; }
 
+    /// <summary>
+    /// <c>"tunnel"</c> when the broker serves the agent's port and relays requests over the
+    /// agent's WebSocket (agents that cannot listen, such as WebAssembly); null for direct agents.
+    /// </summary>
+    [JsonPropertyName("transport")]
+    public string? Transport { get; init; }
+
     [JsonPropertyName("connectedAt")]
     public DateTime ConnectedAt { get; init; } = DateTime.UtcNow;
 
@@ -141,4 +148,7 @@ internal record RegistrationMessage
 
     [JsonPropertyName("processId")]
     public int? ProcessId { get; init; }
+
+    [JsonPropertyName("transport")]
+    public string? Transport { get; init; }
 }

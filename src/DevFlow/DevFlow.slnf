@@ -11,6 +11,7 @@
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Analyzers\\Microsoft.Maui.DevFlow.Analyzers.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent\\Microsoft.Maui.DevFlow.Agent.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent.Gtk\\Microsoft.Maui.DevFlow.Agent.Gtk.csproj",
+      "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent.Web\\Microsoft.Maui.DevFlow.Agent.Web.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent.Gtk.Tests\\Microsoft.Maui.DevFlow.Agent.Gtk.Tests.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent.WPF\\Microsoft.Maui.DevFlow.Agent.WPF.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent.IntegrationTests\\Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj",

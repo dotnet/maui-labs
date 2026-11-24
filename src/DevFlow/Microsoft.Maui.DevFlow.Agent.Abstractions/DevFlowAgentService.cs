@@ -32,7 +32,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         _mutationLease = new MutationLeaseCoordinator(
             () => _brokerRegistration,
             _options.MutationLeaseTimeoutMs);
-        _server = new AgentHttpServer(_options.Port);
+        _server = new AgentHttpServer(_options.Port) { UseBrokerTunnel = _options.UseBrokerTunnel };
         _server.MutationLeaseValidator = ValidateMutationLeaseAsync;
         _server.MutationAdmissionValidator = RejectMutationDuringPointerSession;
         _server.MutationObserver = ObserveMutationAsync;
@@ -175,7 +175,9 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         try
         {
             _server.Start();
-            Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] HTTP server started on port {_options.Port}");
+            Console.WriteLine(_server.UseBrokerTunnel
+                ? $"[Microsoft.Maui.DevFlow.Agent] Serving through the broker tunnel on port {_options.Port}"
+                : $"[Microsoft.Maui.DevFlow.Agent] HTTP server started on port {_options.Port}");
         }
         catch (Exception ex)
         {

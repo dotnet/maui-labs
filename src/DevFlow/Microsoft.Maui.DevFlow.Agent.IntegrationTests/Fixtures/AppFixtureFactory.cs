@@ -25,9 +25,11 @@ public static class AppFixtureFactory
             "windows" => new WindowsFixture(),
             "wpf" => new WpfFixture(),
             "gtk" or "linux" => new GtkFixture(),
+            // The web runs a dedicated sample on the community Platform.Maui.Web backend.
+            "web" or "browser" or "wasm" => new WebFixture(),
             _ => throw new InvalidOperationException(
                 $"Unknown test platform '{platform}'. " +
-                "Supported values: maccatalyst, macos, ios, android, windows, wpf, gtk. " +
+                "Supported values: maccatalyst, macos, ios, android, windows, wpf, gtk, web. " +
                 "Set the DEVFLOW_TEST_PLATFORM environment variable.")
         };
     }

@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+
+  <!--
+    Web (WebAssembly) sample for the DevFlow agent. MAUI has no browser backend of its own, so this
+    sample runs on the community Platform.Maui.Web backend (https://github.com/shinyorg/mauiplatforms).
+    It is not part of the repo's solution filters or CI builds. The repo's feeds do not carry the
+    backend package, so name a source that does when restoring it:
+      -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json
+    Or build against a mauiplatforms checkout instead:
+      -p:PlatformMauiWebProject=<mauiplatforms>/src/Platform.Maui.Web/Platform.Maui.Web.csproj
+      -p:BaseTargetFramework=net10.0 -p:MauiVersion=10.0.120
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DevFlow.Sample.Web</RootNamespace>
+    <!-- Required by the [JSImport] interop the backend generates. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationTitle>DevFlow Web</ApplicationTitle>
+    <ApplicationId>com.companyname.devflow.web</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <IsPackable>false</IsPackable>
+    <!-- Platform.Maui.Web 0.4.0 is built against MAUI 10.0.120, newer than the repo's pinned MAUI. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="10.0.120" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(PlatformMauiWebProject)' == ''">
+    <PackageReference Include="Platform.Maui.Web" VersionOverride="0.4.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(PlatformMauiWebProject)' != ''">
+    <ProjectReference Include="$(PlatformMauiWebProject)" />
+  </ItemGroup>
+  <!-- Package consumers get this from the package's build/ folder; a project reference must import it. -->
+  <Import Project="$([System.IO.Path]::GetDirectoryName('$(PlatformMauiWebProject)'))/buildTransitive/Platform.Maui.Web.targets"
+          Condition="'$(PlatformMauiWebProject)' != ''" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Web\Microsoft.Maui.DevFlow.Agent.Web.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.props" />
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.targets" />
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\build\Microsoft.Maui.DevFlow.Agent.targets" />
+
+</Project>

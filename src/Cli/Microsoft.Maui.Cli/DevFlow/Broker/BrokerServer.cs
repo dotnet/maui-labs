@@ -20,6 +20,9 @@ public class BrokerServer : IDisposable
     public const int DefaultPort = 19223;
     public const int PortRangeStart = 10223;
     public const int PortRangeEnd = 10899;
+    internal const string TunnelTransport = "tunnel";
+    // Tunnel responses carry screenshots, so allow well beyond the agent's request size cap.
+    private const int MaxTunnelMessageBytes = 64 * 1_048_576;
 
     private readonly int _port;
     private readonly TimeSpan _idleTimeout;
@@ -41,6 +44,15 @@ public class BrokerServer : IDisposable
     public int Port => _port;
     public int AgentCount => _agents.Count;
     public bool IsRunning => _listener?.IsListening ?? false;
+
+    /// <summary>
+    /// Whether the broker advertises itself in the shared state file. Tests running a private
+    /// broker turn this off so they never replace or delete a real broker's state.
+    /// </summary>
+    internal bool PublishesState { get; init; } = true;
+
+    /// <summary>How long a tunneled request waits for its agent; null keeps the tunnel's default.</summary>
+    internal TimeSpan? TunnelRequestTimeout { get; init; }
 
     public BrokerServer(int port = DefaultPort, TimeSpan? idleTimeout = null, Action<string>? log = null,
         string? workspaceStartPath = null)
@@ -110,7 +122,8 @@ public class BrokerServer : IDisposable
             Log($"XAML source workspace: {sourceWorkspace}");
 
         // Write state file
-        WriteBrokerState();
+        if (PublishesState)
+            WriteBrokerState();
 
         // Start idle timer
         _idleTimer = new Timer(_ => CheckIdle(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
@@ -252,9 +265,11 @@ public class BrokerServer : IDisposable
     private async Task HandleAgentWebSocket(HttpListenerContext context)
     {
         // Reject cross-origin WebSocket connections; only the local agent process
-        // or CLI tools (no Origin header) may register.
+        // or CLI tools (no Origin header) may register. An agent running in a browser
+        // connects from its own page's loopback origin, so any loopback origin may
+        // connect, but such a connection must register as a tunneled agent below.
         var origin = context.Request.Headers["Origin"];
-        if (!LocalOriginValidator.IsAllowed(origin, _port))
+        if (!LocalOriginValidator.IsAllowed(origin))
         {
             context.Response.StatusCode = 403;
             context.Response.Close();
@@ -289,6 +304,13 @@ public class BrokerServer : IDisposable
             if (registration == null || registration.Type != "register")
             {
                 await ws.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Expected register message", CancellationToken.None);
+                return;
+            }
+
+            var useTunnel = registration.Transport == TunnelTransport;
+            if (!useTunnel && !LocalOriginValidator.IsAllowed(origin, _port))
+            {
+                await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Browser origins may only register tunneled agents", CancellationToken.None);
                 return;
             }
 
@@ -334,6 +356,7 @@ public class BrokerServer : IDisposable
                 Version = registration.Version,
                 SessionId = registration.SessionId,
                 ProcessId = registration.ProcessId,
+                Transport = useTunnel ? TunnelTransport : null,
                 ConnectedAt = DateTime.UtcNow
             };
 
@@ -347,15 +370,39 @@ public class BrokerServer : IDisposable
                     staleInspector.Dispose();
                 if (replaced is not null)
                 {
+                    // Release a superseded tunnel first: a reconnecting agent reuses its port.
+                    replaced.Tunnel?.Dispose();
                     if (replaced.Registration.Port != assignedPort)
                         ReleasePort(replaced.Registration.Port);
                     try { replaced.WebSocket.Dispose(); } catch { }
                     Log($"Agent replaced: {agent.AppName}|{agent.Tfm} (was port {replaced.Registration.Port})");
                 }
+
+                if (useTunnel)
+                {
+                    try
+                    {
+                        connection.Tunnel = AgentTunnel.Start(assignedPort, ws, Log, TunnelRequestTimeout);
+                    }
+                    catch (SocketException ex)
+                    {
+                        _agents.TryRemove(new KeyValuePair<string, AgentConnection>(id, connection));
+                        ReleasePort(assignedPort);
+                        Log($"Agent tunnel failed to listen on port {assignedPort}: {ex.Message}");
+                        var errorMsg = CliJson.SerializeUntyped(new JsonObject
+                        {
+                            ["type"] = "error",
+                            ["message"] = $"The broker could not listen on port {assignedPort}"
+                        }, indented: false);
+                        await ws.SendAsync(Encoding.UTF8.GetBytes(errorMsg), WebSocketMessageType.Text, true, CancellationToken.None);
+                        await ws.CloseAsync(WebSocketCloseStatus.InternalServerError, "Tunnel port unavailable", CancellationToken.None);
+                        return;
+                    }
+                }
             }
             publishedConnection = connection;
 
-            Log($"Agent connected: {agent.AppName}|{agent.Tfm} → port {assignedPort} (id: {id})");
+            Log($"Agent connected: {agent.AppName}|{agent.Tfm} → port {assignedPort}{(useTunnel ? " (tunnel)" : "")} (id: {id})");
 
             // Send registration response
             var response = CliJson.SerializeUntyped(new JsonObject
@@ -401,7 +448,8 @@ public class BrokerServer : IDisposable
 
     private async Task MonitorAgentConnection(AgentConnection connection)
     {
-        var buffer = new byte[256];
+        var buffer = new byte[16 * 1024];
+        using var message = new MemoryStream();
         try
         {
             while (connection.WebSocket.State == WebSocketState.Open && !(_cts?.Token.IsCancellationRequested ?? true))
@@ -409,6 +457,19 @@ public class BrokerServer : IDisposable
                 var result = await connection.WebSocket.ReceiveAsync(buffer, _cts?.Token ?? CancellationToken.None);
                 if (result.MessageType == WebSocketMessageType.Close) break;
                 TouchActivity();
+
+                // Only tunneled agents send the broker messages (their HTTP responses).
+                if (connection.Tunnel is { } tunnel)
+                {
+                    if (message.Length + result.Count > MaxTunnelMessageBytes)
+                        break;
+                    message.Write(buffer, 0, result.Count);
+                    if (result.EndOfMessage)
+                    {
+                        tunnel.HandleAgentMessage(message.GetBuffer().AsSpan(0, (int)message.Length));
+                        message.SetLength(0);
+                    }
+                }
             }
         }
         catch { }
@@ -421,6 +482,7 @@ public class BrokerServer : IDisposable
         // a lifetime change, so it waits for in-flight Inspector requests to finish first.
         await using (await AgentRouteGate(connection.Registration.Id).EnterExclusiveAsync())
         {
+            connection.Tunnel?.Dispose();
             if (_agents.TryRemove(new KeyValuePair<string, AgentConnection>(connection.Registration.Id, connection)))
             {
                 var stateGate = AgentStateGate(connection.Registration.Id);
@@ -537,6 +599,7 @@ public class BrokerServer : IDisposable
                     .Wait(TimeSpan.FromSeconds(2));
             }
             catch { }
+            agent.Tunnel?.Dispose();
             agent.WebSocket.Dispose();
         }
         _agents.Clear();
@@ -553,7 +616,8 @@ public class BrokerServer : IDisposable
         _inspectors.Clear();
 
         // Delete state file
-        DeleteBrokerState();
+        if (PublishesState)
+            DeleteBrokerState();
 
         try { _listener?.Close(); } catch { }
 
@@ -885,7 +949,11 @@ public class BrokerServer : IDisposable
         _flows.Clear();
         _cts?.Dispose();
     }
-    private record AgentConnection(AgentRegistration Registration, WebSocket WebSocket);
+    private record AgentConnection(AgentRegistration Registration, WebSocket WebSocket)
+    {
+        /// <summary>Serves the agent's port when the agent registered as tunneled.</summary>
+        public AgentTunnel? Tunnel { get; set; }
+    }
 
     // ── Inspector integration ──
 
