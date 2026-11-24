@@ -20,8 +20,8 @@ and Windows targets. macOS can also build for Android.
 - Visual Studio Code with the C# Dev Kit extension
 - JetBrains Rider (2024.3 or later)
 
-**Install the .NET 10 SDK.** Download it from
-[https://dotnet.microsoft.com/download/dotnet/10.0](https://dotnet.microsoft.com/download/dotnet/10.0).
+**Install the .NET 11 SDK.** Download it from
+[https://dotnet.microsoft.com/download/dotnet/11.0](https://dotnet.microsoft.com/download/dotnet/11.0).
 After installation, verify from a terminal:
 
 ```
@@ -244,19 +244,19 @@ From the `MyFirstCometApp` directory, build and launch for your target platform.
 **Mac Catalyst (macOS):**
 
 ```
-dotnet build -f net10.0-maccatalyst -t:Run
+dotnet build -f net11.0-maccatalyst -t:Run
 ```
 
 **iOS Simulator (macOS, requires Xcode):**
 
 ```
-dotnet build -f net10.0-ios -t:Run
+dotnet build -f net11.0-ios -t:Run
 ```
 
 **Android Emulator:**
 
 ```
-dotnet build -f net10.0-android -t:Run
+dotnet build -f net11.0-android -t:Run
 ```
 
 Make sure an Android emulator is running or a device is connected. You can
@@ -265,10 +265,10 @@ create an emulator through Android Studio or the `avdmanager` command-line tool.
 **Windows:**
 
 ```
-dotnet build -f net10.0-windows10.0.19041.0
+dotnet build -f net11.0-windows10.0.19041.0
 ```
 
-On Windows, the built executable is in `bin/Debug/net10.0-windows10.0.19041.0/`.
+On Windows, the built executable is in `bin/Debug/net11.0-windows10.0.19041.0/`.
 Run it directly or use Visual Studio's debugger.
 
 

@@ -44,6 +44,15 @@ function Invoke-DotNet {
     }
 }
 
+function Invoke-App {
+    param([string[]] $Arguments)
+    # Apps run through the host directly; Invoke-DotNet routes through the pinned SDK's dotnet.dll.
+    & $dotnet @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
+    }
+}
+
 function Invoke-MSBuild {
     param([string[]] $Arguments)
     if ($SdkDirectory) {
@@ -87,11 +96,12 @@ if ($FontScenarios) {
     $backendPackage = Join-Path $packages "Microsoft.Maui.Platforms.Windows.WPF.$PackageVersion.nupkg"
     $mainTargetEntry = 'build/Microsoft.Maui.Platforms.Windows.WPF.targets'
     $fontTargetEntry = 'build/Fonts/Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets'
-    $fontImport = '$(MSBuildThisFileDirectory)Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets'
+    $transitiveTargetEntry = 'buildTransitive/Microsoft.Maui.Platforms.Windows.WPF.targets'
+    $fontImport = '$(MSBuildThisFileDirectory)..\build\Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets'
     $packedTargets = @{}
     $archive = [IO.Compression.ZipFile]::OpenRead($backendPackage)
     try {
-        foreach ($entryPath in @($mainTargetEntry, $fontTargetEntry)) {
+        foreach ($entryPath in @($mainTargetEntry, $fontTargetEntry, $transitiveTargetEntry)) {
             $entry = $archive.GetEntry($entryPath)
             if (!$entry) { throw "The actual backend package is missing $entryPath." }
             $reader = [IO.StreamReader]::new($entry.Open())
@@ -102,20 +112,24 @@ if ($FontScenarios) {
     }
     [xml] $mainTargets = $packedTargets[$mainTargetEntry]
     [xml] $fontTargets = $packedTargets[$fontTargetEntry]
-    $orderedTargets = @($mainTargets.Project.ChildNodes | Where-Object { $_.LocalName -in @('Target', 'Import') } |
-        ForEach-Object {
-            if ($_.LocalName -eq 'Import' -and $_.GetAttribute('Project') -ceq $fontImport) { '_WpfProcessMauiFont' }
-            elseif ($_.LocalName -eq 'Target') { $_.GetAttribute('Name') }
-            else { throw 'The public build entry point has an unexpected import.' }
-        })
-    if (($orderedTargets -join ',') -cne '_WpfProcessMauiIcon,_WpfProcessMauiImage,_WpfProcessMauiFont,_WpfProcessMauiAsset,_WpfProcessMauiSplashScreen' -or
-        @($mainTargets.Project.Import | Where-Object Project -CEQ $fontImport).Count -ne 1) {
-        throw 'The packed umbrella must import the font child in the existing target order.'
+    [xml] $transitiveTargets = $packedTargets[$transitiveTargetEntry]
+    if (@($mainTargets.Project.Import).Count -ne 1 -or
+        $mainTargets.Project.Import.Project -cne '$(MSBuildThisFileDirectory)..\buildTransitive\Microsoft.Maui.Platforms.Windows.WPF.targets' -or
+        $mainTargets.Project.Import.Condition -cne '''$(_MicrosoftMauiPlatformsWindowsWPFBuildTargetsImported)'' != ''true''') {
+        throw 'The public build entry point must import the transitive resource pipeline exactly once.'
     }
-    $importCondition = '''$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)'' != ''true'''
-    if ($mainTargets.Project.Import.Condition -cne $importCondition -or
+    $fontImports = @($transitiveTargets.Project.Import | Where-Object Project -CEQ $fontImport)
+    $importCondition = '''$(_WpfUseLegacyResourcePipeline)'' == ''true'' and ''$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)'' != ''true'''
+    if ($fontImports.Count -ne 1 -or $fontImports[0].Condition -cne $importCondition -or
         $fontTargets.Project.PropertyGroup._MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported -cne 'true') {
-        throw 'The packed font import must prevent duplicate loading without a test-only enable condition.'
+        throw 'The legacy font import must remain packaged, version-gated, and protected against duplicate loading.'
+    }
+    foreach ($name in @('_WpfPrepareMauiResources', '_WpfCollectProcessedMauiImages',
+        '_WpfCollectProcessedMauiFonts', '_WpfCollectProcessedMauiAssets',
+        '_WpfLegacyProcessMauiImage', '_WpfLegacyProcessMauiAsset', '_WpfProcessMauiSplashScreen')) {
+        if (@($transitiveTargets.SelectNodes("//*[local-name()='Target' and @Name='$name']")).Count -ne 1) {
+            throw "The packed transitive pipeline must preserve target $name exactly once."
+        }
     }
     $fontTarget = @($fontTargets.SelectNodes('//*[local-name()="Target"]'))
     if ($fontTarget.Count -ne 1 -or $fontTarget[0].Name -cne '_WpfProcessMauiFont' -or
@@ -143,10 +157,13 @@ foreach ($id in @('Microsoft.Maui.Platforms.Windows.WPF', 'Microsoft.Maui.Platfo
         throw "$id must use the packed version $PackageVersion, not '$($references[$id])'."
     }
 }
-[xml] $platformProps = Get-Content (Join-Path $platform 'Directory.Build.props') -Raw
-$mauiVersion = [string] ($platformProps.SelectSingleNode('//MauiVersion').InnerText)
+$mauiVersion = (Invoke-MSBuild @($templateProject, '-getProperty:MauiVersion', '-verbosity:quiet', '-nologo') -join "`n").Trim()
 if ($references['Microsoft.Maui.Controls'] -ne $mauiVersion) {
     throw "Microsoft.Maui.Controls must explicitly match the backend's MauiVersion ($mauiVersion)."
+}
+$windowsSdkVersion = (Invoke-MSBuild @($templateProject, '-getProperty:MicrosoftWindowsSdkNetRefVersion', '-verbosity:quiet', '-nologo') -join "`n").Trim()
+if ($projectXml.SelectSingleNode('/Project/PropertyGroup/WindowsSdkPackageVersion').InnerText -cne $windowsSdkVersion) {
+    throw 'The generated consumer must use the same Windows SDK projection version as Essentials.'
 }
 if ((Get-Content $appProject -Raw) -match '__\w+_VERSION__') {
     throw 'The packed template contains unresolved version tokens.'
@@ -156,10 +173,19 @@ if ($FontScenarios) {
     # Reuse the sample's router, real font-registration callback, and native assertions.
     # Only fixture SOURCE files are copied: deployment must come from the installed NuGet target.
     $sample = Join-Path $platform 'samples\Windows.WPF.Sample'
-    $fixture = New-Item -ItemType Directory -Path (Join-Path $appDirectory 'Resources\Fonts') -Force
-    Copy-Item (Join-Path $sample 'Resources\Fonts\OpenSans-Regular.ttf') $fixture.FullName
+    foreach ($resource in @(
+        'Resources\Fonts\OpenSans-Regular.ttf',
+        'Resources\Images\dotnet_bot.svg',
+        'Resources\AppIcon\appicon.svg',
+        'Resources\Raw\Pipeline\payload.txt'
+    )) {
+        $destination = Join-Path $appDirectory $resource
+        New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
+        Copy-Item (Join-Path $sample $resource) $destination
+    }
     $items = $projectXml.CreateElement('ItemGroup')
-    foreach ($relative in @('SampleFontRegistration.cs', 'TestScenarios\TestScenarioRunner.cs', 'TestScenarios\RegisteredFontsScenario.cs')) {
+    foreach ($relative in @('SampleFontRegistration.cs', 'TestScenarios\TestScenarioRunner.cs',
+        'TestScenarios\RegisteredFontsScenario.cs', 'TestScenarios\StandardResourcesScenario.cs')) {
         $compile = $projectXml.CreateElement('Compile')
         $compile.SetAttribute('Include', (Join-Path $sample $relative))
         [void] $items.AppendChild($compile)
@@ -167,10 +193,24 @@ if ($FontScenarios) {
     $font = $projectXml.CreateElement('MauiFont')
     $font.SetAttribute('Include', 'Resources\Fonts\OpenSans-Regular.ttf')
     [void] $items.AppendChild($font)
+    $image = $projectXml.CreateElement('MauiImage')
+    $image.SetAttribute('Include', 'Resources\Images\dotnet_bot.svg')
+    [void] $items.AppendChild($image)
+    $asset = $projectXml.CreateElement('MauiAsset')
+    $asset.SetAttribute('Include', 'Resources\Raw\Pipeline\payload.txt')
+    $asset.SetAttribute('LogicalName', 'Pipeline/payload.txt')
+    [void] $items.AppendChild($asset)
+    $icon = $projectXml.CreateElement('MauiIcon')
+    $icon.SetAttribute('Include', 'Resources\AppIcon\appicon.svg')
+    [void] $items.AppendChild($icon)
+    $splash = $projectXml.CreateElement('MauiSplashScreen')
+    $splash.SetAttribute('Include', 'Resources\Images\dotnet_bot.svg')
+    $splash.SetAttribute('Color', '#512BD4')
+    [void] $items.AppendChild($splash)
     [void] $projectXml.Project.AppendChild($items)
     $properties = $projectXml.CreateElement('PropertyGroup')
     $constants = $projectXml.CreateElement('DefineConstants')
-    $constants.InnerText = '$(DefineConstants);WPF_TEST_SCENARIOS;WPF_FONT_TEST_SCENARIO'
+    $constants.InnerText = '$(DefineConstants);WPF_TEST_SCENARIOS;WPF_FONT_TEST_SCENARIO;WPF_RESOURCE_PIPELINE_SCENARIO'
     [void] $properties.AppendChild($constants)
     [void] $projectXml.Project.AppendChild($properties)
     $projectXml.Save($appProject)
@@ -196,7 +236,8 @@ public static void Main(string[] args)
     [regex]::Replace($program, $signature, $route) | Set-Content $programPath
 }
 
-$consumerArguments = @("-p:RuntimeIdentifier=$RuntimeIdentifier", '-p:SelfContained=false', '-m:1', '-nr:false')
+$consumerArguments = @("-p:RuntimeIdentifier=$RuntimeIdentifier", '-p:SelfContained=false',
+    '-p:PublishReadyToRun=false', '-m:1', '-nr:false')
 Invoke-MSBuild -Arguments (@($appProject, '-restore', '-t:Build', '-p:Configuration=Release',
     "-p:RestoreConfigFile=$configPath", "-p:RestorePackagesPath=$(Join-Path $work 'cache')",
     '-warnaserror:NU1605', '-verbosity:minimal', '-nologo') + $consumerArguments)
@@ -209,43 +250,61 @@ foreach ($id in $references.Keys) {
     }
 }
 
-$output = Join-Path $appDirectory "bin\Release\net10.0-windows\$RuntimeIdentifier"
+$targetFramework = $projectXml.SelectSingleNode('/Project/PropertyGroup/TargetFramework').InnerText
+$output = Join-Path $appDirectory "bin\Release\$targetFramework\$RuntimeIdentifier"
 if ($FontScenarios) {
     $installedPackage = Join-Path $work "cache\microsoft.maui.platforms.windows.wpf\$($PackageVersion.ToLowerInvariant())"
-    foreach ($entryPath in @($mainTargetEntry, $fontTargetEntry)) {
+    foreach ($entryPath in @($mainTargetEntry, $fontTargetEntry, $transitiveTargetEntry)) {
         $installed = Join-Path $installedPackage ($entryPath.Replace('/', '\'))
         if (!(Test-Path -LiteralPath $installed) -or (Get-Content $installed -Raw) -cne $packedTargets[$entryPath]) {
             throw "The consumer did not restore the tested package target: $entryPath."
         }
     }
-    $installedFontTarget = Join-Path $installedPackage ($fontTargetEntry.Replace('/', '\'))
+    $installedFontTarget = Join-Path $installedPackage ($transitiveTargetEntry.Replace('/', '\'))
     $preprocessed = Join-Path $work 'font-consumer.xml'
     Invoke-MSBuild -Arguments (@($appProject, '-p:Configuration=Release', "-preprocess:$preprocessed",
         '-verbosity:quiet', '-nologo') + $consumerArguments)
     $consumerImportText = Get-Content $preprocessed -Raw
     [xml] $consumerImports = $consumerImportText
     if ($consumerImportText.IndexOf($installedFontTarget, [StringComparison]::OrdinalIgnoreCase) -lt 0 -or
-        @($consumerImports.SelectNodes('//*[local-name()="Target" and @Name="_WpfProcessMauiFont"]')).Count -ne 1) {
-        throw 'The package consumer must import exactly one WPF font target from its private package cache.'
+        @($consumerImports.SelectNodes('//*[local-name()="Target" and @Name="_WpfPrepareMauiResources"]')).Count -ne 1 -or
+        @($consumerImports.SelectNodes('//*[local-name()="Target" and @Name="_WpfProcessMauiFont"]')).Count -ne 0) {
+        throw 'The .NET 11 consumer must import the processed-resource target exactly once, without the legacy font target.'
     }
     $fontItemJson = Invoke-MSBuild -Arguments (@($appProject, '-p:Configuration=Release',
-        '-target:_WpfProcessMauiFont', '-getProperty:UseMaui', '-getItem:ContentWithTargetPath',
+        '-target:_WpfPrepareMauiResources', '-getProperty:UseMaui', '-getItem:ContentWithTargetPath',
         '-verbosity:quiet', '-nologo') + $consumerArguments)
     $fontItemJson | Set-Content (Join-Path $work 'font-items.json')
     $fontItems = ($fontItemJson -join "`n") | ConvertFrom-Json
     $consumerFont = Join-Path $appDirectory 'Resources\Fonts\OpenSans-Regular.ttf'
-    $copiedFonts = @($fontItems.Items.ContentWithTargetPath | Where-Object { $_.FullPath -eq $consumerFont })
+    $copiedFonts = @($fontItems.Items.ContentWithTargetPath | Where-Object {
+        $_.TargetPath -ceq 'Resources\Fonts\OpenSans-Regular.ttf'
+    })
     if ($fontItems.Properties.UseMaui -ne 'true' -or $copiedFonts.Count -ne 1 -or
-        $copiedFonts[0].TargetPath -cne 'Resources\Fonts\OpenSans-Regular.ttf' -or
         $copiedFonts[0].CopyToOutputDirectory -cne 'PreserveNewest' -or
-        $copiedFonts[0].CopyToPublishDirectory -cne 'PreserveNewest') {
+        $copiedFonts[0].CopyToPublishDirectory -cne 'PreserveNewest' -or
+        (Get-FileHash -LiteralPath $copiedFonts[0].FullPath).Hash -cne
+            (Get-FileHash -LiteralPath $consumerFont).Hash) {
         throw 'The real PackageReference consumer did not execute the installed font content contract.'
+    }
+    foreach ($targetPath in @(
+        'Resources\Images\dotnet_bot.png',
+        'Resources\AppIcon\appicon.png',
+        'Resources\Splash\dotnet_bot.svg',
+        'Pipeline/payload.txt'
+    )) {
+        $matches = @($fontItems.Items.ContentWithTargetPath | Where-Object TargetPath -CEQ $targetPath)
+        if ($matches.Count -ne 1 -or
+            $matches[0].CopyToOutputDirectory -cne 'PreserveNewest' -or
+            $matches[0].CopyToPublishDirectory -cne 'PreserveNewest') {
+            throw "The real PackageReference consumer did not produce exactly one '$targetPath' build/publish item."
+        }
     }
     [ordered]@{
         PackageVersion = $PackageVersion
         PackageSha256 = (Get-FileHash $backendPackage).Hash
         MainTargetEntry = $mainTargetEntry
-        FontTargetEntry = $fontTargetEntry
+        FontTargetEntry = $transitiveTargetEntry
         InstalledFontTarget = $installedFontTarget
         FontTargetSha256 = (Get-FileHash $installedFontTarget).Hash
         UseMaui = $fontItems.Properties.UseMaui
@@ -259,12 +318,14 @@ if ($FontScenarios) {
     & $fontSmoke -SampleAssembly (Join-Path $output 'TemplateSmoke.WPF.dll') -DotNet $dotnet `
         -ControlFont (Join-Path $sample 'Resources\Fonts\OpenSans-Regular.ttf') `
         -ResultsDirectory (Join-Path $work 'FontBuild')
+    Invoke-App -Arguments @((Join-Path $output 'TemplateSmoke.WPF.dll'), '--test-scenario', 'standard-resources')
     $publish = Join-Path $work 'publish'
     Invoke-DotNet -Arguments (@('publish', $appProject, '-c', 'Release', '--no-build', '--no-restore',
         '-o', $publish) + $consumerArguments)
     & $fontSmoke -SampleAssembly (Join-Path $publish 'TemplateSmoke.WPF.dll') -DotNet $dotnet `
         -ControlFont (Join-Path $sample 'Resources\Fonts\OpenSans-Regular.ttf') `
         -ResultsDirectory (Join-Path $work 'FontPublish')
+    Invoke-App -Arguments @((Join-Path $publish 'TemplateSmoke.WPF.dll'), '--test-scenario', 'standard-resources')
 }
 
 $executable = Join-Path $output 'TemplateSmoke.WPF.exe'

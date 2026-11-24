@@ -13,7 +13,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			new(ViewMapper)
 			{
 				[nameof(Microsoft.Maui.Controls.WebView.Source)] = MapSource,
-				["UserAgent"] = MapUserAgent,
+				[nameof(Microsoft.Maui.Controls.WebView.UserAgent)] = MapUserAgent,
 			};
 
 		public static readonly CommandMapper<Microsoft.Maui.Controls.WebView, WebViewHandler> CommandMapper =
@@ -44,15 +44,9 @@ namespace Microsoft.Maui.Handlers.WPF
 		void OnNavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
 		{
 			if (VirtualView == null) return;
-			try
-			{
-				// Update CanGoBack/CanGoForward
-				var canGoBackProp = typeof(Microsoft.Maui.Controls.WebView).GetProperty("CanGoBack");
-				var canGoForwardProp = typeof(Microsoft.Maui.Controls.WebView).GetProperty("CanGoForward");
-				canGoBackProp?.SetValue(VirtualView, PlatformView.CanGoBack);
-				canGoForwardProp?.SetValue(VirtualView, PlatformView.CanGoForward);
-			}
-			catch { }
+			var webView = (IWebView)VirtualView;
+			webView.CanGoBack = PlatformView.CanGoBack;
+			webView.CanGoForward = PlatformView.CanGoForward;
 		}
 
 		static void MapSource(WebViewHandler handler, Microsoft.Maui.Controls.WebView view)
@@ -143,7 +137,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			try
 			{
 				await PlatformView.EnsureCoreWebView2Async();
-				var userAgent = view.GetType().GetProperty("UserAgent")?.GetValue(view) as string;
+				var userAgent = view.UserAgent;
 				if (!string.IsNullOrEmpty(userAgent))
 					PlatformView.CoreWebView2.Settings.UserAgent = userAgent;
 			}

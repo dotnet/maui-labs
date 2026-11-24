@@ -78,6 +78,42 @@ public class ClipboardPrefsPage : ContentPage
 			prefsResult.TextColor = Colors.OrangeRed;
 		};
 
+		var secureStorageStatus = new Label
+		{
+			AutomationId = "secure-storage-status",
+			Text = "SecureStorage is optional on Linux. An unavailable provider is expected; clipboard and preferences still work.",
+			TextColor = Colors.Gray,
+		};
+		var checkSecureStorageButton = new Button
+		{
+			AutomationId = "check-secure-storage",
+			Text = "Check SecureStorage Availability",
+		};
+		checkSecureStorageButton.Clicked += async (_, _) =>
+		{
+			checkSecureStorageButton.IsEnabled = false;
+			try
+			{
+				await SecureStorage.GetAsync("gtk-sample-availability-check");
+				secureStorageStatus.Text = "SecureStorage provider is available. No secrets were written.";
+				secureStorageStatus.TextColor = Colors.Green;
+			}
+			catch (FeatureNotSupportedException ex)
+			{
+				secureStorageStatus.Text = $"SecureStorage is unavailable on this desktop (expected): {ex.Message}";
+				secureStorageStatus.TextColor = Colors.Gray;
+			}
+			catch (InvalidOperationException ex)
+			{
+				secureStorageStatus.Text = $"SecureStorage provider is unavailable (expected): {ex.Message}";
+				secureStorageStatus.TextColor = Colors.Gray;
+			}
+			finally
+			{
+				checkSecureStorageButton.IsEnabled = true;
+			}
+		};
+
 		Content = new ScrollView
 		{
 			Content = new VerticalStackLayout
@@ -105,7 +141,8 @@ public class ClipboardPrefsPage : ContentPage
 					Separator(),
 
 					SectionHeader("🔐 SecureStorage"),
-					new Label { Text = "The .NET MAUI Microsoft.Maui.Storage.SecureStorage API is not supported on Linux.", TextColor = Colors.Gray },
+					secureStorageStatus,
+					checkSecureStorageButton,
 				}
 			}
 		};

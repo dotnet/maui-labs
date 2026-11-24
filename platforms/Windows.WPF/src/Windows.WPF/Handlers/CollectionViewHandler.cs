@@ -9,6 +9,7 @@ using System.Windows.Data;
 using System.Windows.Media;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platforms.Windows.WPF;
+using View = Microsoft.Maui.Controls.View;
 using WBorder = System.Windows.Controls.Border;
 using WGrid = System.Windows.Controls.Grid;
 using WListBox = System.Windows.Controls.ListBox;
@@ -165,6 +166,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			{
 				if (recognizer is not Microsoft.Maui.Controls.TapGestureRecognizer tap) continue;
 
+#if NET10_0
 				if (tap.Command != null && tap.Command.CanExecute(tap.CommandParameter))
 				{
 					tap.Command.Execute(tap.CommandParameter);
@@ -172,13 +174,19 @@ namespace Microsoft.Maui.Handlers.WPF
 				}
 
 				var sendTapped = typeof(Microsoft.Maui.Controls.TapGestureRecognizer).GetMethod(
-					"SendTapped", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+					"SendTapped",
+					System.Reflection.BindingFlags.Instance |
+					System.Reflection.BindingFlags.Public |
+					System.Reflection.BindingFlags.NonPublic);
 				if (sendTapped != null)
 				{
 					var ps = sendTapped.GetParameters();
 					if (ps.Length == 1) sendTapped.Invoke(tap, new object?[] { mauiView });
 					else if (ps.Length == 2) sendTapped.Invoke(tap, new object?[] { mauiView, null });
 				}
+#else
+				tap.SendTapped(mauiView);
+#endif
 				return;
 			}
 
@@ -534,10 +542,69 @@ namespace Microsoft.Maui.Handlers.WPF
 			base.ConnectHandler(platformView);
 			_themeChangedHandler = _ => PlatformView?.Dispatcher.InvokeAsync(RefreshItems);
 			ThemeManager.ThemeChanged += _themeChangedHandler;
+			VirtualView.ScrollToRequested += OnScrollToRequested;
+		}
+
+		void OnScrollToRequested(object? sender, Microsoft.Maui.Controls.ScrollToRequestEventArgs e)
+		{
+			if (_listBox == null || VirtualView == null) return;
+
+			var target = e.Mode == Microsoft.Maui.Controls.ScrollToMode.Position
+				? GetPlatformItemAt(e.Index, e.GroupIndex)
+				: GetPlatformItem(_listBox, e.Item);
+			if (target == null) return;
+
+			_listBox.ScrollIntoView(target);
+			if (e.ScrollToPosition == Microsoft.Maui.Controls.ScrollToPosition.MakeVisible)
+				return;
+
+			_listBox.UpdateLayout();
+			if (_listBox.ItemContainerGenerator.ContainerFromItem(target) is not FrameworkElement container ||
+				FindScrollViewer(_listBox) is not WScrollViewer scrollViewer)
+				return;
+
+			var offset = container.TransformToAncestor(scrollViewer).Transform(new System.Windows.Point(0, 0));
+			double Align(double position, double itemSize, double viewportSize) => e.ScrollToPosition switch
+			{
+				Microsoft.Maui.Controls.ScrollToPosition.Center => position - (viewportSize - itemSize) / 2,
+				Microsoft.Maui.Controls.ScrollToPosition.End => position - (viewportSize - itemSize),
+				_ => position,
+			};
+
+			if (scrollViewer.ScrollableHeight > 0)
+				scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset + Align(offset.Y, container.ActualHeight, scrollViewer.ViewportHeight));
+			if (scrollViewer.ScrollableWidth > 0)
+				scrollViewer.ScrollToHorizontalOffset(scrollViewer.HorizontalOffset + Align(offset.X, container.ActualWidth, scrollViewer.ViewportWidth));
+		}
+
+		object? GetPlatformItemAt(int index, int groupIndex)
+		{
+			if (_listBox == null || index < 0) return null;
+
+			if (!_listBox.IsGrouped)
+				return index < _listBox.Items.Count ? _listBox.Items[index] : null;
+
+			var group = VirtualView.ItemsSource?.Cast<object>().ElementAtOrDefault(Math.Max(0, groupIndex));
+			var item = (group as IEnumerable)?.Cast<object>().ElementAtOrDefault(index);
+			return GetPlatformItem(_listBox, item);
+		}
+
+		static WScrollViewer? FindScrollViewer(DependencyObject root)
+		{
+			for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+			{
+				var child = VisualTreeHelper.GetChild(root, i);
+				if (child is WScrollViewer scrollViewer)
+					return scrollViewer;
+				if (FindScrollViewer(child) is { } nested)
+					return nested;
+			}
+			return null;
 		}
 
 		protected override void DisconnectHandler(FrameworkElement platformView)
 		{
+			VirtualView.ScrollToRequested -= OnScrollToRequested;
 			UnsubscribeCollections();
 			if (_themeChangedHandler != null)
 				ThemeManager.ThemeChanged -= _themeChangedHandler;

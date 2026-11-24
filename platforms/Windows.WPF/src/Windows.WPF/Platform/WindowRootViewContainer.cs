@@ -45,6 +45,19 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			return finalSize;
 		}
 
+		internal void SetRootPage(FrameworkElement pageView)
+		{
+			if (ReferenceEquals(_topPage, pageView) && Children.Contains(pageView))
+				return;
+
+			// Window.Page was replaced: drop the previous root so it stops rendering
+			// (and receiving input) underneath the new one.
+			if (_topPage != null)
+				RemovePage(_topPage);
+
+			AddPage(pageView);
+		}
+
 		internal void AddPage(FrameworkElement pageView)
 		{
 			if (!Children.Contains(pageView))

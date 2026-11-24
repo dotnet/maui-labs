@@ -5,8 +5,8 @@
          Studio Apex tests) can drive the same protocol as modern .NET consumers, running the exact
          same test source against the netstandard2.0 asset. .NET Framework only runs on Windows, so
          non-Windows CI legs still get the modern-target family. -->
-    <TargetFrameworks>net10.0</TargetFrameworks>
-    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">net472;net10.0</TargetFrameworks>
+    <TargetFrameworks>net11.0</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">net472;net11.0</TargetFrameworks>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

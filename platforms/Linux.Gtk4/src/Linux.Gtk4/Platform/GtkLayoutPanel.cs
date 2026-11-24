@@ -10,7 +10,8 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 /// always allocated at their MAUI-arranged sizes (not at GTK minimums, which would cause jitter).
 /// IMPORTANT: Do NOT use Fixed.Put/Move/Remove on this widget — use AddChild/MoveChild/RemoveChild.
 /// </summary>
-public class GtkLayoutPanel : Gtk.Fixed
+[GObject.Subclass<Gtk.Fixed>]
+public partial class GtkLayoutPanel
 {
 	ICrossPlatformLayout? _crossPlatformLayout;
 	readonly Dictionary<Gtk.Widget, Rect> _childBounds = new();
@@ -64,7 +65,7 @@ public class GtkLayoutPanel : Gtk.Fixed
 	[DllImport("libgtk-4.so.1")]
 	static extern IntPtr gtk_widget_get_next_sibling(IntPtr widget);
 
-	public GtkLayoutPanel() : base()
+	partial void Initialize()
 	{
 		SetHexpand(true);
 		SetVexpand(true);

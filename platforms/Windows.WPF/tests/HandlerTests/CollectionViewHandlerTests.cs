@@ -228,6 +228,56 @@ public class CollectionViewHandlerTests
 	}
 
 	[Theory]
+	[InlineData(ScrollToPosition.MakeVisible)]
+	[InlineData(ScrollToPosition.Start)]
+	[InlineData(ScrollToPosition.Center)]
+	[InlineData(ScrollToPosition.End)]
+	public void ScrollToIndex_InLiveWindow_RealizesAndAlignsTargetItem(ScrollToPosition position)
+	{
+		Run((collection, handler, list, created) =>
+		{
+			collection.ItemsSource = Enumerable.Range(0, 100).Select(i => $"Item {i}").ToArray();
+			var window = new System.Windows.Window
+			{
+				Content = handler.PlatformView,
+				Width = 400,
+				Height = 300,
+				ShowActivated = false,
+				ShowInTaskbar = false,
+			};
+			try
+			{
+				window.Show();
+				window.UpdateLayout();
+				Assert.Null(list.ItemContainerGenerator.ContainerFromIndex(80));
+
+				collection.ScrollTo(80, position: position, animate: false);
+				window.UpdateLayout();
+
+				var container = GetContainer(list, 80);
+				var viewport = list.ActualHeight;
+				var top = container.TransformToAncestor(list).Transform(new System.Windows.Point(0, 0)).Y;
+				var bottom = top + container.ActualHeight;
+				Assert.InRange(top, -1, viewport + 1);
+				Assert.InRange(bottom, -1, viewport + 1);
+				var expectedTop = position switch
+				{
+					ScrollToPosition.Start => 0,
+					ScrollToPosition.Center => (viewport - container.ActualHeight) / 2,
+					ScrollToPosition.End => viewport - container.ActualHeight,
+					_ => top,
+				};
+				Assert.InRange(top, expectedTop - 2, expectedTop + 2);
+			}
+			finally
+			{
+				window.Content = null;
+				window.Close();
+			}
+		});
+	}
+
+	[Theory]
 	[InlineData(SelectionMode.Single)]
 	[InlineData(SelectionMode.Multiple)]
 	public void GroupedTemplateChanges_PreserveSelectedOccurrences(SelectionMode mode)

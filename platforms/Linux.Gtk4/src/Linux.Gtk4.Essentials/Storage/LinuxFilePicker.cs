@@ -10,10 +10,17 @@ public class LinuxFilePicker : IFilePicker
 		return results?.FirstOrDefault();
 	}
 
+#if NET11_0_OR_GREATER
+	public async Task<IEnumerable<FileResult>?> PickMultipleAsync(PickOptions? options)
+	{
+		return await PickInternalAsync(true, options) ?? Enumerable.Empty<FileResult>();
+	}
+#else
 	public async Task<IEnumerable<FileResult?>> PickMultipleAsync(PickOptions? options)
 	{
 		return await PickInternalAsync(true, options) ?? Enumerable.Empty<FileResult?>();
 	}
+#endif
 
 	private async Task<List<FileResult>?> PickInternalAsync(bool multiple, PickOptions? options)
 	{

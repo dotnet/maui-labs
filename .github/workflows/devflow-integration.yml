@@ -68,6 +68,7 @@ on:
       - 'samples/DevFlow.Sample.MacOS/**'
       - 'samples/DevFlow.Sample.Native/**'
       - 'samples/DevFlow.Sample.WPF/**'
+      - 'samples/DevFlow.Sample.Net11.props'
       # Backend dependencies: prefer extra runs over missing a relevant change.
       - 'platforms/Linux.Gtk4/**'
       - 'platforms/MacOS/**'
@@ -90,7 +91,7 @@ concurrency:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   DOTNET_NOLOGO: 1
-  DOTNET_WORKLOAD_VERSION: 10.0.203
+  DOTNET_WORKLOAD_ROLLBACK_FILE: eng/workloads/dotnet11-ga.json
   TEST_PROJECT: src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
 
 jobs:
@@ -185,7 +186,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workloads
-        run: dotnet workload install maui-android android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        run: dotnet workload install maui-android android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
 
       - name: Cache AVD
         uses: actions/cache@v4
@@ -271,9 +272,7 @@ jobs:
       fail-fast: false
       matrix:
         framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
-    # Xcode 26.3 and the pinned iOS 26.2 runtime are installed on this image.
-    # Fresh simulator ownership does not eliminate hosted CoreSimulator stalls.
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 90
     env:
       DEVFLOW_TEST_PLATFORM: ios
@@ -281,16 +280,14 @@ jobs:
       DEVFLOW_TEST_IOS_ISOLATED: 'true'
       # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
       TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
-      # Preserve the 26.2 runtime used with the pinned workload/Xcode on macOS 15.
-      DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime || '26.2' }}
+      DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime || '27.2' }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Select Xcode
         run: |
-          # Keep Xcode aligned with DOTNET_WORKLOAD_VERSION; newer Apple workloads can require newer Xcode.
           COMPATIBLE="${COMPATIBLE:-}"
-          for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
+          for candidate in /Applications/Xcode_27.2.app /Applications/Xcode_27.2.0.app; do
             if [[ -d "$candidate" ]]; then
               COMPATIBLE="$candidate"
               break
@@ -301,14 +298,10 @@ jobs:
             echo "Using $SELECTED"
             sudo xcode-select -s "$SELECTED/Contents/Developer"
             ACTOOL_PATH="$(xcrun --find actool)"
-            DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd)"
-            XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd)"
+            DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd -P)"
             echo "Resolved developer dir: $DEVELOPER_ROOT"
-            echo "Resolved Xcode app: $XCODE_APP"
             export DEVELOPER_DIR="$DEVELOPER_ROOT"
-            export MD_APPLE_SDK_ROOT="$XCODE_APP"
             echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
-            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
           fi
           sudo xcodebuild -runFirstLaunch
           xcodebuild -version
@@ -321,10 +314,9 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
-        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
-        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        # Keep this list to workloads the repo actually targets so unavailable
+        # runtime packs for unused workloads cannot break the job.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
 
       - name: Install Apple simulator automation tool
         if: matrix.framework == 'maui'
@@ -334,6 +326,20 @@ jobs:
           brew trust --formula facebook/fb/idb-companion
           brew install facebook/fb/idb-companion
           command -v idb_companion
+
+      - name: Verify SDK-matching iOS simulator runtime
+        if: matrix.framework == 'maui'
+        run: |
+          set -euo pipefail
+          xcrun simctl list runtimes
+          xcrun simctl list runtimes --json | python3 -c '
+          import json, sys
+          runtimes = json.load(sys.stdin)["runtimes"]
+          if not any(runtime["version"].startswith("27.2") and runtime["isAvailable"]
+                     and runtime["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
+                     for runtime in runtimes):
+              sys.exit("The iOS 27.2 runtime required by Xcode 27.2 actool is unavailable")
+          '
 
       - name: List available iOS simulators
         run: xcrun simctl list devices available
@@ -362,21 +368,26 @@ jobs:
       fail-fast: false
       matrix:
         framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: maccatalyst
       DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
-      # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
-      TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
+      # Xcode 27 currently force-terminates Catalyst apps during WebKit startup
+      # (dotnet/maui#36245). MAUI 11 Catalyst also does not expose the fixture geometry needed by
+      # two layout assertions or route synthetic point taps through Syncfusion's chart recognizer;
+      # the same assertions remain active on iOS, Android, and Windows.
+      TEST_FILTER: >-
+        ${{ matrix.framework == 'native'
+          && '--filter framework!=maui'
+          || '--filter Category!=WebView&FullyQualifiedName!~UiInspectionTests.LayoutDiagnostics_DetectsClippingWithoutFlaggingIntentionalOverlap&FullyQualifiedName!~UiInspectionTests.LayoutDiagnostics_ExhaustiveProfileReportsIntentionalGeometricOverlap&FullyQualifiedName!~UiActionTests.TapAtPoint_OnSyncfusionChart_SelectsEachColumnItIsAimedAt' }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Select Xcode
         run: |
-          # Keep Xcode aligned with DOTNET_WORKLOAD_VERSION; newer Apple workloads can require newer Xcode.
           COMPATIBLE="${COMPATIBLE:-}"
-          for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
+          for candidate in /Applications/Xcode_27.2.app /Applications/Xcode_27.2.0.app; do
             if [[ -d "$candidate" ]]; then
               COMPATIBLE="$candidate"
               break
@@ -388,13 +399,9 @@ jobs:
             sudo xcode-select -s "$SELECTED/Contents/Developer"
             ACTOOL_PATH="$(xcrun --find actool)"
             DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd)"
-            XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd)"
             echo "Resolved developer dir: $DEVELOPER_ROOT"
-            echo "Resolved Xcode app: $XCODE_APP"
             export DEVELOPER_DIR="$DEVELOPER_ROOT"
-            export MD_APPLE_SDK_ROOT="$XCODE_APP"
             echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
-            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
           fi
           sudo xcodebuild -runFirstLaunch
           xcodebuild -version
@@ -407,10 +414,9 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
-        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
-        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        # Keep this list to workloads the repo actually targets so unavailable
+        # runtime packs for unused workloads cannot break the job.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
 
       - name: Run DevFlow integration tests (maccatalyst)
         run: >
@@ -436,11 +442,19 @@ jobs:
       fail-fast: false
       matrix:
         framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
-    runs-on: macos-15
+        # The MAUI-on-AppKit sample runs on both backend generations; the native sample is net11 only.
+        dotnet: ['10', '11']
+        exclude:
+          - framework: native
+            dotnet: '10'
+    name: macos (${{ matrix.framework }}, net${{ matrix.dotnet }})
+    # Both Apple workload generations use the released Xcode 27.2 bindings.
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: macos
       DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
+      DEVFLOW_TEST_DOTNET: ${{ matrix.dotnet }}
       # The custom AppKit backend does not yet provide Blazor CDP, generic gestures/list scrolling,
       # or every Essentials API. Keep those known platform gaps explicit while still running the
       # full UI tree/action/property suite, including the registered native-element bridge.
@@ -453,9 +467,10 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # Keep Xcode aligned with DOTNET_WORKLOAD_VERSION; newer Apple workloads can require newer Xcode.
+          # Match the Apple packs pinned for both AppKit framework generations.
           COMPATIBLE="${COMPATIBLE:-}"
-          for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
+          candidates="/Applications/Xcode_27.2.app"
+          for candidate in $candidates; do
             if [[ -d "$candidate" ]]; then
               COMPATIBLE="$candidate"
               break
@@ -467,11 +482,8 @@ jobs:
             sudo xcode-select -s "$SELECTED/Contents/Developer"
             ACTOOL_PATH="$(xcrun --find actool)"
             DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd)"
-            XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd)"
             export DEVELOPER_DIR="$DEVELOPER_ROOT"
-            export MD_APPLE_SDK_ROOT="$XCODE_APP"
             echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
-            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
           fi
           sudo xcodebuild -runFirstLaunch
           xcodebuild -version
@@ -482,16 +494,15 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
-        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
-        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        # Keep this list to workloads the repo actually targets so unavailable
+        # runtime packs for unused workloads cannot break the job.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ matrix.dotnet == '10' && 'eng/workloads/dotnet11-ga-macos-net10.json' || env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
 
       - name: Run DevFlow integration tests (macos)
         run: >
           dotnet test $TEST_PROJECT
           -c Debug
-          --logger "trx;LogFileName=devflow-integration-macos-${{ matrix.framework }}.trx"
+          --logger "trx;LogFileName=devflow-integration-macos-${{ matrix.framework }}-net${{ matrix.dotnet }}.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/macos
           --filter "$TEST_FILTER"
@@ -500,18 +511,26 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-macos-${{ matrix.framework }}-results
+          name: devflow-integration-macos-${{ matrix.framework }}-net${{ matrix.dotnet }}-results
           path: ./artifacts/TestResults/devflow-integration/macos/
           retention-days: 30
 
   gtk:
     needs: plan
     if: needs.plan.outputs.run-gtk == 'true' && contains(needs.plan.outputs.frameworks, 'maui')
+    strategy:
+      fail-fast: false
+      matrix:
+        # The GTK backend ships net10.0 (MAUI 10) and net11.0 (MAUI 11 contracts) assets;
+        # drive the DevFlow sample built for each.
+        dotnet: ['10', '11']
+    name: gtk (net${{ matrix.dotnet }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: gtk
       DEVFLOW_TEST_FRAMEWORK: maui
+      DEVFLOW_TEST_DOTNET: ${{ matrix.dotnet }}
       GDK_BACKEND: x11
     steps:
       - uses: actions/checkout@v6
@@ -540,18 +559,19 @@ jobs:
         run: echo "DEVFLOW_TEST_GTK_DIAGNOSTICS_DIR=$RUNNER_TEMP/devflow-gtk-crashes" >> "$GITHUB_ENV"
 
       - name: Run DevFlow integration tests (GTK)
+        id: tests
         run: >
           dbus-run-session --
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24"
           dotnet test $TEST_PROJECT
           -c Debug
-          --filter "Category!=Device&Category!=Sensors&Category!=SecureStorage"
-          --logger "trx;LogFileName=devflow-integration-gtk-maui.trx"
+          --filter "Category!=Device&Category!=Sensors"
+          --logger "trx;LogFileName=devflow-integration-gtk-maui-net${{ matrix.dotnet }}.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/gtk
 
       - name: Report GTK crash backtraces
-        if: failure()
+        if: failure() || steps.tests.outcome == 'failure'
         shell: bash
         run: |
           python3 - <<'PY'
@@ -586,7 +606,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-gtk-maui-results
+          name: devflow-integration-gtk-maui-net${{ matrix.dotnet }}-results
           path: ./artifacts/TestResults/devflow-integration/gtk/
           retention-days: 30
 
@@ -601,16 +621,22 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Use a file-based .NET SDK
+        shell: pwsh
+        run: '"DOTNET_INSTALL_DIR=$(Join-Path $env:RUNNER_TEMP ''maui-labs-dotnet'')" >> $env:GITHUB_ENV'
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/maui-ci-dotnet
         with:
           global-json-file: global.json
+          dotnet-version: 10.0.403
 
       - name: Install MAUI workloads
-        # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
-        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
-        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        # Keep this list to workloads the repo actually targets so unavailable
+        # runtime packs for unused workloads cannot break the job.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
 
       - name: Run DevFlow integration tests (windows)
         shell: pwsh
@@ -630,14 +656,14 @@ jobs:
           $inspectorTests = 'src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj'
           $app = $null
           try {
-            dotnet build $cliProject -c Debug -f net10.0 --nologo -v minimal
+            dotnet build $cliProject -c Debug -f net11.0 --nologo -v minimal
             if ($LASTEXITCODE -ne 0) { throw 'CLI build failed.' }
-            dotnet build $sampleProject -c Debug -f net10.0-windows10.0.19041.0 --nologo -v minimal
+            dotnet build $sampleProject -c Debug -f net11.0-windows10.0.19041.0 --nologo -v minimal
             if ($LASTEXITCODE -ne 0) { throw 'Sample build failed.' }
             dotnet build $inspectorTests -c Debug --nologo -v minimal
             if ($LASTEXITCODE -ne 0) { throw 'Inspector test build failed.' }
 
-            $cli = Get-ChildItem 'artifacts\bin\Microsoft.Maui.Cli\Debug\net10.0\maui.dll' |
+            $cli = Get-ChildItem 'artifacts\bin\Microsoft.Maui.Cli\Debug\net11.0\maui.dll' |
               Select-Object -First 1 -ExpandProperty FullName
             dotnet $cli devflow broker stop 2>$null
             dotnet $cli devflow broker start
@@ -662,7 +688,7 @@ jobs:
               throw 'DevFlow sample did not register with the broker.'
             }
 
-            $playwright = Get-ChildItem 'artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Debug\net10.0\playwright.ps1' |
+            $playwright = Get-ChildItem 'artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Debug\net11.0\playwright.ps1' |
               Select-Object -First 1 -ExpandProperty FullName
             & $playwright install chromium
             if ($LASTEXITCODE -ne 0) { throw 'Playwright browser installation failed.' }
@@ -695,21 +721,36 @@ jobs:
   wpf:
     needs: plan
     if: needs.plan.outputs.run-wpf == 'true' && contains(needs.plan.outputs.frameworks, 'maui')
+    strategy:
+      fail-fast: false
+      matrix:
+        # The WPF backend ships net10.0 (MAUI 10) and net11.0 (MAUI 11 contracts) assets;
+        # drive the DevFlow sample built for each.
+        dotnet: ['10', '11']
+    name: wpf (net${{ matrix.dotnet }})
     runs-on: windows-latest
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: wpf
       DEVFLOW_TEST_FRAMEWORK: maui
+      DEVFLOW_TEST_DOTNET: ${{ matrix.dotnet }}
     steps:
       - uses: actions/checkout@v6
 
+      - name: Use a file-based .NET SDK
+        shell: pwsh
+        run: '"DOTNET_INSTALL_DIR=$(Join-Path $env:RUNNER_TEMP ''maui-labs-dotnet'')" >> $env:GITHUB_ENV'
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/maui-ci-dotnet
         with:
           global-json-file: global.json
+          dotnet-version: 10.0.403
 
       - name: Install MAUI workload
-        run: dotnet workload install maui --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        run: dotnet workload install maui --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
 
       - name: Run DevFlow integration tests (WPF)
         shell: pwsh
@@ -717,7 +758,7 @@ jobs:
           dotnet test $env:TEST_PROJECT
           -c Debug
           --filter "Category!=WebView&Category!=Device&Category!=Sensors&Category!=SecureStorage"
-          --logger "trx;LogFileName=devflow-integration-wpf-maui.trx"
+          --logger "trx;LogFileName=devflow-integration-wpf-maui-net${{ matrix.dotnet }}.trx"
           --logger "console;verbosity=normal"
           --results-directory .\artifacts\TestResults\devflow-integration\wpf
 
@@ -725,6 +766,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-wpf-maui-results
+          name: devflow-integration-wpf-maui-net${{ matrix.dotnet }}-results
           path: .\artifacts\TestResults\devflow-integration\wpf\
           retention-days: 30

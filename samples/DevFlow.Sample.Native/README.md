@@ -5,10 +5,10 @@ Four plain .NET app heads — **no MAUI reference anywhere** — that host the D
 
 | Head | Target | UI framework |
 |---|---|---|
-| [`Android`](Android) | `net10.0-android` | `Android.Widget` views |
-| [`iOS`](iOS) | `net10.0-ios` | UIKit |
-| [`MacCatalyst`](MacCatalyst) | `net10.0-maccatalyst` | UIKit |
-| [`MacOS`](MacOS) | `net10.0-macos` | AppKit |
+| [`Android`](Android) | `net11.0-android` | `Android.Widget` views |
+| [`iOS`](iOS) | `net11.0-ios` | UIKit |
+| [`MacCatalyst`](MacCatalyst) | `net11.0-maccatalyst` | UIKit |
+| [`MacOS`](MacOS) | `net11.0-macos` | AppKit |
 
 ## Layout
 

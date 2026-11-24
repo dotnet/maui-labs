@@ -20,6 +20,10 @@ public static class TestScenarioRunner
             case "registered-fonts":
                 return RegisteredFontsScenario.Run();
 #endif
+#if WPF_RESOURCE_PIPELINE_SCENARIO
+            case "standard-resources":
+                return StandardResourcesScenario.Run();
+#endif
             default:
                 Console.Error.WriteLine($"Unknown test scenario: {args[1]}");
                 return 2;

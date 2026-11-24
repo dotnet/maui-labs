@@ -35,14 +35,18 @@ def run(runner):
         runner.launch(output, stage)
 
     for stage, overrides in (
+        ("metadata-raw-assets", {"RuntimeTestResourceTarget": "AssertRawAssetProcessing"}),
         ("metadata-macos", {}),
         ("metadata-windows", {"ResourceAssertionPlatform": "windows"}),
         ("metadata-opt-out", {"EnableMacOSMauiResourceMapping": "false"}),
     ):
+        overrides = dict(overrides)
+        target = overrides.pop("RuntimeTestResourceTarget", "AssertBundleResourceItems")
         arguments = {**properties, "RuntimeTestScenario": runner.name, **overrides}
         runner.command(
             [REPO / "eng/common/dotnet.sh", "msbuild", runner.project,
-             "-t:AssertBundleResourceItems", "-m:1", "-nr:false",
+             f"-t:{target}", "-m:1", "-nr:false",
+             f"-p:TargetFramework={runner.framework}",
              *(f"-p:{key}={value}" for key, value in arguments.items())],
             runner.stage_directory(stage) / "assertions.log",
         )

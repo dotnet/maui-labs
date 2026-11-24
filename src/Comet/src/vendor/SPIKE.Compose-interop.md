@@ -99,7 +99,7 @@ Options, fastest-to-most-control:
 3. **Build our own generator** from this blueprint (max control, ~weeks of ABI work,
    no differentiation gained).
 
-Open environment question for any option: Peppers targets `net10.0-android`;
+Open environment question for any option: Peppers targets `net11.0-android`;
 confirm his composition renders under **.NET 11 preview 5** on the Pixel 5
 (binding rebuild may be required).
 

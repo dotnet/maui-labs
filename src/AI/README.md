@@ -33,7 +33,8 @@ For installation and a quick start, see the [package README](Microsoft.Maui.Esse
 
 - The .NET SDK pinned in the repository `global.json`.
 - Matching MAUI workloads.
-- macOS with Xcode 27 for the Apple native bridge and OS 27 APIs.
+- macOS with exactly Xcode 27.2 for the Apple native bridge and OS 27 APIs
+  (the GA Apple pack rejects Xcode 27.3).
 - Windows build and packaging tools for the Windows target and MSIX app heads.
 - Java 17+ and the Android SDK for Android builds.
 
@@ -43,22 +44,33 @@ For installation and a quick start, see the [package README](Microsoft.Maui.Esse
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst27.2 -p:UseNet11AppleTargets=true
 ```
 
-Use `net10.0-ios27.0` or `net10.0-macos27.0` for those platforms.
-`UseXcode27Preview` selects the OS 27 reference packs; it does not install or
-select Xcode.
+Use `net11.0-ios27.2` or `net11.0-macos27.2` for those platforms.
+The pinned GA workload set provides OS 27.2 reference packs for .NET 11.
+`UseNet11AppleTargets` selects those Apple targets instead of the default Apple
+targets; it does not install or select Xcode. Install the matching workloads with
+`dotnet workload install maui macos --from-rollback-file eng/workloads/dotnet11-ga.json`.
 
 ### Android
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
-  -f net10.0-android
+  -f net11.0-android
 ```
 
 See the [Gemini Nano Android guide](../../docs/ai/gemini-nano-android.md) for
 the native bridge, model readiness, and validation details.
+
+Source builds serialize this library's target frameworks: AGP 8.12.0 creates
+`GRADLE_USER_HOME/android/FakeDependency.jar` without cross-process locking, so
+concurrent .NET 10/.NET 11 Android builds can read an unfinished jar on a cold
+Gradle home. Native outputs are already isolated per target framework; changing
+those output paths does not isolate this shared jar. Builds using
+`EssentialsAIAndroidNativeArtifactsPath` retain parallel target-framework builds.
+Separate, concurrent build invocations should use separate `GRADLE_USER_HOME`
+directories.
 
 The official pipeline's Android dependency step queries the SDK path resolved by
 `InstallAndroidDependencies` and exports it as `ANDROID_HOME` and
@@ -74,7 +86,7 @@ does not depend on Java being present on the agent's `PATH`.
 
 ```powershell
 dotnet build src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj `
-  -f net10.0-windows10.0.19041.0
+  -f net11.0-windows10.0.19041.0
 ```
 
 Build and package Windows app heads on Windows. See the Windows platform guide
@@ -82,19 +94,19 @@ for MSIX, capability, runtime, and physical-device validation requirements.
 
 ### Full product
 
-The library always targets `net10.0` and Android. Apple targets are added on
-non-Linux hosts, using either the default reference packs or the OS 27 packs
-when `UseXcode27Preview=true`. Windows is appended only on Windows hosts.
+The library always targets `net10.0`/`net11.0` and Android. Apple targets are added on
+non-Linux hosts, using either the default reference packs or the OS 27.2 packs
+(net11 only) when `UseNet11AppleTargets=true`. Windows is appended only on Windows hosts.
 The Chat Playground and device tests use the same platform conditions, without
-the portable `net10.0` target or native macOS app target.
+the portable `net11.0` target or native macOS app target.
 
 ```bash
 dotnet build src/AI/EssentialsAI.slnf
 ```
 
-For normal Apple 26.x reference packs with Xcode 27, the native CI job passes
+For normal Apple 26.x reference packs with Xcode 27.2, the native CI job passes
 `ValidateXcodeVersion=false` to bypass the older packs' Xcode version check.
-When Xcode 27 is the default, no `DEVELOPER_DIR` override is needed.
+The job selects Xcode 27.2 explicitly for the .NET 11 targets.
 
 Official Windows packing consumes Apple native artifacts built by the macOS
 job. `CI=true` or `TF_BUILD=true` selects the prebuilt path but does not create
@@ -108,7 +120,7 @@ or download those artifacts by itself. See
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj \
-  -p:TargetFrameworks=net10.0 -p:IsTestProject=true
+  -p:TargetFrameworks=net11.0 -p:IsTestProject=true
 ```
 
 The overrides keep the build portable and enable Arcade's test infrastructure
@@ -145,7 +157,7 @@ are tagged `RequiresModel=true`; exclude them with:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -c Release -p:UseXcode27Preview=true \
+  -f net11.0-maccatalyst27.2 -c Release -p:UseNet11AppleTargets=true \
   --filter "RequiresModel!=true" --logger trx
 ```
 
@@ -163,7 +175,7 @@ makes real requests against the configured deployments:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -c Debug -p:UseXcode27Preview=true \
+  -f net11.0-maccatalyst27.2 -c Debug -p:UseNet11AppleTargets=true \
   -p:EnableOpenAITests=true --logger trx
 ```
 
@@ -173,7 +185,7 @@ For example, isolate the OpenAI chat baseline while diagnosing a failure:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -c Debug -p:UseXcode27Preview=true \
+  -f net11.0-maccatalyst27.2 -c Debug -p:UseNet11AppleTargets=true \
   -p:EnableOpenAIClient=true --filter "FullyQualifiedName~OpenAIChatClient" --logger trx
 ```
 

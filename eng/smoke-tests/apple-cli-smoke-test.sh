@@ -39,7 +39,7 @@ if [[ $# -ge 1 ]]; then
 else
     echo "Building CLI in Debug mode..."
     dotnet build src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj -c Debug --nologo -v q
-    MAUI="$REPO_ROOT/artifacts/bin/Microsoft.Maui.Cli/Debug/net10.0/maui"
+    MAUI="$REPO_ROOT/artifacts/bin/Microsoft.Maui.Cli/Debug/net11.0/maui"
 fi
 
 if [[ ! -x "$MAUI" ]]; then

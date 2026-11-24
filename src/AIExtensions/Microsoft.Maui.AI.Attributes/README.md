@@ -1,6 +1,6 @@
 # Microsoft.Maui.AI.Attributes
 
-Source-generated AI tool discovery for .NET 10. Decorate methods or property accessors with `[ExportAIFunction]`, then either group them into an explicit tool context with `[AIToolSource]` or use the auto-generated assembly-wide context — no DI registration ceremony, no runtime reflection on the hot path.
+Source-generated AI tool discovery for .NET 11. Decorate methods or property accessors with `[ExportAIFunction]`, then either group them into an explicit tool context with `[AIToolSource]` or use the auto-generated assembly-wide context — no DI registration ceremony, no runtime reflection on the hot path.
 
 ## How it works
 

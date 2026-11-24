@@ -5,6 +5,8 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 {
 	bool _updatingSelection;
+	bool _hasPlaceholder;
+	Gtk.StringList? _items;
 
 	public static IPropertyMapper<IPicker, PickerHandler> Mapper =
 		new PropertyMapper<IPicker, PickerHandler>(ViewMapper)
@@ -26,8 +28,9 @@ public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 
 	protected override Gtk.DropDown CreatePlatformView()
 	{
-		var stringList = Gtk.StringList.New(Array.Empty<string>());
-		return Gtk.DropDown.New(stringList, null);
+		_items = Gtk.StringList.New(Array.Empty<string>());
+		_hasPlaceholder = false;
+		return Gtk.DropDown.New(_items, null);
 	}
 
 	protected override void ConnectHandler(Gtk.DropDown platformView)
@@ -48,46 +51,79 @@ public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 			return;
 
 		var selected = PlatformView.GetSelected();
-		VirtualView.SelectedIndex = selected == uint.MaxValue ? -1 : (int)selected;
+		var index = selected == uint.MaxValue || (_hasPlaceholder && selected == 0)
+			? -1
+			: (int)selected - (_hasPlaceholder ? 1 : 0);
+		if (VirtualView.SelectedIndex != index)
+			VirtualView.SelectedIndex = index;
+
+		// Picking a real item removes the placeholder row.
+		MapSelectedIndex(this, VirtualView);
 	}
 
 	public static void MapTitle(PickerHandler handler, IPicker picker)
 	{
-		// GTK DropDown doesn't have a direct title; could use a label
+		if (handler._hasPlaceholder)
+			handler.UpdateSelection(picker, refreshPlaceholder: true);
 	}
 
-	public static void MapSelectedIndex(PickerHandler handler, IPicker picker)
-	{
-		var wasUpdatingSelection = handler._updatingSelection;
-		handler._updatingSelection = true;
-		try
-		{
-			handler.PlatformView?.SetSelected(
-				picker.SelectedIndex >= 0
-					? (uint)picker.SelectedIndex
-					: uint.MaxValue);
-		}
-		finally
-		{
-			handler._updatingSelection = wasUpdatingSelection;
-		}
-	}
+	public static void MapSelectedIndex(PickerHandler handler, IPicker picker) =>
+		handler.UpdateSelection(picker, refreshPlaceholder: false);
 
 	public static void MapItems(PickerHandler handler, IPicker picker)
 	{
-		var items = picker.Items?.ToArray() ?? Array.Empty<string>();
-		var stringList = Gtk.StringList.New(items);
+		if (handler.PlatformView is not { } dropDown)
+			return;
+
 		var wasUpdatingSelection = handler._updatingSelection;
 		handler._updatingSelection = true;
 		try
 		{
 			// GTK selects the first item of a new model; MAUI remains the selection authority.
-			handler.PlatformView?.SetModel(stringList);
-			MapSelectedIndex(handler, picker);
+			handler._items = Gtk.StringList.New(picker.Items?.ToArray() ?? Array.Empty<string>());
+			handler._hasPlaceholder = false;
+			dropDown.SetModel(handler._items);
+			handler.UpdateSelection(picker, refreshPlaceholder: false);
 		}
 		finally
 		{
 			handler._updatingSelection = wasUpdatingSelection;
+		}
+	}
+
+	// GtkDropDown has no "nothing selected" state for a non-empty model on GTK 4.16+: its private
+	// GtkSingleSelection autoselects and ignores GTK_INVALID_LIST_POSITION. While MAUI's
+	// SelectedIndex is -1, a placeholder row showing the Title is kept at position 0 instead.
+	void UpdateSelection(IPicker picker, bool refreshPlaceholder)
+	{
+		if (PlatformView is not { } dropDown || _items is null)
+			return;
+
+		var wasUpdatingSelection = _updatingSelection;
+		_updatingSelection = true;
+		try
+		{
+			var itemCount = _items.GetNItems() - (_hasPlaceholder ? 1u : 0u);
+			var wantsPlaceholder = picker.SelectedIndex < 0 && itemCount > 0;
+			if (_hasPlaceholder && (!wantsPlaceholder || refreshPlaceholder))
+			{
+				_items.Remove(0);
+				_hasPlaceholder = false;
+			}
+			if (wantsPlaceholder && !_hasPlaceholder)
+			{
+				_items.Splice(0, 0, [picker.Title ?? string.Empty]);
+				_hasPlaceholder = true;
+			}
+
+			dropDown.SetSelected(
+				_hasPlaceholder ? 0
+				: picker.SelectedIndex >= 0 ? (uint)picker.SelectedIndex
+				: uint.MaxValue);
+		}
+		finally
+		{
+			_updatingSelection = wasUpdatingSelection;
 		}
 	}
 

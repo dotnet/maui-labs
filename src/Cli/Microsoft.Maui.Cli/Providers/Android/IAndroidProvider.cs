@@ -85,7 +85,7 @@ public interface IAndroidProvider : IDisposable
 	/// <summary>
 	/// Starts an AVD.
 	/// </summary>
-	Task StartAvdAsync(string name, bool coldBoot = false, bool wait = false, CancellationToken cancellationToken = default);
+	Task StartAvdAsync(string name, bool coldBoot = false, bool wait = false, CancellationToken cancellationToken = default, bool noWindow = false);
 
 	/// <summary>
 	/// Stops a running emulator.

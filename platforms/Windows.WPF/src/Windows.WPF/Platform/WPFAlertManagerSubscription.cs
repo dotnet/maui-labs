@@ -1,329 +1,87 @@
+#if NET10_0
 #nullable enable
-using System;
-using System.Linq;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Internals;
 
-namespace Microsoft.Maui.Platforms.Windows.WPF
+namespace Microsoft.Maui.Platforms.Windows.WPF;
+
+#pragma warning disable IL2026, IL2060, IL2080, IL2111
+
+/// <summary>
+/// MAUI 10 compatibility bridge for the internal dialog subscription contract.
+/// .NET 11 uses <see cref="WPFDialogService"/> and public keyed delegates instead.
+/// </summary>
+public class WPFAlertManagerSubscription : DispatchProxy
 {
-#pragma warning disable IL2026, IL2060, IL2080, IL2111 // Reflection required for internal IAlertManagerSubscription
+	static readonly Type? AlertManagerType = typeof(Window).Assembly
+		.GetType("Microsoft.Maui.Controls.Platform.AlertManager");
 
-	/// <summary>
-	/// Uses DispatchProxy to implement MAUI's internal IAlertManagerSubscription interface,
-	/// routing alerts/prompts/action sheets to WPF dialogs.
-	/// </summary>
-	public class WPFAlertManagerSubscription : DispatchProxy
+	static readonly Type? IAlertManagerSubscriptionType = typeof(Window).Assembly
+		.GetType("Microsoft.Maui.Controls.Platform.IAlertManagerSubscription")
+		?? AlertManagerType?.GetNestedType("IAlertManagerSubscription", BindingFlags.Public | BindingFlags.NonPublic);
+
+	public static void Register(IServiceCollection services)
 	{
-		static readonly Type? AlertManagerType = typeof(Window).Assembly
-			.GetType("Microsoft.Maui.Controls.Platform.AlertManager");
+		if (IAlertManagerSubscriptionType == null)
+			throw new NotSupportedException($"Cannot register WPF dialogs: IAlertManagerSubscription was not found in {typeof(Window).Assembly.FullName}.");
 
-		// MAUI 10.0.70 moved the interface out of AlertManager.
-		static readonly Type? IAlertManagerSubscriptionType = typeof(Window).Assembly
-			.GetType("Microsoft.Maui.Controls.Platform.IAlertManagerSubscription")
-			?? AlertManagerType?.GetNestedType("IAlertManagerSubscription", BindingFlags.Public | BindingFlags.NonPublic);
+		var proxyType = typeof(WPFAlertManagerSubscriptionProxy<>).MakeGenericType(IAlertManagerSubscriptionType);
+		var createMethod = typeof(DispatchProxy)
+			.GetMethods(BindingFlags.Public | BindingFlags.Static)
+			.First(m => m.Name == "Create" && m.GetGenericArguments().Length == 2)
+			.MakeGenericMethod(IAlertManagerSubscriptionType, proxyType);
 
-		public static void Register(IServiceCollection services)
+		services.AddSingleton(IAlertManagerSubscriptionType, createMethod.Invoke(null, null)!);
+	}
+
+	internal static void HandleInvoke(MethodInfo? method, object?[]? args)
+	{
+		if (method == null || args == null)
+			return;
+
+		try
 		{
-			if (IAlertManagerSubscriptionType == null)
-				throw new NotSupportedException($"Cannot register WPF dialogs: IAlertManagerSubscription was not found in {typeof(Window).Assembly.FullName}.");
-
-			var proxyType = typeof(WPFAlertManagerSubscriptionProxy<>).MakeGenericType(IAlertManagerSubscriptionType);
-			var createMethod = typeof(DispatchProxy)
-				.GetMethods(BindingFlags.Public | BindingFlags.Static)
-				.First(m => m.Name == "Create" && m.GetGenericArguments().Length == 2)
-				.MakeGenericMethod(IAlertManagerSubscriptionType, proxyType);
-
-			var proxy = createMethod.Invoke(null, null)!;
-			services.AddSingleton(IAlertManagerSubscriptionType, proxy);
-		}
-
-		internal static void HandleInvoke(MethodInfo? method, object?[]? args)
-		{
-			if (method == null || args == null)
-				return;
-
 			switch (method.Name)
 			{
-				case "OnAlertRequested":
-					OnAlertRequested(args[0] as Page, args[1] as AlertArguments);
+				case "OnAlertRequested" when args[1] is AlertArguments alert:
+					alert.SetResult(WPFDialogService.ShowAlertAsync(args[0] as Page, alert).GetAwaiter().GetResult());
 					break;
-				case "OnPromptRequested":
-					OnPromptRequested(args[0] as Page, args[1] as PromptArguments);
+				case "OnPromptRequested" when args[1] is PromptArguments prompt:
+					prompt.SetResult(WPFDialogService.ShowPromptAsync(args[0] as Page, prompt).GetAwaiter().GetResult());
 					break;
-				case "OnActionSheetRequested":
-					OnActionSheetRequested(args[0] as Page, args[1] as ActionSheetArguments);
+				case "OnActionSheetRequested" when args[1] is ActionSheetArguments sheet:
+					sheet.SetResult(WPFDialogService.ShowActionSheetAsync(args[0] as Page, sheet).GetAwaiter().GetResult());
 					break;
 			}
 		}
-
-		static void OnAlertRequested(Page? sender, AlertArguments? arguments)
+		catch (Exception exception)
 		{
-			if (arguments == null) return;
-
-			try
+			switch (args.ElementAtOrDefault(1))
 			{
-				arguments.SetResult(ShowAlert(sender, arguments));
-			}
-			catch (Exception exception)
-			{
-				arguments.Result.TrySetException(exception);
+				case AlertArguments alert:
+					alert.Result.TrySetException(exception);
+					break;
+				case PromptArguments prompt:
+					prompt.Result.TrySetException(exception);
+					break;
+				case ActionSheetArguments sheet:
+					sheet.Result.TrySetException(exception);
+					break;
 			}
 		}
-
-		static bool ShowAlert(Page? sender, AlertArguments arguments)
-		{
-			var owner = sender?.Window?.Handler?.PlatformView as System.Windows.Window
-				?? System.Windows.Application.Current?.MainWindow;
-			// A startup alert can precede the owner's native window creation.
-			if (owner != null && (!owner.CheckAccess()
-				|| new System.Windows.Interop.WindowInteropHelper(owner).Handle == IntPtr.Zero))
-				owner = null;
-
-			var dialog = new System.Windows.Window
-			{
-				Title = arguments.Title ?? string.Empty,
-				SizeToContent = System.Windows.SizeToContent.WidthAndHeight,
-				WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
-				Owner = owner,
-				ResizeMode = System.Windows.ResizeMode.NoResize,
-				ShowInTaskbar = false,
-				MinWidth = 300,
-				MaxWidth = 500,
-				FlowDirection = arguments.FlowDirection == FlowDirection.RightToLeft
-					? System.Windows.FlowDirection.RightToLeft
-					: System.Windows.FlowDirection.LeftToRight,
-			};
-
-			var panel = new System.Windows.Controls.Grid
-			{
-				Margin = new System.Windows.Thickness(16),
-			};
-			panel.RowDefinitions.Add(new System.Windows.Controls.RowDefinition
-			{
-				Height = System.Windows.GridLength.Auto,
-			});
-			panel.RowDefinitions.Add(new System.Windows.Controls.RowDefinition
-			{
-				Height = System.Windows.GridLength.Auto,
-			});
-			panel.Children.Add(new System.Windows.Controls.ScrollViewer
-			{
-				MaxHeight = System.Windows.SystemParameters.WorkArea.Height / 2,
-				VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto,
-				HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Disabled,
-				Margin = new System.Windows.Thickness(0, 0, 0, 12),
-				Content = new System.Windows.Controls.TextBlock
-				{
-					Text = arguments.Message ?? string.Empty,
-					TextWrapping = System.Windows.TextWrapping.Wrap,
-					FontSize = 14,
-				},
-			});
-
-			var buttons = new System.Windows.Controls.WrapPanel
-			{
-				HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
-			};
-
-			if (arguments.Accept != null)
-			{
-				var accept = CreateAlertButton(arguments.Accept);
-				accept.IsDefault = arguments.Cancel == null;
-				accept.Click += (_, _) => dialog.DialogResult = true;
-				buttons.Children.Add(accept);
-			}
-
-			// The one-button overload supplies Cancel, not Accept. Keep cancellation
-			// as the default action, including for two-button destructive alerts.
-			if (arguments.Cancel != null)
-			{
-				var cancel = CreateAlertButton(arguments.Cancel);
-				cancel.IsCancel = true;
-				cancel.IsDefault = true;
-				cancel.Click += (_, _) => dialog.DialogResult = false;
-				buttons.Children.Add(cancel);
-			}
-
-			System.Windows.Controls.Grid.SetRow(buttons, 1);
-			panel.Children.Add(buttons);
-			dialog.Content = panel;
-			return dialog.ShowDialog() == true;
-		}
-
-		static System.Windows.Controls.Button CreateAlertButton(string text)
-		{
-			return new System.Windows.Controls.Button
-			{
-				// A TextBlock preserves literal underscores instead of access keys.
-				Content = new System.Windows.Controls.TextBlock { Text = text },
-				Padding = new System.Windows.Thickness(16, 6, 16, 6),
-				Margin = new System.Windows.Thickness(4, 0, 0, 0),
-				MinWidth = 80,
-			};
-		}
-
-		static void OnPromptRequested(Page? sender, PromptArguments? arguments)
-		{
-			if (arguments == null) return;
-
-			var dialog = new System.Windows.Window
-			{
-				Title = arguments.Title ?? string.Empty,
-				SizeToContent = System.Windows.SizeToContent.WidthAndHeight,
-				WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
-				Owner = System.Windows.Application.Current?.MainWindow,
-				ResizeMode = System.Windows.ResizeMode.NoResize,
-				MinWidth = 350,
-			};
-
-			var panel = new System.Windows.Controls.StackPanel
-			{
-				Margin = new System.Windows.Thickness(16),
-				MinWidth = 320,
-			};
-
-			panel.Children.Add(new System.Windows.Controls.TextBlock
-			{
-				Text = arguments.Message ?? string.Empty,
-				FontSize = 14,
-				Margin = new System.Windows.Thickness(0, 0, 0, 12),
-				TextWrapping = System.Windows.TextWrapping.Wrap,
-			});
-
-			var textBox = new System.Windows.Controls.TextBox
-			{
-				Text = arguments.InitialValue ?? string.Empty,
-				MaxLength = arguments.MaxLength > 0 ? arguments.MaxLength : int.MaxValue,
-				Padding = new System.Windows.Thickness(6, 4, 6, 4),
-				FontSize = 14,
-			};
-			panel.Children.Add(textBox);
-
-			var buttonPanel = new System.Windows.Controls.StackPanel
-			{
-				Orientation = System.Windows.Controls.Orientation.Horizontal,
-				HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
-				Margin = new System.Windows.Thickness(0, 12, 0, 0),
-			};
-
-			bool accepted = false;
-
-			var cancelBtn = new System.Windows.Controls.Button
-			{
-				Content = arguments.Cancel,
-				Padding = new System.Windows.Thickness(16, 6, 16, 6),
-				Margin = new System.Windows.Thickness(0, 0, 8, 0),
-				MinWidth = 80,
-			};
-			cancelBtn.Click += (s, e) => { dialog.Close(); };
-
-			var acceptBtn = new System.Windows.Controls.Button
-			{
-				Content = arguments.Accept,
-				Padding = new System.Windows.Thickness(16, 6, 16, 6),
-				MinWidth = 80,
-				IsDefault = true,
-			};
-			acceptBtn.Click += (s, e) => { accepted = true; dialog.Close(); };
-
-			buttonPanel.Children.Add(cancelBtn);
-			buttonPanel.Children.Add(acceptBtn);
-			panel.Children.Add(buttonPanel);
-
-			dialog.Content = panel;
-			dialog.ShowDialog();
-
-			arguments.SetResult(accepted ? textBox.Text : null);
-		}
-
-		static void OnActionSheetRequested(Page? sender, ActionSheetArguments? arguments)
-		{
-			if (arguments == null) return;
-
-			var dialog = new System.Windows.Window
-			{
-				Title = arguments.Title ?? string.Empty,
-				SizeToContent = System.Windows.SizeToContent.WidthAndHeight,
-				WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
-				Owner = System.Windows.Application.Current?.MainWindow,
-				ResizeMode = System.Windows.ResizeMode.NoResize,
-				MinWidth = 300,
-				MaxWidth = 500,
-			};
-
-			var panel = new System.Windows.Controls.StackPanel
-			{
-				Margin = new System.Windows.Thickness(16),
-				MinWidth = 280,
-			};
-
-			panel.Children.Add(new System.Windows.Controls.TextBlock
-			{
-				Text = arguments.Title ?? string.Empty,
-				FontSize = 16,
-				FontWeight = System.Windows.FontWeights.SemiBold,
-				Margin = new System.Windows.Thickness(0, 0, 0, 12),
-			});
-
-			string? selectedResult = null;
-
-			foreach (var button in arguments.Buttons)
-			{
-				if (button == null) continue;
-				var btn = CreateDialogButton(button);
-				var capturedButton = button;
-				btn.Click += (s, e) => { selectedResult = capturedButton; dialog.Close(); };
-				panel.Children.Add(btn);
-			}
-
-			if (arguments.Destruction != null)
-			{
-				var destructBtn = CreateDialogButton(arguments.Destruction);
-				destructBtn.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
-				var destruction = arguments.Destruction;
-				destructBtn.Click += (s, e) => { selectedResult = destruction; dialog.Close(); };
-				panel.Children.Add(destructBtn);
-			}
-
-			if (arguments.Cancel != null)
-			{
-				var cancelBtn = CreateDialogButton(arguments.Cancel);
-				cancelBtn.Margin = new System.Windows.Thickness(0, 8, 0, 0);
-				var cancel = arguments.Cancel;
-				cancelBtn.Click += (s, e) => { selectedResult = cancel; dialog.Close(); };
-				panel.Children.Add(cancelBtn);
-			}
-
-			dialog.Content = panel;
-			dialog.ShowDialog();
-
-			arguments.SetResult(selectedResult ?? arguments.Cancel ?? string.Empty);
-		}
-
-		static System.Windows.Controls.Button CreateDialogButton(string text)
-		{
-			return new System.Windows.Controls.Button
-			{
-				Content = text,
-				HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
-				HorizontalContentAlignment = System.Windows.HorizontalAlignment.Left,
-				Padding = new System.Windows.Thickness(12, 8, 12, 8),
-				Margin = new System.Windows.Thickness(0, 2, 0, 2),
-				FontSize = 14,
-			};
-		}
-
-		protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
 	}
 
-	public class WPFAlertManagerSubscriptionProxy<T> : DispatchProxy
+	protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
+}
+
+public class WPFAlertManagerSubscriptionProxy<T> : DispatchProxy
+{
+	protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
 	{
-		protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
-		{
-			WPFAlertManagerSubscription.HandleInvoke(targetMethod, args);
-			return null;
-		}
+		WPFAlertManagerSubscription.HandleInvoke(targetMethod, args);
+		return null;
 	}
 }
+#endif

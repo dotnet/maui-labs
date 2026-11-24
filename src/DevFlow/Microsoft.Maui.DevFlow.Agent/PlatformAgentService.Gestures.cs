@@ -287,6 +287,7 @@ public partial class PlatformAgentService
         typeof(global::AndroidX.AppCompat.Widget.AppCompatImageView),
         typeof(global::Microsoft.Maui.Platform.LayoutViewGroup),
         typeof(global::Microsoft.Maui.Platform.ContentViewGroup),
+        typeof(global::Microsoft.Maui.Graphics.Platform.PlatformGraphicsView),
         typeof(global::Microsoft.Maui.Platform.WrapperView),
         typeof(global::Microsoft.Maui.Platform.MauiTextView),
         typeof(global::Microsoft.Maui.Platform.MauiShapeView),
@@ -307,10 +308,11 @@ public partial class PlatformAgentService
             || (OperatingSystem.IsAndroidVersionAtLeast(23) && view.ContextClickable))
             return false;
 
-        if (!PassThroughViewTypes.Contains(view.GetType()) || gestureViews.Contains(view))
+        var viewType = view.GetType();
+        if (!PassThroughViewTypes.Contains(viewType) || gestureViews.Contains(view))
             return false;
 
-        if (HasTouchListener(view) != false)
+        if (HasBlockingTouchListener(view) != false)
             return false;
 
         return view is not global::Android.Widget.TextView text
@@ -321,12 +323,12 @@ public partial class PlatformAgentService
     private static Java.Lang.Reflect.Field? _onTouchListenerField;
 
     /// <summary>
-    /// Whether <c>setOnTouchListener</c> has given the view a listener, which may keep any down
-    /// it is offered; null when that cannot be read. View has no public getter for it, so it is
-    /// read from the private <c>mListenerInfo.mOnTouchListener</c> that <c>dispatchTouchEvent</c>
+    /// Whether <c>setOnTouchListener</c> has given the view a listener that may keep a down,
+    /// excluding MAUI's known passive overlay callback; null when unreadable. View has no public
+    /// getter, so this reads <c>mListenerInfo.mOnTouchListener</c>, which <c>dispatchTouchEvent</c>
     /// consults. A runtime that hides those fields makes every listener unknown.
     /// </summary>
-    private static bool? HasTouchListener(global::Android.Views.View view)
+    private static bool? HasBlockingTouchListener(global::Android.Views.View view)
     {
         try
         {
@@ -350,12 +352,36 @@ public partial class PlatformAgentService
                 _onTouchListenerField = field;
             }
 
-            return _onTouchListenerField.Get(info) != null;
+            var listener = _onTouchListenerField.Get(info);
+            return listener != null && !IsPassiveGraphicsOverlayListener(view, listener);
         }
         catch (Java.Lang.Exception)
         {
             return null;
         }
+    }
+
+    private static bool IsPassiveGraphicsOverlayListener(global::Android.Views.View view, Java.Lang.Object listener)
+    {
+        if (view.GetType() != typeof(global::Microsoft.Maui.Graphics.Platform.PlatformGraphicsView)
+            || ((global::Microsoft.Maui.Graphics.Platform.PlatformGraphicsView)view).Drawable is not WindowOverlay overlay
+            || !ReferenceEquals(overlay.GraphicsView, view)
+            || overlay.DisableUITouchEventPassthrough
+            || overlay.EnableDrawableTouchHandling)
+            return false;
+
+        // A graphics view can have an app-installed listener, or additional Touch subscribers.
+        // Trust only the binding's event implementor with MAUI's sole non-consuming callback.
+        var listenerType = typeof(global::Android.Views.View).GetNestedType(
+            "IOnTouchListenerImplementor", System.Reflection.BindingFlags.NonPublic);
+        if (listenerType == null || listener.GetType() != listenerType
+            || listenerType.GetField("Handler")?.GetValue(listener) is not EventHandler<global::Android.Views.View.TouchEventArgs> handler)
+            return false;
+
+        var callback = typeof(WindowOverlay).GetMethod(
+            "TouchLayerTouch", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        return callback != null && handler.GetInvocationList().All(
+            subscriber => ReferenceEquals(subscriber.Target, overlay) && subscriber.Method == callback);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using Foundation;
+using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platforms.MacOS.Hosting;
 using Microsoft.Maui.Platforms.MacOS.Platform;
@@ -19,6 +20,7 @@ public partial class ApplicationHandler : ElementHandler<IApplication, NSObject>
         {
             [nameof(IApplication.OpenWindow)] = MapOpenWindow,
             [nameof(IApplication.CloseWindow)] = MapCloseWindow,
+            [nameof(IApplication.ActivateWindow)] = MapActivateWindow,
         };
 
     public ApplicationHandler() : base(Mapper, CommandMapper)
@@ -57,6 +59,14 @@ public partial class ApplicationHandler : ElementHandler<IApplication, NSObject>
         {
             nsWindow.Close();
         }
+    }
+
+    public static void MapActivateWindow(ApplicationHandler handler, IApplication application, object? args)
+    {
+        if (args is not IWindow window || window.Handler?.PlatformView is not NSWindow nsWindow)
+            return;
+
+        MacOSMauiApplication.BringToFront(nsWindow);
     }
 
     public static void MapAppTheme(ApplicationHandler handler, IApplication application)

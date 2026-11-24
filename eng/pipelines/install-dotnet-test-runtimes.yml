@@ -1,0 +1,34 @@
+# Installs additional shared runtimes so multi-targeted test projects can run
+# their down-level TFMs (e.g. net10.0) with the .NET 11 SDK. Arcade only installs
+# the SDK from global.json, which carries the .NET 11 runtimes alone, so net10.0
+# test hosts otherwise fail to start on official build agents.
+#
+# Must run after the SDK has been provisioned (Arcade or UseDotNet@2) so the
+# runtimes land next to the dotnet host that cibuild later uses.
+# Keep the version aligned with the runtime shipped in `additional-dotnet-version`
+# used by the GitHub Actions workflows (SDK 10.0.403 -> runtime 10.0.14).
+parameters:
+- name: version
+  type: string
+  default: '10.0.14'
+- name: runtimes
+  type: object
+  default:
+  - dotnet
+
+steps:
+- pwsh: |
+    # Resolve the dotnet root the same way cibuild will.
+    . '$(Build.SourcesDirectory)/eng/common/tools.ps1'
+    $dotnetRoot = InitializeDotNetCli -install:$true
+    Write-Host "Installing .NET ${{ parameters.version }} runtimes into $dotnetRoot"
+
+    foreach ($runtime in '${{ join(',', parameters.runtimes) }}'.Split(',')) {
+      & '$(Build.SourcesDirectory)/eng/common/dotnet-install.ps1' -runtime $runtime -version '${{ parameters.version }}' -dotnetPath $dotnetRoot
+      if ($LASTEXITCODE -ne 0) {
+        throw "Failed to install $runtime runtime ${{ parameters.version }}."
+      }
+    }
+
+    & (Join-Path $dotnetRoot (GetExecutableFileName 'dotnet')) --list-runtimes
+  displayName: Install .NET ${{ parameters.version }} test runtimes

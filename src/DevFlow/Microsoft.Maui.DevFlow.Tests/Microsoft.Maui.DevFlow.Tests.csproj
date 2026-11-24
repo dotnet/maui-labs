@@ -1,7 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
@@ -24,7 +24,7 @@
   <!--
     MauiFreeAssemblyTests reads Agent.Native and Agent.Native.Essentials straight out of
     artifacts/bin via PE metadata, because their real TFMs (android/ios/maccatalyst/macos) cannot
-    be a normal compile-time ProjectReference from this net10.0 project. Without something forcing
+    be a normal compile-time ProjectReference from this net11.0 project. Without something forcing
     a build, "dotnet test" on this project alone finds stale or absent output and the guard passes
     vacuously. These are build-only references (no assembly is added to this project's compilation)
     that force MSBuild to build the android TFM — present unconditionally on every OS — as part of
@@ -34,15 +34,15 @@
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Native\Microsoft.Maui.DevFlow.Agent.Native.csproj"
                        ReferenceOutputAssembly="false"
                        SkipGetTargetFrameworkProperties="true"
-                       SetTargetFramework="TargetFramework=net10.0-android" />
+                       SetTargetFramework="TargetFramework=net11.0-android" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Native.Essentials\Microsoft.Maui.DevFlow.Agent.Native.Essentials.csproj"
                        ReferenceOutputAssembly="false"
                        SkipGetTargetFrameworkProperties="true"
-                       SetTargetFramework="TargetFramework=net10.0-android" />
+                       SetTargetFramework="TargetFramework=net11.0-android" />
   </ItemGroup>
 
   <!-- Compiled by reference (not a project reference) because the source lives in the
-       macOS-only (net10.0-macos) MacOS platform project, which this net10.0 test project
+       macOS-only (net11.0-macos) MacOS platform project, which this net11.0 test project
        cannot reference. Both files have no AppKit/MAUI dependency, so they can be compiled
        and unit tested here directly. -->
   <ItemGroup>
@@ -79,7 +79,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Agent.Native only multi-targets platform TFMs, so it cannot be referenced from this net10.0
+    <!-- Agent.Native only multi-targets platform TFMs, so it cannot be referenced from this net11.0
          project. Link the registry source instead: its id bookkeeping is platform-agnostic (the one
          platform-specific bit, the ObjC stable key, is injectable) and is worth covering here
          because the alternative is relying on device integration runs, where the GC timing that

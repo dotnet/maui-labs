@@ -43,8 +43,13 @@ $fixtures = @(
 $head = Git-Checked $fixed @('rev-parse', 'HEAD')
 if ((Git-Checked $baseline @('rev-parse', 'HEAD')) -cne $head) { throw 'Checkouts must start at the same tested commit' }
 Git-Checked $baseline @('fetch', '--no-tags', '--depth=1', 'origin', $BaselineRef) | Out-Null
-# Keep the current host, tests and dependencies; replace only the production correction.
-Git-Checked $baseline (@('restore', "--source=$BaselineRef", '--') + $production) | Out-Null
+# Reverse only the correction, preserving subsequent production changes.
+$correctionRef = '8f9797ec6c46206f518d708ed8cbdafc6a3c04c6'
+Git-Checked $baseline @('fetch', '--no-tags', '--depth=1', 'origin', $correctionRef) | Out-Null
+$patch = Join-Path $output 'enabled-state-correction.patch'
+Git-Checked $baseline (@('diff', '--binary', "--output=$patch", $BaselineRef, $correctionRef, '--') + $production) | Out-Null
+Git-Checked $baseline @('apply', '--reverse', '--check', $patch) | Out-Null
+Git-Checked $baseline @('apply', '--reverse', $patch) | Out-Null
 $changed = @(Git-Checked $baseline @('diff', '--name-only') | Sort-Object)
 if (($changed -join '|') -cne (($production | ForEach-Object { $_.Replace('\', '/') } | Sort-Object) -join '|')) {
     throw 'Baseline must differ only in the two enabled-state production files'
@@ -80,7 +85,7 @@ $cases = @(foreach ($template in @($false, $true)) {
 })
 $provenance = [pscustomobject]@{
     head=$head; tree=(Git-Checked $fixed @('rev-parse', 'HEAD^{tree}'))
-    baselineProductRef=$BaselineRef; fixturePins=$fixturePins
+    baselineProductRef=$BaselineRef; correctionRef=$correctionRef; fixturePins=$fixturePins
     runId=$env:GITHUB_RUN_ID; attempt=$env:GITHUB_RUN_ATTEMPT; eventSha=$env:GITHUB_SHA
     sdk=(& dotnet --version); results=@()
 }
@@ -96,6 +101,7 @@ try {
         Push-Location $repo
         try {
             & dotnet test 'platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj' -c Release `
+                -f net10.0-windows10.0.17763.0 `
                 -p:UseMaui=false -p:UseSharedCompilation=false -m:1 -nr:false `
                 --filter 'FullyQualifiedName~HandlerTests.ShellTabNavigationTests.NativeTabEnabled_' `
                 --logger 'trx;LogFileName=enabled.trx' --results-directory $resultDirectory `

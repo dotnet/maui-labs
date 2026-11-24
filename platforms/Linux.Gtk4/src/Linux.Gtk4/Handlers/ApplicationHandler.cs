@@ -1,4 +1,5 @@
 using Microsoft.Maui;
+using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 

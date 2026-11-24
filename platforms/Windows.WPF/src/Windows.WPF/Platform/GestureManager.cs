@@ -1,3 +1,4 @@
+#if NET10_0
 #nullable enable
 using System;
 using System.Collections.Generic;
@@ -108,7 +109,7 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 				{
 					// Use SendTapped which handles Command execution + Tapped event
 					var sendTapped = typeof(TapGestureRecognizer).GetMethod(
-						"SendTapped", BindingFlags.Instance | BindingFlags.NonPublic);
+						"SendTapped", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 					if (sendTapped != null)
 					{
 						var parent = FindParentView(tap);
@@ -137,9 +138,10 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 		static void AddPointerGesture(FrameworkElement view, PointerGestureRecognizer pointer)
 		{
-			var sendEntered = typeof(PointerGestureRecognizer).GetMethod("SendPointerEntered", BindingFlags.Instance | BindingFlags.NonPublic);
-			var sendExited = typeof(PointerGestureRecognizer).GetMethod("SendPointerExited", BindingFlags.Instance | BindingFlags.NonPublic);
-			var sendMoved = typeof(PointerGestureRecognizer).GetMethod("SendPointerMoved", BindingFlags.Instance | BindingFlags.NonPublic);
+			var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+			var sendEntered = typeof(PointerGestureRecognizer).GetMethod("SendPointerEntered", flags);
+			var sendExited = typeof(PointerGestureRecognizer).GetMethod("SendPointerExited", flags);
+			var sendMoved = typeof(PointerGestureRecognizer).GetMethod("SendPointerMoved", flags);
 
 			MouseEventHandler enterHandler = (s, e) =>
 			{
@@ -542,3 +544,4 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		}
 	}
 }
+#endif

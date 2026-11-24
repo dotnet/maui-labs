@@ -105,7 +105,8 @@ public class GtkSignalLifetimeTests
 			{
 				box.Remove(panel);
 				layoutHandler.DisconnectHandler();
-				GC.KeepAlive(ownedControllers);
+				foreach (var controller in ownedControllers)
+					controller.Dispose();
 			}
 		}
 	}
