@@ -873,7 +873,12 @@ public class AgentClient : IDisposable
     /// <summary>
     /// Query elements by type, automationId, and/or text.
     /// </summary>
-    public async Task<List<ElementInfo>> QueryAsync(string? type = null, string? automationId = null, string? text = null)
+    /// <remarks>
+    /// An empty list means the agent answered and nothing matched. Transport failures (for
+    /// example an unreachable agent) and agent-reported errors throw instead, so callers never
+    /// mistake a lost connection for "no elements".
+    /// </remarks>
+    public Task<List<ElementInfo>> QueryAsync(string? type = null, string? automationId = null, string? text = null)
     {
         var queryParts = new List<string>();
         if (type != null) queryParts.Add($"type={Uri.EscapeDataString(type)}");
@@ -883,23 +888,39 @@ public class AgentClient : IDisposable
         var url = queryParts.Count > 0
             ? $"{UiApi}/elements?{string.Join("&", queryParts)}"
             : $"{UiApi}/elements";
-        return await GetAsync<List<ElementInfo>>(url) ?? new();
+        return QueryElementsAsync(url);
     }
 
     /// <summary>
     /// Query elements using a CSS selector string.
     /// </summary>
-    public async Task<List<ElementInfo>> QueryCssAsync(string selector)
+    public Task<List<ElementInfo>> QueryCssAsync(string selector)
+        => QueryElementsAsync($"{UiApi}/elements?selector={Uri.EscapeDataString(selector)}");
+
+    private async Task<List<ElementInfo>> QueryElementsAsync(string path)
     {
-        var url = $"{_baseUrl}{UiApi}/elements?selector={Uri.EscapeDataString(selector)}";
-        var body = await GetStringWithRetryableUiReadAsync(url, returnErrorBody: true);
-        var json = ProtocolJson.ParseElement(body);
+        var statusCode = 0;
+        var body = await GetStringWithRetryableUiReadAsync(
+            $"{_baseUrl}{path}",
+            returnErrorBody: true,
+            onStatusCode: code => statusCode = code);
+        var succeeded = statusCode is >= 200 and <= 299;
+        JsonElement json = default;
+        if (!string.IsNullOrWhiteSpace(body))
+        {
+            try { json = ProtocolJson.ParseElement(body); }
+            catch (JsonException) when (!succeeded) { }
+        }
         if (json.ValueKind == JsonValueKind.Object &&
-            json.TryGetProperty("success", out var s) && !s.GetBoolean())
+            json.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.False)
         {
             var msg = json.TryGetProperty("error", out var e) ? e.GetString() : "Query failed";
             throw new InvalidOperationException(msg);
         }
+        if (!succeeded)
+            throw new HttpRequestException($"Query failed: the agent returned HTTP {statusCode}.");
+        if (json.ValueKind == JsonValueKind.Undefined)
+            return new();
         return ProtocolJson.Deserialize<List<ElementInfo>>(json.GetRawText()) ?? new();
     }
 
