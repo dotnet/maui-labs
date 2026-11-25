@@ -9,14 +9,14 @@ namespace Microsoft.Maui.DevFlow.Tests;
 public sealed class XamlMauiSourceDiagnosticsTests : IDisposable
 {
     private const string DiagnosticsSwitch = "Microsoft.Maui.RuntimeFeature.EnableMauiDiagnostics";
-    private const string Xaml = """
+    private static readonly string Xaml = """
         <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui">
           <VerticalStackLayout>
             <Label Text="Same" />
             <Label Text="Same" />
           </VerticalStackLayout>
         </ContentPage>
-        """;
+        """.ReplaceLineEndings("\n");
     private const string SourcePath = "Views/MainPage.xaml";
     private static readonly string AssemblyName = typeof(XamlMauiSourceDiagnosticsTests).Assembly.GetName().Name!;
     private readonly bool _previousDiagnostics;

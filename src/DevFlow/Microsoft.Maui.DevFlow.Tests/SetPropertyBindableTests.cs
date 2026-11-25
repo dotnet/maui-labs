@@ -19,14 +19,14 @@ namespace Microsoft.Maui.DevFlow.Tests;
 [Collection("XamlSourceMapRegistry")]
 public class SetPropertyBindableTests
 {
-    private const string SiblingXaml = """
+    private static readonly string SiblingXaml = """
         <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui">
           <VerticalStackLayout>
             <Label Text="First" />
             <Label Text="Second" />
           </VerticalStackLayout>
         </ContentView>
-        """;
+        """.ReplaceLineEndings("\n");
 
     [Fact]
     public async Task GetPropertyAsync_AutomationIdWithSpace_ResolvesBindingContext()
