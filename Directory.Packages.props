@@ -3,7 +3,7 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
-    <DocumentExtractionPreviewVersion>11.0.0-preview.1.26560.3</DocumentExtractionPreviewVersion>
+    <DocumentExtractionPreviewVersion>11.0.1-preview.1.26570.2</DocumentExtractionPreviewVersion>
     <UseDocumentExtractionPreview Condition="'$(MSBuildProjectName)' == 'Microsoft.Maui.Essentials.AI' or
         '$(MSBuildProjectName)' == 'AIExtensions.Sample.ChatPlayground' or
         '$(MSBuildProjectName)' == 'EssentialsAISample' or
@@ -156,12 +156,9 @@
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="$(MicrosoftWindowsSDKBuildToolsWinAppVersion)" />
   </ItemGroup>
 
-  <!-- The document preview requires the matching MEAI contract and net10 middleware dependencies.
-       Keep the experimental graph scoped to document consumers rather than updating other products. -->
+  <!-- The document extraction preview requires MEAI 11.0.1; scope it to document consumers. -->
   <ItemGroup Condition="'$(UseDocumentExtractionPreview)' == 'true'">
-    <PackageVersion Update="Microsoft.Extensions.AI.Abstractions" Version="11.0.0" />
-    <PackageVersion Update="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.15" />
-    <PackageVersion Update="Microsoft.Extensions.Logging.Abstractions" Version="10.0.15" />
+    <PackageVersion Update="Microsoft.Extensions.AI.Abstractions" Version="11.0.1" />
   </ItemGroup>
 
   <!-- Testing (Microsoft.NET.Test.Sdk and xunit.runner.visualstudio are
