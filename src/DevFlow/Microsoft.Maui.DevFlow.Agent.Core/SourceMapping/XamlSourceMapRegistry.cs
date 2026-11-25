@@ -73,8 +73,17 @@ public sealed class XamlSourceMapRegistry : IXamlSourceMapProvider
     }
 
     // A lookup already in flight must not repopulate the new cache with its old result.
+    // Providers are invalidated first so that a lookup which reads the old cache cannot
+    // place a map built from stale provider data into the new one.
     internal void InvalidateCache()
-        => Interlocked.Exchange(ref _cache, new(StringComparer.Ordinal));
+    {
+        IXamlSourceMapProvider[] providers;
+        lock (_gate)
+            providers = _providers.ToArray();
+        foreach (var provider in providers)
+            provider.InvalidateCache();
+        Interlocked.Exchange(ref _cache, new(StringComparer.Ordinal));
+    }
 
     internal bool HasProviders
     {

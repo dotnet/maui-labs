@@ -124,6 +124,31 @@ public class XamlSourceMapGeneratorTests
     }
 
     [Fact]
+    public void GeneratedProvider_ReusesTypeMetadata_UntilInvalidated()
+    {
+        var (output, diagnostics, _) = Run(("MainPage.xaml", SampleXaml, true));
+        Assert.Empty(diagnostics);
+        using var ms = new System.IO.MemoryStream();
+        Assert.True(output.Emit(ms).Success);
+        var providerType = Assembly.Load(ms.ToArray()).GetType(
+            "Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.Generated.__DevFlowXamlSourceMapProvider")!;
+        var provider = (IXamlSourceMapProvider)Activator.CreateInstance(providerType, nonPublic: true)!;
+        var metadataField = providerType.GetField("_metadata", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        Assert.NotNull(provider.GetMap("TestApp.MainPage"));
+        var first = metadataField.GetValue(provider);
+        Assert.NotNull(first);
+        Assert.NotNull(provider.GetMap("TestApp.MainPage"));
+        Assert.Same(first, metadataField.GetValue(provider));
+
+        provider.InvalidateCache();
+        Assert.NotNull(provider.GetMap("TestApp.MainPage"));
+        var rebuilt = metadataField.GetValue(provider);
+        Assert.NotNull(rebuilt);
+        Assert.NotSame(first, rebuilt);
+    }
+
+    [Fact]
     public void Generator_XamlAndTypeMappingEdits_DoNotChangeFieldInitializers()
     {
         var (originalOutput, originalDiagnostics, original) =

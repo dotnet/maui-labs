@@ -87,6 +87,17 @@ public class XamlSourceMapRegistryTests : System.IDisposable
     }
 
     [Fact]
+    public void MetadataUpdate_InvalidatesProviderCaches()
+    {
+        var provider = new FakeProvider { ["App.Page"] = MapFor("page.xaml") };
+        XamlSourceMapRegistry.Register(provider);
+
+        XamlSourceMapHotReloadHandler.ClearCache(null);
+
+        Assert.Equal(1, provider.InvalidateCount);
+    }
+
+    [Fact]
     public async Task MetadataUpdate_DoesNotCacheAnInFlightOldMap()
     {
         using var provider = new BlockingProvider(MapFor("old.xaml"));
@@ -145,6 +156,10 @@ public class XamlSourceMapRegistryTests : System.IDisposable
             CallCount++;
             return _maps.TryGetValue(fullTypeName, out var map) ? map : null;
         }
+
+        public int InvalidateCount { get; private set; }
+
+        public void InvalidateCache() => InvalidateCount++;
     }
 
     private sealed class BlockingProvider(XamlSourceMap map) : IXamlSourceMapProvider, IDisposable

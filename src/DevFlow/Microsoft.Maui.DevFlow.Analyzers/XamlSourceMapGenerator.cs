@@ -330,6 +330,36 @@ public sealed class XamlSourceMapGenerator : IIncrementalGenerator
         builder.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"Microsoft.Maui.DevFlow.Analyzers\", \"1.0.0\")]");
         builder.AppendLine("    internal sealed class __DevFlowXamlSourceMapProvider : global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.IXamlSourceMapProvider");
         builder.AppendLine("    {");
+        // Shared lookup data is built lazily (no field initializers, which Hot Reload cannot update)
+        // and tagged with a version so a build that races InvalidateCache is never reused.
+        builder.AppendLine("        private sealed class __Metadata");
+        builder.AppendLine("        {");
+        builder.AppendLine("            internal __Metadata(int version, global::System.Collections.Generic.IReadOnlyDictionary<string, string> namespaces, global::System.Collections.Generic.IReadOnlyDictionary<string, string> types)");
+        builder.AppendLine("            {");
+        builder.AppendLine("                Version = version;");
+        builder.AppendLine("                Namespaces = namespaces;");
+        builder.AppendLine("                Types = types;");
+        builder.AppendLine("            }");
+        builder.AppendLine("            internal int Version { get; }");
+        builder.AppendLine("            internal global::System.Collections.Generic.IReadOnlyDictionary<string, string> Namespaces { get; }");
+        builder.AppendLine("            internal global::System.Collections.Generic.IReadOnlyDictionary<string, string> Types { get; }");
+        builder.AppendLine("        }");
+        builder.AppendLine("        private int _metadataVersion;");
+        builder.AppendLine("        private __Metadata? _metadata;");
+        builder.AppendLine("        public void InvalidateCache()");
+        builder.AppendLine("        {");
+        builder.AppendLine("            global::System.Threading.Interlocked.Increment(ref _metadataVersion);");
+        builder.AppendLine("            global::System.Threading.Volatile.Write(ref _metadata, null);");
+        builder.AppendLine("        }");
+        builder.AppendLine("        private __Metadata GetMetadata()");
+        builder.AppendLine("        {");
+        builder.AppendLine("            var version = global::System.Threading.Volatile.Read(ref _metadataVersion);");
+        builder.AppendLine("            var cached = global::System.Threading.Volatile.Read(ref _metadata);");
+        builder.AppendLine("            if (cached is not null && cached.Version == version) return cached;");
+        builder.AppendLine("            var created = new __Metadata(version, GetNamespaces(), GetTypes());");
+        builder.AppendLine("            global::System.Threading.Interlocked.CompareExchange(ref _metadata, created, cached);");
+        builder.AppendLine("            return created;");
+        builder.AppendLine("        }");
         builder.AppendLine("        public global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap? GetMap(string fullTypeName)");
         builder.AppendLine("        {");
         builder.AppendLine("            (string File, string Xaml)? entry = fullTypeName switch");
@@ -344,7 +374,8 @@ public sealed class XamlSourceMapGenerator : IIncrementalGenerator
         builder.AppendLine("                _ => null");
         builder.AppendLine("            };");
         builder.AppendLine("            if (entry is null) return null;");
-        builder.AppendLine("            return global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap.Parse(entry.Value.Xaml, entry.Value.File, null, GetNamespaces(), GetTypes());");
+        builder.AppendLine("            var metadata = GetMetadata();");
+        builder.AppendLine("            return global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMap.Parse(entry.Value.Xaml, entry.Value.File, null, metadata.Namespaces, metadata.Types);");
         builder.AppendLine("        }");
         builder.AppendLine("        private static global::System.Collections.Generic.IReadOnlyDictionary<string, string> GetNamespaces() =>");
         builder.AppendLine("            new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.Ordinal)");
