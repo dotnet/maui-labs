@@ -26,7 +26,7 @@ Verify: `maui devflow version`
 ## 2. Add NuGet Packages
 
 First, determine whether the project is a standard MAUI app or a Linux/GTK app.
-There is no `-linux` TFM — Linux/GTK apps target plain `net10.0` (or `net9.0`) and use
+There is no `-linux` TFM — Linux/GTK apps target plain `net11.0` (or `net9.0`) and use
 the community `Maui.Gtk` package. Detect this by checking the `.csproj`:
 
 ```bash

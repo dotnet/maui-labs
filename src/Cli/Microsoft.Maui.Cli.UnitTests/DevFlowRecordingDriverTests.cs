@@ -11,6 +11,9 @@ public class DevFlowRecordingDriverTests
     [InlineData("ios")]
     [InlineData("iOS")]
     [InlineData("iossimulator")]
+    [InlineData("tvos")]
+    [InlineData("tvOS")]
+    [InlineData("tvossimulator")]
     public void CreateRecordingDriver_IosTarget_PreservesExplicitUdid(string platform)
     {
         const string udid = "11111111-2222-3333-4444-555555555555";
@@ -29,6 +32,42 @@ public class DevFlowRecordingDriverTests
             () => DevFlowCommands.CreateRecordingDriver("ios", device, starting: true));
 
         Assert.Contains("--device", error.Message);
+    }
+
+    [Fact]
+    public void CreateRecordingDriver_TvOSWithoutDevice_RejectsAmbiguousRecording()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            DevFlowCommands.CreateRecordingDriver("tvos", null, starting: true));
+    }
+
+    [Fact]
+    public void AppDriverFactory_TvOS_UsesSimulatorDriverWithTvOSIdentity()
+    {
+        using var driver = AppDriverFactory.Create("tvOS");
+
+        Assert.IsType<TvOSSimulatorAppDriver>(driver);
+        Assert.Equal("tvOSSimulator", driver.Platform);
+    }
+
+    [Fact]
+    public async Task TvOSSimulatorDriver_NativeInteraction_ReportsUnsupportedWithoutSendingTouchInput()
+    {
+        using var driver = new TvOSSimulatorAppDriver { DeviceUdid = "TV-SIMULATOR" };
+
+        await Assert.ThrowsAsync<NotSupportedException>(() => driver.TapCoordinateAsync(10, 20));
+        await Assert.ThrowsAsync<NotSupportedException>(() => ((IAlertDriver)driver).DetectAlertAsync());
+    }
+
+    [Fact]
+    public async Task TvOSSimulatorDriver_SystemTheme_ReportsUnsupported()
+    {
+        using var driver = new TvOSSimulatorAppDriver { DeviceUdid = "TV-SIMULATOR" };
+
+        var result = await driver.SetThemeAsync(DevFlowTheme.Dark, ThemeSetScope.System);
+
+        Assert.False(result.Success);
+        Assert.Contains("app scope", result.Message);
     }
 
     [Fact]

@@ -8,7 +8,7 @@ using global::Android.OS;
 using global::Android.Views;
 using Microsoft.Maui.Devices;
 #endif
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
 using CoreAnimation;
 using Foundation;
 using Microsoft.Maui.Devices;
@@ -29,7 +29,7 @@ internal static class NativeFrameStatsProviderFactory
         return AndroidFrameMetricsStatsProvider.IsApiSupported
             ? new AndroidFrameMetricsStatsProvider()
             : new AndroidChoreographerFrameStatsProvider();
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
         return new AppleDisplayLinkFrameStatsProvider();
 #elif WINDOWS
         return new WindowsCompositionFrameStatsProvider();
@@ -337,7 +337,7 @@ internal sealed class AndroidChoreographerFrameStatsProvider : Java.Lang.Object,
 }
 #endif
 
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
 internal sealed class AppleDisplayLinkFrameStatsProvider : INativeFrameStatsProvider
 {
     private readonly FrameStatsAccumulator _accumulator;
@@ -361,7 +361,7 @@ internal sealed class AppleDisplayLinkFrameStatsProvider : INativeFrameStatsProv
             return;
 
         _lastTimestampSeconds = 0d;
-        MainThread.BeginInvokeOnMainThread(() =>
+        CoreFoundation.DispatchQueue.MainQueue.DispatchAsync(() =>
         {
             try
             {
@@ -378,7 +378,7 @@ internal sealed class AppleDisplayLinkFrameStatsProvider : INativeFrameStatsProv
     public void Stop()
     {
         _running = false;
-        MainThread.BeginInvokeOnMainThread(() =>
+        CoreFoundation.DispatchQueue.MainQueue.DispatchAsync(() =>
         {
             _displayLink?.Invalidate();
             _displayLink?.Dispose();
@@ -422,7 +422,12 @@ internal sealed class AppleDisplayLinkFrameStatsProvider : INativeFrameStatsProv
     {
         try
         {
+#if TVOS
+            // tvOS uses platform-neutral Essentials, whose DeviceDisplay is not implemented.
+            double refreshRate = UIKit.UIScreen.MainScreen.MaximumFramesPerSecond;
+#else
             var refreshRate = DeviceDisplay.Current.MainDisplayInfo.RefreshRate;
+#endif
             if (refreshRate > 1d && !double.IsInfinity(refreshRate) && !double.IsNaN(refreshRate))
                 return 1000d / refreshRate;
         }

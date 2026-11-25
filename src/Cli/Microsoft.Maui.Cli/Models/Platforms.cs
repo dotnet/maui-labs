@@ -10,6 +10,7 @@ public static class Platforms
 {
 	public const string Android = "android";
 	public const string iOS = "ios";
+	public const string tvOS = "tvos";
 	public const string MacCatalyst = "maccatalyst";
 	public const string Windows = "windows";
 	public const string All = "all";
@@ -18,11 +19,11 @@ public static class Platforms
 	/// Every value accepted by a <c>--platform</c> option, in the order they should be
 	/// listed to users. <see cref="All"/> is a wildcard rather than a real platform.
 	/// </summary>
-	public static readonly string[] Supported = [Android, iOS, MacCatalyst, Windows, All];
+	public static readonly string[] Supported = [Android, iOS, tvOS, MacCatalyst, Windows, All];
 
 	public static bool IsValid(string? platform) => platform?.ToLowerInvariant() switch
 	{
-		Android or iOS or MacCatalyst or Windows or All => true,
+		Android or iOS or tvOS or MacCatalyst or Windows or All => true,
 		_ => false
 	};
 

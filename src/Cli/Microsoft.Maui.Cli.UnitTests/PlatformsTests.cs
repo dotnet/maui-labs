@@ -11,6 +11,7 @@ public class PlatformsTests
 	[Theory]
 	[InlineData("android", true)]
 	[InlineData("ios", true)]
+	[InlineData("tvOS", true)]
 	[InlineData("maccatalyst", true)]
 	[InlineData("windows", true)]
 	[InlineData("all", true)]
@@ -28,6 +29,7 @@ public class PlatformsTests
 	[InlineData("android", "android")]
 	[InlineData("ANDROID", "android")]
 	[InlineData("ios", "ios")]
+	[InlineData("tvOS", "tvos")]
 	[InlineData("apple", "ios")]
 	[InlineData("iphone", "ios")]
 	[InlineData("ipad", "ios")]
@@ -50,7 +52,7 @@ public class PlatformsTests
 	public void Supported_ContainsEveryValueAcceptedByIsValid()
 	{
 		Assert.All(Platforms.Supported, p => Assert.True(Platforms.IsValid(p), $"'{p}' is listed as supported but rejected by IsValid"));
-		Assert.Equal(new[] { "android", "ios", "maccatalyst", "windows", "all" }, Platforms.Supported);
+		Assert.Equal(new[] { "android", "ios", "tvos", "maccatalyst", "windows", "all" }, Platforms.Supported);
 	}
 
 	[Fact]
@@ -58,6 +60,6 @@ public class PlatformsTests
 	{
 		// Regression: `string.Join(", ", Platforms.All)` bound to the IEnumerable<char>
 		// overload and rendered "a, l, l" in the unknown-platform warning.
-		Assert.Equal("android, ios, maccatalyst, windows, all", string.Join(", ", Platforms.Supported));
+		Assert.Equal("android, ios, tvos, maccatalyst, windows, all", string.Join(", ", Platforms.Supported));
 	}
 }

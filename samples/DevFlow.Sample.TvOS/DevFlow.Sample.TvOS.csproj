@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    tvOS sample for the DevFlow agent. MAUI has no tvOS backend of its own, so this sample runs on
+    the community Platform.Maui.TvOS backend (https://github.com/shinyorg/mauiplatforms). The
+    backend package is published to nuget.org only, which is not one of the repo's feeds, so name
+    it when restoring: -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json
+    (or build the backend from a checkout, below). It is not part of the repo's solution filters
+    or CI builds.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net11.0-tvos</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DevFlow.Sample.TvOS</RootNamespace>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <SupportedOSPlatformVersion>16.0</SupportedOSPlatformVersion>
+    <ApplicationTitle>DevFlow tvOS</ApplicationTitle>
+    <ApplicationId>com.companyname.devflow.tvos</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <IsPackable>false</IsPackable>
+    <!-- The community backend uses MAUI 11, while DevFlow retains a MAUI 10 baseline. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(CommunityPlatformMauiVersion)" />
+  </ItemGroup>
+
+  <!--
+    Platform.Maui.TvOS 0.5.0 includes the scene lifecycle support required by tvOS 27.
+    To test a local backend checkout instead:
+      -p:PlatformMauiTvOSProject=<mauiplatforms>/src/Platform.Maui.TvOS/Platform.Maui.TvOS.csproj
+      -p:BaseTargetFramework=net11.0 -p:MauiVersion=<CommunityPlatformMauiVersion>
+  -->
+  <ItemGroup Condition="'$(PlatformMauiTvOSProject)' == ''">
+    <PackageReference Include="Platform.Maui.TvOS" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(PlatformMauiTvOSProject)' != ''">
+    <ProjectReference Include="$(PlatformMauiTvOSProject)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.props" />
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.targets" />
+
+</Project>

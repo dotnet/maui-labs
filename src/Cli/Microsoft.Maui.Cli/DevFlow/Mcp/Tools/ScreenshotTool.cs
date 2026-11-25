@@ -22,7 +22,7 @@ public sealed class ScreenshotTool
 		[Description("Native registry generation from maui_tree")] long? registryGeneration = null)
 	{
 		using var agent = await session.GetAgentClientAsync(agentPort);
-		var result = await agent.ScreenshotResultAsync(
+		var result = await new ScreenshotOperations(agent).CaptureAsync(
 			window,
 			elementId,
 			selector,

@@ -2,7 +2,8 @@
 name: maui-devflow-debug
 description: >-
   Run DevFlow inspect-and-fix loops for MAUI apps. USE FOR: launch, device
-  selection, agent recovery, broker/port/adb, tree/screenshot, Blazor CDP, and
+  selection (including tvOS/Apple TV), agent recovery, broker/port/adb,
+  tree/screenshot, Blazor CDP, and
   iterative UI debugging. DO NOT USE FOR: first-time setup or non-MAUI
   automation. INVOKES: DevFlow `maui_*` MCP tools when available; `maui
   devflow` CLI as fallback; `dotnet`, `adb`, and `simctl` for build, deployment,
@@ -16,7 +17,7 @@ packages and `builder.AddMauiDevFlowAgent()` registered.
 
 ## When to Use
 
-- Build and run a MAUI app on Android, iOS, Mac Catalyst, macOS, Windows, or GTK.
+- Build and run a MAUI app on Android, iOS, tvOS (community backend), Mac Catalyst, macOS, Windows, or GTK.
 - Choose or create a simulator/emulator for a project.
 - Wait for a DevFlow agent, inspect the visual tree, tap/fill UI, or capture screenshots.
 - Recover from DevFlow connection failures after the app is integrated, including broker, port, and Android adb forwarding issues.
@@ -46,13 +47,13 @@ for MAUI DevFlow product feedback. Do not run it automatically.
 
    If no project has DevFlow package references, stop and switch to `maui-devflow-onboard`.
 
-2. Pick the target framework and launch target. Do not assume `net10.0`; inspect the project first.
+2. Pick the target framework and launch target. Do not assume `net11.0`; inspect the project first.
 
    ```bash
    grep -i "TargetFramework" *.csproj Directory.Build.props 2>/dev/null
    ```
 
-3. Start or select the device/emulator. For Android and iOS, avoid reusing a simulator/emulator that is already running another app under investigation.
+3. Start or select the device/emulator. For Android, iOS, and tvOS, avoid reusing a simulator/emulator that is already running another app under investigation.
 
 4. Launch the app and keep the launch process alive when required.
 
@@ -94,6 +95,7 @@ for MAUI DevFlow product feedback. Do not run it automatically.
 - Do not reuse a busy simulator/emulator when multiple MAUI apps or agents may be running.
 - Do not debug Blazor WebView DOM issues through the native visual tree alone; use the WebView/CDP commands.
 - Do not drive key app flows by coordinates when AutomationIds are available or can be added.
+- For tvOS, use element tap/fill/back for app automation. The MCP `maui_key` tool does not inject Siri Remote navigation; arrow/Return/Escape are manual Simulator shortcuts, not DevFlow key events. Read the tvOS section in `references/ios-and-mac.md` before deploying or recording.
 
 ## Stop Signals
 
@@ -109,7 +111,7 @@ Load these only when needed:
 - `references/setup.md` - detailed integration, package, entitlement, and update notes.
 - `references/connectivity.md` - broker, agent, port, Android forwarding, and "no agents connected" recovery.
 - `references/android.md` - Android SDK, emulator, adb, build, deploy, and port forwarding details.
-- `references/ios-and-mac.md` - iOS simulator, Mac Catalyst, permissions, entitlements, and Apple tooling.
+- `references/ios-and-mac.md` - iOS/tvOS simulators, Apple TV capture/recording and input limits, Mac Catalyst, permissions, entitlements, and Apple tooling.
 - `references/macos.md` - macOS AppKit project shape, launch model, and troubleshooting.
 - `references/linux.md` - GTK/Linux launch, packages, and WebKitGTK notes.
 - `references/batch.md` - batching multiple DevFlow UI/WebView operations.

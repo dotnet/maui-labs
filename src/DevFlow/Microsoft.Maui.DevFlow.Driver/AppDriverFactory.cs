@@ -12,9 +12,10 @@ public static class AppDriverFactory
             "maccatalyst" or "mac" or "catalyst" => new MacCatalystAppDriver(),
             "android" => new AndroidAppDriver(),
             "ios" or "iossimulator" => new iOSSimulatorAppDriver(),
+            "tvos" or "tvossimulator" => new TvOSSimulatorAppDriver(),
             "windows" or "win" or "winui" or "wpf" => new WindowsAppDriver(),
             "linux" or "gtk" => new LinuxAppDriver(),
-            _ => throw new ArgumentException($"Unknown platform: {platform}. Supported: maccatalyst, android, ios, windows, wpf, linux")
+            _ => throw new ArgumentException($"Unknown platform: {platform}. Supported: maccatalyst, android, ios, tvos, windows, wpf, linux")
         };
     }
 }

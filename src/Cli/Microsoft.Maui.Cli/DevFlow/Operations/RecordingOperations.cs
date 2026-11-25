@@ -7,9 +7,8 @@ internal sealed class RecordingOperations(
     Func<RecordingState?> readState)
 {
     internal static IAppDriver CreateDefaultDriver(string platform) =>
-        platform.Equals("ios", StringComparison.OrdinalIgnoreCase)
-            || platform.Equals("iossimulator", StringComparison.OrdinalIgnoreCase)
-            ? new RecordingIOSSimulatorAppDriver()
+        HostOperations.IsAppleSimulatorPlatform(platform)
+            ? new RecordingIOSSimulatorAppDriver(platform.StartsWith("tvos", StringComparison.OrdinalIgnoreCase))
             : AppDriverFactory.Create(platform);
 
     internal async Task<string> StartAsync(string platform, string? device, string filename, int timeout)
@@ -39,13 +38,11 @@ internal sealed class RecordingOperations(
 
     internal static IAppDriver CreateDriver(Func<string, IAppDriver> factory, string platform, string? device, bool starting)
     {
-        var isIos = platform.Equals("ios", StringComparison.OrdinalIgnoreCase)
-            || platform.Equals("iossimulator", StringComparison.OrdinalIgnoreCase);
         if (starting
-            && isIos
+            && HostOperations.IsAppleSimulatorPlatform(platform)
             && string.IsNullOrWhiteSpace(device))
         {
-            throw new ArgumentException("Specify --device <simulator UDID> for iOS recording.", nameof(device));
+            throw new ArgumentException("Specify --device <simulator UDID> for iOS/tvOS recording.", nameof(device));
         }
 
         var driver = factory(platform);
@@ -111,8 +108,12 @@ internal sealed class RecordingOperations(
     }
 }
 
-internal sealed class RecordingIOSSimulatorAppDriver : iOSSimulatorAppDriver
+internal sealed class RecordingIOSSimulatorAppDriver(bool isTvOS = false) : iOSSimulatorAppDriver
 {
+    public override string Platform => isTvOS ? "tvOSSimulator" : base.Platform;
+
+    protected override string RecordingPlatform => isTvOS ? "tvos" : base.RecordingPlatform;
+
     public override async Task StartRecordingAsync(string outputFile, int timeoutSeconds = 30)
     {
         EnsureNotRecording();
@@ -151,7 +152,8 @@ internal sealed class RecordingIOSSimulatorAppDriver : iOSSimulatorAppDriver
             RecordingPid = process.Id,
             WatchdogPid = watchdogPid,
             OutputFile = fullPath,
-            Platform = "ios",
+            Platform = RecordingPlatform,
+            Serial = DeviceUdid,
             StartedAt = DateTimeOffset.UtcNow,
             TimeoutSeconds = timeoutSeconds,
         });

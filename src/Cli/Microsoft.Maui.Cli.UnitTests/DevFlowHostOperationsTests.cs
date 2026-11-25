@@ -10,6 +10,67 @@ namespace Microsoft.Maui.Cli.UnitTests;
 [Collection("CLI")]
 public sealed class HostOperationsTests
 {
+    [Fact]
+    public async Task ResolveUdid_UsesSelectedAppleTVAgentInsteadOfAnotherBootedSimulator()
+    {
+        var status = new AgentStatus
+        {
+            Device = new() { Platform = "tvOS", DeviceType = "Virtual", Id = "SELECTED-TV" }
+        };
+
+        Assert.Equal("SELECTED-TV", await HostOperations.ResolveUdidAsync(null, status));
+    }
+
+    [Fact]
+    public async Task ResolveUdid_PhysicalAppleTV_DoesNotFallBackToSimulator()
+    {
+        var status = new AgentStatus
+        {
+            Device = new() { Platform = "tvOS", DeviceType = "Physical" }
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => HostOperations.ResolveUdidAsync(null, status));
+    }
+
+    [Theory]
+    [InlineData("tvos", "TV")]
+    [InlineData("ios", "PHONE")]
+    public void SelectBootedSimulator_FiltersRuntimeInsteadOfTakingFirstDevice(string platform, string expected)
+    {
+        var json = """
+            {"devices":{
+              "com.apple.CoreSimulator.SimRuntime.iOS-27-2":[{"udid":"PHONE","state":"Booted"}],
+              "com.apple.CoreSimulator.SimRuntime.tvOS-27-2":[{"udid":"TV","state":"Booted"}]
+            }}
+            """;
+
+        Assert.Equal(expected, HostOperations.SelectBootedSimulator(json, platform));
+        Assert.Throws<InvalidOperationException>(() => HostOperations.SelectBootedSimulator(json));
+    }
+
+    [Fact]
+    public void SelectBootedSimulator_AmbiguousAppleTVs_RequiresExplicitTarget()
+    {
+        var json = """
+            {"devices":{"com.apple.CoreSimulator.SimRuntime.tvOS-27-2":[
+              {"udid":"TV-1","state":"Booted"},{"udid":"TV-2","state":"Booted"}
+            ]}}
+            """;
+
+        Assert.Throws<InvalidOperationException>(() => HostOperations.SelectBootedSimulator(json, "tvos"));
+    }
+
+    [Fact]
+    public async Task AlertPlatform_TvOS_DoesNotFallBackToDesktopOrIos()
+    {
+        var operations = new HostOperations(() => Task.FromResult<AgentStatus?>(new()
+        {
+            Device = new() { Platform = "tvOS", DeviceType = "Virtual" }
+        }));
+
+        await Assert.ThrowsAsync<NotSupportedException>(() => operations.ResolveAlertPlatformAsync(null, null));
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

@@ -522,12 +522,9 @@ public class AppleProvider : IAppleProvider
 
 	/// <inheritdoc />
 	/// <remarks>
-	/// Scoped to iOS because <see cref="GetDevices"/> tags every simulator and physical device with
-	/// <see cref="Platforms.iOS"/>. tvOS/watchOS/visionOS simulators are returned by
-	/// <c>simctl</c> but are not yet recognized in the shared Platforms model; when they are,
-	/// add them both here and to the tagging below.
+	/// Simulator discovery supports iOS and tvOS; physical device discovery is currently iOS-only.
 	/// </remarks>
-	public IReadOnlyList<string> SupportedPlatforms { get; } = [Platforms.iOS];
+	public IReadOnlyList<string> SupportedPlatforms { get; } = [Platforms.iOS, Platforms.tvOS];
 
 	public List<Device> GetDevices()
 	{
@@ -546,37 +543,41 @@ public class AppleProvider : IAppleProvider
 		if (_simulatorService is null)
 			return new List<Device>();
 
-		var sims = _simulatorService.List(availableOnly: true);
-		return sims.Select(s =>
-		{
-			// Scope to iOS simulators only for now; tvOS/watchOS/visionOS
-			// are not yet recognized in the shared Platforms model.
-			var platform = Platforms.iOS;
+		return GetSimulators(availableOnly: true)
+			.Where(s => s.Platform?.Equals("iOS", StringComparison.OrdinalIgnoreCase) == true
+				|| s.Platform?.Equals("tvOS", StringComparison.OrdinalIgnoreCase) == true)
+			.Select(ToSimulatorDevice).ToList();
+	}
 
-			return new Device
+	internal static Device ToSimulatorDevice(SimulatorInfo s)
+	{
+		var platform = s.Platform?.Equals("tvOS", StringComparison.OrdinalIgnoreCase) == true
+			? Platforms.tvOS : Platforms.iOS;
+
+		return new Device
+		{
+			Id = s.Udid,
+			Name = s.Name,
+			Platforms = new[] { platform },
+			Type = DeviceType.Simulator,
+			State = s.IsBooted ? DeviceState.Booted : DeviceState.Shutdown,
+			IsEmulator = true,
+			IsRunning = s.IsBooted,
+			ConnectionType = Models.ConnectionType.Local,
+			EmulatorId = s.Udid,
+			Model = s.DeviceTypeIdentifier,
+			Manufacturer = "Apple",
+			Version = s.OSVersion,
+			VersionName = s.Platform != null ? $"{s.Platform} {s.OSVersion}" : s.OSVersion,
+			Idiom = platform == Platforms.tvOS ? DeviceIdiom.TV
+				: s.DeviceTypeIdentifier?.Contains("iPad") == true ? DeviceIdiom.Tablet : DeviceIdiom.Phone,
+			Details = new JsonObject
 			{
-				Id = s.Udid,
-				Name = s.Name,
-				Platforms = new[] { platform },
-				Type = DeviceType.Simulator,
-				State = s.IsBooted ? DeviceState.Booted : DeviceState.Shutdown,
-				IsEmulator = true,
-				IsRunning = s.IsBooted,
-				ConnectionType = Models.ConnectionType.Local,
-				EmulatorId = s.Udid,
-				Model = s.DeviceTypeIdentifier,
-				Manufacturer = "Apple",
-				Version = s.OSVersion,
-				VersionName = s.Platform != null ? $"{s.Platform} {s.OSVersion}" : s.OSVersion,
-				Idiom = s.DeviceTypeIdentifier?.Contains("iPad") == true ? DeviceIdiom.Tablet : DeviceIdiom.Phone,
-				Details = new JsonObject
-				{
-					["runtime"] = s.RuntimeIdentifier ?? "",
-					["device_type"] = s.DeviceTypeIdentifier ?? "",
-					["platform"] = s.Platform ?? ""
-				}
-			};
-		}).ToList();
+				["runtime"] = s.RuntimeIdentifier ?? "",
+				["device_type"] = s.DeviceTypeIdentifier ?? "",
+				["platform"] = s.Platform ?? ""
+			}
+		};
 	}
 
 	// devicectl also lists remembered devices that are not currently attached or reachable.
