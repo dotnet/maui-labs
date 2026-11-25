@@ -29,7 +29,7 @@
     <IsShipping>true</IsShipping>
     <IsAotCompatible>true</IsAotCompatible>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1572;CS1573;IL2104</NoWarn>
+    <NoWarn>$(NoWarn);CS1572;CS1573</NoWarn>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
@@ -81,11 +81,25 @@
        untrimmed in a subdirectory so the native CLI can launch it through the installed SDK. -->
   <Target Name="PublishManagedGoServer"
           AfterTargets="Publish"
-          Condition="'$(DesignTimeBuild)' != 'true'">
+          Condition="'$(PublishAot)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <!-- InvariantGlobalization is reset so an outer -p: override does not leak into the server's runtimeconfig. -->
     <MSBuild Projects="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj"
              Targets="Publish"
              BuildInParallel="false"
-             Properties="Configuration=$(Configuration);TargetFramework=net11.0;RuntimeIdentifier=;SelfContained=false;PublishAot=false;PublishTrimmed=false;RollForward=Major;PublishDir=$(PublishDir)go-server/" />
+             Properties="Configuration=$(Configuration);TargetFramework=net11.0;RuntimeIdentifier=;SelfContained=false;PublishAot=false;PublishTrimmed=false;InvariantGlobalization=false;RollForward=Major;PublishDir=$(PublishDir)go-server/" />
+  </Target>
+
+  <!-- NativeAOT links ProfilingHelper into the executable, so its managed assembly is no longer
+       in the publish output. `maui profile` injects that assembly into the app being profiled
+       (see ProfileCommandBuildInjectionResolver), so ship the untrimmed copy under Build/. -->
+  <Target Name="PublishManagedProfilingHelper"
+          AfterTargets="Publish"
+          Condition="'$(PublishAot)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_ProfilingHelperAssembly Include="@(ReferencePath)" Condition="'%(Filename)' == 'Microsoft.Maui.ProfilingHelper'" />
+    </ItemGroup>
+    <Error Condition="'@(_ProfilingHelperAssembly)' == ''" Text="Microsoft.Maui.ProfilingHelper.dll was not found among the resolved references; it must ship beside the NativeAOT CLI." />
+    <Copy SourceFiles="@(_ProfilingHelperAssembly)" DestinationFolder="$(PublishDir)Build/" />
   </Target>
 
   <ItemGroup>

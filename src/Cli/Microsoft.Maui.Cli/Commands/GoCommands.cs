@@ -152,7 +152,14 @@ public static class GoCommands
 				return 1;
 			}
 
-			var startInfo = new ProcessStartInfo("dotnet")
+			var dotnet = Microsoft.Maui.Cli.Utils.ProcessRunner.GetCommandPath("dotnet");
+			if (dotnet is null)
+			{
+				Console.Error.WriteLine("Error: 'maui go' needs the .NET SDK (the 'dotnet' command) to compile and run your app, but it was not found on PATH.");
+				return 1;
+			}
+
+			var startInfo = new ProcessStartInfo(dotnet)
 			{
 				UseShellExecute = false,
 				WorkingDirectory = Directory.GetCurrentDirectory(),

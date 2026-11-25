@@ -85,7 +85,6 @@
     <WebsocketClientVersion>5.3.0</WebsocketClientVersion>
     <XenoAtomTerminalUIVersion>1.7.1</XenoAtomTerminalUIVersion>
     <ModelContextProtocolVersion>1.1.0</ModelContextProtocolVersion>
-    <InteropUIAutomationClientVersion>10.19041.0</InteropUIAutomationClientVersion>
     <MicrosoftCodeAnalysisCSharpVersion>4.14.0</MicrosoftCodeAnalysisCSharpVersion>
     <MicrosoftOpenApiVersion>3.5.4</MicrosoftOpenApiVersion>
     <YamlDotNetVersion>16.3.0</YamlDotNetVersion>

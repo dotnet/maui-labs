@@ -98,7 +98,7 @@ internal static class AiAssetRegistry
 				foreach (var environment in oldEnvironments)
 					if (environment?.GetValue<string>() is { } name) environments.Add(name);
 			if (previous is not null) entries.Remove(previous);
-			entries.Add(new JsonObject
+			entries.Add((JsonNode)new JsonObject
 			{
 				["kind"] = asset.Kind.ToString().ToLowerInvariant(), ["name"] = asset.Name,
 				["scope"] = asset.Scope, ["path"] = relativePath, ["entryKey"] = asset.EntryKey,

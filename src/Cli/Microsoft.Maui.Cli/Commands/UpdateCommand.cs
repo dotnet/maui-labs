@@ -30,7 +30,12 @@ internal static class UpdateCommand
 		var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 		var shim = Path.Combine(toolHome, OperatingSystem.IsWindows() ? "maui.exe" : "maui");
 		var store = Path.GetFullPath(Path.Combine(toolHome, ".store", PackageId.ToLowerInvariant())) + Path.DirectorySeparatorChar;
-		return string.Equals(Path.GetFullPath(processPath), Path.GetFullPath(shim), comparison)
+		// A framework-dependent install launches through an apphost shim (so the process is the shim),
+		// but a NativeAOT install gets a symlink (Unix) or maui.cmd (Windows) to the executable inside
+		// the package, so the process itself lives in the tool store.
+		var isShim = string.Equals(Path.GetFullPath(processPath), Path.GetFullPath(shim), comparison);
+		var isStoreExecutable = Path.GetFullPath(processPath).StartsWith(store, comparison);
+		return (isShim || isStoreExecutable)
 			&& Path.GetFullPath(baseDirectory).StartsWith(store, comparison);
 	}
 

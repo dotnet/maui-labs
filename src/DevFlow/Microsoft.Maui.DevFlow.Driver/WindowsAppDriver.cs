@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 #if WINDOWS_BUILD
-using Interop.UIAutomationClient;
 using Microsoft.Maui.DevFlow.Driver.Windows;
 #endif
 

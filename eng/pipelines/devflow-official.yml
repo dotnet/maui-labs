@@ -91,7 +91,6 @@ extends:
       - template: /eng/common/templates-official/jobs/jobs.yml@self
         parameters:
           enableMicrobuild: true
-          enableMicrobuildForMacAndLinux: true
           enablePublishBuildAssets: true
           enablePublishBuildArtifacts: true
           enablePublishTestResults: true
@@ -140,6 +139,11 @@ extends:
 
           - job: Cli
             displayName: Cli - Windows
+            # The macOS and Linux jobs build the NativeAOT packages for their own OS; this job
+            # signs and publishes every Cli package so MicroBuild is only needed on Windows.
+            dependsOn:
+            - Cli_macOS
+            - Cli_Linux
             pool:
               name: NetCore1ESPool-Internal
               demands: ImageOverride -equals windows.vs2026.amd64
@@ -152,6 +156,16 @@ extends:
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
             - template: /eng/pipelines/install-dotnet-sdk.yml@self
+            - task: DownloadPipelineArtifact@2
+              displayName: Download macOS NativeAOT Cli package
+              inputs:
+                artifact: CliMacNativeAotPackages
+                path: '$(Build.ArtifactStagingDirectory)/CliRidArtifacts/packages/$(_BuildConfig)/Shipping'
+            - task: DownloadPipelineArtifact@2
+              displayName: Download Linux NativeAOT Cli package
+              inputs:
+                artifact: CliLinuxNativeAotPackages
+                path: '$(Build.ArtifactStagingDirectory)/CliRidArtifacts/packages/$(_BuildConfig)/Shipping'
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -181,6 +195,8 @@ extends:
                 & eng/common/dotnet.ps1 @commonArguments
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+                # This is a second Arcade publish in the same job: give it its own asset manifest and binlog
+                # so it does not overwrite the first run's (which carries Microsoft.Maui.ProfilingHelper).
                 & eng/common/build.ps1 `
                   -configuration '$(_BuildConfig)' `
                   -restore `
@@ -188,8 +204,10 @@ extends:
                   -publish `
                   -ci `
                   -prepareMachine `
+                  -binaryLogName 'CliRidPackages.binlog' `
                   -projects '$(Build.SourcesDirectory)/src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj' `
                   "/p:ArtifactsDir=$artifactsDir" `
+                  '/p:AssetManifestFileName=Cli_RidPackages.xml' `
                   '/p:OfficialBuildId=$(BUILD.BUILDNUMBER)' `
                   '/p:TeamName=$(_TeamName)' `
                   '/p:DotNetSignType=$(_SignType)'
@@ -202,12 +220,17 @@ extends:
               name: Azure Pipelines
               vmImage: macos-latest-internal
               os: macOS
+            templateContext:
+              outputs:
+              - output: pipelineArtifact
+                displayName: Publish macOS NativeAOT Cli package
+                targetPath: '$(Build.ArtifactStagingDirectory)/CliNativeAotPackages'
+                artifactName: CliMacNativeAotPackages
             strategy:
               matrix:
                 Release:
                   _BuildConfig: Release
-                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
-                    /p:TeamName=$(_TeamName)
+                  _OfficialBuildArgs: /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
             - template: /eng/pipelines/install-dotnet-sdk.yml@self
@@ -218,18 +241,13 @@ extends:
                   /p:ArtifactsDir='$(Build.ArtifactStagingDirectory)/CliRidArtifacts' \
                   $(_OfficialBuildArgs)
               displayName: Pack Cli NativeAOT for macOS
-            - script: |
-                ./eng/common/build.sh \
-                  --restore \
-                  --sign \
-                  --publish \
-                  --ci \
-                  --prepareMachine \
-                  --configuration $(_BuildConfig) \
-                  --projects $(Build.SourcesDirectory)/src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj \
-                  /p:ArtifactsDir='$(Build.ArtifactStagingDirectory)/CliRidArtifacts' \
-                  $(_OfficialBuildArgs)
-              displayName: Sign and publish Cli macOS package
+            - task: CopyFiles@2
+              displayName: Stage macOS NativeAOT Cli package
+              inputs:
+                SourceFolder: '$(Build.ArtifactStagingDirectory)/CliRidArtifacts/packages/$(_BuildConfig)/Shipping'
+                Contents: Microsoft.Maui.Cli.osx-arm64.*.nupkg
+                TargetFolder: '$(Build.ArtifactStagingDirectory)/CliNativeAotPackages'
+                OverWrite: true
 
           - job: Cli_Linux
             displayName: Cli NativeAOT - Linux
@@ -237,12 +255,17 @@ extends:
               name: NetCore1ESPool-Internal
               demands: ImageOverride -equals build.ubuntu.2204.amd64
               os: linux
+            templateContext:
+              outputs:
+              - output: pipelineArtifact
+                displayName: Publish Linux NativeAOT Cli package
+                targetPath: '$(Build.ArtifactStagingDirectory)/CliNativeAotPackages'
+                artifactName: CliLinuxNativeAotPackages
             strategy:
               matrix:
                 Release:
                   _BuildConfig: Release
-                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
-                    /p:TeamName=$(_TeamName)
+                  _OfficialBuildArgs: /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
             - template: /eng/pipelines/install-dotnet-sdk.yml@self
@@ -257,18 +280,13 @@ extends:
                   /p:ArtifactsDir='$(Build.ArtifactStagingDirectory)/CliRidArtifacts' \
                   $(_OfficialBuildArgs)
               displayName: Pack Cli NativeAOT for Linux
-            - script: |
-                ./eng/common/build.sh \
-                  --restore \
-                  --sign \
-                  --publish \
-                  --ci \
-                  --prepareMachine \
-                  --configuration $(_BuildConfig) \
-                  --projects $(Build.SourcesDirectory)/src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj \
-                  /p:ArtifactsDir='$(Build.ArtifactStagingDirectory)/CliRidArtifacts' \
-                  $(_OfficialBuildArgs)
-              displayName: Sign and publish Cli Linux package
+            - task: CopyFiles@2
+              displayName: Stage Linux NativeAOT Cli package
+              inputs:
+                SourceFolder: '$(Build.ArtifactStagingDirectory)/CliRidArtifacts/packages/$(_BuildConfig)/Shipping'
+                Contents: Microsoft.Maui.Cli.linux-x64.*.nupkg
+                TargetFolder: '$(Build.ArtifactStagingDirectory)/CliNativeAotPackages'
+                OverWrite: true
 
           - job: AI
             displayName: AI Extensions - Windows

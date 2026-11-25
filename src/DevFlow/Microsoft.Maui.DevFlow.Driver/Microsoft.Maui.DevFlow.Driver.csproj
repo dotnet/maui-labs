@@ -9,6 +9,7 @@
     <IsPackable>false</IsPackable>
     <IsPackable Condition="'$(PackDriverNuGet)' == 'true'">true</IsPackable>
     <IsAotCompatible>true</IsAotCompatible>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <PackageId>Microsoft.Maui.DevFlow.Driver</PackageId>
     <IsShipping>true</IsShipping>
@@ -19,7 +20,6 @@
   <ItemGroup>
     <PackageReference Include="System.Text.Json" VersionOverride="$(SystemTextJsonCompatibilityVersion)" />
     <PackageReference Include="Xamarin.Android.Tools.AndroidSdk" PrivateAssets="all" GeneratePathProperty="true" />
-    <PackageReference Include="Interop.UIAutomationClient" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
   </ItemGroup>
 
   <ItemGroup>
