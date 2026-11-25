@@ -114,12 +114,17 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             "contentview.capture-control");
 
         var clips = clipNative.Layer?.MasksToBounds == true;
+        var outsideRegion = new CGRect(clipNative.Frame.Right + 4, clipNative.Frame.Y + 60, 24, 60);
         _clip.IsClippedToBounds = false;
         var unclipped = clipNative.Layer?.MasksToBounds == false;
-        var disabled = await CaptureAsync(context, nativeWindow, "unclipped.png");
+        // A layer-only change (MasksToBounds) can reach the window server a frame late; wait for it
+        // rather than reading back the previous composited frame.
+        var disabled = await CaptureSettledAsync(context, nativeWindow, "unclipped.png",
+            image => CountPixels(image, nativeWindow, windowContent, IsLavender, outsideRegion) > 5);
         _clip.IsClippedToBounds = true;
         var clipsAgain = clipNative.Layer?.MasksToBounds == true;
-        var restored = await CaptureAsync(context, nativeWindow, "restored.png");
+        var restored = await CaptureSettledAsync(context, nativeWindow, "restored.png",
+            image => CountPixels(image, nativeWindow, windowContent, IsLavender, outsideRegion) == 0);
 
         context.Assert(NSThread.IsMain, "Transform updates must run on AppKit's main thread.",
             "contentview.ui-thread");
@@ -128,7 +133,6 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         await RuntimeTestContext.FlushMainQueueAsync();
         windowContent.LayoutSubtreeIfNeeded();
         var translated = await CaptureAsync(context, nativeWindow, "translated.png");
-        var outsideRegion = new CGRect(clipNative.Frame.Right + 4, clipNative.Frame.Y + 60, 24, 60);
         var initialOutsidePixels = CountPixels(initial, nativeWindow, windowContent, IsLavender, outsideRegion);
         var disabledOutsidePixels = CountPixels(disabled, nativeWindow, windowContent, IsLavender, outsideRegion);
         var restoredOutsidePixels = CountPixels(restored, nativeWindow, windowContent, IsLavender, outsideRegion);
@@ -962,6 +966,20 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
     static bool FramesMatch(CGRect actual, CGRect expected) =>
         Math.Abs(actual.X - expected.X) < 0.0001 && Math.Abs(actual.Y - expected.Y) < 0.0001 &&
         Math.Abs(actual.Width - expected.Width) < 0.0001 && Math.Abs(actual.Height - expected.Height) < 0.0001;
+
+    // Retries a capture for a bounded time until it shows the expected state. When the state never
+    // appears (the unfixed baseline), the last frame is returned and the caller's assertion decides.
+    async Task<RuntimeBitmap> CaptureSettledAsync(RuntimeTestContext context, NSWindow window, string name,
+        Func<RuntimeBitmap, bool> settled)
+    {
+        var image = await CaptureAsync(context, window, name);
+        for (var attempt = 1; attempt < 20 && !settled(image); attempt++)
+        {
+            await Task.Delay(16);
+            image = await CaptureAsync(context, window, name);
+        }
+        return image;
+    }
 
     async Task<RuntimeBitmap> CaptureAsync(RuntimeTestContext context, NSWindow window, string name)
     {
