@@ -6,6 +6,8 @@ public enum ResponseUpdateTypeNative: Int, Sendable {
     case content = 0
     case toolCall = 1
     case toolResult = 2
+    /// A tool call that was not executed natively and must be invoked by the caller.
+    case pendingToolCall = 3
 }
 
 @objc(ResponseUpdateNative)

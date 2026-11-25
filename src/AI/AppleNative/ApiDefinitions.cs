@@ -158,6 +158,10 @@ interface ChatOptionsNative
 	[Export("toolCallingMode", ArgumentSemantic.Assign)]
 	ToolCallingModeNative ToolCallingMode { get; set; }
 
+	// @property (nonatomic) BOOL approvalMode;
+	[Export("approvalMode")]
+	bool ApprovalMode { get; set; }
+
 	// @property (nonatomic, strong) NSNumber * _Nullable topK;
 	[NullAllowed, Export("topK", ArgumentSemantic.Strong)]
 	NSNumber TopK { get; set; }
@@ -203,6 +207,10 @@ interface ChatResponseNative
 	// @property (nonatomic, readonly, strong) UsageDetailsNative * _Nullable usage;
 	[NullAllowed, Export("usage", ArgumentSemantic.Strong)]
 	UsageDetailsNative Usage { get; }
+
+	// @property (nonatomic) BOOL hasPendingToolCalls;
+	[Export("hasPendingToolCalls")]
+	bool HasPendingToolCalls { get; set; }
 
 	// - (nonnull instancetype)initWithMessages:(NSArray<ChatMessageNative *> * _Nonnull)messages OBJC_DESIGNATED_INITIALIZER;
 	[Export("initWithMessages:")]

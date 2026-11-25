@@ -29,6 +29,10 @@ public class AppleIntelligenceChatClientFunctionCallingTestsBase : ChatClientFun
 
 	protected override bool PreservesToolCancellation => true;
 
+	// OS 26 has no tool-call hook, so approval-required tools still run natively (with a warning).
+	protected override bool SupportsToolApproval =>
+		OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27);
+
 	// Foundation Models runs native tools inside a session that can also generate a guided schema.
 	protected override bool SupportsStructuredOutputWithTools => true;
 	// The on-device model calls every available tool for a schema prompt that needs none
