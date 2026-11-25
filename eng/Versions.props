@@ -50,17 +50,19 @@
     <XamarinAndroidXLifecycleServiceVersion>2.11.0.1</XamarinAndroidXLifecycleServiceVersion>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
-    <MicrosoftExtensionsDependencyInjectionVersion>11.0.1</MicrosoftExtensionsDependencyInjectionVersion>
-    <MicrosoftExtensionsConfigurationVersion>11.0.1</MicrosoftExtensionsConfigurationVersion>
-    <MicrosoftExtensionsHttpVersion>11.0.1</MicrosoftExtensionsHttpVersion>
-    <MicrosoftExtensionsHostingVersion>11.0.1</MicrosoftExtensionsHostingVersion>
-    <MicrosoftExtensionsLoggingAbstractionsVersion>11.0.1</MicrosoftExtensionsLoggingAbstractionsVersion>
-    <MicrosoftExtensionsLoggingConsoleVersion>11.0.1</MicrosoftExtensionsLoggingConsoleVersion>
-    <MicrosoftExtensionsLoggingVersion>11.0.1</MicrosoftExtensionsLoggingVersion>
-    <MicrosoftExtensionsLoggingDebugVersion>11.0.1</MicrosoftExtensionsLoggingDebugVersion>
-    <MicrosoftExtensionsConfigurationJsonVersion>11.0.1</MicrosoftExtensionsConfigurationJsonVersion>
-    <MicrosoftExtensionsConfigurationUserSecretsVersion>11.0.1</MicrosoftExtensionsConfigurationUserSecretsVersion>
-    <SystemTextJsonVersion>11.0.1</SystemTextJsonVersion>
+    <!-- These become package dependencies of shipping packages (DevFlow agents), so they must be
+         versions that are published on nuget.org, or consumers cannot restore them. -->
+    <MicrosoftExtensionsDependencyInjectionVersion>11.0.0</MicrosoftExtensionsDependencyInjectionVersion>
+    <MicrosoftExtensionsConfigurationVersion>11.0.0</MicrosoftExtensionsConfigurationVersion>
+    <MicrosoftExtensionsHttpVersion>11.0.0</MicrosoftExtensionsHttpVersion>
+    <MicrosoftExtensionsHostingVersion>11.0.0</MicrosoftExtensionsHostingVersion>
+    <MicrosoftExtensionsLoggingAbstractionsVersion>11.0.0</MicrosoftExtensionsLoggingAbstractionsVersion>
+    <MicrosoftExtensionsLoggingConsoleVersion>11.0.0</MicrosoftExtensionsLoggingConsoleVersion>
+    <MicrosoftExtensionsLoggingVersion>11.0.0</MicrosoftExtensionsLoggingVersion>
+    <MicrosoftExtensionsLoggingDebugVersion>11.0.0</MicrosoftExtensionsLoggingDebugVersion>
+    <MicrosoftExtensionsConfigurationJsonVersion>11.0.0</MicrosoftExtensionsConfigurationJsonVersion>
+    <MicrosoftExtensionsConfigurationUserSecretsVersion>11.0.0</MicrosoftExtensionsConfigurationUserSecretsVersion>
+    <SystemTextJsonVersion>11.0.0</SystemTextJsonVersion>
     <!-- The CLI and portable DevFlow client retain older TFMs and need a compatible BCL graph. -->
     <MicrosoftExtensionsCompatibilityVersion>10.0.5</MicrosoftExtensionsCompatibilityVersion>
     <SystemTextJsonCompatibilityVersion>10.0.5</SystemTextJsonCompatibilityVersion>
