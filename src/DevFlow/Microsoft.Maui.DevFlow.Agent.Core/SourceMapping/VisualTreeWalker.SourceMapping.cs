@@ -6,6 +6,8 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 public partial class VisualTreeWalker
 {
     private readonly ConditionalWeakTable<object, SourceTextEdit> _sourceTextEdits = new();
+    private readonly ConditionalWeakTable<object, SourceObservation> _sourceObservations = new();
+    private readonly object _sourceObservationsGate = new();
 
     public IXamlSourceMapProvider? SourceMapProvider { get; set; }
 
@@ -76,46 +78,103 @@ public partial class VisualTreeWalker
     {
         if (SourceMapProvider is null || roots is null)
             return;
-        foreach (var root in roots)
-            ApplySourceMapToNode(root, default);
+
+        var registry = XamlSourceMapRegistry.Instance;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var generation = registry.Generation;
+            var observations = new Dictionary<object, SourceObservation?>(ReferenceEqualityComparer.Instance);
+            // Incremental XAML Hot Reload can leave existing MAUI source registrations unchanged.
+            // A regenerated map needs independent evidence before it can supply a new source hash.
+            foreach (var root in roots)
+                ApplySourceMapToNode(root, default, parentIdentity: null, generation, observations);
+            if (registry.Generation == generation)
+            {
+                lock (_sourceObservationsGate)
+                {
+                    if (registry.Generation == generation)
+                    {
+                        foreach (var (identity, observation) in observations)
+                        {
+                            if (!_sourceObservations.TryGetValue(identity, out var previous)
+                                || previous.Generation <= generation)
+                            {
+                                if (observation is null)
+                                    _sourceObservations.Remove(identity);
+                                else
+                                    _sourceObservations.AddOrUpdate(identity, observation);
+                            }
+                        }
+                    }
+                }
+                if (registry.Generation == generation)
+                    return;
+            }
+            foreach (var root in roots)
+                ClearSourceTree(root);
+        }
     }
 
-    private void ApplySourceMapToNode(ElementInfo info, XamlSourceContext context)
+    private void ApplySourceMapToNode(
+        ElementInfo info,
+        XamlSourceContext context,
+        object? parentIdentity,
+        long generation,
+        Dictionary<object, SourceObservation?> observations)
     {
-        var childContext = AttachSource(info, context);
+        var childContext = AttachSource(info, context, parentIdentity, generation, observations);
         if (info.Children is null)
             return;
 
         var alignment = AlignSourceChildren(info.Children, childContext);
+        var childParent = !IsSyntheticElement(info) && info.IdentityToken is not null
+            ? info.IdentityToken
+            : parentIdentity;
         for (var index = 0; index < info.Children.Count; index++)
         {
             ApplySourceMapToNode(
                 info.Children[index],
                 alignment is not null && alignment[index] >= 0
                     ? childContext.ForChild(alignment[index])
-                    : default);
+                    : childContext.WithoutMatch(),
+                childParent,
+                generation,
+                observations);
         }
     }
 
     private XamlSourceContext AttachSource(
         ElementInfo info,
-        XamlSourceContext context)
+        XamlSourceContext context,
+        object? parentIdentity,
+        long generation,
+        Dictionary<object, SourceObservation?> observations)
     {
-        XamlSourceMap? childMap = null;
-        var childBasePath = string.Empty;
+        ClearSource(info);
+        var childMap = context.Map;
+        var childBasePath = context.Path;
         var expectedChildCount = -1;
+        var childMatched = false;
         var attached = false;
+        XamlSourceMap? selectedMap = null;
+        XamlSourceEntry? selectedEntry = null;
 
         if (context.Matched
             && context.Map is not null
             && context.Map.TryGet(context.Path, out var entry)
             && IdentityMatches(entry, info))
         {
-            AttachLocation(info, context.Map, entry);
-            attached = true;
+            if (generation == 0 || HasPriorSourceIdentity(info, parentIdentity, context.Map, entry, generation))
+            {
+                AttachLocation(info, context.Map, entry);
+                selectedMap = context.Map;
+                selectedEntry = entry;
+                attached = true;
+            }
             childMap = context.Map;
             childBasePath = context.Path;
             expectedChildCount = entry.ChildCount;
+            childMatched = true;
         }
 
         var ownMap = info.FullType is not null
@@ -123,15 +182,74 @@ public partial class VisualTreeWalker
             : null;
         if (ownMap is not null && ownMap.TryGet(string.Empty, out var rootEntry))
         {
-            if (!attached)
+            if (!attached && (generation == 0 || HasPriorSourceIdentity(info, parentIdentity, ownMap, rootEntry, generation)))
+            {
                 AttachLocation(info, ownMap, rootEntry);
+                selectedMap = ownMap;
+                selectedEntry = rootEntry;
+            }
             childMap = ownMap;
             childBasePath = string.Empty;
             expectedChildCount = rootEntry.ChildCount;
+            childMatched = true;
         }
-        else if (!attached)
+
+        if (generation == 0
+            && (HasDiagnosticsIdentity(context.Map) || HasDiagnosticsIdentity(ownMap))
+            && TryGetMauiSource(info, out var source))
         {
-            return default;
+            var sourceMap = MatchesDiagnosticsIdentity(context.Map, source)
+                ? context.Map
+                : MatchesDiagnosticsIdentity(ownMap, source) ? ownMap : null;
+            if (sourceMap is not null)
+            {
+                info.SourceFile = NormalizeSourceFile(sourceMap.File);
+                info.SourceLine = source.Line;
+                info.SourceColumn = source.Column;
+                info.SourceHash = sourceMap.ContentHash;
+                selectedMap = sourceMap;
+                selectedEntry = sourceMap.TryGetByLocation(source.Line, source.Column, out var sourceEntry)
+                    && (IdentityMatches(sourceEntry, info)
+                        || ReferenceEquals(sourceMap, ownMap)
+                        && ownMap!.TryGet(string.Empty, out var ownRoot)
+                        && ownRoot.Line == source.Line
+                        && ownRoot.Column == source.Column)
+                        ? sourceEntry
+                        : null;
+
+                if (ownMap is null
+                    && childMatched
+                    && ReferenceEquals(sourceMap, context.Map)
+                    && context.Map!.TryGet(context.Path, out var alignedEntry)
+                    && (alignedEntry.Line != source.Line || alignedEntry.Column != source.Column))
+                {
+                    childMatched = false;
+                }
+            }
+            else
+            {
+                ClearSource(info);
+                selectedMap = null;
+                selectedEntry = null;
+                if (ownMap is null)
+                    childMatched = false;
+            }
+        }
+
+        if (info.IdentityToken is { } identity)
+        {
+            observations[identity] = selectedMap is not null && selectedEntry is { } selected
+                ? new SourceObservation(
+                    NormalizeSourceFile(selectedMap.File),
+                    selectedMap.DiagnosticsPath,
+                    selectedMap.DiagnosticsAssembly,
+                    selected.QualifiedName,
+                    selected.DeclarationSignature,
+                    selected.AutomationId,
+                    parentIdentity is null ? null : new WeakReference<object>(parentIdentity),
+                    global::Microsoft.Maui.VisualDiagnostics.GetSourceInfo(identity),
+                    generation)
+                : null;
         }
 
         return childMap is null
@@ -139,8 +257,114 @@ public partial class VisualTreeWalker
             : new XamlSourceContext(
                 childMap,
                 childBasePath,
-                matched: true,
+                childMatched,
                 expectedChildCount);
+    }
+
+    // Structural alignment alone cannot prove that a changed declaration still denotes this object.
+    private bool HasPriorSourceIdentity(
+        ElementInfo info,
+        object? parentIdentity,
+        XamlSourceMap map,
+        XamlSourceEntry entry,
+        long generation)
+    {
+        if (info.IdentityToken is not { } identity
+            || !_sourceObservations.TryGetValue(identity, out var previous)
+            || (previous.Generation != generation && previous.Generation != generation - 1)
+            || !string.Equals(previous.File, NormalizeSourceFile(map.File), StringComparison.Ordinal)
+            || !string.Equals(previous.DiagnosticsPath, map.DiagnosticsPath, StringComparison.Ordinal)
+            || !string.Equals(previous.DiagnosticsAssembly, map.DiagnosticsAssembly, StringComparison.OrdinalIgnoreCase)
+            || previous.QualifiedName is null
+            || !string.Equals(previous.QualifiedName, entry.QualifiedName, StringComparison.Ordinal)
+            || !ReferenceEquals(previous.MauiSource, global::Microsoft.Maui.VisualDiagnostics.GetSourceInfo(identity))
+            || !SameParent(previous.Parent, parentIdentity))
+        {
+            return false;
+        }
+
+        return (previous.DeclarationSignature is not null
+                && string.Equals(previous.DeclarationSignature, entry.DeclarationSignature, StringComparison.Ordinal))
+            || (previous.AutomationId is not null
+                && string.Equals(previous.AutomationId, entry.AutomationId, StringComparison.Ordinal));
+    }
+
+    private static bool SameParent(WeakReference<object>? previous, object? current)
+        => previous is null
+            ? current is null
+            : current is not null && previous.TryGetTarget(out var parent) && ReferenceEquals(parent, current);
+
+    private sealed record SourceObservation(
+        string File,
+        string? DiagnosticsPath,
+        string? DiagnosticsAssembly,
+        string? QualifiedName,
+        string? DeclarationSignature,
+        string? AutomationId,
+        WeakReference<object>? Parent,
+        global::Microsoft.Maui.SourceInfo? MauiSource,
+        long Generation);
+
+    private static bool TryGetMauiSource(ElementInfo info, out MauiSourceLocation source)
+    {
+        source = default;
+        if (info.IdentityToken is null || IsSyntheticElement(info))
+            return false;
+
+        var diagnostics = global::Microsoft.Maui.VisualDiagnostics.GetSourceInfo(info.IdentityToken);
+        if (diagnostics?.SourceUri is not { } uri
+            || diagnostics.LineNumber <= 0
+            || diagnostics.LinePosition <= 0)
+        {
+            return false;
+        }
+
+        const string assemblyMarker = ";assembly=";
+        var value = uri.OriginalString;
+        var separator = value.LastIndexOf(assemblyMarker, StringComparison.OrdinalIgnoreCase);
+        if (separator <= 0 || separator + assemblyMarker.Length == value.Length)
+            return false;
+
+        var path = value[..separator].Replace('\\', '/');
+        if (path.StartsWith("/", StringComparison.Ordinal)
+            || path.Contains(':')
+            || path.Split('/').Any(static part => part.Length == 0 || part == "." || part == ".."))
+        {
+            return false;
+        }
+
+        source = new MauiSourceLocation(
+            path,
+            value[(separator + assemblyMarker.Length)..],
+            diagnostics.LineNumber,
+            diagnostics.LinePosition);
+        return true;
+    }
+
+    private static bool HasDiagnosticsIdentity(XamlSourceMap? map)
+        => map?.DiagnosticsPath is { Length: > 0 }
+            && map.DiagnosticsAssembly is { Length: > 0 };
+
+    private static bool MatchesDiagnosticsIdentity(XamlSourceMap? map, MauiSourceLocation source)
+        => HasDiagnosticsIdentity(map)
+            && string.Equals(map!.DiagnosticsPath, source.Path, StringComparison.Ordinal)
+            && string.Equals(map.DiagnosticsAssembly, source.Assembly, StringComparison.OrdinalIgnoreCase);
+
+    private static void ClearSourceTree(ElementInfo info)
+    {
+        ClearSource(info);
+        if (info.Children is null)
+            return;
+        foreach (var child in info.Children)
+            ClearSourceTree(child);
+    }
+
+    private static void ClearSource(ElementInfo info)
+    {
+        info.SourceFile = null;
+        info.SourceLine = null;
+        info.SourceColumn = null;
+        info.SourceHash = null;
     }
 
     private int[]? AlignSourceChildren(
@@ -337,6 +561,8 @@ public partial class VisualTreeWalker
 
     private sealed record SourceTextEdit(string File, int Line, int Column, string Hash, string Text);
 
+    private readonly record struct MauiSourceLocation(string Path, string Assembly, int Line, int Column);
+
     private readonly struct XamlSourceContext
     {
         public XamlSourceContext(
@@ -364,6 +590,9 @@ public partial class VisualTreeWalker
                     ChildPath(index),
                     matched: true,
                     expectedChildCount: -1);
+
+        public XamlSourceContext WithoutMatch()
+            => Map is null ? default : new XamlSourceContext(Map, Path, matched: false, expectedChildCount: -1);
 
         public string ChildPath(int index)
             => Path.Length == 0 ? index.ToString() : $"{Path}/{index}";

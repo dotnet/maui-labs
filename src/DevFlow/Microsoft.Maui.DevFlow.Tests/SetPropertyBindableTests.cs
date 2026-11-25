@@ -16,16 +16,17 @@ using Microsoft.Maui.Dispatching;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
+[Collection("XamlSourceMapRegistry")]
 public class SetPropertyBindableTests
 {
-    private const string SiblingXaml = """
+    private static readonly string SiblingXaml = """
         <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui">
           <VerticalStackLayout>
             <Label Text="First" />
             <Label Text="Second" />
           </VerticalStackLayout>
         </ContentView>
-        """;
+        """.ReplaceLineEndings("\n");
 
     [Fact]
     public async Task GetPropertyAsync_AutomationIdWithSpace_ResolvesBindingContext()
@@ -203,6 +204,157 @@ public class SetPropertyBindableTests
         finally
         {
             await inspector.StopAsync();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task MauiSourceInfo_ReorderedSiblings_PersistsTheCorrectDeclarationAndRejectsStaleContent()
+    {
+        const string diagnosticsSwitch = "Microsoft.Maui.RuntimeFeature.EnableMauiDiagnostics";
+        var previousDiagnostics = AppContext.TryGetSwitch(diagnosticsSwitch, out var enabled)
+            ? enabled
+            : AppContext.TryGetSwitch("Microsoft.Maui.RuntimeFeature.EnableDiagnostics", out enabled) && enabled;
+        AppContext.SetSwitch(diagnosticsSwitch, true);
+        XamlSourceMapRegistry.Instance.Reset();
+        var root = Path.Combine(Path.GetTempPath(), $"devflow-native-source-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var xaml = SiblingXaml.Replace("Text=\"First\"", "Text=\"Same\"", StringComparison.Ordinal)
+                .Replace("Text=\"Second\"", "Text=\"Same\"", StringComparison.Ordinal);
+            var project = Path.Combine(root, "App.csproj");
+            var source = Path.Combine(root, "MainPage.xaml");
+            await File.WriteAllTextAsync(project, "<Project />");
+            await File.WriteAllTextAsync(source, xaml);
+            var first = new Label { AutomationId = "native-first", Text = "Same" };
+            var second = new Label { AutomationId = "native-second", Text = "Same" };
+            var assembly = typeof(SourceMappedView).Assembly.GetName().Name!;
+            var uri = new Uri($"MainPage.xaml;assembly={assembly}", UriKind.Relative);
+            VisualDiagnostics.RegisterSourceInfo(first, uri, 3, 6);
+            VisualDiagnostics.RegisterSourceInfo(second, uri, 4, 6);
+            var view = new SourceMappedView
+            {
+                Content = new VerticalStackLayout { Children = { second, first } }
+            };
+            var map = XamlSourceMap.Parse(xaml, "MainPage.xaml", null, null, null, "MainPage.xaml", assembly)!;
+            using var harness = await SetPropertyTestHarness.CreateAsync(new SiblingMapProvider(map), view);
+            var id = await harness.GetElementIdAsync(second.AutomationId);
+            var detail = Assert.IsType<Microsoft.Maui.DevFlow.Driver.ElementInfo>(
+                await harness.Client.GetElementAsync(id));
+            Assert.Equal(4, detail.SourceLine);
+            var editor = new XamlSourcePropertyEditor(project);
+
+            var result = await editor.PersistAsync(detail, "Text", "Correct sibling");
+
+            Assert.Equal(XamlSourceEditStatus.Success, result.Status);
+            var expected = xaml.Replace(
+                "    <Label Text=\"Same\" />\n  </VerticalStackLayout>",
+                "    <Label Text=\"Correct sibling\" />\n  </VerticalStackLayout>",
+                StringComparison.Ordinal);
+            Assert.Equal(expected, await File.ReadAllTextAsync(source));
+
+            var external = expected + "\n<!-- external edit -->";
+            await File.WriteAllTextAsync(source, external);
+            var stale = await editor.PersistAsync(detail, "Text", "Must not save");
+            Assert.Equal(XamlSourceEditStatus.Stale, stale.Status);
+            Assert.Equal(external, await File.ReadAllTextAsync(source));
+        }
+        finally
+        {
+            XamlSourceMapRegistry.Instance.Reset();
+            AppContext.SetSwitch(diagnosticsSwitch, previousDiagnostics);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ElementDetailCache_InvalidatesWhenSourceMapsUpdate()
+    {
+        XamlSourceMapRegistry.Instance.Reset();
+        try
+        {
+            var label = new Label { AutomationId = "cached-label", Text = "First" };
+            var view = new SourceMappedView
+            {
+                Content = new VerticalStackLayout
+                {
+                    Children = { label, new Label { Text = "Second" } }
+                }
+            };
+            var provider = new MutableSiblingMapProvider(XamlSourceMap.Parse(SiblingXaml, "MainPage.xaml")!);
+            using var harness = await SetPropertyTestHarness.CreateAsync(provider, view);
+            var id = await harness.GetElementIdAsync(label.AutomationId);
+            var before = Assert.IsType<Microsoft.Maui.DevFlow.Driver.ElementInfo>(
+                await harness.Client.GetElementAsync(id));
+            Assert.Equal(3, before.SourceLine);
+
+            var updated = SiblingXaml.Replace(
+                "  <VerticalStackLayout>\n",
+                "  <VerticalStackLayout>\n    <!-- moved declarations -->\n",
+                StringComparison.Ordinal);
+            provider.Map = XamlSourceMap.Parse(updated, "MainPage.xaml")!;
+            XamlSourceMapHotReloadHandler.ClearCache(null);
+            var after = Assert.IsType<Microsoft.Maui.DevFlow.Driver.ElementInfo>(
+                await harness.Client.GetElementAsync(id));
+
+            Assert.Equal(4, after.SourceLine);
+            Assert.Equal(provider.Map.ContentHash, after.SourceHash);
+            Assert.NotEqual(before.SourceHash, after.SourceHash);
+        }
+        finally
+        {
+            XamlSourceMapRegistry.Instance.Reset();
+        }
+    }
+
+    [Fact]
+    public async Task HotReload_StableAutomationId_PersistsAgainstTheUpdatedSource()
+    {
+        XamlSourceMapRegistry.Instance.Reset();
+        var root = Path.Combine(Path.GetTempPath(), $"devflow-updated-source-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var xaml = SiblingXaml.Replace(
+                "Text=\"First\"", "AutomationId=\"stable-label\" Text=\"First\"", StringComparison.Ordinal);
+            var project = Path.Combine(root, "App.csproj");
+            var source = Path.Combine(root, "MainPage.xaml");
+            await File.WriteAllTextAsync(project, "<Project />");
+            await File.WriteAllTextAsync(source, xaml);
+            var label = new Label { AutomationId = "stable-label", Text = "First" };
+            var view = new SourceMappedView
+            {
+                Content = new VerticalStackLayout { Children = { label, new Label { Text = "Second" } } }
+            };
+            var provider = new MutableSiblingMapProvider(XamlSourceMap.Parse(xaml, "MainPage.xaml")!);
+            using var harness = await SetPropertyTestHarness.CreateAsync(provider, view);
+            var id = await harness.GetElementIdAsync(label.AutomationId);
+            var original = Assert.IsType<Microsoft.Maui.DevFlow.Driver.ElementInfo>(
+                await harness.Client.GetElementAsync(id));
+            Assert.Equal(3, original.SourceLine);
+
+            var updated = xaml.Replace("Text=\"First\"", "Text=\"Hot Reload\"", StringComparison.Ordinal)
+                .Replace("  <VerticalStackLayout>\n",
+                    "  <VerticalStackLayout>\n    <!-- moved declaration -->\n", StringComparison.Ordinal);
+            await File.WriteAllTextAsync(source, updated);
+            provider.Map = XamlSourceMap.Parse(updated, "MainPage.xaml")!;
+            label.Text = "Hot Reload";
+            XamlSourceMapHotReloadHandler.ClearCache(null);
+            var current = Assert.IsType<Microsoft.Maui.DevFlow.Driver.ElementInfo>(
+                await harness.Client.GetElementAsync(id));
+            Assert.Equal(4, current.SourceLine);
+            Assert.NotEqual(original.SourceHash, current.SourceHash);
+
+            var result = await new XamlSourcePropertyEditor(project).PersistAsync(current, "Text", "Saved");
+
+            Assert.Equal(XamlSourceEditStatus.Success, result.Status);
+            Assert.Equal(updated.Replace("Text=\"Hot Reload\"", "Text=\"Saved\"", StringComparison.Ordinal),
+                await File.ReadAllTextAsync(source));
+        }
+        finally
+        {
+            XamlSourceMapRegistry.Instance.Reset();
             Directory.Delete(root, recursive: true);
         }
     }
@@ -749,6 +901,13 @@ public class SetPropertyBindableTests
     {
         public XamlSourceMap? GetMap(string fullTypeName)
             => fullTypeName == typeof(SourceMappedView).FullName ? map : null;
+    }
+
+    private sealed class MutableSiblingMapProvider(XamlSourceMap map) : IXamlSourceMapProvider
+    {
+        public XamlSourceMap Map { get; set; } = map;
+        public XamlSourceMap? GetMap(string fullTypeName)
+            => fullTypeName == typeof(SourceMappedView).FullName ? Map : null;
     }
 
     private static async Task<MemoryStream> ReceiveMessageAsync(ClientWebSocket socket, CancellationToken cancellationToken)

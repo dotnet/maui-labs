@@ -1,7 +1,9 @@
 <Project>
 
   <ItemGroup>
+    <CompilerVisibleProperty Include="MSBuildProjectDirectory" />
     <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="DevFlowXaml" />
+    <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="RelativePath" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(DevFlowXamlSourceMapsEnabled)' == 'true'">
