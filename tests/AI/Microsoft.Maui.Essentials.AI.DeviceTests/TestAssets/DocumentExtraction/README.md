@@ -44,6 +44,6 @@ swift $dir/TestAssets/DocumentExtraction/generate-barcodes.swift \
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst -p:TargetFrameworks=net10.0-maccatalyst \
+  -f net11.0-maccatalyst -p:TargetFrameworks=net11.0-maccatalyst \
   --filter FullyQualifiedName~AppleVisionRecognizeDocumentsClientTests
 ```
