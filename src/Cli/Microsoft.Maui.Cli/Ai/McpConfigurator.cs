@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -14,11 +15,21 @@ namespace Microsoft.Maui.Cli.Ai;
 /// </summary>
 internal static class McpConfigurator
 {
+	// A NativeAOT tool on Windows is installed behind a maui.cmd shim, which MCP clients that start servers
+	// without a shell (Node's child_process, for one) cannot launch: spawning "maui" fails with ENOENT and
+	// "maui.cmd" with EINVAL. Routing through cmd.exe is the standard workaround. Framework-dependent installs
+	// get a real maui.exe shim, so they keep the plain command.
+	internal static bool RequiresCmdShimWrapper => OperatingSystem.IsWindows() && !RuntimeFeature.IsDynamicCodeSupported;
+
 	internal static JsonObject OwnedDefinition(AgentEnvironmentKind kind)
+		=> OwnedDefinition(kind, RequiresCmdShimWrapper);
+
+	internal static JsonObject OwnedDefinition(AgentEnvironmentKind kind, bool wrapInCmd)
 	{
+		string[] launch = wrapInCmd ? ["cmd", "/c", "maui", "devflow", "mcp"] : ["maui", "devflow", "mcp"];
 		var definition = kind == AgentEnvironmentKind.OpenCode
-			? new JsonObject { ["type"] = "local", ["command"] = new JsonArray("maui", "devflow", "mcp") }
-			: new JsonObject { ["command"] = "maui", ["args"] = new JsonArray("devflow", "mcp") };
+			? new JsonObject { ["type"] = "local", ["command"] = new JsonArray(launch.Select(a => (JsonNode)JsonValue.Create(a)!).ToArray()) }
+			: new JsonObject { ["command"] = launch[0], ["args"] = new JsonArray(launch.Skip(1).Select(a => (JsonNode)JsonValue.Create(a)!).ToArray()) };
 		if (kind == AgentEnvironmentKind.VsCode) definition["type"] = "stdio";
 		if (kind == AgentEnvironmentKind.CopilotCli) definition["type"] = "local";
 		return definition;
@@ -218,22 +229,9 @@ internal static class McpConfigurator
 			root[key] = servers;
 		}
 
-		var expected = kind == AgentEnvironmentKind.OpenCode
-			? new JsonObject
-			{
-				["type"] = "local",
-				["command"] = new JsonArray("maui", "devflow", "mcp")
-			}
-			: new JsonObject
-			{
-				["command"] = "maui",
-				["args"] = new JsonArray("devflow", "mcp")
-			};
-		if (kind == AgentEnvironmentKind.VsCode)
-			expected["type"] = "stdio";
+		var expected = OwnedDefinition(kind);
 		if (kind == AgentEnvironmentKind.CopilotCli)
 		{
-			expected["type"] = "local";
 			if (servers[ServerName] is not JsonObject configuredServer || configuredServer["tools"] is null)
 				expected["tools"] = new JsonArray("*");
 		}

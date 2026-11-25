@@ -91,6 +91,8 @@ You can also test by configuring the MCP server in an AI tool that supports MCP 
 
 > **Note:** This assumes the `maui` CLI is installed as a global tool (`dotnet tool install -g Microsoft.Maui.Cli`). For a local build, use the full path to the built executable.
 
+> **Windows:** the `win-x64` global tool is a NativeAOT build that `dotnet` installs behind a `maui.cmd` shim. Clients that start servers without a shell (anything built on Node's `child_process`) cannot launch a `.cmd` file directly, so use `cmd` as the command: `"command": "cmd", "args": ["/c", "maui", "devflow", "mcp"]`. `maui ai add mcp` writes this form for you on Windows.
+
 ## Manual stdio test
 
 For a quick smoke test without Node.js, you can send a raw MCP initialize request:

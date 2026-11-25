@@ -74,22 +74,58 @@ export async function fetchAgents(
   return Array.isArray(data) && data.every(isAgentRegistration) ? data : null;
 }
 
-/** Resolve the `maui` CLI path: explicit override → ~/.dotnet/tools/maui → PATH. */
-export function resolveMauiCli(override?: string): string {
-  const exe = process.platform === "win32" ? "maui.exe" : "maui";
+/**
+ * Resolve the `maui` CLI path: explicit override → ~/.dotnet/tools shim → PATH.
+ * A framework-dependent install gets a `maui.exe` shim on Windows; a NativeAOT install gets `maui.cmd`.
+ */
+export function resolveMauiCli(override?: string, platform: NodeJS.Platform = process.platform, home: string = homedir()): string {
+  const exe = platform === "win32" ? "maui.exe" : "maui";
   if (override && existsSync(override)) return override;
-  const wellKnown = join(homedir(), ".dotnet", "tools", exe);
+  const toolsDir = join(home, ".dotnet", "tools");
+  const wellKnown = join(toolsDir, exe);
   if (existsSync(wellKnown)) return wellKnown;
+  if (platform === "win32") {
+    const cmdShim = join(toolsDir, "maui.cmd");
+    if (existsSync(cmdShim)) return cmdShim;
+  }
   return exe;
+}
+
+export interface CliLaunch {
+  file: string;
+  args: string[];
+  windowsVerbatimArguments?: boolean;
+}
+
+/**
+ * Describe how to start the CLI. Node refuses to spawn a `.cmd` shim directly (EINVAL since the
+ * CVE-2024-27980 fix), so on Windows those go through cmd.exe.
+ */
+export function mauiCliLaunch(cliPath: string, args: string[], platform: NodeJS.Platform = process.platform): CliLaunch {
+  if (platform === "win32" && /\.(cmd|bat)$/i.test(cliPath)) {
+    const quote = (value: string) => (/[\s"]/.test(value) ? `"${value.replace(/"/g, '\\"')}"` : value);
+    return {
+      file: process.env.ComSpec ?? "cmd.exe",
+      args: ["/d", "/s", "/c", `"${[cliPath, ...args].map(quote).join(" ")}"`],
+      windowsVerbatimArguments: true,
+    };
+  }
+  return { file: cliPath, args };
 }
 
 /** Spawn `maui devflow list --json` once to trigger the broker to start. */
 export function bootstrapBrokerViaCli(cliPath: string, timeoutMs = 20000): Promise<boolean> {
+  const launch = mauiCliLaunch(cliPath, ["devflow", "list", "--json"]);
   return new Promise<boolean>((resolve) => {
     execFile(
-      cliPath,
-      ["devflow", "list", "--json"],
-      { timeout: timeoutMs, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+      launch.file,
+      launch.args,
+      {
+        timeout: timeoutMs,
+        windowsHide: true,
+        maxBuffer: 8 * 1024 * 1024,
+        windowsVerbatimArguments: launch.windowsVerbatimArguments,
+      },
       (error) => resolve(!error),
     );
   });

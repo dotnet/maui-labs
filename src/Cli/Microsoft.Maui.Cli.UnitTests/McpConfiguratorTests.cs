@@ -24,6 +24,35 @@ public class McpConfiguratorTests : IDisposable
 			Directory.Delete(_tempDir, recursive: true);
 	}
 
+	[Theory]
+	[InlineData("Claude")]
+	[InlineData("VsCode")]
+	[InlineData("CopilotCli")]
+	public void OwnedDefinition_WrappedInCmd_LaunchesThroughCmdExe(string kindName)
+	{
+		var kind = Enum.Parse<AgentEnvironmentKind>(kindName);
+		var plain = McpConfigurator.OwnedDefinition(kind, wrapInCmd: false);
+		var wrapped = McpConfigurator.OwnedDefinition(kind, wrapInCmd: true);
+
+		Assert.Equal("maui", plain["command"]!.GetValue<string>());
+		Assert.Equal(["devflow", "mcp"], plain["args"]!.AsArray().Select(a => a!.GetValue<string>()));
+		Assert.Equal("cmd", wrapped["command"]!.GetValue<string>());
+		Assert.Equal(["/c", "maui", "devflow", "mcp"], wrapped["args"]!.AsArray().Select(a => a!.GetValue<string>()));
+		Assert.NotEqual(McpConfigurator.OwnedHash(plain), McpConfigurator.OwnedHash(wrapped));
+	}
+
+	[Fact]
+	public void OwnedDefinition_OpenCodeWrappedInCmd_UsesCommandArray()
+	{
+		var wrapped = McpConfigurator.OwnedDefinition(AgentEnvironmentKind.OpenCode, wrapInCmd: true);
+
+		Assert.Equal(["cmd", "/c", "maui", "devflow", "mcp"], wrapped["command"]!.AsArray().Select(a => a!.GetValue<string>()));
+	}
+
+	[Fact]
+	public void OwnedDefinition_OnTheCoreClrBuild_KeepsThePlainCommand()
+		=> Assert.False(McpConfigurator.RequiresCmdShimWrapper);
+
 	[Fact]
 	public async Task ConfigureAsync_CreatesNewConfigFile_WhenNoneExists()
 	{
