@@ -38,21 +38,21 @@ resolution must use the physical developer directory, not a runner alias such
 as `Xcode_26.0.app`. Do not set `MD_APPLE_SDK_ROOT`; GA Apple packs deprecate
 and ignore it, emitting a warning that breaks warnings-as-errors builds.
 The .NET 11 GA Apple packs require Xcode 27.2 exactly; Xcode 27.3 is rejected.
-The MAUI iOS integration job instead uses
-`eng/workloads/dotnet11-ga-ios-net10.json`: it selects the released .NET 10 iOS
+The iOS and Mac Catalyst integration jobs use .NET 11 with Xcode 27.2.
+For .NET 10 iOS compatibility builds,
+`eng/workloads/dotnet11-ga-ios-net10.json` selects the released .NET 10 iOS
 26.4.10259 manifest from feature band `10.0.100` while keeping the other GA
 .NET 11 manifests.
 Install `mobile-librarybuilder-net10` alongside the ordinary workloads so the
 SDK 11 resolver also has the .NET 10 runtime packs; the older iOS manifest extends
 the current runtime workload, which otherwise supplies .NET 11 runtime packs.
-This job uses Xcode 26.4 and verifies the hosted iOS 26.4.1 runtime for asset
-compilation, while keeping the test device on iOS 26.2. The native iOS job uses
-the GA workload set's .NET 10 packs with Xcode 26.0. The job-specific manifest
+That compatibility manifest requires Xcode 26.4 and the iOS 26.4.1 runtime for
+asset compilation. The compatibility manifest
 cannot build .NET 11 iOS targets; use `eng/workloads/dotnet11-ga.json` for those. Do not
 mix entire .NET 10 workload sets into SDK 11 or bypass asset compilation/Xcode
 validation.
-Existing .NET 10 target frameworks and the repository-wide MAUI 10 baseline
-remain unchanged; AI's `UseNet11AppleTargets=true` adds .NET 11 OS 27.2 targets.
+Shipping libraries retain .NET 10 compatibility alongside .NET 11. Samples and
+host tests use .NET 11; AI's `UseNet11AppleTargets=true` selects OS 27.2 Apple targets.
 
 ### Building
 

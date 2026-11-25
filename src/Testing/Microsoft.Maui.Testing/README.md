@@ -13,4 +13,4 @@ The runtime package is referenced automatically by the `mauitest` template. Conf
 
 See the [full documentation](https://github.com/dotnet/maui-labs/tree/main/src/Testing) for Apple commands and framework conversion instructions.
 
-> This package is experimental and requires .NET 11.
+> This package is experimental and supports .NET 10 and .NET 11.

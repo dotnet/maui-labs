@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <PackageId>Microsoft.NET.Workloads.11.0.100</PackageId>
+    <PackageVersion>11.100.0-servicing.26530.3</PackageVersion>
+    <Authors>Microsoft</Authors>
+    <Description>Local .NET 11 workload set for maui-labs CI.</Description>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="microsoft.net.workloads.workloadset.json"
+          Pack="true"
+          PackagePath="data/" />
+  </ItemGroup>
+</Project>

@@ -789,20 +789,20 @@ MAUI's Resizetizer processes `MauiImage` and `MauiIcon` items:
 
 #### macOS Approach
 - **MauiIcon:** Custom target using `sips` (macOS CLI) to generate 10 icon sizes → `iconutil` to create `.icns` file → `BundleResource` + `PartialAppManifest`
-- **MauiImage:** Relies on MAUI SDK's Resizetizer (project uses `net10.0-macos` TFM)
+- **MauiImage:** Relies on MAUI SDK's Resizetizer (project uses `net11.0-macos` TFM)
 - **MauiFont:** Standard MAUI font processing
 - **BlazorWebView assets:** Custom target converts `StaticWebAsset` → `BundleResource` with `wwwroot` prefix
 
 #### GTK4 Approach
 - **MauiIcon:** Custom `buildTransitive/` targets generate hicolor icon theme (SVG/PNG at multiple sizes for Linux desktop integration)
-- **MauiImage:** Custom image processing via build targets (since `net10.0` TFM doesn't import MAUI's Resizetizer)
+- **MauiImage:** Custom image processing via build targets (since `net11.0` TFM doesn't import MAUI's Resizetizer)
 - **MauiFont:** Extracts to `~/.local/share/fonts/` at runtime
 - **MauiAsset:** Custom deployment to output directory
 
 ### Recommended Approach for New Backends
 
-1. **If using a MAUI SDK TFM** (e.g., `net10.0-ios`, `net10.0-macos`): Resizetizer runs automatically; add `AfterTargets` hooks for platform-specific output
-2. **If using plain `net10.0` TFM**: Reference Resizetizer NuGet package directly ([#34102 fix](https://github.com/dotnet/maui/issues/34102)), then hook `AfterTargets` for output injection
+1. **If using a MAUI SDK TFM** (e.g., `net11.0-ios`, `net11.0-macos`): Resizetizer runs automatically; add `AfterTargets` hooks for platform-specific output
+2. **If using plain `net11.0` TFM**: Reference Resizetizer NuGet package directly ([#34102 fix](https://github.com/dotnet/maui/issues/34102)), then hook `AfterTargets` for output injection
 3. **For app icons**: Implement a custom build target since icon formats are highly platform-specific
 
 ---
@@ -1394,7 +1394,7 @@ The co-evolution workflow uses project references during development for rapid i
 
 **Checklist:**
 - [ ] Agent project has correct NuGet metadata
-- [ ] Agent targets the correct TFM (e.g., `net10.0` for plain .NET platforms, `net10.0-[platform]` for SDK platforms)
+- [ ] Agent targets the correct TFM (e.g., `net11.0` for plain .NET platforms, `net11.0-[platform]` for SDK platforms)
 - [ ] Package includes any necessary build targets for port generation (`Microsoft.Maui.DevFlowPort.g.cs`)
 - [ ] Package works in isolation (no lingering file-link dependencies to the maui-labs repo)
 

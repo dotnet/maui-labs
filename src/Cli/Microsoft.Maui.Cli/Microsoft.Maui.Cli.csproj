@@ -2,17 +2,21 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <!-- RID-specific .NET tool packages require the .NET 10 SDK. -->
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- Multi-target net9.0 and net11.0 so `dotnet tool install` works on both
+         SDKs. dotnet picks the highest compatible TFM at install time. -->
+    <TargetFrameworks>net9.0;net11.0</TargetFrameworks>
+    <!-- Preserve the .NET 9 tool asset by allowing the compatible package graph selected below,
+         rather than promoting transitive dependencies to the repository-wide .NET 11 versions. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
     <RootNamespace>Microsoft.Maui.Cli</RootNamespace>
     <AssemblyName>maui</AssemblyName>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>maui</ToolCommandName>
     <ToolPackageRuntimeIdentifiers>win-x64;linux-x64;osx-arm64;any</ToolPackageRuntimeIdentifiers>
     <!-- NativeAOT requires a RID, so enable it for packaging rather than ordinary builds. -->
-    <PublishAot Condition="'$(_IsPacking)' == 'true'">true</PublishAot>
-    <PublishTrimmed Condition="'$(_IsPacking)' == 'true'">true</PublishTrimmed>
-    <SelfContained Condition="'$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">true</SelfContained>
+    <PublishAot Condition="'$(_IsPacking)' == 'true' and '$(TargetFramework)' == 'net11.0'">true</PublishAot>
+    <PublishTrimmed Condition="'$(_IsPacking)' == 'true' and '$(TargetFramework)' == 'net11.0'">true</PublishTrimmed>
+    <SelfContained Condition="'$(TargetFramework)' == 'net11.0' and '$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">true</SelfContained>
     <!-- Go.Server is consumed in-process even though its project also emits a standalone executable. -->
     <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
     <PackageId>Microsoft.Maui.Cli</PackageId>
@@ -32,24 +36,29 @@
     <!-- SDK 11's optimized AOT publish skips copying the XML documentation
          that this tool includes in its publish output. Keep the full build path. -->
     <UseOptimizedPublish Condition="'$(PublishAot)' == 'true'">false</UseOptimizedPublish>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0'">
     <!-- Let the latest packaged tool TFM run on newer major runtimes. -->
     <RollForward>Major</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" VersionOverride="$(MicrosoftExtensionsCompatibilityVersion)" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" VersionOverride="$(MicrosoftExtensionsCompatibilityVersion)" />
     <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="Websocket.Client" />
     <PackageReference Include="Xamarin.Android.Tools.AndroidSdk" />
     <PackageReference Include="Xamarin.Apple.Tools.MaciOS" />
-    <PackageReference Include="XenoAtom.Terminal.UI" />
+    <!-- XenoAtom.Terminal.UI requires .NET 10 or later (uses C# 14 extension members).
+         On net9.0 we fall back to JSON output for the network monitor. -->
+    <PackageReference Include="XenoAtom.Terminal.UI" Condition="'$(TargetFramework)' == 'net11.0'" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
-    <!-- Exclude sources that depend on XenoAtom.Terminal.UI on non-net10 targets. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net11.0'">
+    <!-- Exclude sources that depend on XenoAtom.Terminal.UI on older targets. -->
     <Compile Remove="DevFlow\NetworkMonitorTui.cs" />
   </ItemGroup>
 
@@ -76,13 +85,13 @@
     <MSBuild Projects="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj"
              Targets="Publish"
              BuildInParallel="false"
-             Properties="Configuration=$(Configuration);TargetFramework=net10.0;RuntimeIdentifier=;SelfContained=false;PublishAot=false;PublishTrimmed=false;RollForward=Major;PublishDir=$(PublishDir)go-server/" />
+             Properties="Configuration=$(Configuration);TargetFramework=net11.0;RuntimeIdentifier=;SelfContained=false;PublishAot=false;PublishTrimmed=false;RollForward=Major;PublishDir=$(PublishDir)go-server/" />
   </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.ProfilingHelper\Microsoft.Maui.ProfilingHelper.csproj" />
     <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
-    <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" />
+    <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" Condition="'$(TargetFramework)' == 'net11.0'" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+  <!-- The .NET 10 binding generator omits this Kotlin internal class entirely. -->
+  <remove-node path="/api/package[@name='com.microsoft.maui.essentials.ai']/class[@name='NativeChatStream']/implements[@name='com.google.mlkit.genai.common.StreamingCallback']" />
+</metadata>

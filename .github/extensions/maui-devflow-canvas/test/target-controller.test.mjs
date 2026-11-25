@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { LiveStore } from "../store.mjs";
 
 const old = {
-  id: "old", project: "C:/old/App.csproj", tfm: "net10.0", platform: "Windows",
+  id: "old", project: "C:/old/App.csproj", tfm: "net11.0", platform: "Windows",
   appName: "Old", sessionId: "old-worktree", port: 9223,
 };
 const chosen = { ...old, id: "chosen", project: "C:/chosen/App.csproj", appName: "Chosen", port: 9224 };

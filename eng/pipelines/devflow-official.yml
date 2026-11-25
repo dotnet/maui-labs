@@ -121,13 +121,14 @@ extends:
                   'build'
                   '-t:InstallAndroidDependencies'
                   '-f'
-                  'net10.0-android'
+                  'net11.0-android'
                   "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
                   '-p:AcceptAndroidSDKLicenses=true'
                   'src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj'
                 )
                 & eng/common/dotnet.ps1 @arguments
               displayName: Install Android SDK dependencies
+            - template: /eng/pipelines/install-dotnet-test-runtimes.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -311,7 +312,7 @@ extends:
                 $(_OfficialBuildArgs)
               displayName: Build and Test AppProjectReference
 
-          # The Linux GTK4 NuGet packages are pure managed (net10.0) assemblies
+          # The Linux GTK4 NuGet packages are pure managed (net11.0) assemblies
           # using GirCore for GTK/WebKit bindings, so they build and pack on Windows.
           # Running on Windows is required so MicroBuild/ESRP can sign the DLLs —
           # signing does not execute on Linux agents.
@@ -331,6 +332,7 @@ extends:
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
             - template: /eng/pipelines/install-dotnet-sdk.yml@self
+            - template: /eng/pipelines/install-dotnet-test-runtimes.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -378,7 +380,7 @@ extends:
                 set -euo pipefail
                 android_sdk=$(.dotnet/dotnet build \
                   -t:InstallAndroidDependencies \
-                  -f net10.0-android \
+                  -f net11.0-android \
                   -p:AcceptAndroidSDKLicenses=true \
                   -getProperty:AndroidSdkDirectory \
                   src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj)
@@ -455,7 +457,7 @@ extends:
                   'build'
                   '-t:InstallAndroidDependencies'
                   '-f'
-                  'net10.0-android'
+                  'net11.0-android'
                   '-p:AcceptAndroidSDKLicenses=true'
                   '-getProperty:AndroidSdkDirectory,JavaSdkDirectory'
                   'src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj'
@@ -546,6 +548,11 @@ extends:
               displayName: Provision .NET SDK via Arcade
             - script: eng\common\dotnet.cmd workload install maui --from-rollback-file eng\workloads\dotnet11-ga.json
               displayName: Install MAUI workload
+            - template: /eng/pipelines/install-dotnet-test-runtimes.yml@self
+              parameters:
+                runtimes:
+                - dotnet
+                - windowsdesktop
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -573,6 +580,7 @@ extends:
               displayName: Provision .NET SDK via Arcade
             - script: eng\common\dotnet.cmd workload install maui macos --from-rollback-file eng\workloads\dotnet11-ga.json
               displayName: Install MAUI and macOS workloads
+            - template: /eng/pipelines/install-dotnet-test-runtimes.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine

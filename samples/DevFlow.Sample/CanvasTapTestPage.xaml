@@ -78,6 +78,19 @@
                                VerticalOptions="Center"
                                AutomationId="ListenerOverlayStatus" />
                     </HorizontalStackLayout>
+                    <VerticalStackLayout Spacing="8" IsVisible="{OnPlatform Android=True, Default=False}">
+                        <Label x:Name="GraphicsOverlayStatusLabel"
+                               Text="graphics overlay: hidden touches=0"
+                               AutomationId="GraphicsOverlayStatus" />
+                        <Button Text="Toggle consuming graphics overlay"
+                                AutomationId="GraphicsOverlayToggle"
+                                CommandParameter="consuming"
+                                Clicked="OnGraphicsOverlayToggleClicked" />
+                        <Button Text="Toggle passive graphics overlay"
+                                AutomationId="PassiveGraphicsOverlayToggle"
+                                CommandParameter="passive"
+                                Clicked="OnGraphicsOverlayToggleClicked" />
+                    </VerticalStackLayout>
                 </VerticalStackLayout>
             </Border>
 

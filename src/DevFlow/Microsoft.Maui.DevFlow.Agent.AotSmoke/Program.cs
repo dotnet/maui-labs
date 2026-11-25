@@ -57,7 +57,7 @@ broker.MapPost("/api/recordings/aot-smoke", request =>
 }, requiresMutationLease: false);
 broker.Start();
 
-using var registration = new BrokerRegistration("aot-smoke", "net10.0", "host", "AOT smoke", brokerPort);
+using var registration = new BrokerRegistration("aot-smoke", "net11.0", "host", "AOT smoke", brokerPort);
 var agentOptions = new AgentOptions { Port = agentPort, EnableProfiler = true };
 var routes = agentOptions.RegisterExtension("com.devflow.smoke", "Source-generated extension contracts");
 routes.MapPost("/echo", request => Task.FromResult(HttpResponse.Json(request.BodyAs<ExtensionReply>()!)));

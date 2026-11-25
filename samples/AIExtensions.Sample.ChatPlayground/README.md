@@ -86,7 +86,7 @@ the asset may be absent on simulators.
 ### Windows
 
 ```powershell
-dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj -f net10.0-windows10.0.19041.0
+dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj -f net11.0-windows10.0.19041.0
 ```
 
 Keep the Windows sample MSIX-packaged for on-device AI. It bundles an
@@ -113,7 +113,7 @@ See the [Android guide](../../docs/ai/gemini-nano-android.md).
 
 ```sh
 dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
-  -f net10.0-android --device <device-id>
+  -f net11.0-android --device <device-id>
 ```
 
 ### Model readiness

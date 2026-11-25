@@ -14,4 +14,10 @@ public class AppDelegate : UIApplicationDelegate
 
         return true;
     }
+
+    public override UISceneConfiguration GetConfiguration(
+        UIApplication application,
+        UISceneSession connectingSceneSession,
+        UISceneConnectionOptions options)
+        => new("Default Configuration", connectingSceneSession.Role);
 }
