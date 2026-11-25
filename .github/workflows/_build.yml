@@ -355,6 +355,15 @@ jobs:
           name: test-results-${{ inputs.project-name }}-${{ matrix.os }}
           path: artifacts/TestResults/**/*.xml
 
+      # Arcade writes per-project test output under artifacts/log, which is otherwise lost when a test fails.
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: logs-${{ inputs.project-name }}-${{ matrix.os }}
+          path: artifacts/log/**
+          if-no-files-found: ignore
+
       - name: Upload targeted test results
         if: inputs.test-only && always()
         uses: actions/upload-artifact@v7
