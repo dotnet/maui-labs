@@ -1,14 +1,17 @@
 ---
 name: devflow-automation
 description: >-
-  Automate MAUI app state through DevFlow Actions. USE FOR: `[DevFlowAction]` shortcuts, login, seed data, deep screens. DO NOT USE FOR: arbitrary methods, DI internals, UI MCP tools, connectivity, or build/deploy issues.
+  Automate MAUI app state through DevFlow Actions. USE FOR: `[DevFlowAction]`
+  shortcuts, login, seed data, deep screens, and action updates with .NET 11
+  `dotnet watch`/Hot Reload. DO NOT USE FOR: arbitrary methods, DI internals, UI
+  MCP tools, connectivity, or build/deploy issues.
 ---
 
 # DevFlow Automation - Actions
 
 DevFlow Actions are named shortcuts that a .NET MAUI app explicitly exposes for automation with `[DevFlowAction]`. Use them to reach useful app states quickly, such as logging in a test user, seeding data, toggling a feature flag, or navigating to a deep screen.
 
-Actions are opt-in. DevFlow does not expose arbitrary reflection invoke; if you need a new shortcut, add an attributed method in app debug/test code, let Hot Reload apply it, then list and invoke the action.
+Actions are opt-in. DevFlow does not expose arbitrary reflection invoke; if you need a new shortcut, add an attributed method in app debug/test code, apply it with C# Hot Reload when the running app supports it, then list and invoke the action. For .NET 11 Android, iOS, or Mac Catalyst apps, prefer starting the app with `dotnet watch` and keep that process running while editing. If the watcher reports an update or compilation error, inspect its diagnostics and verify behavior through DevFlow; do not assume the edit was applied because the app remains connected. Restart/rebuild when the watcher requires it, then rediscover the action.
 
 ## Optional Session Feedback Nudge
 
@@ -55,9 +58,9 @@ If no useful action exists and you can edit the app:
 
 1. Add a public static method annotated with `[DevFlowAction]`.
 2. Add `[Description]` to each parameter so agents know what to pass.
-3. Save and let C# Hot Reload apply the change.
-4. Call `maui_list_actions` again.
-5. Invoke the new action with `maui_invoke_action`.
+3. Save and inspect the watcher's output to confirm whether C# Hot Reload applied or the app restarted.
+4. Call `maui_list_actions` again and confirm the new action is present.
+5. Invoke the new action with `maui_invoke_action` and verify the resulting state.
 
 Example:
 

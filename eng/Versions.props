@@ -41,6 +41,7 @@
     <XamarinAndroidXWorkRuntimeVersion>2.10.0.5</XamarinAndroidXWorkRuntimeVersion>
     <XamarinAndroidXKtxFacadeVersion>1.3.0.1</XamarinAndroidXKtxFacadeVersion>
     <XamarinAndroidXLifecycleServiceVersion>2.9.2.1</XamarinAndroidXLifecycleServiceVersion>
+    <XamarinAndroidXLifecycleServiceNet11Version>2.11.0.1</XamarinAndroidXLifecycleServiceNet11Version>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
     <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>

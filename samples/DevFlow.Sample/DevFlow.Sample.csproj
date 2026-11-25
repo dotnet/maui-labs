@@ -1,9 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
     <PropertyGroup>
-        <TargetFrameworks>net10.0-android</TargetFrameworks>
-        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+        <TargetFrameworks>net10.0-android;net11.0-android</TargetFrameworks>
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net10.0-ios;net11.0-ios;net10.0-maccatalyst;net11.0-maccatalyst</TargetFrameworks>
         <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+        <!-- Isolate the sample TFM during Hot Reload qualification runs. -->
+        <TargetFrameworks Condition="'$(DevFlowSampleWatchTarget)' == 'net11.0-android' or '$(DevFlowSampleWatchTarget)' == 'net11.0-ios' or '$(DevFlowSampleWatchTarget)' == 'net11.0-maccatalyst'">$(DevFlowSampleWatchTarget)</TargetFrameworks>
 
         <OutputType>Exe</OutputType>
         <RootNamespace>DevFlow.Sample</RootNamespace>
@@ -20,6 +22,12 @@
         <DefineConstants>$(DefineConstants);DEVFLOW_TOUCH_PAGES</DefineConstants>
 
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+        <MauiXamlInflator Condition="'$(TargetFramework)' == 'net11.0-android' or '$(TargetFramework)' == 'net11.0-ios' or '$(TargetFramework)' == 'net11.0-maccatalyst'">SourceGen</MauiXamlInflator>
+        <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net11.0-maccatalyst'">17.0</SupportedOSPlatformVersion>
+        <!-- Mac Catalyst arm64 Debug defaults to SdkOnly trimming, which removes APIs the dotnet watch startup hook needs. -->
+        <MtouchLink Condition="'$(TargetFramework)' == 'net11.0-maccatalyst' and '$(Configuration)' == 'Debug'">None</MtouchLink>
+        <!-- dotnet watch rejects the default trimmable-static registrar because it rewrites user assemblies. -->
+        <Registrar Condition="'$(TargetFramework)' == 'net11.0-maccatalyst'">partial-static</Registrar>
     </PropertyGroup>
 
     <ItemGroup>
@@ -50,6 +58,11 @@
         <PackageReference Include="Xamarin.AndroidX.Concurrent.Futures.Ktx" />
         <PackageReference Include="Xamarin.AndroidX.Tracing.Tracing.Ktx" />
         <PackageReference Include="Xamarin.AndroidX.Lifecycle.Service" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net11.0-android' or '$(TargetFramework)' == 'net11.0-ios' or '$(TargetFramework)' == 'net11.0-maccatalyst'">
+        <PackageReference Update="Microsoft.Maui.Controls" VersionOverride="$(CommunityPlatformMauiVersion)" />
+        <PackageReference Update="Microsoft.AspNetCore.Components.WebView.Maui" VersionOverride="$(CommunityPlatformAspNetCoreComponentsWebViewVersion)" />
     </ItemGroup>
 
     <ItemGroup>
@@ -84,5 +97,7 @@
                 Condition="'%(SourceId)' == 'Microsoft.Maui.DevFlow.Blazor' AND $([System.String]::Copy('%(RelativePath)').StartsWith('_framework/'))" />
         </ItemGroup>
     </Target>
+
+    <Import Project="..\DevFlow.Sample.Net11.props" />
 
 </Project>

@@ -101,3 +101,4 @@ If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui
 | `SensorTools.cs` | `maui_sensors_list`, `maui_sensors_start`, `maui_sensors_stop` | Device sensors |
 | `ThemeTools.cs` | `maui_get_theme`, `maui_set_theme` | Theme switching |
 | `TreeTool.cs` | `maui_tree` | Visual tree inspection |
+| `WatchTools.cs` | `maui_watch_start`, `maui_watch_wait`, `maui_watch_status`, `maui_watch_restart`, `maui_watch_stop` | `dotnet watch` Hot Reload sessions (no agent required) |

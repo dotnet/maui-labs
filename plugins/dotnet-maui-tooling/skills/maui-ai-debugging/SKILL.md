@@ -11,7 +11,8 @@ replacement is `maui-devflow-debug`, installed through `maui devflow init` /
 `maui devflow skills update`.
 
 Build, deploy, inspect, and debug .NET MAUI apps from the terminal. This skill enables a complete
-feedback loop: **build → deploy → inspect → fix → rebuild**.
+feedback loop: **launch → inspect → edit → verify**, using `dotnet watch` when supported and
+rebuilding/redeploying when it is not.
 
 ## Prerequisites
 
@@ -189,7 +190,42 @@ adb reverse tcp:19223 tcp:19223   # Broker (lets agent in emulator reach host br
 adb forward tcp:<port> tcp:<port> # Agent (lets CLI reach agent in emulator)
 ```
 
-**To rebuild:** repeat from Step 1. See [references/troubleshooting.md](references/troubleshooting.md)
+**Before rebuilding after an edit, try the .NET 11 `dotnet watch` fast path** when the app
+targets Android, iOS, or Mac Catalyst in Debug. Start the watcher from the app project directory,
+select the TFM/device explicitly, and keep it running:
+
+```bash
+# iOS Simulator
+dotnet watch --framework net11.0-ios --device <simulator-udid> --no-launch-profile --non-interactive run
+
+# Android
+dotnet watch --framework net11.0-android --device <device-id> --no-launch-profile --non-interactive run
+
+# Mac Catalyst
+dotnet watch --framework net11.0-maccatalyst --no-launch-profile --non-interactive run
+```
+
+For XAML edits, ensure the .NET 11 project uses `MauiXamlInflator` set to
+`SourceGen` and has not disabled incremental Hot Reload. The incremental engine
+is enabled by default in Debug builds. If the watcher reports that a restart is
+needed, the edit was not hot-reloaded; verify the restarted app through DevFlow.
+For this repository's .NET 11 Android and iOS `DevFlow.Sample`, repeated
+existing-label XAML edits were verified in the same process, preserving input
+and refreshing DevFlow source maps. An older DevFlow source-map generator
+caused a restart; `dotnet watch --verbose` revealed `ENC0118` in
+`DevFlowXamlSourceMaps.g.cs`.
+An omitted `.xaml` file in `dotnet watch --list` is not proof it is unwatched:
+it can be tracked as a compiler additional document. Other platforms and edit
+types still need their own verification, including Mac Catalyst.
+
+Wait for DevFlow after the first launch. After each edit, confirm the watcher's Hot Reload/restart
+result and query the changed UI through DevFlow; a running agent alone does not prove the edit
+applied. Treat a Hot Reload compilation error as a failed update: inspect the watcher diagnostics
+and verify the source behavior before continuing. Unsupported edits can require a restart. On .NET 11 Mac Catalyst, set the
+`partial-static` registrar and a minimum supported OS version of 17.0.
+
+**To rebuild:** use the platform-specific launch steps above when the watcher reports an
+unsupported edit or the app needs a full restart. See [references/troubleshooting.md](references/troubleshooting.md)
 if the build fails.
 
 ### 4. Inspect and Interact
