@@ -8,6 +8,7 @@ description: |
 on:
   pull_request:
     types: [closed]
+    max-stack: -1
     branches:
       - main
       - release/*
@@ -52,6 +53,10 @@ network:
     - defaults
     - github
 
+excluded-env:
+  - GH_AW_OTLP_ENDPOINTS
+  - OTEL_EXPORTER_OTLP_HEADERS
+
 tools:
   github:
     toolsets: [repos, issues, pull_requests]
@@ -62,12 +67,21 @@ imports:
 
 safe-outputs:
   github-token: ${{ secrets.MAUI_BOT_TOKEN }}
+  noop:
+    report-as-issue: false
+  threat-detection:
+    continue-on-error: false
+    steps:
+      - name: Clear OTLP credentials before threat detection
+        run: |
+          echo "GH_AW_OTLP_ENDPOINTS=" >> "$GITHUB_ENV"
+          echo "OTEL_EXPORTER_OTLP_HEADERS=" >> "$GITHUB_ENV"
   steps:
     - name: Enforce documentation issue AI disclosure
       id: enforce_ai_disclosure
       uses: actions/github-script@v8
       env:
-        GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
+        GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
       with:
         script: |
           const fs = require("node:fs");
@@ -95,11 +109,55 @@ safe-outputs:
             }
           }
           fs.writeFileSync(outputPath, JSON.stringify(output), "utf8");
+    # gh-aw v0.87.10 replaces imported safe-output steps; keep this guard in sync with shared/docs-output-body-limit.md.
+    - name: Guard final documentation output body sizes
+      id: guard_output_body_sizes
+      uses: actions/github-script@v8
+      with:
+        script: |
+          const fs = require("node:fs");
+          const entrypoint = `${process.env.RUNNER_TEMP}/gh-aw/actions/safe_output_handler_manager.cjs`;
+          const original = `${process.env.RUNNER_TEMP}/gh-aw/actions/docs_original_handler_manager.cjs`;
+          if (fs.existsSync(original)) {
+            throw new Error("Documentation output body guard was already installed.");
+          }
+          fs.renameSync(entrypoint, original);
+          fs.writeFileSync(entrypoint, `
+          const handler = require("./docs_original_handler_manager.cjs");
+          module.exports = {
+            ...handler,
+            async main(...args) {
+              const restorations = [];
+              for (const resource of ["issues", "pulls"]) {
+                for (const operation of ["create", "update"]) {
+                  const client = github.rest[resource];
+                  const send = client[operation];
+                  client[operation] = async function (params) {
+                    // UTF-16 length is conservative for non-BMP text; never truncate disclosure or provenance.
+                    if (typeof params.body === "string" && params.body.length > 65536) {
+                      const message = "Documentation output " + resource + "." + operation
+                        + " body exceeds GitHub's 65,536-character limit after disclosure and generated content ("
+                        + params.body.length + " UTF-16 code units). Shorten the generated body and retry.";
+                      core.setFailed(message);
+                      throw new Error(message);
+                    }
+                    return send.call(this, params);
+                  };
+                  restorations.push(() => { client[operation] = send; });
+                }
+              }
+              try {
+                return await handler.main(...args);
+              } finally {
+                for (const restore of restorations) restore();
+              }
+            }
+          };
+          `, "utf8");
   create-issue:
     title-prefix: "[maui-labs docs] "
     labels: [docs-from-code]
     target-repo: "dotnet/docs-maui"
-  noop: false
 
 timeout-minutes: 15
 ---
@@ -108,7 +166,8 @@ timeout-minutes: 15
 
 Analyze a merged pull request in `dotnet/maui-labs` and determine whether
 documentation updates are needed on the `dotnet/docs-maui` documentation site.
-If updates are needed, open an issue on docs-maui. If not, do nothing.
+If updates are needed, open an issue on docs-maui. If not, call `noop` with a
+brief reason; do not create an issue or comment.
 
 ## Context
 
@@ -139,7 +198,8 @@ Before doing a deep analysis, check if this PR can be **skipped entirely**:
 - ALL changed files are CI/build infrastructure only (`eng/`, `.github/`,
   `*.yml`, `*.yaml`, `*.props`, `*.targets`)
 
-If the PR is skipped, **stop silently** — do not create any issues or comments.
+If the PR is skipped, call `noop` with a brief reason and **stop silently** —
+do not create any issues or comments.
 
 **Always proceed with analysis if:**
 - Any file in `src/Cli/Microsoft.Maui.Cli/DevFlow/` was changed (CLI DevFlow commands)
@@ -170,7 +230,8 @@ Review the PR diff for user-facing changes that affect documentation.
 - Performance improvements that don't change usage patterns
 - Help text or error message fixes (these are self-documenting)
 
-If no documentation is needed, **stop silently** — do not create any issues or comments.
+If no documentation is needed, call `noop` with a brief reason and **stop
+silently** — do not create any issues or comments.
 
 **When uncertain, PROCEED.** Issues are cheap; missing docs are expensive.
 
@@ -226,7 +287,7 @@ the GitHub request, including unexpected footer growth; it never truncates
 disclosure or provenance.
 
 Local regression check: `node --test .github/workflows/tests/pr-docs-check.test.cjs`.
-Set `GH_AW_ACTIONS_DIR` to gh-aw v0.53.5's `actions/setup/js` directory to also
+Set `GH_AW_ACTIONS_DIR` to gh-aw v0.87.10's `actions/setup/js` directory to also
 exercise its issue handler with a mocked GitHub client (no API writes).
 After editing the frontmatter, regenerate this workflow's lock file with
-`gh aw compile pr-docs-check` using gh-aw v0.53.5.
+`gh aw compile pr-docs-check` using gh-aw v0.87.10.

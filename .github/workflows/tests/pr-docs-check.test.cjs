@@ -122,23 +122,58 @@ for (const [name, workflow] of [["source", source], ["compiled", compiled]]) {
 test("compiled output enforces disclosure after download and before the unchanged issue handler", () => {
   assert.equal(disclosureScript(source), disclosureScript(compiled));
   const job = compiled.slice(compiled.indexOf("\n  safe_outputs:"));
-  const download = job.indexOf('echo "GH_AW_AGENT_OUTPUT=');
+  const download = job.indexOf("id: download-agent-output");
+  const setupOutput = job.indexOf("id: setup-agent-output-env");
   const enforcement = job.indexOf("id: enforce_ai_disclosure");
   const handler = job.indexOf("id: process_safe_outputs");
-  assert.ok(download > 0 && enforcement > download && handler > enforcement);
-  assert.doesNotMatch(job.slice(download, handler), /continue-on-error: true|if: always\(\)/);
+  assert.ok(download > 0 && setupOutput > download && enforcement > setupOutput && handler > enforcement);
+  assert.match(job.slice(enforcement, handler), /GH_AW_AGENT_OUTPUT: \$\{\{ steps\.setup-agent-output-env\.outputs\.GH_AW_AGENT_OUTPUT \}\}/);
+  assert.doesNotMatch(job.slice(setupOutput, handler), /continue-on-error: true|if: always\(\)/);
   const configLine = job.match(/GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: (".*")/)[1];
   const config = JSON.parse(JSON.parse(configLine));
-  assert.deepEqual(Object.keys(config).sort(), ["create_issue", "missing_data", "missing_tool"]);
   assert.equal(config.create_issue["target-repo"], "dotnet/docs-maui");
   assert.equal(config.create_issue.max, 1);
   assert.equal(config.create_issue.footer, undefined, "Keep the default provenance footer");
   assert.equal(config.create_issue.group, undefined, "No unprotected parent issue creation");
-  assert.match(job, /require\('\/opt\/gh-aw\/actions\/safe_output_handler_manager.cjs'\)/);
+  assert.equal(config.noop["report-as-issue"], "false");
+  assert.match(job, /safe_output_handler_manager\.cjs/);
+});
+
+test("compiled workflow launches AWF without sudo", () => {
+  assert.match(compiled, /^\s+awf --config /m);
+  assert.doesNotMatch(compiled, /sudo\s+-E\s+awf/);
+});
+
+test("compiled workflow gates outputs on strict detection and keeps all merged stack positions", () => {
+  const detection = compiled.slice(compiled.indexOf("\n  detection:"), compiled.indexOf("\n  pre_activation:"));
+  const conclusion = detection.slice(detection.indexOf("      - name: Conclude threat detection"));
+  const install = detection.slice(
+    detection.indexOf("      - name: Install threat-detect binary"),
+    detection.indexOf("      - name: Execute threat detection with AWF"),
+  );
+  const safeOutputs = compiled.slice(compiled.indexOf("\n  safe_outputs:"));
+  assert.equal((detection.match(/GH_AW_DETECTION_CONTINUE_ON_ERROR: "false"/g) ?? []).length, 3);
+  assert.doesNotMatch(install, /continue-on-error:/);
+  assert.doesNotMatch(conclusion, /continue-on-error:/);
+  assert.match(safeOutputs, /needs\.detection\.result == 'success'/);
+  const clearTelemetry = detection.indexOf("Clear OTLP credentials before threat detection");
+  const detectionAwf = detection.indexOf("Execute threat detection with AWF");
+  assert.ok(clearTelemetry > 0 && clearTelemetry < detectionAwf);
+  const clearStep = detection.slice(clearTelemetry, detectionAwf);
+  for (const variable of ["GH_AW_OTLP_ENDPOINTS", "OTEL_EXPORTER_OTLP_HEADERS"]) {
+    assert.match(source, new RegExp(`- ${variable}`));
+    assert.equal((compiled.match(new RegExp(`--exclude-env ${variable}(?:\\s|$)`, "g")) ?? []).length, 1);
+    assert.match(clearStep, new RegExp(`${variable}=.*GITHUB_ENV`));
+  }
+  assert.doesNotMatch(compiled, /pull_request\.stack\.position/);
+  assert.match(source, /max-stack: -1/);
+  assert.match(source, /If the PR is skipped, call `noop`/);
+  assert.match(source, /If no documentation is needed, call `noop`/);
+  assert.match(compiled, /GH_AW_NOOP_REPORT_AS_ISSUE: "false"/);
 });
 
 test("pinned gh-aw handler sends disclosure and provenance in the actual create payload", {
-  skip: !process.env.GH_AW_ACTIONS_DIR && "Set GH_AW_ACTIONS_DIR to gh-aw v0.53.5 actions/setup/js",
+  skip: !process.env.GH_AW_ACTIONS_DIR && "Set GH_AW_ACTIONS_DIR to gh-aw v0.87.10 actions/setup/js",
 }, async t => {
   const { main } = require(path.join(process.env.GH_AW_ACTIONS_DIR, "create_issue.cjs"));
   const savedGlobals = { core: global.core, context: global.context, github: global.github };
@@ -151,7 +186,8 @@ test("pinned gh-aw handler sends disclosure and provenance in the actual create 
     GH_AW_WORKFLOW_SOURCE: "",
     GH_AW_WORKFLOW_SOURCE_URL: "",
   };
-  const savedEnv = Object.fromEntries(Object.keys(metadata).map(key => [key, process.env[key]]));
+  const promptDir = path.join(process.env.GH_AW_ACTIONS_DIR, "..", "md");
+  const savedEnv = Object.fromEntries([...Object.keys(metadata), "GH_AW_PROMPTS_DIR"].map(key => [key, process.env[key]]));
   t.after(() => {
     Object.assign(global, savedGlobals);
     for (const [key, value] of Object.entries(savedEnv)) {
@@ -160,6 +196,7 @@ test("pinned gh-aw handler sends disclosure and provenance in the actual create 
     }
   });
   Object.assign(process.env, metadata);
+  process.env.GH_AW_PROMPTS_DIR = promptDir;
   const failures = [];
   global.core = { info() {}, debug() {}, warning() {}, setOutput() {}, setFailed(message) { failures.push(message); }, error() {} };
   global.context = {

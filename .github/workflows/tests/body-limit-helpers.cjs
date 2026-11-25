@@ -1,21 +1,24 @@
 const assert = require("node:assert/strict");
 const vm = require("node:vm");
 
-function installBodyGuard(workflow) {
+function installBodyGuard(workflow, { alreadyInstalled = false } = {}) {
   const blocks = [...workflow.matchAll(/^( +)script: \|-?\n((?:\1  .*(?:\n|$)|\n)+)/gm)];
   const scripts = blocks.map(([, indent, body]) =>
     body.replace(new RegExp(`^${indent}  `, "gm"), ""));
-  const matches = scripts.filter(script => script.includes('const original = "/opt/gh-aw/actions/docs_original_handler_manager.cjs";'));
+  const matches = scripts.filter(script => script.includes("docs_original_handler_manager.cjs"));
   assert.equal(matches.length, 1, "One final-body guard installer must be compiled");
   let renamed = false;
   let wrapper;
-  const entrypoint = "/opt/gh-aw/actions/safe_output_handler_manager.cjs";
-  const original = "/opt/gh-aw/actions/docs_original_handler_manager.cjs";
+  const runnerTemp = "/fixture/runner-temp";
+  const actionsDir = matches[0].includes("process.env.RUNNER_TEMP") ? `${runnerTemp}/gh-aw/actions` : "/opt/gh-aw/actions";
+  const entrypoint = `${actionsDir}/safe_output_handler_manager.cjs`;
+  const original = `${actionsDir}/docs_original_handler_manager.cjs`;
   vm.runInNewContext(matches[0], {
+    process: { env: { RUNNER_TEMP: runnerTemp } },
     require(name) {
       assert.equal(name, "node:fs");
       return {
-        existsSync(file) { assert.equal(file, original); return false; },
+        existsSync(file) { assert.equal(file, original); return alreadyInstalled; },
         renameSync(from, to) {
           assert.equal(from, entrypoint);
           assert.equal(to, original);
