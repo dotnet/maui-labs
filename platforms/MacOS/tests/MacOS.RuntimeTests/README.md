@@ -23,7 +23,7 @@ sentinel and all 59 fixed assertions remain required.
 | Scenario | Cases | Before/fixed behavior |
 |---|---|---|
 | `layout` | 6 | Exact missing native child failure / add, insert, replace, remove, clear, re-add |
-| `contentview-clipping` | 19 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, Entry replacement, redraw cost, scale-only visibility and extent, native owner relayout, scaled collections, composite scroll cost and layout changes, Auto Layout toolbar geometry, autoresizing, scale/anchor resets, nonuniform scale, combined rotation/mirroring with translation, and zero/collapsed transitions (198 assertions) |
+| `contentview-clipping` | 19 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, Entry replacement, redraw cost, scale-only visibility and extent, native owner relayout, scaled collections, composite scroll cost and layout changes, Auto Layout toolbar geometry, autoresizing, scale/anchor resets, logical resizes of autoresizing children, nonuniform scale, combined rotation/mirroring with translation, and zero/collapsed transitions (200 assertions) |
 | `scrollview-measure` | 7 | Horizontal ScrollView in an Auto row measured 0 tall / content-height horizontal scroller, MaximumHeightRequest clamp, star-row fill, wrapping content within WidthRequest, WidthRequest clamped by a smaller MaximumWidthRequest or larger MinimumWidthRequest, padding (17 assertions) |
 | `collection-view-grid` | 4 | Incorrect composed-card measurements and grid rows / tall cards, live Span changes, resize remeasurement, and spanning headers (8 assertions) |
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
@@ -214,7 +214,7 @@ in a 60x30-point region calculated independently from MAUI's untransformed
 arranged rectangle. Transform updates occur after attachment/layout settles;
 the unique yellow corner isolates zero-scale checks from the earlier lime marker.
 
-The scenario requires all 198 assertions and 19 cases. Native scroll notifications
+The scenario requires all 200 assertions and 19 cases. Native scroll notifications
 must not re-arrange unchanged composite item roots, while an ItemsLayout change
 must reposition those same roots. Auto Layout-owned toolbar
 content must retain its resolved Frame/Bounds while transformed and resized;

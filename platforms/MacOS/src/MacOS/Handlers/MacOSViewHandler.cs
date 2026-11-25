@@ -575,11 +575,27 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         {
             // AppKit must know the scale to make newly visible descendants drawable.
             var autoresizes = platformView.AutoresizesSubviews;
+            var oldSize = platformView.Bounds.Size;
             platformView.AutoresizesSubviews = false;
             try
             {
                 if (platformView.Layer is { } layer)
                     layer.Transform = CATransform3D.Identity;
+
+                // Autoresizing stays suspended for the scaled frame so a transform never resizes
+                // native children, but a change in the logical size still has to reach them -
+                // WKWebView, for one, sizes its content view this way and otherwise renders into a
+                // zero-sized view. AppKit autoresizes against the frame, so replay the logical
+                // change unscaled first, then apply the scaled geometry.
+                if (autoresizes && oldSize != bounds.Size)
+                {
+                    platformView.Frame = new CGRect(platformView.Frame.Location, oldSize);
+                    platformView.Bounds = new CGRect(platformView.Bounds.Location, oldSize);
+                    platformView.AutoresizesSubviews = true;
+                    platformView.SetFrameSize(bounds.Size);
+                    platformView.AutoresizesSubviews = false;
+                }
+
                 platformView.Frame = transformed;
                 platformView.Bounds = bounds;
             }

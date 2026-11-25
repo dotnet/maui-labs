@@ -19,7 +19,7 @@ static class Registration
     public static void Register() =>
         ScenarioRegistry.Register(new("contentview-clipping", 19,
             context => new ContentViewClippingScenario().CreateDelegate(context),
-            ExpectedAssertions: 198));
+            ExpectedAssertions: 200));
 }
 
 sealed class ContentViewClippingScenario : MauiRuntimeScenario
@@ -634,6 +634,20 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
                 $"Transform geometry resized an autoresizing child ({autoresizedChild.Frame}) or changed its owner's flag ({worldNative.AutoresizesSubviews}).",
                 "contentview.autoresizing-child");
         }
+        // A logical size change, unlike a transform, must still reach autoresizing children - in
+        // logical units, even while scaled. WKWebView sizes its content view this way.
+        _world.WidthRequest = 1300;
+        await CaptureAsync(context, nativeWindow, "scale-resized.png");
+        context.Assert(FramesMatch(worldNative.Bounds, new CGRect(0, 0, 1300, 240)) &&
+            FramesMatch(autoresizedChild.Frame, new CGRect(800, 100, 180, 20)),
+            $"A logical size change did not resize an autoresizing child ({autoresizedChild.Frame}, owner bounds {worldNative.Bounds}).",
+            "contentview.autoresizing-child-resized");
+        _world.WidthRequest = 1200;
+        await CaptureAsync(context, nativeWindow, "scale-resized-back.png");
+        context.Assert(FramesMatch(worldNative.Bounds, new CGRect(0, 0, 1200, 240)) &&
+            FramesMatch(autoresizedChild.Frame, new CGRect(800, 100, 80, 20)),
+            $"Restoring the logical size did not restore an autoresizing child ({autoresizedChild.Frame}).",
+            "contentview.autoresizing-child-restored");
         _world.AnchorX = _world.AnchorY = 0.5;
         var anchored = await CaptureAsync(context, nativeWindow, "scale-anchored.png");
         context.Assert(FramesMatch(worldNative.Frame, new CGRect(480, 96, 240, 48)),
