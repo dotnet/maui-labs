@@ -328,7 +328,8 @@ public static partial class AndroidCommands
 	/// <summary>
 	/// Resolves the target device serial: an explicit <c>--device</c> value (falling back to the
 	/// <c>ANDROID_SERIAL</c> environment variable) must match an online device; otherwise the single
-	/// online Android device is used. Throws when none, multiple (without a selector), or the requested
+	/// online Android device is used (USB and wireless transports of one phone count as one device,
+	/// preferring USB). Throws when none, multiple (without a selector), or the requested
 	/// device is not online.
 	/// </summary>
 	static async Task<string> ResolveDeviceSerialAsync(IAndroidProvider provider, string? requested, CancellationToken cancellationToken)
@@ -345,18 +346,20 @@ public static partial class AndroidCommands
 
 		if (!string.IsNullOrWhiteSpace(target))
 		{
-			var match = online.FirstOrDefault(d => d.Id.Equals(target, StringComparison.OrdinalIgnoreCase));
+			var match = AndroidPhysicalDevices.FindRequested(online, target, static d => d.Id, AndroidPhysicalDevices.GetPhysicalId);
 			if (match is null)
 				throw new MauiToolException(ErrorCodes.AndroidDeviceNotFound,
 					$"Android device '{target}' is not connected and online.");
 			return match.Id;
 		}
 
-		return online.Count switch
+		// USB and wireless-debugging transports of the same phone count as one device (USB preferred).
+		var physicalDevices = AndroidPhysicalDevices.Group(online);
+		return physicalDevices.Count switch
 		{
 			0 => throw new MauiToolException(ErrorCodes.AndroidDeviceNotFound,
 				"No online Android devices or emulators were found."),
-			1 => online[0].Id,
+			1 => physicalDevices[0][0].Id,
 			_ => throw new MauiToolException(ErrorCodes.InvalidArgument,
 				"Multiple online Android devices or emulators were found. Specify --device or ANDROID_SERIAL.")
 		};

@@ -63,6 +63,12 @@ maui devflow diagnose --device <serial>
 maui devflow list --device <serial>
 ```
 
+One phone connected over both USB and wireless debugging appears twice in
+`adb devices` (its serial and an `adb-<serial>-…._adb-tls-connect._tcp` or
+`ip:port` entry). The CLI treats those entries as one device and prefers the USB
+transport, so no `--device` is needed. You can still pass `--device` or
+`ANDROID_SERIAL` with either transport id or the phone's serial to choose one.
+
 If no broker is available and the app uses a direct `.mauidevflow` port, forward that port instead:
 
 ```bash

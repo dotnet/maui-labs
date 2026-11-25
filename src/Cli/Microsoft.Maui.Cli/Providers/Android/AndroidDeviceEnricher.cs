@@ -75,7 +75,7 @@ internal static class AndroidDeviceEnricher
 		CancellationToken cancellationToken)
 	{
 		// Read every property in parallel — they are independent, and the per-device
-		// property set is small and fixed (≤10 props), so the wall-clock cost is
+		// property set is small and fixed (≤11 props), so the wall-clock cost is
 		// dominated by a few adb round-trips rather than process spawn overhead.
 		// Note: adb does NOT serialise commands per-device — each ReadPropAsync
 		// spawns its own `adb -s <serial> shell getprop` subprocess. A future
@@ -92,8 +92,9 @@ internal static class AndroidDeviceEnricher
 		var brand = ReadPropAsync(getProperty, device.Id, "ro.product.brand", cancellationToken);
 		var model = ReadPropAsync(getProperty, device.Id, "ro.product.model", cancellationToken);
 		var productName = ReadPropAsync(getProperty, device.Id, "ro.product.name", cancellationToken);
+		var serialNumber = ReadPropAsync(getProperty, device.Id, "ro.serialno", cancellationToken);
 
-		await Task.WhenAll(abi, abiList, sdk, sdkFallback, release, releaseFallback, manufacturer, brand, model, productName);
+		await Task.WhenAll(abi, abiList, sdk, sdkFallback, release, releaseFallback, manufacturer, brand, model, productName, serialNumber);
 
 		var resolvedAbi = FirstNonEmpty(abi.Result, FirstAbi(abiList.Result));
 		var architecture = AndroidEnvironment.MapAbiToArchitecture(resolvedAbi);
@@ -115,6 +116,7 @@ internal static class AndroidDeviceEnricher
 			VersionName = versionName ?? device.VersionName,
 			Manufacturer = manufacturerValue ?? device.Manufacturer,
 			Model = modelValue ?? device.Model,
+			SerialNumber = serialNumber.Result ?? device.SerialNumber,
 		};
 
 		return (index, enriched);

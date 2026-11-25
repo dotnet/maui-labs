@@ -106,7 +106,9 @@ public class Adb
 			State = state,
 			IsEmulator = isEmulator,
 			IsRunning = isRunning,
-			ConnectionType = isEmulator ? ConnectionType.Local : ConnectionType.Usb,
+			ConnectionType = isEmulator
+				? ConnectionType.Local
+				: AndroidPhysicalDevices.IsNetworkTransport(info.Serial) ? ConnectionType.Wifi : ConnectionType.Usb,
 			EmulatorId = info.AvdName,
 			Model = info.Model,
 			Idiom = DeviceIdiom.Phone,

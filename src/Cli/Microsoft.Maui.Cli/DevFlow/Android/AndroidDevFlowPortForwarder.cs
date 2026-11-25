@@ -294,29 +294,39 @@ internal sealed class AndroidDevFlowPortForwarder
         if (onlineDevices.Length == 0)
             return AndroidDevFlowDeviceResolution.Failed("No online Android devices or emulators were found.");
 
-        var matches = new List<string>();
-        var errors = new List<string>();
+        var matches = new List<AndroidDevFlowDevice>();
+        var failures = new List<(AndroidDevFlowDevice Device, string Error)>();
         foreach (var device in onlineDevices)
         {
             var mappings = await ListMappingsAsync(device.Serial, reverse: false, cancellationToken);
             if (!mappings.Success)
             {
-                errors.Add($"{device.Serial}: {mappings.Error}");
+                failures.Add((device, $"{device.Serial}: {mappings.Error}"));
                 continue;
             }
 
             if (ContainsMapping(mappings.Mappings, agentPort))
-                matches.Add(device.Serial);
+                matches.Add(device);
         }
 
-        if (matches.Count > 1)
+        // Several transports of the same phone (USB + wireless debugging) are one owner.
+        var owners = AndroidPhysicalDevices.Group(matches, static d => d.Serial, static d => d.PhysicalId);
+        if (owners.Count > 1)
             return AndroidDevFlowDeviceResolution.Failed(
-                $"Agent port {agentPort} is forwarded by multiple Android devices ({string.Join(", ", matches)}). Remove stale ADB forwards and reconnect.");
-        if (errors.Count > 0)
+                $"Agent port {agentPort} is forwarded by multiple Android devices ({string.Join(", ", matches.Select(static d => d.Serial))}). Remove stale ADB forwards and reconnect.");
+
+        // A transport that could not be inspected only matters if it belongs to a different
+        // physical device than the owner we found.
+        var ownerId = owners.Count == 1 ? owners[0][0].PhysicalId : null;
+        var errors = failures
+            .Where(f => ownerId is null || !f.Device.PhysicalId.Equals(ownerId, StringComparison.OrdinalIgnoreCase))
+            .Select(static f => f.Error)
+            .ToArray();
+        if (errors.Length > 0)
             return AndroidDevFlowDeviceResolution.Failed(
                 $"Could not identify the Android device for agent port {agentPort}: {string.Join("; ", errors)}");
-        if (matches.Count == 1)
-            return AndroidDevFlowDeviceResolution.Resolved(matches[0], _adbPath);
+        if (owners.Count == 1)
+            return AndroidDevFlowDeviceResolution.Resolved(owners[0][0].Serial, _adbPath);
 
         return AndroidDevFlowDeviceResolution.Failed(
             $"No online Android device owns the ADB forward for agent port {agentPort}. Reconnect the app or run 'maui devflow diagnose'.");
@@ -329,7 +339,7 @@ internal sealed class AndroidDevFlowPortForwarder
     {
         if (!string.IsNullOrWhiteSpace(requestedSerial))
         {
-            var match = onlineDevices.FirstOrDefault(d => d.Serial.Equals(requestedSerial, StringComparison.OrdinalIgnoreCase));
+            var match = AndroidPhysicalDevices.FindRequested(onlineDevices, requestedSerial, static d => d.Serial, static d => d.PhysicalId);
             return match is not null
                 ? AndroidDeviceSelection.Ok(match)
                 : AndroidDeviceSelection.Failed(
@@ -338,17 +348,20 @@ internal sealed class AndroidDevFlowPortForwarder
                     ["adb devices"]);
         }
 
-        return onlineDevices.Length switch
+        // A phone connected over both USB and wireless debugging shows up as two transports;
+        // treat them as one device and prefer the USB transport.
+        var physicalDevices = AndroidPhysicalDevices.Group(onlineDevices, static d => d.Serial, static d => d.PhysicalId);
+        return physicalDevices.Count switch
         {
             0 => AndroidDeviceSelection.Failed(
                 AndroidDevFlowForwardingStatus.NoDevice,
                 "No online Android devices or emulators were found.",
                 ["adb devices"]),
-            1 => AndroidDeviceSelection.Ok(onlineDevices[0]),
+            1 => AndroidDeviceSelection.Ok(physicalDevices[0][0]),
             _ => AndroidDeviceSelection.Failed(
                 AndroidDevFlowForwardingStatus.MultipleDevices,
                 "Multiple online Android devices or emulators were found. Specify --device or ANDROID_SERIAL.",
-                onlineDevices.Select(static d => $"--device {d.Serial}").ToArray())
+                physicalDevices.Select(static g => $"--device {g[0].Serial}").ToArray())
         };
     }
 
@@ -532,10 +545,24 @@ internal sealed record AndroidDevFlowDevice
     [JsonPropertyName("is_online")]
     public bool IsOnline { get; init; }
 
+    /// <summary>
+    /// Identity of the physical device behind this adb transport. USB and wireless-debugging
+    /// transports of the same phone share it.
+    /// </summary>
+    [JsonIgnore]
+    public string PhysicalId
+    {
+        get => string.IsNullOrEmpty(_physicalId) ? Serial : _physicalId;
+        init => _physicalId = value;
+    }
+
+    readonly string? _physicalId;
+
     public static AndroidDevFlowDevice FromDevice(Device device)
         => new()
         {
             Serial = device.Id,
+            PhysicalId = AndroidPhysicalDevices.GetPhysicalId(device),
             Name = device.Name,
             State = device.State,
             IsEmulator = device.IsEmulator,

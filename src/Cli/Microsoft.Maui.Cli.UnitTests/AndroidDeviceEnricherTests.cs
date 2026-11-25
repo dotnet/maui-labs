@@ -40,6 +40,7 @@ public class AndroidDeviceEnricherTests
 			["ro.build.version.release"] = "16",
 			["ro.product.manufacturer"] = "Google",
 			["ro.product.model"] = "Pixel 8",
+			["ro.serialno"] = "39061FDJH00LYQ",
 		};
 
 		var result = await AndroidDeviceEnricher.EnrichAsync(
@@ -54,6 +55,7 @@ public class AndroidDeviceEnricherTests
 		Assert.Equal("16", device.VersionName);
 		Assert.Equal("Google", device.Manufacturer);
 		Assert.Equal("Pixel 8", device.Model);
+		Assert.Equal("39061FDJH00LYQ", device.SerialNumber);
 	}
 
 	[Fact]
