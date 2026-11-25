@@ -97,9 +97,89 @@ public class AndroidDevFlowPortForwarderTests
 
 		Assert.Equal(AndroidDevFlowForwardingStatus.MultipleDevices, report.Status);
 		Assert.Null(report.SelectedSerial);
-		Assert.Equal("Multiple online Android devices or emulators were found. Specify --device or ANDROID_SERIAL.", report.Message);
+		Assert.StartsWith("Multiple online Android devices or emulators were found. Specify --device or ANDROID_SERIAL.", report.Message);
+		Assert.Contains("No online device is listening on agent port 9223", report.Message);
 		Assert.Empty(runner.Commands);
 	}
+
+	[Fact]
+	public async Task EnsureAsync_WithMultipleDevices_SelectsTheOnlyDeviceListeningOnAgentPort()
+	{
+		var provider = CreateProvider(
+			Device("emulator-5554"),
+			Device("RZ8T123456A", isEmulator: false));
+		var runner = new FakeAdbRunner();
+		runner.ListeningPortsBySerial["emulator-5554"] = [10224];
+		runner.ListeningPortsBySerial["RZ8T123456A"] = [10223];
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest { AgentPorts = [10223], Repair = true });
+
+		Assert.Equal(AndroidDevFlowForwardingStatus.Repaired, report.Status);
+		Assert.Equal("RZ8T123456A", report.SelectedSerial);
+		Assert.Contains("-s RZ8T123456A forward tcp:10223 tcp:10223", runner.Commands);
+		Assert.DoesNotContain(runner.Commands, c => c.Contains("emulator-5554", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public async Task EnsureAsync_WithMultipleDevicesListeningOnAgentPort_RefusesToGuess()
+	{
+		var provider = CreateProvider(
+			Device("emulator-5554"),
+			Device("RZ8T123456A", isEmulator: false));
+		var runner = new FakeAdbRunner();
+		runner.ListeningPortsBySerial["emulator-5554"] = [10223];
+		runner.ListeningPortsBySerial["RZ8T123456A"] = [10223];
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest { AgentPorts = [10223], Repair = true });
+
+		Assert.Equal(AndroidDevFlowForwardingStatus.MultipleDevices, report.Status);
+		Assert.Null(report.SelectedSerial);
+		Assert.Contains("more than one device (emulator-5554, RZ8T123456A)", report.Message);
+		Assert.Empty(runner.Commands);
+	}
+
+	[Fact]
+	public async Task EnsureAsync_WhenAnyDeviceProbeFails_RefusesToGuess()
+	{
+		var provider = CreateProvider(
+			Device("emulator-5554"),
+			Device("RZ8T123456A", isEmulator: false));
+		var runner = new FakeAdbRunner();
+		runner.ListeningPortsBySerial["RZ8T123456A"] = [10223];
+		runner.ShellFailures.Add("emulator-5554");
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest { AgentPorts = [10223], Repair = true });
+
+		Assert.Equal(AndroidDevFlowForwardingStatus.MultipleDevices, report.Status);
+		Assert.Null(report.SelectedSerial);
+		Assert.Contains("Could not inspect listening ports on emulator-5554", report.Message);
+		Assert.Empty(runner.Commands);
+	}
+
+	[Fact]
+	public async Task EnsureAsync_WithMultipleDevicesAndNoAgentPorts_DoesNotProbe()
+	{
+		var provider = CreateProvider(
+			Device("emulator-5554"),
+			Device("RZ8T123456A", isEmulator: false));
+		var runner = new FakeAdbRunner();
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest { EnsureBrokerReverse = true });
+
+		Assert.Equal(AndroidDevFlowForwardingStatus.MultipleDevices, report.Status);
+		Assert.Empty(runner.ShellCommands);
+	}
+
+	[Theory]
+	[InlineData(null)]
+	[InlineData("")]
+	[InlineData("/system/bin/sh: cat: /proc/net/tcp: Permission denied")]
+	public void ParseListeningPorts_UnrecognizedOutput_IsNotTreatedAsNoListeners(string? output)
+		=> Assert.Null(AndroidDevFlowPortForwarder.ParseListeningPorts(output));
 
 	[Fact]
 	public async Task EnsureAsync_WithExplicitSerial_SelectsMatchingDevice()
@@ -123,6 +203,7 @@ public class AndroidDevFlowPortForwarderTests
 		Assert.Equal("RZ8T123456A", report.SelectedSerial);
 		Assert.True(report.BrokerReversePresent);
 		Assert.True(report.AgentForwards.Single(f => f.Port == 9223).PresentAfter);
+		Assert.Empty(runner.ShellCommands);
 	}
 
 	[Fact]

@@ -85,6 +85,41 @@ public class AgentClientQueryTests
     }
 
     [Fact]
+    public async Task QueryAsync_UnreachableAgentThrowsInsteadOfReturningNoElements()
+    {
+        var port = FakeAgent.ReserveFreePort();
+        using var client = new AgentClient("localhost", port)
+        {
+            TransientFailureRetryCount = 0,
+        };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.QueryAsync(type: "Button"));
+    }
+
+    [Fact]
+    public async Task QueryAsync_AgentErrorResponseThrowsWithAgentMessage()
+    {
+        using var agent = FakeAgent.Start(_ => FakeAgent.Response.Json(
+            """{ "success": false, "error": "Agent not bound to app" }""", statusCode: 500));
+        using var client = new AgentClient("localhost", agent.Port);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => client.QueryAsync(type: "Button"));
+
+        Assert.Equal("Agent not bound to app", ex.Message);
+    }
+
+    [Fact]
+    public async Task QueryAsync_NonJsonHttpFailureThrows()
+    {
+        using var agent = FakeAgent.Start(_ => FakeAgent.Response.Json("Bad Gateway", statusCode: 502));
+        using var client = new AgentClient("localhost", agent.Port);
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => client.QueryAsync(type: "Button"));
+
+        Assert.Contains("502", ex.Message);
+    }
+
+    [Fact]
     public async Task GetTreeAsync_RequestsDepthAndParsesTree()
     {
         using var agent = FakeAgent.StartJson(TwoElementPayload);

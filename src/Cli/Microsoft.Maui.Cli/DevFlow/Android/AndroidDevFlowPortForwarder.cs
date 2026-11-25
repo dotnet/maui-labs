@@ -112,6 +112,9 @@ internal sealed class AndroidDevFlowPortForwarder
             .ToArray();
 
         var selected = SelectDevice(onlineDevices, report.RequestedSerial);
+        if (selected.Status == AndroidDevFlowForwardingStatus.MultipleDevices && report.AgentPorts.Length > 0)
+            selected = await SelectDeviceByListeningAgentPortsAsync(onlineDevices, report.AgentPorts, selected, cancellationToken);
+
         if (selected.Status != AndroidDevFlowForwardingStatus.Ok)
         {
             return report with
@@ -350,6 +353,94 @@ internal sealed class AndroidDevFlowPortForwarder
                 "Multiple online Android devices or emulators were found. Specify --device or ANDROID_SERIAL.",
                 onlineDevices.Select(static d => $"--device {d.Serial}").ToArray())
         };
+    }
+
+    /// <summary>
+    /// When several devices are online and no serial was requested, identifies the device that
+    /// hosts the agent by reading each device's listening TCP sockets (read-only). A device is
+    /// selected only when every probe succeeds and exactly one device listens on all requested
+    /// agent ports; otherwise the original ambiguity is preserved so no device is guessed.
+    /// </summary>
+    async Task<AndroidDeviceSelection> SelectDeviceByListeningAgentPortsAsync(
+        AndroidDevFlowDevice[] onlineDevices,
+        int[] agentPorts,
+        AndroidDeviceSelection ambiguous,
+        CancellationToken cancellationToken)
+    {
+        var matches = new List<AndroidDevFlowDevice>();
+        var failedProbes = new List<string>();
+
+        foreach (var device in onlineDevices)
+        {
+            var listening = await TryGetListeningPortsAsync(device.Serial, cancellationToken);
+            if (listening is null)
+            {
+                failedProbes.Add(device.Serial);
+                continue;
+            }
+
+            if (agentPorts.All(listening.Contains))
+                matches.Add(device);
+        }
+
+        if (failedProbes.Count == 0 && matches.Count == 1)
+            return AndroidDeviceSelection.Ok(matches[0]);
+
+        var portList = string.Join(", ", agentPorts);
+        var detail = failedProbes.Count > 0
+            ? $"Could not inspect listening ports on {string.Join(", ", failedProbes)}."
+            : matches.Count == 0
+                ? $"No online device is listening on agent port {portList}."
+                : $"Agent port {portList} is listening on more than one device ({string.Join(", ", matches.Select(static d => d.Serial))}).";
+
+        return ambiguous with { Message = $"{ambiguous.Message} {detail}" };
+    }
+
+    async Task<HashSet<int>?> TryGetListeningPortsAsync(string serial, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timeoutCts = CreateAdbCallTimeoutSource(cancellationToken);
+            var output = await _adbRunner!.RunShellCommandAsync(serial, "cat /proc/net/tcp /proc/net/tcp6", timeoutCts.Token);
+            return ParseListeningPorts(output);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Parses <c>/proc/net/tcp</c>-format output and returns local ports in the LISTEN state.
+    /// Returns <see langword="null"/> when the output is not recognizable, so a failed or
+    /// restricted read is never mistaken for "nothing is listening".
+    /// </summary>
+    internal static HashSet<int>? ParseListeningPorts(string? procNetTcp)
+    {
+        if (string.IsNullOrWhiteSpace(procNetTcp) || !procNetTcp.Contains("local_address", StringComparison.Ordinal))
+            return null;
+
+        const string ListenState = "0A";
+        var ports = new HashSet<int>();
+        foreach (var line in procNetTcp.Split('\n'))
+        {
+            var fields = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (fields.Length < 4 || !fields[3].Equals(ListenState, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var separator = fields[1].LastIndexOf(':');
+            if (separator < 0)
+                continue;
+
+            if (int.TryParse(fields[1].AsSpan(separator + 1), System.Globalization.NumberStyles.HexNumber, null, out var port))
+                ports.Add(port);
+        }
+
+        return ports;
     }
 
     async Task<AndroidPortMappingList> ListMappingsAsync(string serial, bool reverse, CancellationToken cancellationToken)
