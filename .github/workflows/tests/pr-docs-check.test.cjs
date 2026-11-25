@@ -133,12 +133,25 @@ test("compiled output enforces disclosure after download and before the unchange
   assert.equal(config.create_issue.max, 1);
   assert.equal(config.create_issue.footer, undefined, "Keep the default provenance footer");
   assert.equal(config.create_issue.group, undefined, "No unprotected parent issue creation");
+  assert.equal(config.noop["report-as-issue"], "false");
   assert.match(job, /safe_output_handler_manager\.cjs/);
 });
 
 test("compiled workflow launches AWF without sudo", () => {
   assert.match(compiled, /^\s+awf --config /m);
   assert.doesNotMatch(compiled, /sudo\s+-E\s+awf/);
+});
+
+test("compiled workflow gates outputs on strict detection and keeps all merged stack positions", () => {
+  const detection = compiled.slice(compiled.indexOf("\n  detection:"), compiled.indexOf("\n  pre_activation:"));
+  const conclusion = detection.slice(detection.indexOf("id: detection_conclusion"));
+  assert.match(detection, /GH_AW_DETECTION_CONTINUE_ON_ERROR: "false"/);
+  assert.doesNotMatch(conclusion.slice(0, conclusion.indexOf("\n      - name:")), /continue-on-error: true/);
+  assert.doesNotMatch(compiled, /pull_request\.stack\.position/);
+  assert.match(source, /max-stack: -1/);
+  assert.match(source, /If the PR is skipped, call `noop`/);
+  assert.match(source, /If no documentation is needed, call `noop`/);
+  assert.match(compiled, /GH_AW_NOOP_REPORT_AS_ISSUE: "false"/);
 });
 
 test("pinned gh-aw handler sends disclosure and provenance in the actual create payload", {

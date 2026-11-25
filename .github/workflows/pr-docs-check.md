@@ -8,6 +8,7 @@ description: |
 on:
   pull_request:
     types: [closed]
+    max-stack: -1
     branches:
       - main
       - release/*
@@ -62,6 +63,10 @@ imports:
 
 safe-outputs:
   github-token: ${{ secrets.MAUI_BOT_TOKEN }}
+  noop:
+    report-as-issue: false
+  threat-detection:
+    continue-on-error: false
   steps:
     - name: Enforce documentation issue AI disclosure
       id: enforce_ai_disclosure
@@ -144,7 +149,6 @@ safe-outputs:
     title-prefix: "[maui-labs docs] "
     labels: [docs-from-code]
     target-repo: "dotnet/docs-maui"
-  noop: false
 
 timeout-minutes: 15
 ---
@@ -153,7 +157,8 @@ timeout-minutes: 15
 
 Analyze a merged pull request in `dotnet/maui-labs` and determine whether
 documentation updates are needed on the `dotnet/docs-maui` documentation site.
-If updates are needed, open an issue on docs-maui. If not, do nothing.
+If updates are needed, open an issue on docs-maui. If not, call `noop` with a
+brief reason; do not create an issue or comment.
 
 ## Context
 
@@ -184,7 +189,8 @@ Before doing a deep analysis, check if this PR can be **skipped entirely**:
 - ALL changed files are CI/build infrastructure only (`eng/`, `.github/`,
   `*.yml`, `*.yaml`, `*.props`, `*.targets`)
 
-If the PR is skipped, **stop silently** — do not create any issues or comments.
+If the PR is skipped, call `noop` with a brief reason and **stop silently** —
+do not create any issues or comments.
 
 **Always proceed with analysis if:**
 - Any file in `src/Cli/Microsoft.Maui.Cli/DevFlow/` was changed (CLI DevFlow commands)
@@ -215,7 +221,8 @@ Review the PR diff for user-facing changes that affect documentation.
 - Performance improvements that don't change usage patterns
 - Help text or error message fixes (these are self-documenting)
 
-If no documentation is needed, **stop silently** — do not create any issues or comments.
+If no documentation is needed, call `noop` with a brief reason and **stop
+silently** — do not create any issues or comments.
 
 **When uncertain, PROCEED.** Issues are cheap; missing docs are expensive.
 
