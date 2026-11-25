@@ -79,6 +79,8 @@
     <CommunityToolkitMvvmVersion>8.4.2</CommunityToolkitMvvmVersion>
     <FizzlerVersion>1.3.1</FizzlerVersion>
     <SkiaSharpVersion>3.119.2</SkiaSharpVersion>
+    <!-- 3.119.2's tvOS native assets have no simulator slice; 3.119.4 is the first 3.x that does. -->
+    <SkiaSharpNativeAssetsTvOSVersion>3.119.4</SkiaSharpNativeAssetsTvOSVersion>
     <SyncfusionMauiToolkitVersion>1.0.11</SyncfusionMauiToolkitVersion>
     <SpectreConsoleVersion>0.54.0</SpectreConsoleVersion>
     <SystemCommandLineStableVersion>2.0.5</SystemCommandLineStableVersion>

@@ -30,7 +30,7 @@ The separate `ci-devflow.yml` workflow runs host, browser, JavaScript and AOT te
 | **Microsoft.Maui.DevFlow.Blazor.Gtk** | Blazor CDP bridge for WebKitGTK on Linux. |
 | **Microsoft.Maui.DevFlow.CLI** | DevFlow command implementation used by the unified `maui devflow` CLI surface for automation, debugging, and MCP server support. |
 | **Microsoft.Maui.DevFlow.Client** | Portable protocol client: `AgentClient`, element and protocol DTOs, and their serialization. Targets `netstandard2.0`, so .NET Framework harnesses speak the same protocol as modern .NET consumers. |
-| **Microsoft.Maui.DevFlow.Driver** | Platform-aware app driver for iOS, Android, Mac Catalyst, Windows, and Linux. Builds on `Microsoft.Maui.DevFlow.Client`. |
+| **Microsoft.Maui.DevFlow.Driver** | Platform-aware app driver for iOS, tvOS simulators, Android, Mac Catalyst, Windows, and Linux. Builds on `Microsoft.Maui.DevFlow.Client`. |
 | **Microsoft.Maui.DevFlow.Logging** | Buffered rotating JSONL file logger. No MAUI dependency. |
 
 ## Quick Start
@@ -234,6 +234,66 @@ Optional bridge diagnostics use `GtkBlazorWebViewDebugService.LogCallback`;
 JavaScript console entries are available through the DevFlow log API when log
 capture is enabled.
 
+### tvOS apps
+
+MAUI has no tvOS backend of its own. Apps that run MAUI on tvOS through a community backend
+such as [Platform.Maui.TvOS](https://github.com/shinyorg/mauiplatforms) use the standard
+`Microsoft.Maui.DevFlow.Agent` package, which has `net10.0-tvos` and `net11.0-tvos` targets built and packed
+alongside the other Apple targets, including in the Windows signing build. Register it in
+the backend's `CreateMauiApp`:
+
+```csharp
+using Microsoft.Maui.DevFlow.Agent;
+
+#if DEBUG
+builder.AddMauiDevFlowAgent();
+#endif
+```
+
+The agent starts once the backend has created the MAUI application. The visual tree, element
+and window screenshots, tap (sent as `PrimaryActionTriggered`, the Siri Remote select press),
+fill, navigation, logs and preference key listing work. Point gestures and synthetic touch
+are not available because tvOS has no touchscreen. MAUI Essentials ships no tvOS
+implementation, so the agent reads the platform and app identity from UIKit and the app bundle;
+the other Essentials endpoints (preference values, secure storage, device info and sensors)
+return an error unless the app registers an Essentials backend. tvOS 27 only launches apps that adopt the scene lifecycle, so declare
+`UIApplicationSceneManifest` in `Info.plist` and use a backend version that supports scenes.
+See `samples/DevFlow.Sample.TvOS`.
+
+The CLI and MCP tools use the selected agent's simulator UDID, not the first booted
+iPhone or Apple TV. Unscoped screenshots capture the entire simulator display, including
+system overlays; element and capture-bound screenshots stay with the agent. Simulator
+recording and app-scoped light/dark theme switching also work. Explicit simulator targets use
+the existing Apple commands:
+
+```bash
+maui device list --platform tvos
+maui apple runtime list --platform tvOS
+maui apple simulator start <tv-udid>
+maui apple simulator install <tv-udid> path/to/DevFlow.Sample.TvOS.app
+maui apple simulator launch <tv-udid> com.companyname.devflow.tvos
+maui devflow ui screenshot --output tv.png
+maui devflow recording start --platform tvos --device <tv-udid> --output tv.mp4
+maui devflow recording stop
+maui devflow theme set dark --scope app
+maui apple simulator stop <tv-udid>
+```
+
+`maui apple simulator` also supports create/delete, app uninstall/terminate, screenshots
+and video recording without an agent. This is not a full Siri Remote emulator:
+directional focus movement, remote button injection and system-dialog interaction are
+not implemented for tvOS. `simctl ui appearance` is unsupported on Apple TV, so theme changes
+apply to the app, not the simulator system. Use agent element actions for app controls; physical Apple TVs
+use in-app screenshots and actions, not host `simctl` operations.
+
+For manual simulator navigation, use arrow keys to move focus, Return to select, and
+Escape to go back ([Apple's keyboard shortcuts](https://developer.apple.com/documentation/xcode/interacting-with-your-app-in-the-tvos-simulator)).
+DevFlow's key action (`maui_key` over MCP) operates on supported text controls; it does not inject
+these simulator shortcuts. Element actions do not validate real remote/focus navigation.
+The bundled [`maui-devflow-debug` Apple reference](../../plugins/dotnet-maui-tooling/skills/maui-devflow-debug/references/ios-and-mac.md#tvos-apple-tv)
+has the deployment and automation workflow. Updated CLI bundles distribute this guidance
+through `maui devflow init`; existing installations can use `maui devflow skills update`.
+
 ### 2b. Or, in a plain .NET app (no MAUI)
 
 The same agent, CLI and MCP tools work against apps that never reference MAUI. Reference
@@ -387,7 +447,7 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Dialog Handling** — detect and dismiss alerts/action sheets programmatically; `maui_native_dialog_detect` / `maui_native_dialog_respond` require an exact, user-confirmed choice and a one-time prompt token
 - **Batch Operations** — execute command sequences from stdin for scripting
 - **Agent Extensions** — expose app-specific diagnostic tools under `/api/v1/ext/{namespace}/...` with self-describing metadata for CLI and MCP discovery
-- **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK
+- **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK, tvOS (through a community MAUI backend)
 
 Android driver commands and screen recording use `System.Diagnostics.Process` through the
 driver's internal `HostProcess` helper, not `Xamarin.Android.Tools.ProcessUtils`. Output and
@@ -828,7 +888,7 @@ for Linux-only releases.
 
 The simulator/emulator-driven suite is separate from the fast host tests and runs
 automatically in integration CI as described above. For local runs, set
-`DEVFLOW_TEST_PLATFORM` to `maccatalyst` (or `mac`/`catalyst`), `ios`, `android`,
+`DEVFLOW_TEST_PLATFORM` to `maccatalyst` (or `mac`/`catalyst`), `ios`, `tvos`, `android`,
 `windows`, `macos`, `gtk`, or `wpf`. It defaults to `maccatalyst` on macOS and
 `windows` on Windows.
 
@@ -845,6 +905,23 @@ DEVFLOW_TEST_PLATFORM=android DEVFLOW_TEST_ANDROID_API=35 DEVFLOW_TEST_ANDROID_A
 # Windows (run on a Windows machine)
 DEVFLOW_TEST_PLATFORM=windows dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/
 ```
+
+tvOS drives the smaller `samples/DevFlow.Sample.TvOS` on an Apple TV simulator (a booted
+one is preferred), so only its own tests apply; run them with `--filter Category=TvOS`. The
+sample uses the community Platform.Maui.TvOS backend, which is published to nuget.org only and
+so is not on the repo's feeds: set `DEVFLOW_TEST_TVOS_BACKEND_SOURCE` to a feed that has it
+(such as `https://api.nuget.org/v3/index.json`). The sample targets .NET 11 and uses
+Platform.Maui.TvOS 0.5.0 with scene lifecycle support for tvOS 27; the agent itself retains
+its .NET 10 target. No separate backend checkout is required:
+
+```bash
+DEVFLOW_TEST_PLATFORM=tvos \
+DEVFLOW_TEST_TVOS_BACKEND_SOURCE=https://api.nuget.org/v3/index.json \
+dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter Category=TvOS
+```
+
+For backend development, set `DEVFLOW_TEST_TVOS_BACKEND_PROJECT` to a local
+`mauiplatforms/src/Platform.Maui.TvOS/Platform.Maui.TvOS.csproj` instead.
 
 For local reliability, prefer running one platform suite at a time from a given repo worktree. Android fixture selection can be pinned with `DEVFLOW_TEST_ANDROID_AVD` and `DEVFLOW_TEST_ANDROID_SERIAL` when you want the harness to use a known emulator instance.
 

@@ -45,7 +45,8 @@ internal sealed class HostOperations(Func<Task<AgentStatus?>> getStatus)
     internal async Task<(bool Success, string? Error)> SetPermissionAsync(
         IAppleProvider appleProvider, string action, string? udid, string? bundleId, string service)
     {
-        var resolved = await ResolveUdidAsync(udid);
+        var status = string.IsNullOrWhiteSpace(udid) ? await getStatus() : null;
+        var resolved = await ResolveUdidAsync(udid, status);
 
         if (!SimulatorEnumParsing.TryParsePrivacyPermission(service, out var permission))
             return (false, $"Unknown permission service '{service}'. Valid services: {SimulatorEnumParsing.PrivacyPermissionNames}.");
@@ -81,6 +82,8 @@ internal sealed class HostOperations(Func<Task<AgentStatus?>> getStatus)
             if (status?.Platform != null)
             {
                 var platform = status.Platform.ToLowerInvariant();
+                if (platform.Contains("tvos"))
+                    throw new NotSupportedException("Native tvOS dialog automation requires remote focus input, which is not supported. Use agent UI actions for app controls.");
                 if (platform.Contains("ios")) return "ios-simulator";
                 if (platform.Contains("android")) return "android";
                 if (platform.Contains("windows")) return "windows";
@@ -88,6 +91,7 @@ internal sealed class HostOperations(Func<Task<AgentStatus?>> getStatus)
                 // Prefer a booted iOS simulator over the desktop fallback for dialog detection.
             }
         }
+        catch (NotSupportedException) { throw; }
         catch { }
 
         if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
@@ -177,10 +181,25 @@ internal sealed class HostOperations(Func<Task<AgentStatus?>> getStatus)
         throw new InvalidOperationException("Cannot determine Windows app PID. Specify --pid.");
     }
 
-    internal static async Task<string> ResolveUdidAsync(string? udid)
+    internal static bool IsAppleSimulatorPlatform(string? platform)
+        => platform?.Equals("ios", StringComparison.OrdinalIgnoreCase) == true
+            || platform?.Equals("iossimulator", StringComparison.OrdinalIgnoreCase) == true
+            || platform?.Equals("tvos", StringComparison.OrdinalIgnoreCase) == true
+            || platform?.Equals("tvossimulator", StringComparison.OrdinalIgnoreCase) == true;
+
+    internal static async Task<string> ResolveUdidAsync(string? udid, AgentStatus? status = null)
     {
-        if (!string.IsNullOrEmpty(udid))
+        if (!string.IsNullOrWhiteSpace(udid))
             return udid;
+
+        if (status != null && IsAppleSimulatorPlatform(status.Platform))
+        {
+            if (!string.Equals(status.DeviceType, "Virtual", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The selected agent is not running on an Apple simulator. Specify a simulator UDID.");
+
+            if (!string.IsNullOrWhiteSpace(status.Device?.Id))
+                return status.Device.Id;
+        }
 
         var result = await ProcessRunner.RunAsync("xcrun", ["simctl", "list", "devices", "booted", "-j"]);
         if (!result.Success || result.ExitCode != 0)
@@ -193,21 +212,38 @@ internal sealed class HostOperations(Func<Task<AgentStatus?>> getStatus)
         if (string.IsNullOrWhiteSpace(result.StandardOutput))
             throw new InvalidOperationException("Failed to resolve simulator UDID: no output received from 'xcrun simctl list devices booted -j'.");
 
-        using var doc = JsonDocument.Parse(result.StandardOutput);
+        return SelectBootedSimulator(result.StandardOutput, status?.Platform);
+    }
+
+    internal static string SelectBootedSimulator(string json, string? platform = null)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var candidates = new List<string>();
         if (doc.RootElement.TryGetProperty("devices", out var devices))
         {
             foreach (var runtime in devices.EnumerateObject())
             {
+                var runtimePlatform = platform?.StartsWith("tvos", StringComparison.OrdinalIgnoreCase) == true
+                    ? "tvOS" : platform?.StartsWith("ios", StringComparison.OrdinalIgnoreCase) == true ? "iOS" : null;
+                if (runtimePlatform != null && !runtime.Name.Contains($".{runtimePlatform}-", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 foreach (var device in runtime.Value.EnumerateArray())
                 {
-                    if (device.TryGetProperty("state", out var state) && state.GetString() == "Booted")
+                    if (device.TryGetProperty("state", out var state) && state.GetString() == "Booted"
+                        && (!device.TryGetProperty("isAvailable", out var available) || available.GetBoolean()))
                     {
-                        return device.GetProperty("udid").GetString()!;
+                        candidates.Add(device.GetProperty("udid").GetString()!);
                     }
                 }
             }
         }
 
-        throw new InvalidOperationException("No booted simulator found. Specify --udid or boot a simulator.");
+        return candidates.Count switch
+        {
+            1 => candidates[0],
+            0 => throw new InvalidOperationException("No matching booted simulator found. Specify --udid or boot a simulator."),
+            _ => throw new InvalidOperationException("Multiple matching simulators are booted. Specify --udid to choose one.")
+        };
     }
 }

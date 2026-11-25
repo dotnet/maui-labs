@@ -1,13 +1,14 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
 using Microsoft.Maui.Cli.DevFlow.Mcp;
+using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 
 [McpServerToolType]
 public sealed class RecordingTools
 {
-	[McpServerTool(Name = "maui_recording_start"), Description("Start screen recording of the running app. Uses platform-specific recording (xcrun for iOS/Mac Catalyst, scrcpy for Android).")]
+	[McpServerTool(Name = "maui_recording_start"), Description("Start screen recording of the running app. Uses simctl for iOS/tvOS simulators, xcrun for Mac Catalyst, and scrcpy for Android.")]
 	public static async Task<string> RecordingStart(
 		McpAgentSession session,
 		[Description("Output file path (default: recording_<timestamp>.mp4)")] string? output = null,
@@ -18,11 +19,14 @@ public sealed class RecordingTools
 		{
 			using var agent = await session.GetAgentClientAsync(agentPort);
 			var status = await agent.GetStatusAsync();
-			var platform = status?.Platform ?? "maccatalyst";
+			var platform = status?.Platform ?? throw new InvalidOperationException("The selected agent did not report its platform.");
+			var device = HostOperations.IsAppleSimulatorPlatform(platform)
+				? await HostOperations.ResolveUdidAsync(null, status)
+				: session.GetAndroidDeviceSerial(new Uri(agent.BaseUrl).Port);
 
 			var filename = output ?? $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.mp4";
-			using var driver = Microsoft.Maui.DevFlow.Driver.AppDriverFactory.Create(platform);
-			await driver.StartRecordingAsync(filename, timeout);
+			var operations = new RecordingOperations(DevFlowCommands.CreateRecordingDriver, RecordingStateManager.Load);
+			await operations.StartAsync(platform, device, filename, timeout);
 
 			return $"Recording started (timeout: {timeout}s). Output: {Path.GetFullPath(filename)}";
 		}
@@ -39,13 +43,8 @@ public sealed class RecordingTools
 	{
 		try
 		{
-			using var agent = await session.GetAgentClientAsync(agentPort);
-			var status = await agent.GetStatusAsync();
-			var platform = status?.Platform ?? "maccatalyst";
-
-			using var driver = Microsoft.Maui.DevFlow.Driver.AppDriverFactory.Create(platform);
-			var outputFile = await driver.StopRecordingAsync();
-			var size = File.Exists(outputFile) ? new FileInfo(outputFile).Length : 0;
+			var operations = new RecordingOperations(DevFlowCommands.CreateRecordingDriver, RecordingStateManager.Load);
+			var (outputFile, size) = await operations.StopAsync();
 
 			return $"Recording saved: {outputFile} ({size} bytes)";
 		}
