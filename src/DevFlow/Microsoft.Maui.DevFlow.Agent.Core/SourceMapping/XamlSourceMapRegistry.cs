@@ -1,6 +1,15 @@
 using System.Collections.Concurrent;
+using System.Reflection.Metadata;
+
+[assembly: MetadataUpdateHandler(typeof(Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMapHotReloadHandler))]
 
 namespace Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
+
+static class XamlSourceMapHotReloadHandler
+{
+    internal static void ClearCache(Type[]? updatedTypes)
+        => XamlSourceMapRegistry.Instance.InvalidateCache();
+}
 
 public sealed class XamlSourceMapRegistry : IXamlSourceMapProvider
 {
@@ -8,7 +17,7 @@ public sealed class XamlSourceMapRegistry : IXamlSourceMapProvider
 
     private readonly List<IXamlSourceMapProvider> _providers = [];
     private readonly object _gate = new();
-    private readonly ConcurrentDictionary<string, XamlSourceMap> _cache =
+    private ConcurrentDictionary<string, XamlSourceMap> _cache =
         new(StringComparer.Ordinal);
 
     private XamlSourceMapRegistry()
@@ -32,7 +41,8 @@ public sealed class XamlSourceMapRegistry : IXamlSourceMapProvider
     {
         if (string.IsNullOrEmpty(fullTypeName))
             return null;
-        if (_cache.TryGetValue(fullTypeName, out var cached))
+        var cache = Volatile.Read(ref _cache);
+        if (cache.TryGetValue(fullTypeName, out var cached))
             return cached;
 
         IXamlSourceMapProvider[] providers;
@@ -48,7 +58,7 @@ public sealed class XamlSourceMapRegistry : IXamlSourceMapProvider
             var map = provider.GetMap(fullTypeName);
             if (map is null)
                 continue;
-            _cache[fullTypeName] = map;
+            cache[fullTypeName] = map;
             return map;
         }
 
@@ -59,7 +69,20 @@ public sealed class XamlSourceMapRegistry : IXamlSourceMapProvider
     {
         lock (_gate)
             _providers.Clear();
-        _cache.Clear();
+        InvalidateCache();
+    }
+
+    // A lookup already in flight must not repopulate the new cache with its old result.
+    // Providers are invalidated first so that a lookup which reads the old cache cannot
+    // place a map built from stale provider data into the new one.
+    internal void InvalidateCache()
+    {
+        IXamlSourceMapProvider[] providers;
+        lock (_gate)
+            providers = _providers.ToArray();
+        foreach (var provider in providers)
+            provider.InvalidateCache();
+        Interlocked.Exchange(ref _cache, new(StringComparer.Ordinal));
     }
 
     internal bool HasProviders

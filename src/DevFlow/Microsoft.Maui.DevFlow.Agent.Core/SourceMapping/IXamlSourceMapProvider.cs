@@ -7,4 +7,11 @@ namespace Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
 public interface IXamlSourceMapProvider
 {
     XamlSourceMap? GetMap(string fullTypeName);
+
+    /// <summary>
+    /// Discards data derived from code that a Hot Reload metadata update may have changed.
+    /// </summary>
+    void InvalidateCache()
+    {
+    }
 }
