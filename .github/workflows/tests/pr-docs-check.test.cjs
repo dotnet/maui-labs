@@ -144,9 +144,16 @@ test("compiled workflow launches AWF without sudo", () => {
 
 test("compiled workflow gates outputs on strict detection and keeps all merged stack positions", () => {
   const detection = compiled.slice(compiled.indexOf("\n  detection:"), compiled.indexOf("\n  pre_activation:"));
-  const conclusion = detection.slice(detection.indexOf("id: detection_conclusion"));
-  assert.match(detection, /GH_AW_DETECTION_CONTINUE_ON_ERROR: "false"/);
-  assert.doesNotMatch(conclusion.slice(0, conclusion.indexOf("\n      - name:")), /continue-on-error: true/);
+  const conclusion = detection.slice(detection.indexOf("      - name: Conclude threat detection"));
+  const install = detection.slice(
+    detection.indexOf("      - name: Install threat-detect binary"),
+    detection.indexOf("      - name: Execute threat detection with AWF"),
+  );
+  const safeOutputs = compiled.slice(compiled.indexOf("\n  safe_outputs:"));
+  assert.equal((detection.match(/GH_AW_DETECTION_CONTINUE_ON_ERROR: "false"/g) ?? []).length, 3);
+  assert.doesNotMatch(install, /continue-on-error:/);
+  assert.doesNotMatch(conclusion, /continue-on-error:/);
+  assert.match(safeOutputs, /needs\.detection\.result == 'success'/);
   assert.doesNotMatch(compiled, /pull_request\.stack\.position/);
   assert.match(source, /max-stack: -1/);
   assert.match(source, /If the PR is skipped, call `noop`/);
