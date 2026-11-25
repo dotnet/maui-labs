@@ -10,13 +10,17 @@ for (const workflow of ["pr-docs-check", "ai-docs-audit"]) {
   const compiled = fs.readFileSync(path.join(directory, `${workflow}.lock.yml`), "utf8");
   test(`${workflow}: compiled final-payload guard matches shared source and precedes dispatch`, () => {
     assert.equal(installBodyGuard(compiled), installBodyGuard(shared));
+    assert.throws(() => installBodyGuard(compiled, { alreadyInstalled: true }), /already installed/);
     const job = compiled.slice(compiled.indexOf("\n  safe_outputs:"));
     const guard = job.indexOf("id: guard_output_body_sizes");
     assert.ok(guard > job.indexOf("name: Setup Scripts"));
     assert.ok(guard < job.indexOf("id: process_safe_outputs"));
     assert.doesNotMatch(job.slice(guard, job.indexOf("id: process_safe_outputs")), /continue-on-error: true/);
-    const tools = JSON.parse(compiled.match(/cat > \/opt\/gh-aw\/safeoutputs\/config.json << 'GH_AW_SAFE_OUTPUTS_CONFIG_EOF'\n\s+([^\n]+)/)[1]);
-    assert.equal(Object.hasOwn(tools, "noop"), workflow === "ai-docs-audit", "Keep each workflow's existing noop policy");
+    const configEnv = compiled.match(/^\s+GH_AW_SAFE_OUTPUTS_CONFIG: (".*")$/m);
+    const tools = configEnv
+      ? JSON.parse(JSON.parse(configEnv[1]))
+      : JSON.parse(compiled.match(/cat > \/opt\/gh-aw\/safeoutputs\/config.json << 'GH_AW_SAFE_OUTPUTS_CONFIG_EOF'\n\s+([^\n]+)/)[1]);
+    assert.ok(Object.hasOwn(tools, "noop"), "Both workflows support explicit no-op output");
   });
   test(`${workflow}: exact final-body boundary enforced before every issue/PR create/update request`, async () => {
     const failures = [];

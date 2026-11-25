@@ -95,6 +95,51 @@ safe-outputs:
             }
           }
           fs.writeFileSync(outputPath, JSON.stringify(output), "utf8");
+    # gh-aw v0.87.10 replaces imported safe-output steps; keep this guard in sync with shared/docs-output-body-limit.md.
+    - name: Guard final documentation output body sizes
+      id: guard_output_body_sizes
+      uses: actions/github-script@v8
+      with:
+        script: |
+          const fs = require("node:fs");
+          const entrypoint = `${process.env.RUNNER_TEMP}/gh-aw/actions/safe_output_handler_manager.cjs`;
+          const original = `${process.env.RUNNER_TEMP}/gh-aw/actions/docs_original_handler_manager.cjs`;
+          if (fs.existsSync(original)) {
+            throw new Error("Documentation output body guard was already installed.");
+          }
+          fs.renameSync(entrypoint, original);
+          fs.writeFileSync(entrypoint, `
+          const handler = require("./docs_original_handler_manager.cjs");
+          module.exports = {
+            ...handler,
+            async main(...args) {
+              const restorations = [];
+              for (const resource of ["issues", "pulls"]) {
+                for (const operation of ["create", "update"]) {
+                  const client = github.rest[resource];
+                  const send = client[operation];
+                  client[operation] = async function (params) {
+                    // UTF-16 length is conservative for non-BMP text; never truncate disclosure or provenance.
+                    if (typeof params.body === "string" && params.body.length > 65536) {
+                      const message = "Documentation output " + resource + "." + operation
+                        + " body exceeds GitHub's 65,536-character limit after disclosure and generated content ("
+                        + params.body.length + " UTF-16 code units). Shorten the generated body and retry.";
+                      core.setFailed(message);
+                      throw new Error(message);
+                    }
+                    return send.call(this, params);
+                  };
+                  restorations.push(() => { client[operation] = send; });
+                }
+              }
+              try {
+                return await handler.main(...args);
+              } finally {
+                for (const restore of restorations) restore();
+              }
+            }
+          };
+          `, "utf8");
   create-issue:
     title-prefix: "[maui-labs docs] "
     labels: [docs-from-code]
@@ -226,7 +271,7 @@ the GitHub request, including unexpected footer growth; it never truncates
 disclosure or provenance.
 
 Local regression check: `node --test .github/workflows/tests/pr-docs-check.test.cjs`.
-Set `GH_AW_ACTIONS_DIR` to gh-aw v0.53.5's `actions/setup/js` directory to also
+Set `GH_AW_ACTIONS_DIR` to gh-aw v0.87.10's `actions/setup/js` directory to also
 exercise its issue handler with a mocked GitHub client (no API writes).
 After editing the frontmatter, regenerate this workflow's lock file with
-`gh aw compile pr-docs-check` using gh-aw v0.53.5.
+`gh aw compile pr-docs-check` using gh-aw v0.87.10.

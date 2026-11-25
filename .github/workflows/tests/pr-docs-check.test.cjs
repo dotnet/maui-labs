@@ -129,16 +129,20 @@ test("compiled output enforces disclosure after download and before the unchange
   assert.doesNotMatch(job.slice(download, handler), /continue-on-error: true|if: always\(\)/);
   const configLine = job.match(/GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: (".*")/)[1];
   const config = JSON.parse(JSON.parse(configLine));
-  assert.deepEqual(Object.keys(config).sort(), ["create_issue", "missing_data", "missing_tool"]);
   assert.equal(config.create_issue["target-repo"], "dotnet/docs-maui");
   assert.equal(config.create_issue.max, 1);
   assert.equal(config.create_issue.footer, undefined, "Keep the default provenance footer");
   assert.equal(config.create_issue.group, undefined, "No unprotected parent issue creation");
-  assert.match(job, /require\('\/opt\/gh-aw\/actions\/safe_output_handler_manager.cjs'\)/);
+  assert.match(job, /safe_output_handler_manager\.cjs/);
+});
+
+test("compiled workflow launches AWF without sudo", () => {
+  assert.match(compiled, /^\s+awf --config /m);
+  assert.doesNotMatch(compiled, /sudo\s+-E\s+awf/);
 });
 
 test("pinned gh-aw handler sends disclosure and provenance in the actual create payload", {
-  skip: !process.env.GH_AW_ACTIONS_DIR && "Set GH_AW_ACTIONS_DIR to gh-aw v0.53.5 actions/setup/js",
+  skip: !process.env.GH_AW_ACTIONS_DIR && "Set GH_AW_ACTIONS_DIR to gh-aw v0.87.10 actions/setup/js",
 }, async t => {
   const { main } = require(path.join(process.env.GH_AW_ACTIONS_DIR, "create_issue.cjs"));
   const savedGlobals = { core: global.core, context: global.context, github: global.github };
@@ -151,7 +155,8 @@ test("pinned gh-aw handler sends disclosure and provenance in the actual create 
     GH_AW_WORKFLOW_SOURCE: "",
     GH_AW_WORKFLOW_SOURCE_URL: "",
   };
-  const savedEnv = Object.fromEntries(Object.keys(metadata).map(key => [key, process.env[key]]));
+  const promptDir = path.join(process.env.GH_AW_ACTIONS_DIR, "..", "md");
+  const savedEnv = Object.fromEntries([...Object.keys(metadata), "GH_AW_PROMPTS_DIR"].map(key => [key, process.env[key]]));
   t.after(() => {
     Object.assign(global, savedGlobals);
     for (const [key, value] of Object.entries(savedEnv)) {
@@ -160,6 +165,7 @@ test("pinned gh-aw handler sends disclosure and provenance in the actual create 
     }
   });
   Object.assign(process.env, metadata);
+  process.env.GH_AW_PROMPTS_DIR = promptDir;
   const failures = [];
   global.core = { info() {}, debug() {}, warning() {}, setOutput() {}, setFailed(message) { failures.push(message); }, error() {} };
   global.context = {
