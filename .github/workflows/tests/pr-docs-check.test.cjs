@@ -122,11 +122,13 @@ for (const [name, workflow] of [["source", source], ["compiled", compiled]]) {
 test("compiled output enforces disclosure after download and before the unchanged issue handler", () => {
   assert.equal(disclosureScript(source), disclosureScript(compiled));
   const job = compiled.slice(compiled.indexOf("\n  safe_outputs:"));
-  const download = job.indexOf('echo "GH_AW_AGENT_OUTPUT=');
+  const download = job.indexOf("id: download-agent-output");
+  const setupOutput = job.indexOf("id: setup-agent-output-env");
   const enforcement = job.indexOf("id: enforce_ai_disclosure");
   const handler = job.indexOf("id: process_safe_outputs");
-  assert.ok(download > 0 && enforcement > download && handler > enforcement);
-  assert.doesNotMatch(job.slice(download, handler), /continue-on-error: true|if: always\(\)/);
+  assert.ok(download > 0 && setupOutput > download && enforcement > setupOutput && handler > enforcement);
+  assert.match(job.slice(enforcement, handler), /GH_AW_AGENT_OUTPUT: \$\{\{ steps\.setup-agent-output-env\.outputs\.GH_AW_AGENT_OUTPUT \}\}/);
+  assert.doesNotMatch(job.slice(setupOutput, handler), /continue-on-error: true|if: always\(\)/);
   const configLine = job.match(/GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: (".*")/)[1];
   const config = JSON.parse(JSON.parse(configLine));
   assert.equal(config.create_issue["target-repo"], "dotnet/docs-maui");
@@ -154,6 +156,15 @@ test("compiled workflow gates outputs on strict detection and keeps all merged s
   assert.doesNotMatch(install, /continue-on-error:/);
   assert.doesNotMatch(conclusion, /continue-on-error:/);
   assert.match(safeOutputs, /needs\.detection\.result == 'success'/);
+  const clearTelemetry = detection.indexOf("Clear OTLP credentials before threat detection");
+  const detectionAwf = detection.indexOf("Execute threat detection with AWF");
+  assert.ok(clearTelemetry > 0 && clearTelemetry < detectionAwf);
+  const clearStep = detection.slice(clearTelemetry, detectionAwf);
+  for (const variable of ["GH_AW_OTLP_ENDPOINTS", "OTEL_EXPORTER_OTLP_HEADERS"]) {
+    assert.match(source, new RegExp(`- ${variable}`));
+    assert.equal((compiled.match(new RegExp(`--exclude-env ${variable}(?:\\s|$)`, "g")) ?? []).length, 1);
+    assert.match(clearStep, new RegExp(`${variable}=.*GITHUB_ENV`));
+  }
   assert.doesNotMatch(compiled, /pull_request\.stack\.position/);
   assert.match(source, /max-stack: -1/);
   assert.match(source, /If the PR is skipped, call `noop`/);

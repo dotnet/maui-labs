@@ -53,6 +53,10 @@ network:
     - defaults
     - github
 
+excluded-env:
+  - GH_AW_OTLP_ENDPOINTS
+  - OTEL_EXPORTER_OTLP_HEADERS
+
 tools:
   github:
     toolsets: [repos, issues, pull_requests]
@@ -67,12 +71,17 @@ safe-outputs:
     report-as-issue: false
   threat-detection:
     continue-on-error: false
+    steps:
+      - name: Clear OTLP credentials before threat detection
+        run: |
+          echo "GH_AW_OTLP_ENDPOINTS=" >> "$GITHUB_ENV"
+          echo "OTEL_EXPORTER_OTLP_HEADERS=" >> "$GITHUB_ENV"
   steps:
     - name: Enforce documentation issue AI disclosure
       id: enforce_ai_disclosure
       uses: actions/github-script@v8
       env:
-        GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
+        GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
       with:
         script: |
           const fs = require("node:fs");
