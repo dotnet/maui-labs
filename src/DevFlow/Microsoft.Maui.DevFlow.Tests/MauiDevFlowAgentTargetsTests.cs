@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security;
+using Microsoft.Maui.DevFlow.Analyzers;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
@@ -98,6 +99,130 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
         var expectSourceMaps = enabled == "true" || (enabled == "" && configuration == "Debug");
         Assert.Equal(expectSourceMaps,
             editorConfig.Contains("build_metadata.AdditionalFiles.DevFlowXaml = true", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("net10.0", "Debug", "", true, true)]
+    [InlineData("net10.0", "Debug", "", false, false)]
+    [InlineData("net10.0", "Debug", "false", true, true)]
+    [InlineData("net10.0", "Release", "", true, false)]
+    [InlineData("net10.0", "Release", "true", true, false)]
+    [InlineData("net11.0", "Debug", "", true, true)]
+    [InlineData("net11.0", "Debug", "", false, false)]
+    [InlineData("net11.0", "Debug", "false", true, false)]
+    [InlineData("net11.0", "Release", "", true, false)]
+    [InlineData("net11.0", "Release", "true", true, true)]
+    public async Task CoreSourceMapTarget_MatchesActualMauiDiagnostics(
+        string targetFramework, string configuration, string diagnostics, bool runtimeDiagnostics, bool expectDiagnostics)
+    {
+        File.WriteAllText(Path.Combine(_projectDirectory, "Directory.Packages.props"), $$"""
+            <Project>
+              <Import Project="{{SecurityElement.Escape(Path.Combine(RepoRoot, "eng", "Versions.props"))}}" />
+              <Import Project="{{SecurityElement.Escape(Path.Combine(RepoRoot, "Directory.Packages.props"))}}" />
+            </Project>
+            """);
+        Directory.CreateDirectory(Path.Combine(_projectDirectory, "Source Folder"));
+        File.WriteAllText(Path.Combine(_projectDirectory, "Source Folder", "Main Page.xaml"), """
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                         x:Class="SourceMapBuild.TestPage">
+              <Button Text="Click me" />
+            </ContentPage>
+            """);
+        File.WriteAllText(Path.Combine(_projectDirectory, "Program.cs"), $$"""
+            using System;
+            using Microsoft.Maui;
+            using Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
+
+            Environment.SetEnvironmentVariable("ENABLE_XAML_DIAGNOSTICS_SOURCE_INFO", null);
+            AppContext.SetSwitch("Microsoft.Maui.RuntimeFeature.EnableMauiDiagnostics", {{runtimeDiagnostics.ToString().ToLowerInvariant()}});
+            var page = new SourceMapBuild.TestPage();
+            var source = VisualDiagnostics.GetSourceInfo(page.Content);
+            var map = XamlSourceMapRegistry.Instance.GetMap(typeof(SourceMapBuild.TestPage).FullName!)
+                ?? throw new Exception("No generated source map.");
+            if (map.File != "Source Folder/Main Page.xaml")
+                throw new Exception($"Unexpected physical source path: {map.File}");
+            if ((source is not null) != {{expectDiagnostics.ToString().ToLowerInvariant()}})
+                throw new Exception($"Unexpected diagnostic registration: {source}");
+            if (source is not null)
+            {
+                var identity = source.SourceUri.OriginalString.Split(";assembly=");
+                if (identity.Length != 2 || identity[0] != map.DiagnosticsPath ||
+                    identity[1] != map.DiagnosticsAssembly)
+                    throw new Exception($"MAUI source {source.SourceUri} does not match map {map.DiagnosticsPath};assembly={map.DiagnosticsAssembly}.");
+                if (source.LineNumber != 4 || source.LinePosition != 4)
+                    throw new Exception($"Unexpected location: {source.LineNumber}:{source.LinePosition}.");
+            }
+            Console.WriteLine("MAUI source identity verified.");
+
+            namespace SourceMapBuild
+            {
+                public partial class TestPage : Microsoft.Maui.Controls.ContentPage
+                {
+                    public TestPage() => InitializeComponent();
+                }
+            }
+            """);
+        File.WriteAllText(ProjectFilePath, $$"""
+            <Project>
+              <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+              <PropertyGroup>
+                <TargetFramework>{{targetFramework}}</TargetFramework>
+                <OutputType>Exe</OutputType>
+                <RollForward>Major</RollForward>
+                <ImplicitUsings>enable</ImplicitUsings>
+                <Nullable>enable</Nullable>
+                <Configuration>{{configuration}}</Configuration>
+                <EnableMauiXamlDiagnostics>{{diagnostics}}</EnableMauiXamlDiagnostics>
+                <DevFlowXamlSourceMapsEnabled>true</DevFlowXamlSourceMapsEnabled>
+                <EnableDefaultMauiItems>false</EnableDefaultMauiItems>
+                <RestoreConfigFile>{{SecurityElement.Escape(Path.Combine(RepoRoot, "NuGet.config"))}}</RestoreConfigFile>
+              </PropertyGroup>
+              <Import Project="{{SecurityElement.Escape(Path.Combine(CoreBuildPath, "Microsoft.Maui.DevFlow.Agent.Core.props"))}}" />
+              <ItemGroup>
+                <PackageReference Include="Microsoft.Maui.Controls" />
+                <MauiXaml Include="Source Folder/Main Page.xaml" Link="Pages/Linked Page.xaml" />
+                <Analyzer Include="{{SecurityElement.Escape(typeof(XamlSourceMapGenerator).Assembly.Location)}}" />
+                <Compile Include="{{SecurityElement.Escape(Path.Combine(
+                    RepoRoot, "src", "DevFlow", "Microsoft.Maui.DevFlow.Agent.Core",
+                    "SourceMapping", "XamlSourceMap.cs"))}}" />
+                <Compile Include="{{SecurityElement.Escape(Path.Combine(
+                    RepoRoot, "src", "DevFlow", "Microsoft.Maui.DevFlow.Agent.Core",
+                    "SourceMapping", "XamlSourceMapRegistry.cs"))}}" />
+                <Compile Include="{{SecurityElement.Escape(Path.Combine(
+                    RepoRoot, "src", "DevFlow", "Microsoft.Maui.DevFlow.Agent.Core",
+                    "SourceMapping", "IXamlSourceMapProvider.cs"))}}" />
+              </ItemGroup>
+              <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+              <Import Project="{{SecurityElement.Escape(Path.Combine(CoreBuildPath, "Microsoft.Maui.DevFlow.Agent.Core.targets"))}}" />
+            </Project>
+            """);
+
+        RunMsBuildTarget(
+            "Build", "/restore", "/m:1", "/nr:false", "/p:UseSharedCompilation=false",
+            $"/p:TargetFramework={targetFramework}");
+        var executable = Path.Combine(_projectDirectory, "bin", configuration, targetFramework, "Test.dll");
+        var startInfo = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = _projectDirectory,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add(executable);
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start the MAUI source-map test.");
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(30_000))
+        {
+            process.Kill(entireProcessTree: true);
+            Assert.Fail("MAUI source-map test timed out.");
+        }
+        var stdout = await output;
+        var stderr = await error;
+        Assert.True(process.ExitCode == 0, $"MAUI source-map test failed: {stdout}{stderr}");
+        Assert.Contains("MAUI source identity verified.", stdout);
     }
 
     [Theory]

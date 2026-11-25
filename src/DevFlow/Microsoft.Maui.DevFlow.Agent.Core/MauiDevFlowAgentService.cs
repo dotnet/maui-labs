@@ -1124,13 +1124,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     /// all-window tree walk on the UI thread for every request.
     /// </summary>
     private readonly object _sourceMapCacheGate = new();
-    private (long Registry, long Mutation, long External) _sourceMapCacheKey = (-1, -1, -1);
+    private (long Registry, long Mutation, long External, long SourceMaps) _sourceMapCacheKey = (-1, -1, -1, -1);
     private Dictionary<string, (string File, int Line, int Column, string? Hash)>? _sourceMapCache;
 
     private Dictionary<string, (string File, int Line, int Column, string? Hash)> GetCachedSourceMap(
         UiCaptureContext capture)
     {
-        var key = (capture.RegistryGeneration, capture.MutationGeneration, capture.ExternalMutationGeneration);
+        var key = (capture.RegistryGeneration, capture.MutationGeneration, capture.ExternalMutationGeneration,
+            SourceMapping.XamlSourceMapRegistry.Instance.Generation);
         lock (_sourceMapCacheGate)
         {
             if (_sourceMapCache is not null && _sourceMapCacheKey == key)

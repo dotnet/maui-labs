@@ -666,8 +666,14 @@ Debug builds generate XAML source maps by default, so findings can include
 `sourceFile`, `sourceLine`, and `sourceColumn`. Source-content hashes are not
 emitted by the diagnostics contract.
 Set `DevFlowXamlSourceMapsEnabled=false` to disable source embedding, or enable
-it explicitly for another configuration. Source maps embed developer file paths
-and XAML text and should normally remain disabled for Release/store builds.
+it explicitly for another configuration. When available, MAUI's per-instance
+XAML diagnostics identify source elements; otherwise DevFlow uses conservative
+structural matching. Availability depends on the XAML inflator, build
+configuration, and runtime diagnostics settings. After Hot Reload, source
+actions are withheld when an updated
+declaration cannot be safely matched to an observed live object; rebuilding and
+restarting restores them. Source maps embed project-relative paths and XAML text
+and should normally remain disabled for Release/store builds.
 Source maps reuse MAUI's prepared XAML items regardless of target framework,
 including plain .NET GTK heads and macOS AppKit heads. Projects without the MAUI
 Controls build targets can still supply `MauiXaml` items for source mapping.

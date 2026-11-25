@@ -273,15 +273,21 @@ The Agent.Core package supplies a build-transitive source generator. In Debug bu
 elements to source file, line, column, and a build-time content hash. VS Code compares the current
 file hash before opening the recorded line and warns when the file changed after the app was built.
 
-Source locations are emitted only when the runtime element can be matched conservatively to its
-XAML declaration. Repeated same-type siblings, such as the two `Label`s in the default template,
-are told apart by a sibling-unique `AutomationId`, or when every one of them declares a different
-literal `Text` that the runtime element still shows. Otherwise (bound, duplicated, or
-code-behind-changed text) their source actions are withheld rather than risk opening or editing
-the wrong declaration; give those elements a unique `AutomationId` to map them. A successful agent
-`setProperty` mutation of `Text` retains an already verified declaration for the same live object and value,
-so changing the identity literal in Inspector does not remove **Apply to XAML**. This does not
-bypass sibling alignment, literal uniqueness, or source-version checks.
+When MAUI supplies per-instance XAML diagnostic locations, DevFlow matches the source URI's path
+and assembly to the generated map. Availability depends on the XAML inflator, build configuration,
+and runtime diagnostics settings. When locations are unavailable, DevFlow falls back to
+conservative structural matching.
+Repeated same-type siblings are told apart by a sibling-unique `AutomationId`, or when each
+declares a different literal `Text` that the runtime element still shows. Otherwise their source
+actions are withheld rather than risk opening or editing the wrong declaration. A successful
+agent `setProperty` mutation of `Text` retains an already verified declaration for the same live
+object and value; it does not bypass sibling alignment, literal uniqueness, or source-version checks.
+
+MAUI can retain old source locations on existing objects after XAML Hot Reload. DevFlow therefore
+does not pair those locations with the updated content hash. After a metadata update, it maps a
+previously observed object only when its parent is unchanged and its declaration is unchanged or
+has the same sibling-unique `AutomationId`. Changed anonymous declarations, new or replaced
+objects, and ambiguous matches may lose source actions until the app is rebuilt and restarted.
 
 Source maps are disabled outside Debug by default because they embed XAML text and source paths.
 They can be disabled explicitly:

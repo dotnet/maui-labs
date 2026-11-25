@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
@@ -120,6 +121,59 @@ public class XamlSourceMapGeneratorTests
         // The generated source must compile cleanly against Agent.Core.
         var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
         Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void Generator_XamlEdits_DoNotChangeFieldInitializers()
+    {
+        var (originalOutput, originalDiagnostics, original) =
+            Run(("MainPage.xaml", SampleXaml, true), ProjectNamespacePrefixSource);
+        var updatedXaml = SampleXaml.Replace(
+            "<Label Text=\"Hello\" />",
+            "<widgets:CustomView xmlns:widgets=\"http://schemas.test/widgets\" />");
+        var (updatedOutput, updatedDiagnostics, updated) =
+            Run(("MainPage.xaml", updatedXaml, true), ProjectNamespacePrefixSource);
+
+        Assert.Empty(originalDiagnostics);
+        Assert.Empty(updatedDiagnostics);
+        Assert.Empty(originalOutput.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Empty(updatedOutput.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.NotEqual(original, updated);
+
+        static string[] Fields(string source) => CSharpSyntaxTree.ParseText(source)
+            .GetRoot().DescendantNodes().OfType<FieldDeclarationSyntax>()
+            .Select(field => field.NormalizeWhitespace().ToFullString()).ToArray();
+
+        Assert.Equal(Fields(original!), Fields(updated!));
+    }
+
+    [Fact]
+    public void GeneratedProvider_RecordsMauiDocumentIdentityWithoutEmbeddingAbsolutePaths()
+    {
+        var project = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SourceMapProject");
+        var path = System.IO.Path.Combine(project, "Views", "MainPage.xaml");
+        var (output, diagnostics, generated) = Run(
+            ("MainPage.xaml", SampleXaml, true, path),
+            relativePath: @"Linked\MainPage.xaml",
+            projectDirectory: project);
+
+        Assert.Empty(diagnostics);
+        Assert.NotNull(generated);
+        Assert.DoesNotContain(project, generated, StringComparison.Ordinal);
+        XamlSourceMapRegistry.Instance.Reset();
+        try
+        {
+            LoadAndRunModuleInitializer(output);
+            var map = Assert.IsType<XamlSourceMap>(
+                XamlSourceMapRegistry.Instance.GetMap("TestApp.MainPage"));
+            Assert.Equal("Views/MainPage.xaml", map.File);
+            Assert.Equal("Linked/MainPage.xaml", map.DiagnosticsPath);
+            Assert.Equal(output.AssemblyName, map.DiagnosticsAssembly);
+        }
+        finally
+        {
+            XamlSourceMapRegistry.Instance.Reset();
+        }
     }
 
     [Fact]
@@ -332,7 +386,7 @@ public class XamlSourceMapGeneratorTests
     [Fact]
     public void GeneratedProvider_EndToEnd_RegistersMapMatchingParser()
     {
-        const string path = @"C:\proj\TestApp\MainPage.xaml";
+        var path = System.IO.Path.Combine("proj", "TestApp", "MainPage.xaml");
         // The generator normalizes to a project-relative path (falling back to the file name when
         // MSBuildProjectDirectory is unavailable, as here) so shipped assemblies never embed
         // developer-machine paths. The inspector resolves it against the registered project.
@@ -389,9 +443,16 @@ public class XamlSourceMapGeneratorTests
         => Run((file.Name, file.Xaml, file.Marked, @"C:\proj\" + file.Name), source: null);
 
     private static (Compilation Output, ImmutableArray<Diagnostic> Diagnostics, string? Generated) Run(
+        (string Name, string Xaml, bool Marked) file,
+        string source)
+        => Run((file.Name, file.Xaml, file.Marked, @"C:\proj\" + file.Name), source);
+
+    private static (Compilation Output, ImmutableArray<Diagnostic> Diagnostics, string? Generated) Run(
         (string Name, string Xaml, bool Marked, string Path) file,
         string? source = null,
-        MetadataReference? additionalReference = null)
+        MetadataReference? additionalReference = null,
+        string? relativePath = null,
+        string? projectDirectory = null)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
         var compilation = CSharpCompilation.Create(
@@ -406,7 +467,7 @@ public class XamlSourceMapGeneratorTests
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
 
         var additionalText = new TestAdditionalText(file.Path, file.Xaml);
-        var optionsProvider = new TestOptionsProvider(additionalText, file.Marked);
+        var optionsProvider = new TestOptionsProvider(additionalText, file.Marked, relativePath, projectDirectory);
 
         var driver = CSharpGeneratorDriver.Create(
             generators: new[] { new XamlSourceMapGenerator().AsSourceGenerator() },
@@ -497,21 +558,44 @@ public class XamlSourceMapGeneratorTests
     {
         private readonly AdditionalText _file;
         private readonly bool _marked;
-        public TestOptionsProvider(AdditionalText file, bool marked) { _file = file; _marked = marked; }
-        public override AnalyzerConfigOptions GlobalOptions => EmptyOptions.Instance;
+        private readonly string? _relativePath;
+        private readonly string? _projectDirectory;
+        public TestOptionsProvider(AdditionalText file, bool marked, string? relativePath = null, string? projectDirectory = null)
+        {
+            _file = file;
+            _marked = marked;
+            _relativePath = relativePath;
+            _projectDirectory = projectDirectory;
+        }
+        public override AnalyzerConfigOptions GlobalOptions => _projectDirectory is null
+            ? EmptyOptions.Instance
+            : new TestOptions("build_property.MSBuildProjectDirectory", _projectDirectory);
         public override AnalyzerConfigOptions GetOptions(SyntaxTree tree) => EmptyOptions.Instance;
         public override AnalyzerConfigOptions GetOptions(AdditionalText textFile)
-            => ReferenceEquals(textFile, _file) && _marked ? MarkedOptions.Instance : EmptyOptions.Instance;
+            => ReferenceEquals(textFile, _file) && _marked ? new MarkedOptions(_relativePath) : EmptyOptions.Instance;
     }
 
-    private sealed class MarkedOptions : AnalyzerConfigOptions
+    private sealed class MarkedOptions(string? relativePath) : AnalyzerConfigOptions
     {
-        public static readonly MarkedOptions Instance = new();
         public override bool TryGetValue(string key, out string value)
         {
             if (key == "build_metadata.AdditionalFiles.DevFlowXaml") { value = "true"; return true; }
+            if (key == "build_metadata.AdditionalFiles.RelativePath" && relativePath is not null)
+            {
+                value = relativePath;
+                return true;
+            }
             value = null!;
             return false;
+        }
+    }
+
+    private sealed class TestOptions(string name, string optionValue) : AnalyzerConfigOptions
+    {
+        public override bool TryGetValue(string key, out string value)
+        {
+            value = optionValue;
+            return key == name;
         }
     }
 

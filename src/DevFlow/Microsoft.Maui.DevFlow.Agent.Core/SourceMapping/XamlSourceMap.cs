@@ -17,6 +17,9 @@ public readonly record struct XamlSourceEntry(
     /// Init-only rather than positional so the public constructor and deconstruction are unchanged.
     /// </summary>
     public string? Text { get; init; }
+
+    internal string? QualifiedName { get; init; }
+    internal string? DeclarationSignature { get; init; }
 }
 
 public sealed class XamlSourceMap
@@ -31,6 +34,7 @@ public sealed class XamlSourceMap
     };
 
     private readonly IReadOnlyDictionary<string, XamlSourceEntry> _paths;
+    private readonly Dictionary<(int Line, int Column), XamlSourceEntry?> _locations = [];
 
     public XamlSourceMap(
         string file,
@@ -40,9 +44,21 @@ public sealed class XamlSourceMap
         File = file;
         _paths = paths;
         ContentHash = contentHash;
+        foreach (var entry in paths.Values)
+        {
+            var location = (entry.Line, entry.Column);
+            if (!_locations.TryAdd(location, entry))
+                _locations[location] = null;
+        }
     }
 
     public string File { get; }
+
+    /// <summary>The XAML path used by MAUI's visual diagnostics, relative to its assembly.</summary>
+    public string? DiagnosticsPath { get; init; }
+
+    /// <summary>The assembly that supplied the XAML and its visual diagnostics.</summary>
+    public string? DiagnosticsAssembly { get; init; }
 
     /// <summary>
     /// Short hash of the .xaml content at build time. A click-to-source consumer hashes the
@@ -55,6 +71,17 @@ public sealed class XamlSourceMap
 
     public bool TryGet(string childPath, out XamlSourceEntry entry)
         => _paths.TryGetValue(childPath, out entry);
+
+    internal bool TryGetByLocation(int line, int column, out XamlSourceEntry entry)
+    {
+        if (_locations.TryGetValue((line, column), out var candidate) && candidate is { } match)
+        {
+            entry = match;
+            return true;
+        }
+        entry = default;
+        return false;
+    }
 
     public static XamlSourceMap? Parse(string xaml, string file)
         => Parse(xaml, file, contentHash: null);
@@ -75,6 +102,16 @@ public sealed class XamlSourceMap
         string? contentHash,
         IReadOnlyDictionary<string, string>? namespaceMappings,
         IReadOnlyDictionary<string, string>? typeMappings)
+        => Parse(xaml, file, contentHash, namespaceMappings, typeMappings, null, null);
+
+    public static XamlSourceMap? Parse(
+        string xaml,
+        string file,
+        string? contentHash,
+        IReadOnlyDictionary<string, string>? namespaceMappings,
+        IReadOnlyDictionary<string, string>? typeMappings,
+        string? diagnosticsPath,
+        string? diagnosticsAssembly)
     {
         if (string.IsNullOrWhiteSpace(xaml))
             return null;
@@ -121,7 +158,11 @@ public sealed class XamlSourceMap
             map,
             root.Attribute("AutomationId")?.Value,
             typeMappings);
-        return new XamlSourceMap(file, map, contentHash ?? ComputeContentHash(xaml));
+        return new XamlSourceMap(file, map, contentHash ?? ComputeContentHash(xaml))
+        {
+            DiagnosticsPath = diagnosticsPath,
+            DiagnosticsAssembly = diagnosticsAssembly
+        };
     }
 
     /// <summary>
@@ -153,7 +194,9 @@ public sealed class XamlSourceMap
                 usableAutomationId,
                 ResolveFullTypeName(element, typeMappings))
             {
-                Text = LiteralText(element)
+                Text = LiteralText(element),
+                QualifiedName = element.Name.ToString(),
+                DeclarationSignature = DeclarationSignature(element)
             };
         }
 
@@ -181,6 +224,22 @@ public sealed class XamlSourceMap
     {
         var text = element.Attribute("Text")?.Value;
         return text is null || text.TrimStart().StartsWith('{') ? null : text;
+    }
+
+    private static string DeclarationSignature(XElement element)
+    {
+        var properties = element.Elements().Where(child =>
+        {
+            var name = child.Name.LocalName;
+            var dot = name.LastIndexOf('.');
+            return dot >= 0 && !s_contentProperties.Contains(name[(dot + 1)..]);
+        });
+        return new XElement(
+            element.Name,
+            element.Attributes().Where(attribute => !attribute.IsNamespaceDeclaration)
+                .OrderBy(attribute => attribute.Name.ToString(), StringComparer.Ordinal),
+            element.Nodes().OfType<XText>().Where(text => !string.IsNullOrWhiteSpace(text.Value)),
+            properties).ToString(SaveOptions.DisableFormatting);
     }
 
     private static string? ResolveFullTypeName(

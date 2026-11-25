@@ -2,6 +2,9 @@ using Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
+[CollectionDefinition("XamlSourceMapRegistry", DisableParallelization = true)]
+public sealed class XamlSourceMapRegistryCollection;
+
 /// <summary>
 /// Verifies <see cref="XamlSourceMapRegistry"/> composition semantics: no-op when empty,
 /// first-non-null-wins, reference-idempotent registration, and — critically — that it does NOT
@@ -73,6 +76,42 @@ public class XamlSourceMapRegistryTests : System.IDisposable
     }
 
     [Fact]
+    public void MetadataUpdate_RefreshesCachedMapFromProvider()
+    {
+        var provider = new FakeProvider { ["App.Page"] = MapFor("old.xaml") };
+        XamlSourceMapRegistry.Register(provider);
+        Assert.Equal("old.xaml", XamlSourceMapRegistry.Instance.GetMap("App.Page")!.File);
+
+        provider["App.Page"] = MapFor("updated.xaml");
+        XamlSourceMapHotReloadHandler.ClearCache(null);
+
+        Assert.Equal(1, XamlSourceMapRegistry.Instance.Generation);
+        Assert.Equal("updated.xaml", XamlSourceMapRegistry.Instance.GetMap("App.Page")!.File);
+        Assert.Equal(2, provider.CallCount);
+    }
+
+    [Fact]
+    public async Task MetadataUpdate_RetriesAnInFlightLookup()
+    {
+        using var provider = new BlockingProvider(MapFor("old.xaml"));
+        XamlSourceMapRegistry.Register(provider);
+        var lookup = Task.Run(() => XamlSourceMapRegistry.Instance.GetMap("App.Page"));
+        try
+        {
+            Assert.True(provider.Started.Wait(TimeSpan.FromSeconds(10)));
+            provider.Map = MapFor("updated.xaml");
+            XamlSourceMapHotReloadHandler.ClearCache(null);
+        }
+        finally
+        {
+            provider.Continue.Set();
+        }
+
+        Assert.Equal("updated.xaml", (await lookup)!.File);
+        Assert.Equal("updated.xaml", XamlSourceMapRegistry.Instance.GetMap("App.Page")!.File);
+    }
+
+    [Fact]
     public void GetMap_DoesNotNegativeCache_LateRegistrationDiscovered()
     {
         // Query a type before any provider maps it → null (must NOT be cached as null).
@@ -109,6 +148,28 @@ public class XamlSourceMapRegistryTests : System.IDisposable
         {
             CallCount++;
             return _maps.TryGetValue(fullTypeName, out var map) ? map : null;
+        }
+    }
+
+    private sealed class BlockingProvider(XamlSourceMap map) : IXamlSourceMapProvider, IDisposable
+    {
+        public readonly ManualResetEventSlim Started = new();
+        public readonly ManualResetEventSlim Continue = new();
+        public XamlSourceMap Map = map;
+
+        public XamlSourceMap? GetMap(string fullTypeName)
+        {
+            var result = Map;
+            Started.Set();
+            if (!Continue.Wait(TimeSpan.FromSeconds(10)))
+                throw new TimeoutException("Timed out waiting to finish the map lookup.");
+            return result;
+        }
+
+        public void Dispose()
+        {
+            Started.Dispose();
+            Continue.Dispose();
         }
     }
 }

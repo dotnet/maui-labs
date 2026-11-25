@@ -46,6 +46,25 @@ public class XamlSourceMapTests
     }
 
     [Fact]
+    public void TryGetByLocation_RejectsAmbiguousLocations()
+    {
+        var first = new XamlSourceEntry(2, 4, "Label", 0);
+        var duplicate = new XamlSourceEntry(2, 4, "Button", 0);
+        var unique = new XamlSourceEntry(3, 4, "Label", 0);
+        var map = new XamlSourceMap("Page.xaml", new Dictionary<string, XamlSourceEntry>
+        {
+            ["0"] = first,
+            ["1"] = duplicate,
+            ["2"] = unique
+        });
+
+        Assert.False(map.TryGetByLocation(2, 4, out _));
+        Assert.True(map.TryGetByLocation(3, 4, out var actual));
+        Assert.Equal(unique, actual);
+        Assert.False(map.TryGetByLocation(4, 4, out _));
+    }
+
+    [Fact]
     public void Parse_UsesProvidedProjectNamespacePrefixes()
     {
         const string xaml =
