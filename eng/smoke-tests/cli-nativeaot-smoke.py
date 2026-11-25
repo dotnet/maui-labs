@@ -13,13 +13,21 @@ import json
 import queue
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+import types
 import uuid
 
 
 def run(cli, *args, check=True):
-    result = subprocess.run([cli, *args], capture_output=True, text=True, timeout=120)
+    # Output goes to files, not pipes: commands such as `devflow list` start a detached broker daemon, which
+    # inherits pipe handles on Windows and would keep a pipe-based capture waiting until the daemon exits.
+    with tempfile.TemporaryFile("w+") as out, tempfile.TemporaryFile("w+") as err:
+        completed = subprocess.run([cli, *args], stdout=out, stderr=err, text=True, timeout=120)
+        out.seek(0)
+        err.seek(0)
+        result = types.SimpleNamespace(returncode=completed.returncode, stdout=out.read(), stderr=err.read())
     if check and result.returncode != 0:
         raise SystemExit(
             f"'{' '.join(args)}' exited with {result.returncode}\n{result.stdout}\n{result.stderr}")
