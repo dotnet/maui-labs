@@ -45,4 +45,9 @@ namespace Microsoft.Maui.Cli.DevFlow;
 [JsonSerializable(typeof(InspectorServer.InspectorDiagnosticRequest))]
 [JsonSerializable(typeof(InspectorServer.InspectorLayoutScanRequest))]
 [JsonSerializable(typeof(InspectorServer.InspectorLayoutScanResponse))]
+[JsonSerializable(typeof(Watch.WatchSessionInfo))]
+[JsonSerializable(typeof(Watch.WatchStatus))]
+[JsonSerializable(typeof(List<Watch.WatchStatus>))]
+[JsonSerializable(typeof(Watch.WatchWaitResult))]
+[JsonSerializable(typeof(Watch.WatchEvent))]
 internal sealed partial class DevFlowCliJsonContext : JsonSerializerContext;

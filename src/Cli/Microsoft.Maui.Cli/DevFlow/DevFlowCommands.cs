@@ -1687,6 +1687,8 @@ public partial class DevFlowCommands
         });
         devflowCommand.Add(diagnoseCmd);
 
+        RegisterWatchCommands(devflowCommand, deviceOption, jsonOption, noJsonOption);
+
         // ===== wait command (wait for agent to connect) =====
         var waitTimeoutOption = new Option<int>("--timeout", "-t") { Description = "Maximum seconds to wait for an agent to connect", DefaultValueFactory = _ => 120 };
         var waitProjectOption = new Option<string?>("--project") { Description = "Filter by project path (csproj). Resolves to full path for matching.", DefaultValueFactory = _ => null };
@@ -2628,6 +2630,12 @@ public partial class DevFlowCommands
         new("ui set-property", "Set element property value", true),
         new("ui screenshot", "Take screenshot of app or element", false),
         new("ui assert", "Assert element property equals expected value", false),
+        new("watch start", "Run the app under dotnet watch in the background (C#/XAML Hot Reload); waits until ready", true),
+        new("watch wait", "Wait for the outcome of a saved edit (applied, compile-error, restart-required, ...)", false),
+        new("watch status", "Show watch session state, last outcome, and event cursor", false),
+        new("watch list", "List watch sessions", false),
+        new("watch restart", "Stop and restart the watch session (full rebuild)", true),
+        new("watch stop", "Stop the watch session and its app", true),
         new("recording start", "Start screen recording", true),
         new("recording stop", "Stop screen recording", true),
         new("recording status", "Check recording status", false),

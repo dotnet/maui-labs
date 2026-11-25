@@ -16,4 +16,8 @@
     <PackageReference Update="Microsoft.Extensions.Logging.Debug" VersionOverride="$(DevFlowSampleExtensions11Version)" />
     <PackageReference Update="Microsoft.Extensions.Http" VersionOverride="$(DevFlowSampleExtensions11Version)" />
   </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' != '' and $([MSBuild]::GetTargetFrameworkVersion('$(TargetFramework)')) == '11.0' and $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <PackageReference Update="Xamarin.AndroidX.Lifecycle.Service" VersionOverride="$(XamarinAndroidXLifecycleServiceNet11Version)" />
+  </ItemGroup>
 </Project>

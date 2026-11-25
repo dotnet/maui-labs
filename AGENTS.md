@@ -430,7 +430,7 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 ## DevFlow MCP Tools
 
-DevFlow exposes 78 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
+DevFlow exposes 83 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
 
 | Tool | Purpose |
 |------|---------|
@@ -512,6 +512,11 @@ DevFlow exposes 78 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_take_control` | Claim or explicitly take over the app-wide mutation lease |
 | `maui_tree` | Inspect visual tree — structured JSON hierarchy with IDs, types, bounds |
 | `maui_wait` | Wait for an agent to connect |
+| `maui_watch_restart` | Restart the app in a `dotnet watch` session (after rude edits or an app exit) |
+| `maui_watch_start` | Build and launch the app under `dotnet watch` (C#/XAML Hot Reload) in a background session |
+| `maui_watch_status` | Show a `dotnet watch` session's state and latest result |
+| `maui_watch_stop` | Stop a `dotnet watch` session and the app it launched |
+| `maui_watch_wait` | Wait for the Hot Reload result of the latest save (applied, compile error, restart needed, …) |
 
 ## Important Notes
 

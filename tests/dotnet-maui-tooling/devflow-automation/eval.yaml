@@ -1,0 +1,63 @@
+scenarios:
+  - name: "Add and invoke an action while watch is active"
+    prompt: |
+      My .NET 11 iOS MAUI app is running under `dotnet watch` with DevFlow
+      connected. I need a new `[DevFlowAction]` that opens the sample's settings
+      page. How do I add it and verify that it is available?
+    assertions:
+      - type: "output_matches"
+        pattern: "dotnet\\s+watch"
+      - type: "output_matches"
+        pattern: "DevFlowAction"
+      - type: "output_matches"
+        pattern: "maui_list_actions|maui devflow.*actions"
+      - type: "output_matches"
+        pattern: "maui_invoke_action|maui devflow.*invoke"
+    rubric:
+      - "Keeps the existing compatible watcher running while making the app-code edit."
+      - "Checks watcher output to distinguish a hot-reloaded method from a restart."
+      - "Discovers the action again through DevFlow before invoking it."
+      - "Verifies the action's resulting app state."
+    timeout: 120
+
+  - name: "Recover action discovery after a required restart"
+    prompt: |
+      I added a new DevFlow action to a .NET 11 Android app, but `dotnet watch`
+      says a restart is needed. DevFlow still shows the old action list. What
+      should I do?
+    assertions:
+      - type: "output_matches"
+        pattern: "restart"
+      - type: "output_matches"
+        pattern: "maui_list_actions|maui devflow.*actions"
+      - type: "output_matches"
+        pattern: "maui devflow (wait|agent status)"
+      - type: "output_not_contains"
+        value: "clear the action cache to force it"
+    rubric:
+      - "Does not treat the old action list as proof the code edit succeeded."
+      - "Allows the watcher to restart the app and confirms the new DevFlow agent is connected."
+      - "Lists actions again only after the updated app is reachable, then invokes and verifies the new action."
+      - "Does not fake source reload by clearing caches or directly changing runtime state."
+    timeout: 120
+
+  - name: "Start watch before adding an action"
+    prompt: |
+      I need a test shortcut in a .NET 11 MAUI Mac Catalyst app. The app is
+      running normally and exposes DevFlow actions, but it was not started with
+      `dotnet watch`. What is the lowest-restart workflow?
+    assertions:
+      - type: "output_matches"
+        pattern: "dotnet\\s+watch"
+      - type: "output_matches"
+        pattern: "net11\\.0-maccatalyst"
+      - type: "output_matches"
+        pattern: "partial-static"
+      - type: "output_matches"
+        pattern: "maui_list_actions|maui devflow.*actions"
+    rubric:
+      - "Recognizes that a normally launched process cannot be assumed to receive watch edits."
+      - "Starts one watch session with the Mac Catalyst TFM and keeps it alive."
+      - "Mentions the .NET 11 Mac Catalyst registrar requirement."
+      - "Re-discovers and invokes the action through DevFlow after the edit or restart."
+    timeout: 120
