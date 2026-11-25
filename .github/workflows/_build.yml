@@ -315,6 +315,33 @@ jobs:
             }
           }
 
+      # The publish-output smoke test below cannot tell which build `dotnet tool install` really picks. A
+      # TFM-specific net9.0 build next to the AOT one silently wins, so install the packed tool and check.
+      - name: Verify installed tool is NativeAOT (Windows)
+        if: runner.os == 'Windows' && inputs.pack && inputs.project-name == 'cli' && !inputs.test-only
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          pkg_dir="artifacts/packages/Release/Shipping"
+          pointer="$(ls "$pkg_dir"/Microsoft.Maui.Cli.[0-9]*.nupkg | head -1)"
+          version="$(basename "$pointer" .nupkg)"
+          version="${version#Microsoft.Maui.Cli.}"
+
+          tool_path="$RUNNER_TEMP/maui-tool"
+          dotnet tool install Microsoft.Maui.Cli --tool-path "$tool_path" --version "$version" \
+            --add-source "$pkg_dir" --ignore-failed-sources
+
+          exe="$(find "$tool_path/.store" -path '*/tools/any/win-x64/maui.exe' | head -1)"
+          test -n "$exe" || { echo "::error::The installed tool has no NativeAOT win-x64 executable."; exit 1; }
+          test "$(wc -c < "$exe")" -gt 5000000 || { echo "::error::The installed executable is too small to be NativeAOT."; exit 1; }
+          if find "$tool_path/.store" -path '*/tools/net*/win-x64/*' | grep -q .; then
+            echo "::error::The win-x64 package also contains a TFM-specific build, which would be installed instead of NativeAOT."
+            exit 1
+          fi
+
+          "$exe" version
+
       # ILC cannot flag every runtime failure, so publish with warnings as errors and then run the
       # real executable. Windows and Linux are covered too: they compile different native code.
       - name: NativeAOT publish smoke test

@@ -9,6 +9,8 @@
     <EnableAotAnalyzer>false</EnableAotAnalyzer>
     <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
+    <!-- The Cli pointer pack also builds the host's RID package, which flows that RID to this referenced executable. -->
+    <RuntimeIdentifiers Condition="'$(_IsPacking)' == 'true' and '$(RuntimeIdentifier)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>

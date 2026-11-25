@@ -5,6 +5,9 @@
     <!-- Multi-target net9.0 and net11.0 so `dotnet tool install` works on both
          SDKs. dotnet picks the highest compatible TFM at install time. -->
     <TargetFrameworks>net9.0;net11.0</TargetFrameworks>
+    <!-- A NativeAOT RID package must contain only the AOT build: with a net9.0 build beside it, `dotnet tool install`
+         prefers the TFM-specific net9.0 assets over the TFM-agnostic AOT ones, and users would get no NativeAOT. -->
+    <TargetFrameworks Condition="'$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">net11.0</TargetFrameworks>
     <!-- Preserve the .NET 9 tool asset by allowing the compatible package graph selected below,
          rather than promoting transitive dependencies to the repository-wide .NET 11 versions. -->
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
@@ -13,9 +16,12 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>maui</ToolCommandName>
     <ToolPackageRuntimeIdentifiers>win-x64;linux-x64;osx-arm64;any</ToolPackageRuntimeIdentifiers>
-    <!-- NativeAOT requires a RID, so enable it for packaging rather than ordinary builds. -->
-    <PublishAot Condition="'$(_IsPacking)' == 'true' and '$(TargetFramework)' == 'net11.0'">true</PublishAot>
+    <!-- NativeAOT requires a RID, so enable it for packaging rather than ordinary builds. The empty-TFM case is the
+         cross-targeting outer pack: it must see PublishAot so the SDK does not try to build every RID there. -->
+    <PublishAot Condition="'$(_IsPacking)' == 'true' and ('$(TargetFramework)' == 'net11.0' or '$(TargetFramework)' == '')">true</PublishAot>
     <PublishTrimmed Condition="'$(_IsPacking)' == 'true' and '$(TargetFramework)' == 'net11.0'">true</PublishTrimmed>
+    <!-- Packing the pointer package (no RuntimeIdentifier) also builds the host's RID package, so restore must cover it. -->
+    <RuntimeIdentifiers Condition="'$(_IsPacking)' == 'true' and '$(RuntimeIdentifier)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifiers>
     <SelfContained Condition="'$(TargetFramework)' == 'net11.0' and '$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">true</SelfContained>
     <!-- Go.Server is consumed in-process even though its project also emits a standalone executable. -->
     <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
