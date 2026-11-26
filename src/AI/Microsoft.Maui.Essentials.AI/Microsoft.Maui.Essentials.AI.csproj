@@ -16,7 +16,7 @@
     <IsBindingProject>true</IsBindingProject>
     <!-- CA1416: Apple Intelligence APIs require iOS/macOS 26+ but the library supports
          older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
-    <NoWarn>$(NoWarn);CA1416;XCODE_27_0_PREVIEW</NoWarn>
+    <NoWarn>$(NoWarn);CA1416;MEDE0001;EXTEXP0019;XCODE_27_0_PREVIEW</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition="$(TargetFramework.Contains('-android'))">
     <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
@@ -46,6 +46,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DocumentExtraction.Abstractions" />
   </ItemGroup>
   <ItemGroup Condition="$(TargetFramework.StartsWith('net10.0'))">
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
@@ -117,6 +118,7 @@
   <!-- Exclude Apple-only files from non-Apple TFMs (including net11.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
     <Compile Remove="Platform\MaciOS\**\*.cs" />
+    <Compile Remove="DocumentExtraction\AppleVisionRecognizeDocumentsClient.cs" />
   </ItemGroup>
   <ItemGroup Condition="!$(TargetFramework.Contains('-android'))">
     <Compile Remove="Platform\Android\**\*.cs" />
@@ -130,6 +132,7 @@
       <SchemeName>EssentialsAI</SchemeName>
     </XcodeProject>
     <ObjcBindingApiDefinition Include="..\AppleNative\ApiDefinitions.cs" />
+    <ObjcBindingApiDefinition Include="..\AppleNative\RecognizeDocumentsRequestApiDefinitions.cs" />
     <ObjcBindingCoreSource Include="..\AppleNative\StructsAndEnums.cs" />
   </ItemGroup>
   <Import Project="..\AppleBindings.targets" />

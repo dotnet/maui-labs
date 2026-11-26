@@ -247,6 +247,38 @@ The default generator uses English sentence embeddings. Pass an `NLLanguage` to
 the constructor for another supported language, or wrap an existing
 `NLEmbedding`. The language's model asset must be installed.
 
+## Document extraction
+
+On iOS, Mac Catalyst, and macOS 26+, `AppleVisionRecognizeDocumentsClient` extracts
+text, tables, and source geometry on-device with Apple Vision. It implements the
+experimental `Microsoft.Extensions.DocumentExtraction` client and does not require
+Apple Intelligence.
+
+| Input | Support |
+|-------|---------|
+| PDF | Each page is rendered with PDFKit |
+| JPEG, PNG, HEIC, TIFF | Orientation is honored; only the first frame is used |
+
+```csharp
+using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Extensions.Documents;
+using Microsoft.Extensions.AI;
+using Microsoft.Maui.Essentials.AI;
+
+using DocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+await using var input = File.OpenRead("receipt.pdf");
+ExtractionDocument result = await client.ExtractAsync(input, "receipt", "application/pdf");
+foreach (var element in result.EnumerateContent().OfType<ExtractionDocumentTextElement>())
+    Console.WriteLine(((TextContent)element.Content!).Text);
+```
+
+The input stream is not disposed. Data the shared model has no place for, such as
+confidence, OCR candidates, list structure, and detected entities, is available as
+JSON through `RawRepresentation`.
+
+See the [Apple document extraction guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-document-extraction.md)
+for architecture, request settings, and fidelity limits.
+
 ## Guides and samples
 
 - [Apple Foundation Models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models.md) — availability, images, tools, and native bridge.
