@@ -4,6 +4,53 @@ namespace Microsoft.Maui.DevFlow.Tests;
 
 public class AppKitScreenshotCaptureTests
 {
+    [Fact]
+    public void IsUniformRgba_AllWhiteImage_IsBlank()
+    {
+        var pixels = Enumerable.Repeat((byte)255, 16 * 16 * 4).ToArray();
+
+        Assert.True(AppKitScreenshotCapture.IsUniformRgba(pixels));
+    }
+
+    [Fact]
+    public void IsUniformRgba_ToleratesTinyNoise()
+    {
+        var pixels = Enumerable.Repeat((byte)255, 16 * 16 * 4).ToArray();
+        pixels[40] = 254;
+
+        Assert.True(AppKitScreenshotCapture.IsUniformRgba(pixels));
+    }
+
+    [Fact]
+    public void IsUniformRgba_VisibleContent_IsNotBlank()
+    {
+        var pixels = Enumerable.Repeat((byte)255, 16 * 16 * 4).ToArray();
+        pixels[400] = 200; // one pixel with visibly different red channel
+
+        Assert.False(AppKitScreenshotCapture.IsUniformRgba(pixels));
+    }
+
+    [Fact]
+    public void IsUniformRgba_TooFewPixels_IsNotTreatedAsBlank()
+    {
+        Assert.False(AppKitScreenshotCapture.IsUniformRgba(new byte[] { 255, 255, 255, 255 }));
+    }
+
+    [Fact]
+    public void GetContentPixelRect_ExcludesTitleBarFromWindowCapture()
+    {
+        // 1440x960 window with a 28pt title bar, captured at 2x.
+        var rect = AppKitScreenshotCapture.GetContentPixelRect(1440, 960, 0, 0, 1440, 932, 2880, 1920);
+
+        Assert.Equal((0, 56, 2880, 1864), rect);
+    }
+
+    [Fact]
+    public void GetContentPixelRect_EmptyContent_ReturnsNull()
+    {
+        Assert.Null(AppKitScreenshotCapture.GetContentPixelRect(1440, 960, 0, 0, 0, 0, 2880, 1920));
+    }
+
     [Theory]
     [InlineData(14, 0, false)]
     [InlineData(14, 1, false)]
