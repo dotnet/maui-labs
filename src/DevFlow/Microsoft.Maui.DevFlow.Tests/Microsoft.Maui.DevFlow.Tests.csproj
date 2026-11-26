@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFramework>net11.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <!-- Mirrors the Driver: the Windows UI Automation members only exist when it is built on Windows. -->
+    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(DefineConstants);WINDOWS_BUILD</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

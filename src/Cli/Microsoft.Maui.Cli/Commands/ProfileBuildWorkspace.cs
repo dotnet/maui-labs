@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Security;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Utils;
 
@@ -73,7 +74,7 @@ internal sealed class ProfileBuildWorkspace
 				CreatedAtUtc = DateTimeOffset.UtcNow
 			};
 
-			JsonSerializer.Serialize(ownershipLease, ownership);
+			JsonSerializer.Serialize(ownershipLease, ownership, ProfileBuildWorkspaceJsonContext.Default.ProfileBuildWorkspaceOwnership);
 			ownershipLease.Flush(flushToDisk: true);
 			ownershipLease.Position = 0;
 
@@ -257,7 +258,7 @@ internal sealed class ProfileBuildWorkspace
 				FileMode.Open,
 				FileAccess.ReadWrite,
 				FileShare.None);
-			ownership = JsonSerializer.Deserialize<ProfileBuildWorkspaceOwnership>(ownershipLease);
+			ownership = JsonSerializer.Deserialize(ownershipLease, ProfileBuildWorkspaceJsonContext.Default.ProfileBuildWorkspaceOwnership);
 		}
 		catch (IOException)
 		{
@@ -497,3 +498,7 @@ internal sealed record ProfileBuildWorkspaceOwnership
 	public long? ProcessStartTimeUtcTicks { get; init; }
 	public required DateTimeOffset CreatedAtUtc { get; init; }
 }
+
+// Default (PascalCase) naming keeps the lease file readable by earlier CLI versions.
+[JsonSerializable(typeof(ProfileBuildWorkspaceOwnership))]
+internal sealed partial class ProfileBuildWorkspaceJsonContext : JsonSerializerContext;

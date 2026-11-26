@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { fetchAgents, isAgentRegistration } from "../src/broker.js";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fetchAgents, isAgentRegistration, mauiCliLaunch, resolveMauiCli } from "../src/broker.js";
 
 const validAgent = {
   id: "agent-1",
@@ -63,4 +66,33 @@ test("fetchAgents rejects a registry containing malformed entries", async (t) =>
   assert.ok(address && typeof address !== "string");
 
   assert.equal(await fetchAgents(address.port), null);
+});
+
+test("mauiCliLaunch routes a Windows .cmd shim through cmd.exe and leaves real executables alone", () => {
+  const shim = mauiCliLaunch("C:\\Users\\Jane Doe\\.dotnet\\tools\\maui.cmd", ["devflow", "list", "--json"], "win32");
+  assert.match(shim.file, /cmd(\.exe)?$/i);
+  assert.deepEqual(shim.args.slice(0, 3), ["/d", "/s", "/c"]);
+  assert.equal(shim.args[3], '"\"C:\\Users\\Jane Doe\\.dotnet\\tools\\maui.cmd\" devflow list --json"');
+  assert.equal(shim.windowsVerbatimArguments, true);
+
+  const exe = mauiCliLaunch("C:\\tools\\maui.exe", ["devflow"], "win32");
+  assert.deepEqual(exe, { file: "C:\\tools\\maui.exe", args: ["devflow"] });
+
+  const unix = mauiCliLaunch("/home/u/.dotnet/tools/maui", ["devflow"], "linux");
+  assert.deepEqual(unix, { file: "/home/u/.dotnet/tools/maui", args: ["devflow"] });
+});
+
+test("resolveMauiCli prefers maui.exe, then falls back to the maui.cmd shim of a NativeAOT install", (t) => {
+  const home = mkdtempSync(join(tmpdir(), "maui-cli-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const tools = join(home, ".dotnet", "tools");
+  mkdirSync(tools, { recursive: true });
+
+  assert.equal(resolveMauiCli(undefined, "win32", home), "maui.exe");
+
+  writeFileSync(join(tools, "maui.cmd"), "");
+  assert.equal(resolveMauiCli(undefined, "win32", home), join(tools, "maui.cmd"));
+
+  writeFileSync(join(tools, "maui.exe"), "");
+  assert.equal(resolveMauiCli(undefined, "win32", home), join(tools, "maui.exe"));
 });

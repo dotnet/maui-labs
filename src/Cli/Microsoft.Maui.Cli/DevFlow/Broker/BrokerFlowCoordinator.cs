@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json.Serialization;
 using Microsoft.Maui.Cli.DevFlow.Flows;
 
 namespace Microsoft.Maui.Cli.DevFlow.Broker;
@@ -254,36 +255,36 @@ internal sealed class BrokerFlowCoordinator
 
 internal sealed class FlowObservation
 {
-    public string Action { get; set; } = "";
-    public string? AutomationId { get; set; }
-    public string? Text { get; set; }
-    public string? Type { get; set; }
-    public int? Index { get; set; }
-    public string? Id { get; set; }
-    public string? Value { get; set; }
-    public string? Name { get; set; }
-    public double? Dx { get; set; }
-    public double? Dy { get; set; }
-    public int? ItemIndex { get; set; }
-    public string? Position { get; set; }
-    public string? Page { get; set; }
-    public bool Navigated { get; set; }
-    public string? AssertsJson { get; set; }
+    [JsonPropertyName("action")] public string Action { get; set; } = "";
+    [JsonPropertyName("automationId")] public string? AutomationId { get; set; }
+    [JsonPropertyName("text")] public string? Text { get; set; }
+    [JsonPropertyName("type")] public string? Type { get; set; }
+    [JsonPropertyName("index")] public int? Index { get; set; }
+    [JsonPropertyName("id")] public string? Id { get; set; }
+    [JsonPropertyName("value")] public string? Value { get; set; }
+    [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("dx")] public double? Dx { get; set; }
+    [JsonPropertyName("dy")] public double? Dy { get; set; }
+    [JsonPropertyName("itemIndex")] public int? ItemIndex { get; set; }
+    [JsonPropertyName("position")] public string? Position { get; set; }
+    [JsonPropertyName("page")] public string? Page { get; set; }
+    [JsonPropertyName("navigated")] public bool Navigated { get; set; }
+    [JsonPropertyName("assertsJson")] public string? AssertsJson { get; set; }
 }
 
 internal sealed class BrokerFlowResult
 {
-    public bool Ok { get; set; }
-    public bool Recording { get; set; }
-    public string? RecordingId { get; set; }
-    public string? Name { get; set; }
-    public int Steps { get; set; }
-    public int? Seq { get; set; }
-    public bool Fragile { get; set; }
-    public bool Empty { get; set; }
-    public string? Markdown { get; set; }
-    public string[]? Warnings { get; set; }
-    public string? Error { get; set; }
+    [JsonPropertyName("ok")] public bool Ok { get; set; }
+    [JsonPropertyName("recording")] public bool Recording { get; set; }
+    [JsonPropertyName("recordingId")] public string? RecordingId { get; set; }
+    [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("steps")] public int Steps { get; set; }
+    [JsonPropertyName("seq")] public int? Seq { get; set; }
+    [JsonPropertyName("fragile")] public bool Fragile { get; set; }
+    [JsonPropertyName("empty")] public bool Empty { get; set; }
+    [JsonPropertyName("markdown")] public string? Markdown { get; set; }
+    [JsonPropertyName("warnings")] public string[]? Warnings { get; set; }
+    [JsonPropertyName("error")] public string? Error { get; set; }
 
     public static BrokerFlowResult Failure(string error) => new()
     {

@@ -16,6 +16,8 @@
     <PackageReference Include="Spectre.Console.Testing" />
     <!-- Independent PNG decoder for compatibility tests, not part of the shipped tool graph. -->
     <PackageReference Include="SkiaSharp" PrivateAssets="all" />
+    <!-- SkiaSharp ships Windows and macOS natives only; Linux needs its own assets for the PNG test fixtures. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" PrivateAssets="all" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
   </ItemGroup>
 
   <ItemGroup>

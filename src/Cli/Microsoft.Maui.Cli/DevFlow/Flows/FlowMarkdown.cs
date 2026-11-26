@@ -29,16 +29,6 @@ public static class FlowMarkdown
         "```json maui-test\\s*\\r?\\n(.*?)\\r?\\n```",
         RegexOptions.Singleline | RegexOptions.Compiled);
 
-    private static readonly JsonSerializerOptions ReadOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
-
-    private static readonly JsonSerializerOptions WriteOptions = new()
-    {
-        WriteIndented = true,
-    };
-
     /// <summary>Extract and deserialize the authoritative flow payload from a <c>.md</c> document.</summary>
     public static FlowParseResult Parse(string markdown, string? file = null)
     {
@@ -58,7 +48,7 @@ public static class FlowMarkdown
         MauiFlow? flow;
         try
         {
-            flow = JsonSerializer.Deserialize<MauiFlow>(jsonText, ReadOptions);
+            flow = JsonSerializer.Deserialize(jsonText, DevFlowCliJsonContext.Default.MauiFlow);
         }
         catch (JsonException ex)
         {
@@ -78,7 +68,7 @@ public static class FlowMarkdown
     /// <summary>Render a flow as a dual-layer <c>.md</c> (human prose + authoritative json block).</summary>
     public static string Serialize(MauiFlow flow)
     {
-        var json = JsonSerializer.Serialize(flow, WriteOptions);
+        var json = CliJson.PrettyPrint(JsonSerializer.Serialize(flow, DevFlowCliJsonPreserveNullContext.Default.MauiFlow));
         var sb = new StringBuilder();
         sb.Append("# Scenario: ").Append(NoFence(flow.Name)).Append('\n').Append('\n');
         sb.Append("<!-- Recorded by MAUI DevFlow. The fenced ```json maui-test block below is the source of\n");

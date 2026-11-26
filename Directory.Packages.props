@@ -58,6 +58,7 @@
     <PackageVersion Include="Fizzler" Version="$(FizzlerVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="$(MicrosoftCodeAnalysisCSharpVersion)" />
     <PackageVersion Include="SkiaSharp" Version="$(SkiaSharpVersion)" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="$(SkiaSharpVersion)" />
     <PackageVersion Include="SkiaSharp.NativeAssets.tvOS" Version="$(SkiaSharpNativeAssetsTvOSVersion)" />
     <PackageVersion Include="Platform.Maui.TvOS" Version="0.5.0" />
     <PackageVersion Include="Spectre.Console" Version="$(SpectreConsoleVersion)" />
@@ -67,7 +68,6 @@
     <PackageVersion Include="Websocket.Client" Version="$(WebsocketClientVersion)" />
     <PackageVersion Include="XenoAtom.Terminal.UI" Version="$(XenoAtomTerminalUIVersion)" />
     <PackageVersion Include="ModelContextProtocol" Version="$(ModelContextProtocolVersion)" />
-    <PackageVersion Include="Interop.UIAutomationClient" Version="$(InteropUIAutomationClientVersion)" />
     <PackageVersion Include="AathifMahir.Maui.MauiIcons.Cupertino" Version="$(AathifMahirMauiIconsCupertinoVersion)" />
   </ItemGroup>
 

@@ -39,6 +39,18 @@ public class UpdateCommandTests
 		Assert.False(UpdateCommand.IsGlobalInstall(shim, Path.GetTempPath(), home));
 	}
 
+	[Fact]
+	public void IsGlobalInstall_AcceptsNativeExecutableInsideToolStore()
+	{
+		var home = Path.Combine(Path.GetTempPath(), "cli home", ".dotnet", "tools");
+		var payload = Path.Combine(home, ".store", "microsoft.maui.cli", "1.0.0", "microsoft.maui.cli.osx-arm64", "1.0.0", "tools", "any", "osx-arm64");
+		var executable = Path.Combine(payload, "maui");
+		Assert.True(UpdateCommand.IsGlobalInstall(executable, payload + Path.DirectorySeparatorChar, home));
+		Assert.False(UpdateCommand.IsGlobalInstall(Path.Combine(Path.GetTempPath(), "elsewhere", "maui"), payload, home));
+		Assert.False(UpdateCommand.IsGlobalInstall(
+			Path.Combine(home, ".store", "microsoft.maui.cli.other", "1.0.0", "maui"), payload, home));
+	}
+
 	static readonly string[] WindowsInputValues =
 	[
 		"normal", "two words", "ordinary's apostrophe",

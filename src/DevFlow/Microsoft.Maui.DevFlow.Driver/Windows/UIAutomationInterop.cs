@@ -1,16 +1,17 @@
 #if WINDOWS_BUILD
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 using System.Text;
-using Interop.UIAutomationClient;
 #endif
 
 namespace Microsoft.Maui.DevFlow.Driver.Windows;
 
 /// <summary>
-/// Windows UI Automation helpers using the Interop.UIAutomationClient TLB-generated types.
+/// Windows UI Automation helpers using source-generated (NativeAOT-compatible) COM interop.
 /// Provides dialog detection, button invocation, and accessibility tree dumping
 /// analogous to the Mac AXElement wrapper.
 /// </summary>
-internal static class UIAutomationInterop
+internal static partial class UIAutomationInterop
 {
 #if WINDOWS_BUILD
     private const int UIA_InvokePatternId = 10000;
@@ -26,44 +27,95 @@ internal static class UIAutomationInterop
     private const int UIA_EditControlTypeId = 50004;
     private const int UIA_TextControlTypeId = 50020;
 
-    private static CUIAutomationClass? _automation;
+    private const uint CLSCTX_INPROC_SERVER = 0x1;
+    private const uint COINIT_MULTITHREADED = 0x0;
 
-    private static CUIAutomationClass GetAutomation()
+    private static readonly StrategyBasedComWrappers s_comWrappers = new();
+
+    private static IUIAutomation? _automation;
+
+    private static IUIAutomation GetAutomation()
     {
-        _automation ??= new CUIAutomationClass();
+        // StrategyBasedComWrappers (unlike built-in COM interop) does not marshal a cached pointer
+        // between apartments, so create the process-wide singleton on a thread-pool thread, which is
+        // always in the MTA, no matter which apartment the first caller happens to be in.
+        _automation ??= Task.Run(CreateAutomation).GetAwaiter().GetResult();
         return _automation;
+    }
+
+    private static IUIAutomation CreateAutomation()
+    {
+        // Built-in COM interop initialized COM on the calling thread implicitly; CoCreateInstance does not.
+        // S_FALSE (already initialized) and RPC_E_CHANGED_MODE (STA thread) are both fine here.
+        _ = CoInitializeEx(IntPtr.Zero, COINIT_MULTITHREADED);
+
+        var clsid = UIAutomationClsids.CUIAutomation;
+        var iid = UIAutomationClsids.IUIAutomation;
+        Marshal.ThrowExceptionForHR(CoCreateInstance(in clsid, IntPtr.Zero, CLSCTX_INPROC_SERVER, in iid, out var unknown));
+
+        try
+        {
+            return (IUIAutomation)s_comWrappers.GetOrCreateObjectForComInstance(unknown, CreateObjectFlags.None);
+        }
+        finally
+        {
+            Marshal.Release(unknown);
+        }
+    }
+
+    [LibraryImport("ole32.dll")]
+    private static partial int CoInitializeEx(IntPtr pvReserved, uint dwCoInit);
+
+    [LibraryImport("ole32.dll")]
+    private static partial int CoCreateInstance(in Guid rclsid, IntPtr pUnkOuter, uint dwClsContext, in Guid riid, out IntPtr ppv);
+
+    // Returns null when the element does not support the pattern (UIA returns S_OK with a null pointer).
+    private static T? GetPattern<T>(IUIAutomationElement element, int patternId) where T : class
+    {
+        var unknown = element.GetCurrentPattern(patternId);
+        if (unknown == IntPtr.Zero)
+            return null;
+
+        try
+        {
+            return (T)s_comWrappers.GetOrCreateObjectForComInstance(unknown, CreateObjectFlags.None);
+        }
+        finally
+        {
+            Marshal.Release(unknown);
+        }
     }
 
     public static string? GetName(IUIAutomationElement element)
     {
-        try { return element.CurrentName; } catch { return null; }
+        try { return element.GetCurrentName(); } catch { return null; }
     }
 
     public static int GetControlType(IUIAutomationElement element)
     {
-        try { return element.CurrentControlType; } catch { return 0; }
+        try { return element.GetCurrentControlType(); } catch { return 0; }
     }
 
     public static string? GetLocalizedControlType(IUIAutomationElement element)
     {
-        try { return element.CurrentLocalizedControlType; } catch { return null; }
+        try { return element.GetCurrentLocalizedControlType(); } catch { return null; }
     }
 
     public static string? GetAutomationId(IUIAutomationElement element)
     {
-        try { return element.CurrentAutomationId; } catch { return null; }
+        try { return element.GetCurrentAutomationId(); } catch { return null; }
     }
 
     public static int GetProcessId(IUIAutomationElement element)
     {
-        try { return element.CurrentProcessId; } catch { return 0; }
+        try { return element.GetCurrentProcessId(); } catch { return 0; }
     }
 
     public static IntPtr GetNativeWindowHandle(IUIAutomationElement element)
     {
         try
         {
-            var handle = element.CurrentNativeWindowHandle;
+            var handle = element.GetCurrentNativeWindowHandle();
             return handle == 0 ? IntPtr.Zero : new IntPtr(handle);
         }
         catch { return IntPtr.Zero; }
@@ -73,7 +125,7 @@ internal static class UIAutomationInterop
     {
         try
         {
-            var rect = element.CurrentBoundingRectangle;
+            var rect = element.GetCurrentBoundingRectangle();
             var width = Math.Max(0, rect.right - rect.left);
             var height = Math.Max(0, rect.bottom - rect.top);
             return new UiaRect(rect.left, rect.top, width, height);
@@ -83,12 +135,12 @@ internal static class UIAutomationInterop
 
     public static bool IsEnabled(IUIAutomationElement element)
     {
-        try { return element.CurrentIsEnabled != 0; } catch { return false; }
+        try { return element.GetCurrentIsEnabled() != 0; } catch { return false; }
     }
 
     public static bool IsOffscreen(IUIAutomationElement element)
     {
-        try { return element.CurrentIsOffscreen != 0; } catch { return false; }
+        try { return element.GetCurrentIsOffscreen() != 0; } catch { return false; }
     }
 
     public static bool SetFocus(IUIAutomationElement element)
@@ -105,7 +157,10 @@ internal static class UIAutomationInterop
     {
         try
         {
-            var pattern = (IUIAutomationInvokePattern)element.GetCurrentPattern(UIA_InvokePatternId);
+            var pattern = GetPattern<IUIAutomationInvokePattern>(element, UIA_InvokePatternId);
+            if (pattern is null)
+                return false;
+
             pattern.Invoke();
             return true;
         }
@@ -116,8 +171,8 @@ internal static class UIAutomationInterop
     {
         try
         {
-            var pattern = (IUIAutomationValuePattern)element.GetCurrentPattern(UIA_ValuePatternId);
-            if (pattern.CurrentIsReadOnly != 0)
+            var pattern = GetPattern<IUIAutomationValuePattern>(element, UIA_ValuePatternId);
+            if (pattern is null || pattern.GetCurrentIsReadOnly() != 0)
                 return false;
 
             pattern.SetValue(value);
@@ -130,7 +185,10 @@ internal static class UIAutomationInterop
     {
         try
         {
-            var pattern = (IUIAutomationScrollItemPattern)element.GetCurrentPattern(UIA_ScrollItemPatternId);
+            var pattern = GetPattern<IUIAutomationScrollItemPattern>(element, UIA_ScrollItemPatternId);
+            if (pattern is null)
+                return false;
+
             pattern.ScrollIntoView();
             return true;
         }
@@ -141,7 +199,10 @@ internal static class UIAutomationInterop
     {
         try
         {
-            var pattern = (IUIAutomationScrollPattern)element.GetCurrentPattern(UIA_ScrollPatternId);
+            var pattern = GetPattern<IUIAutomationScrollPattern>(element, UIA_ScrollPatternId);
+            if (pattern is null)
+                return false;
+
             pattern.Scroll(horizontalAmount, verticalAmount);
             return true;
         }
@@ -161,14 +222,14 @@ internal static class UIAutomationInterop
     {
         var uia = GetAutomation();
         var root = uia.GetRootElement();
-        var condition = uia.CreatePropertyCondition(UIA_ProcessIdPropertyId, processId);
+        var condition = uia.CreatePropertyCondition(UIA_ProcessIdPropertyId, UiaVariant.FromInt32(processId));
         var results = new List<IUIAutomationElement>();
 
         try
         {
             var array = root.FindAll(TreeScope.TreeScope_Children, condition);
             if (array != null)
-                for (int i = 0; i < array.Length; i++)
+                for (int i = 0; i < array.GetLength(); i++)
                     results.Add(array.GetElement(i));
         }
         catch { }
@@ -202,21 +263,21 @@ internal static class UIAutomationInterop
     {
         var uia = GetAutomation();
         var root = uia.GetRootElement();
-        var condition = uia.CreatePropertyCondition(UIA_ControlTypePropertyId, UIA_WindowControlTypeId);
+        var condition = uia.CreatePropertyCondition(UIA_ControlTypePropertyId, UiaVariant.FromInt32(UIA_WindowControlTypeId));
         return FindAll(root, TreeScope.TreeScope_Children, condition);
     }
 
     public static List<(IUIAutomationElement element, string name)> FindButtons(IUIAutomationElement root)
     {
         var uia = GetAutomation();
-        var condition = uia.CreatePropertyCondition(UIA_ControlTypePropertyId, UIA_ButtonControlTypeId);
+        var condition = uia.CreatePropertyCondition(UIA_ControlTypePropertyId, UiaVariant.FromInt32(UIA_ButtonControlTypeId));
         var results = new List<(IUIAutomationElement, string)>();
 
         try
         {
             var array = root.FindAll(TreeScope.TreeScope_Descendants, condition);
             if (array != null)
-                for (int i = 0; i < array.Length; i++)
+                for (int i = 0; i < array.GetLength(); i++)
                 {
                     var el = array.GetElement(i);
                     var name = GetName(el) ?? "";
@@ -232,14 +293,14 @@ internal static class UIAutomationInterop
     public static List<string> FindTexts(IUIAutomationElement root)
     {
         var uia = GetAutomation();
-        var condition = uia.CreatePropertyCondition(UIA_ControlTypePropertyId, UIA_TextControlTypeId);
+        var condition = uia.CreatePropertyCondition(UIA_ControlTypePropertyId, UiaVariant.FromInt32(UIA_TextControlTypeId));
         var texts = new List<string>();
 
         try
         {
             var array = root.FindAll(TreeScope.TreeScope_Descendants, condition);
             if (array != null)
-                for (int i = 0; i < array.Length; i++)
+                for (int i = 0; i < array.GetLength(); i++)
                 {
                     var name = GetName(array.GetElement(i)) ?? "";
                     if (name.Length > 0)
@@ -254,14 +315,14 @@ internal static class UIAutomationInterop
     public static List<IUIAutomationElement> FindEdits(IUIAutomationElement root)
     {
         var uia = GetAutomation();
-        var condition = uia.CreatePropertyCondition(UIA_ControlTypePropertyId, UIA_EditControlTypeId);
+        var condition = uia.CreatePropertyCondition(UIA_ControlTypePropertyId, UiaVariant.FromInt32(UIA_EditControlTypeId));
         return FindAll(root, TreeScope.TreeScope_Descendants, condition);
     }
 
     public static List<IUIAutomationElement> FindChildWindows(IUIAutomationElement parent)
     {
         var uia = GetAutomation();
-        var condition = uia.CreatePropertyCondition(UIA_ControlTypePropertyId, UIA_WindowControlTypeId);
+        var condition = uia.CreatePropertyCondition(UIA_ControlTypePropertyId, UiaVariant.FromInt32(UIA_WindowControlTypeId));
         return FindAll(parent, TreeScope.TreeScope_Descendants, condition);
     }
 
@@ -289,14 +350,14 @@ internal static class UIAutomationInterop
     {
         var uia = GetAutomation();
         var root = uia.GetRootElement();
-        var condition = uia.CreatePropertyCondition(UIA_ProcessIdPropertyId, processId);
+        var condition = uia.CreatePropertyCondition(UIA_ProcessIdPropertyId, UiaVariant.FromInt32(processId));
         return FindAll(root, TreeScope.TreeScope_Descendants, condition);
     }
 
     public static string DumpTree(IUIAutomationElement element, int maxDepth = 8)
     {
         var sb = new StringBuilder();
-        var walker = GetAutomation().RawViewWalker;
+        var walker = GetAutomation().GetRawViewWalker();
         DumpTreeRecursive(walker, element, sb, 0, maxDepth);
         return sb.ToString();
     }
@@ -337,7 +398,7 @@ internal static class UIAutomationInterop
         {
             var array = root.FindAll(scope, condition);
             if (array != null)
-                for (int i = 0; i < array.Length; i++)
+                for (int i = 0; i < array.GetLength(); i++)
                     results.Add(array.GetElement(i));
         }
         catch { }

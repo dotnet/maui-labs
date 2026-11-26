@@ -155,6 +155,10 @@ jobs:
         if: inputs.native-deps != ''
         run: ${{ inputs.native-deps }}
 
+      - name: Install NativeAOT dependencies
+        if: inputs.project-name == 'cli' && runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
       # Use Arcade's dotnet wrapper for workload-related setup so SDK resolution
       # matches the later cibuild invocation.
       - name: Install workloads from GA manifests (Windows)
@@ -189,6 +193,7 @@ jobs:
           -prepareMachine
           -projects %CD%\${{ inputs.project-path }}
           /p:VersionSuffix=%CI_PACKAGE_VERSION_SUFFIX%
+          ${{ inputs.project-name == 'cli' && '/p:SkipMauiCliPack=true' || '' }}
           ${{ inputs.build-arguments }}
         shell: cmd
 
@@ -203,6 +208,7 @@ jobs:
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
+          ${{ inputs.project-name == 'cli' && '/p:SkipMauiCliPack=true' || '' }}
           ${{ matrix.os == 'xcode-27' && '/p:JavaSdkDirectory=$JAVA_HOME' || '' }}
           ${{ inputs.build-arguments }}
           ${{ inputs.skip-xcode-version-validation && '/p:ValidateXcodeVersion=false' || '' }}
@@ -217,7 +223,41 @@ jobs:
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
+          ${{ inputs.project-name == 'cli' && '/p:SkipMauiCliPack=true' || '' }}
           ${{ inputs.build-arguments }}
+
+      - name: Pack NativeAOT CLI
+        if: inputs.pack && inputs.project-name == 'cli'
+        shell: pwsh
+        run: |
+          $rid = switch ('${{ runner.os }}') {
+            'Windows' { 'win-x64' }
+            'Linux' { 'linux-x64' }
+            'macOS' { 'osx-arm64' }
+            default { throw "Unsupported NativeAOT build OS: ${{ runner.os }}" }
+          }
+
+          dotnet pack src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj `
+            --configuration Release `
+            --runtime $rid `
+            -p:VersionSuffix=$env:CI_PACKAGE_VERSION_SUFFIX
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          if ('${{ runner.os }}' -eq 'Windows') {
+            dotnet pack src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj `
+              --configuration Release `
+              --runtime any `
+              -p:PublishAot=false `
+              -p:PublishTrimmed=false `
+              -p:SelfContained=false `
+              -p:VersionSuffix=$env:CI_PACKAGE_VERSION_SUFFIX
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            dotnet pack src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj `
+              --configuration Release `
+              -p:VersionSuffix=$env:CI_PACKAGE_VERSION_SUFFIX
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Build targeted framework
         if: inputs.build-target-framework != ''
@@ -275,18 +315,47 @@ jobs:
             }
           }
 
-      - name: NativeAOT publish smoke test (macOS)
-        if: matrix.os == 'macos-latest' && inputs.project-name == 'cli' && !inputs.test-only
+      # The publish-output smoke test below cannot tell which build `dotnet tool install` really picks. A
+      # TFM-specific net9.0 build next to the AOT one silently wins, so install the packed tool and check.
+      - name: Verify installed tool is NativeAOT (Windows)
+        if: runner.os == 'Windows' && inputs.pack && inputs.project-name == 'cli' && !inputs.test-only
         shell: bash
         run: |
           set -euo pipefail
 
-          arch="$(uname -m)"
-          case "$arch" in
-            arm64) rid="osx-arm64" ;;
-            x86_64) rid="osx-x64" ;;
+          pkg_dir="artifacts/packages/Release/Shipping"
+          pointer="$(ls "$pkg_dir"/Microsoft.Maui.Cli.[0-9]*.nupkg | head -1)"
+          version="$(basename "$pointer" .nupkg)"
+          version="${version#Microsoft.Maui.Cli.}"
+
+          tool_path="$RUNNER_TEMP/maui-tool"
+          dotnet tool install Microsoft.Maui.Cli --tool-path "$tool_path" --version "$version" \
+            --add-source "$pkg_dir" --ignore-failed-sources
+
+          exe="$(find "$tool_path/.store" -path '*/tools/any/win-x64/maui.exe' | head -1)"
+          test -n "$exe" || { echo "::error::The installed tool has no NativeAOT win-x64 executable."; exit 1; }
+          test "$(wc -c < "$exe")" -gt 5000000 || { echo "::error::The installed executable is too small to be NativeAOT."; exit 1; }
+          if find "$tool_path/.store" -path '*/tools/net*/win-x64/*' | grep -q .; then
+            echo "::error::The win-x64 package also contains a TFM-specific build, which would be installed instead of NativeAOT."
+            exit 1
+          fi
+
+          "$exe" version
+
+      # ILC cannot flag every runtime failure, so publish with warnings as errors and then run the
+      # real executable. Windows and Linux are covered too: they compile different native code.
+      - name: NativeAOT publish smoke test
+        if: inputs.project-name == 'cli' && !inputs.test-only
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$RUNNER_OS" in
+            Windows) rid="win-x64"; exe="maui.exe"; python_exe="python"; smoke_args="--windows-uia" ;;
+            Linux) rid="linux-x64"; exe="maui"; python_exe="python3"; smoke_args="" ;;
+            macOS) rid="osx-arm64"; exe="maui"; python_exe="python3"; smoke_args="" ;;
             *)
-              echo "Unsupported macOS architecture: $arch"
+              echo "Unsupported NativeAOT smoke-test OS: $RUNNER_OS"
               exit 1
               ;;
           esac
@@ -297,37 +366,14 @@ jobs:
             -r "$rid" \
             -p:PublishAot=true \
             -p:PublishTrimmed=true \
-            -p:InvariantGlobalization=true \
             -p:TreatWarningsAsErrors=true \
             --self-contained true
 
           publish_dir="artifacts/bin/Microsoft.Maui.Cli/Release/net11.0/$rid/publish"
-          cli_path="$publish_dir/maui"
-          commands_json="$(mktemp)"
-          agents_json="$(mktemp)"
+          test -f "$publish_dir/Build/Microsoft.Maui.ProfilingHelper.dll"
+          test -f "$publish_dir/go-server/Microsoft.Maui.Go.Server.dll"
 
-          "$cli_path" devflow version
-          "$cli_path" devflow commands --json > "$commands_json"
-          "$cli_path" devflow broker stop >/dev/null 2>&1 || true
-          "$cli_path" devflow list --json > "$agents_json"
-          "$cli_path" devflow broker stop >/dev/null 2>&1 || true
-
-          python - "$commands_json" "$agents_json" <<'PY'
-          import json
-          import sys
-
-          with open(sys.argv[1], "r", encoding="utf-8") as fp:
-              commands = json.load(fp)
-          with open(sys.argv[2], "r", encoding="utf-8") as fp:
-              agents = json.load(fp)
-
-          assert isinstance(commands, list), "Expected commands output to be a JSON array"
-          assert commands, "Expected at least one command description"
-          assert all("command" in item and "description" in item for item in commands), "Command entries must include command and description"
-          assert isinstance(agents, list), "Expected list --json output to be a JSON array"
-          PY
-
-          rm -f "$commands_json" "$agents_json"
+          "$python_exe" eng/smoke-tests/cli-nativeaot-smoke.py "$publish_dir/$exe" $smoke_args
 
       - name: Upload test results
         if: inputs.run-tests && !inputs.test-only && always()
@@ -335,6 +381,15 @@ jobs:
         with:
           name: test-results-${{ inputs.project-name }}-${{ matrix.os }}
           path: artifacts/TestResults/**/*.xml
+
+      # Arcade writes per-project test output under artifacts/log, which is otherwise lost when a test fails.
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: logs-${{ inputs.project-name }}-${{ matrix.os }}
+          path: artifacts/log/**
+          if-no-files-found: ignore
 
       - name: Upload targeted test results
         if: inputs.test-only && always()
