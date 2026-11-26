@@ -6,6 +6,7 @@ using System.CommandLine.Parsing;
 using System.Text.Json;
 using Microsoft.Maui.Cli;
 using Microsoft.Maui.Cli.Commands;
+using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
 using Spectre.Console;
 using Spectre.Console.Testing;
@@ -279,6 +280,7 @@ public class AndroidCommandsTests
 
 		// Assert
 		Assert.Contains(androidCommand.Subcommands, c => c.Name == "install");
+		Assert.Contains(androidCommand.Subcommands, c => c.Name == "info");
 		Assert.Contains(androidCommand.Subcommands, c => c.Name == "jdk");
 		Assert.Contains(androidCommand.Subcommands, c => c.Name == "sdk");
 		Assert.Contains(androidCommand.Subcommands, c => c.Name == "emulator");
@@ -831,5 +833,204 @@ public class AndroidCommandsTests
 		Assert.Equal(2, choices.Count);
 		Assert.Equal(("pixel_9_pro_fold", "Pixel 9 Pro Fold"), choices[0]);
 		Assert.Equal(("Nexus 10", "Nexus 10"), choices[1]);
+	}
+
+	// --- Handler-level tests for the 'android info' command. ---
+
+	static async Task<(int ExitCode, string Output)> InvokeAndroidInfoJsonAsync(
+		Action<FakeAndroidProvider> configure,
+		Action<FakeJdkManager>? configureJdk = null,
+		params string[] extraArgs)
+	{
+		var fakeAndroid = new FakeAndroidProvider();
+		configure(fakeAndroid);
+
+		var fakeJdk = new FakeJdkManager();
+		configureJdk?.Invoke(fakeJdk);
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(
+			androidProvider: fakeAndroid,
+			jdkManager: fakeJdk);
+		try
+		{
+			Program.Services = testProvider;
+
+			var sb = new System.Text.StringBuilder();
+			using var writer = new StringWriter(sb);
+			var originalOut = Console.Out;
+			Console.SetOut(writer);
+			try
+			{
+				var rootCommand = Program.BuildRootCommand();
+				var args = new List<string> { "android", "info", "--json" };
+				args.AddRange(extraArgs);
+				var parseResult = rootCommand.Parse(args);
+				var exitCode = await parseResult.InvokeAsync();
+				return (exitCode, sb.ToString());
+			}
+			finally
+			{
+				Console.SetOut(originalOut);
+			}
+		}
+		finally
+		{
+			Program.ResetServices();
+		}
+	}
+
+	[Fact]
+	public async Task InfoCommand_Json_ReturnsSdkAndJdkPaths()
+	{
+		var (exitCode, output) = await InvokeAndroidInfoJsonAsync(
+			f =>
+			{
+				f.SdkPath = "/test/sdk";
+				f.JdkPath = "/test/jdk";
+				f.IsSdkInstalled = true;
+				f.LicensesAccepted = true;
+				f.SdkPathSource = "ANDROID_HOME";
+				f.InstalledPackages = new List<SdkPackage>
+				{
+					new SdkPackage { Path = "platforms;android-35", IsInstalled = true },
+					new SdkPackage { Path = "build-tools;35.0.0", IsInstalled = true },
+				};
+				f.ToolPathsResult = new ToolPaths
+				{
+					Sdkmanager = "/test/sdk/cmdline-tools/13.0/bin/sdkmanager",
+					Adb = "/test/sdk/platform-tools/adb",
+				};
+			},
+			jdk =>
+			{
+				jdk.DetectedJdkPath = "/test/jdk";
+				jdk.DetectedJdkVersion = 21;
+			});
+
+		Assert.Equal(0, exitCode);
+		Assert.Contains("\"sdk_path\": \"/test/sdk\"", output);
+		Assert.Contains("\"sdk_path_source\": \"ANDROID_HOME\"", output);
+		Assert.Contains("\"jdk_path\": \"/test/jdk\"", output);
+		Assert.Contains("\"jdk_version\": \"21\"", output);
+		Assert.Contains("\"licenses_accepted\": true", output);
+	}
+
+	[Fact]
+	public async Task InfoCommand_Json_HandlesNoSdkInstalled()
+	{
+		var (exitCode, output) = await InvokeAndroidInfoJsonAsync(f =>
+		{
+			f.IsSdkInstalled = false;
+			f.SdkPath = null;
+			f.JdkPath = null;
+		});
+
+		Assert.Equal(0, exitCode);
+		using var json = JsonDocument.Parse(output);
+		Assert.False(json.RootElement.TryGetProperty("sdk_path", out _));
+		Assert.Empty(json.RootElement.GetProperty("installed_api_levels").EnumerateArray());
+	}
+
+	[Fact]
+	public async Task InfoCommand_Json_AppliesSdkOverride()
+	{
+		var sdkPath = Path.Combine(Path.GetTempPath(), "maui-info-sdk-" + Path.GetRandomFileName());
+		Directory.CreateDirectory(sdkPath);
+		try
+		{
+			var (exitCode, output) = await InvokeAndroidInfoJsonAsync(
+				f => f.SdkPathSource = "ANDROID_HOME",
+				extraArgs: ["--sdk", sdkPath]);
+
+			Assert.Equal(0, exitCode);
+			using var json = JsonDocument.Parse(output);
+			Assert.Equal(sdkPath, json.RootElement.GetProperty("sdk_path").GetString());
+			Assert.Equal("command-line", json.RootElement.GetProperty("sdk_path_source").GetString());
+		}
+		finally
+		{
+			Directory.Delete(sdkPath);
+		}
+	}
+
+	[Fact]
+	public async Task InfoCommand_Json_InvalidSdkOverride_ReturnsError()
+	{
+		var missingPath = Path.Combine(Path.GetTempPath(), "missing-maui-info-sdk-" + Path.GetRandomFileName());
+		var (exitCode, output) = await InvokeAndroidInfoJsonAsync(
+			_ => { },
+			extraArgs: ["--sdk", missingPath]);
+
+		Assert.NotEqual(0, exitCode);
+		using var json = JsonDocument.Parse(output);
+		Assert.Contains("--sdk path does not exist", json.RootElement.GetProperty("message").GetString());
+	}
+
+	[Fact]
+	public void GroupInstalledPackages_IncludesDottedApiLevelsAndSeparateBuildTools()
+	{
+		var (apiLevels, buildTools) = AndroidCommands.GroupInstalledPackages(
+		[
+			new SdkPackage { Path = "platforms;android-35", IsInstalled = true },
+			new SdkPackage { Path = "build-tools;35.0.0", IsInstalled = true },
+			new SdkPackage { Path = "system-images;android-35;google_apis;arm64-v8a", IsInstalled = true },
+			new SdkPackage { Path = "platforms;android-9", IsInstalled = true },
+			new SdkPackage { Path = "platforms;android-37.0", IsInstalled = true },
+		]);
+
+		Assert.Equal(["37.0", "35", "9"], apiLevels.Select(api => api.Api).ToArray());
+		Assert.Equal("google_apis/arm64-v8a", apiLevels[1].SystemImages[0]);
+		Assert.Equal(["35.0.0"], buildTools);
+	}
+
+	[Fact]
+	public async Task InfoCommand_Json_ReadsSdkDirectoryInventory()
+	{
+		var sdkPath = Path.Combine(Path.GetTempPath(), "maui-info-sdk-" + Path.GetRandomFileName());
+		var platformPath = Path.Combine(sdkPath, "platforms", "android-37.0");
+		var buildToolsPath = Path.Combine(sdkPath, "build-tools", "36.0.0");
+		var systemImagePath = Path.Combine(sdkPath, "system-images", "android-36", "google_apis", "x86_64");
+		Directory.CreateDirectory(platformPath);
+		Directory.CreateDirectory(buildToolsPath);
+		Directory.CreateDirectory(systemImagePath);
+		File.WriteAllText(Path.Combine(platformPath, "source.properties"), "");
+		File.WriteAllText(Path.Combine(buildToolsPath, "source.properties"), "");
+		File.WriteAllText(Path.Combine(systemImagePath, "source.properties"), "");
+		try
+		{
+			var (exitCode, output) = await InvokeAndroidInfoJsonAsync(
+				f =>
+				{
+					f.IsSdkInstalled = true;
+				},
+				extraArgs: ["--sdk", sdkPath]);
+
+			Assert.Equal(0, exitCode);
+			using var json = JsonDocument.Parse(output);
+			var root = json.RootElement;
+			Assert.Equal("37.0", root.GetProperty("installed_api_levels")[0].GetProperty("api").GetString());
+			Assert.Equal("google_apis/x86_64",
+				root.GetProperty("installed_api_levels")[1].GetProperty("system_images")[0].GetString());
+			Assert.Equal("36.0.0", root.GetProperty("build_tools")[0].GetString());
+			Assert.Empty(root.GetProperty("warnings").EnumerateArray());
+		}
+		finally
+		{
+			Directory.Delete(sdkPath, recursive: true);
+		}
+	}
+
+	[Fact]
+	public async Task InfoCommand_Json_CancellationReturns130()
+	{
+		var (exitCode, output) = await InvokeAndroidInfoJsonAsync(f =>
+		{
+			f.IsSdkInstalled = true;
+			f.LicensesException = new OperationCanceledException();
+		});
+
+		Assert.Equal(130, exitCode);
+		using var json = JsonDocument.Parse(output);
+		Assert.Equal("Cancelled.", json.RootElement.GetProperty("message").GetString());
 	}
 }
