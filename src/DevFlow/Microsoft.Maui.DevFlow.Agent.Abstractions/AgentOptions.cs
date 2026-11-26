@@ -60,6 +60,15 @@ public class AgentOptions
     public bool CaptureTrace { get; set; } = true;
 
     /// <summary>
+    /// Captures MAUI visual-tree, binding-failure and available incremental XAML Hot Reload
+    /// events through the logs API with source "maui-diagnostics". Default: false.
+    /// Requires <see cref="EnableFileLogging"/> and enabled MAUI diagnostic producers.
+    /// Register the agent before creating the UI to capture startup events.
+    /// This does not enable MAUI diagnostics or Hot Reload.
+    /// </summary>
+    public bool CaptureMauiDiagnostics { get; set; } = false;
+
+    /// <summary>
     /// Whether to intercept HttpClient requests for network monitoring. Default: true.
     /// When enabled, all IHttpClientFactory-created HttpClients are automatically monitored.
     /// </summary>

@@ -1058,7 +1058,7 @@ public partial class DevFlowCommands
         // logs command
         var logsLimitOption = new Option<int>("--limit") { Description = "Number of log entries to return", DefaultValueFactory = _ => 100 };
         var logsSkipOption = new Option<int>("--skip") { Description = "Number of newest entries to skip", DefaultValueFactory = _ => 0 };
-        var logsSourceOption = new Option<string?>("--source") { Description = "Filter by log source: native, webview, or all (default: all)", DefaultValueFactory = _ => null };
+        var logsSourceOption = new Option<string?>("--source") { Description = "Filter by log source: native, webview, or maui-diagnostics (omit for all sources)", DefaultValueFactory = _ => null };
         var logsFollowOption = new Option<bool>("--follow", "-f") { Description = "Stream logs in real-time (Ctrl+C to stop)", DefaultValueFactory = _ => false };
                 var logsReplayOption = new Option<int>("--replay") { Description = "Number of recent entries to replay on connect (use with --follow, 0 to skip)", DefaultValueFactory = _ => 100 };
         var mauiLogsCmd = new Command("logs", "Fetch application logs") { logsLimitOption, logsSkipOption, logsSourceOption, logsFollowOption, logsReplayOption };

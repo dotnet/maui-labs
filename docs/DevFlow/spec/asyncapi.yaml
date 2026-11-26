@@ -153,8 +153,10 @@ channels:
             source:
               type: string
               description: >
-                Case-insensitive producer source filter. Omit to include every
-                source; the literal all is not a special value.
+                Case-insensitive producer source filter (for example native,
+                webview, or maui-diagnostics). Omit to include every source;
+                the literal all is not a special value. Opt-in MAUI diagnostic
+                log messages contain JSON snapshots.
             replay:
               type: integer
               default: 100

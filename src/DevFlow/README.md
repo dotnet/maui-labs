@@ -174,6 +174,49 @@ builder.AddMauiDevFlowAgent(options =>
 });
 ```
 
+### MAUI diagnostic capture
+
+Opt in during builder registration, before creating the UI:
+
+```csharp
+#if DEBUG
+builder.AddMauiDevFlowAgent(options => options.CaptureMauiDiagnostics = true);
+#endif
+```
+
+Requires `EnableFileLogging` (enabled by default). Read or follow the existing logs
+API with source `maui-diagnostics`; the same events are available through the
+inspector's logs and the `maui_logs` MCP tool. Each message is JSON with a `kind`
+and capture-local `sequence`. The `maui.diagnostics` capability and
+`capture.started` entry list the events available in the loaded MAUI version.
+No MAUI changes or package upgrade are required. Incremental XAML Hot Reload
+events are discovered optionally and may be absent on older releases or after trimming.
+
+```sh
+maui devflow logs --source maui-diagnostics --follow
+```
+
+Capture **does not enable the producers**. Visual-tree and binding events require
+MAUI diagnostics to be enabled (for example, `EnableDiagnostics=true` in a
+development build); these APIs do not themselves require `Debugger.IsAttached`.
+Visual source information also depends on build-time XAML diagnostic generation.
+Hot Reload events require incremental XAML Hot Reload and an actual update from
+tooling; subscribing does not start a Hot Reload session.
+
+Visual events describe additions/removals, not arbitrary property changes.
+An applied Hot Reload event is terminal batch statistics, not proof that every
+instance succeeded: inspect preceding failure events with the matching version.
+Requested/skipped events have no shared request ID; capture does not infer one.
+
+The pending queue holds at most 256 detached snapshots, dropping the oldest under
+load and reporting a `capture.dropped` count. Strings are limited to 1,024 characters
+and type lists to 32 entries. Events flow to the existing rotating log files.
+Snapshots never retain views, binding sources, raw message arguments or exceptions,
+and never call application objects' `ToString()`. Binding messages remain unformatted
+templates; Hot Reload exceptions include their type only. Type names, binding paths,
+automation IDs and source paths can still reveal application information: use this
+only in trusted development sessions.
+
 ### GTK/Linux apps
 
 Use `Microsoft.Maui.DevFlow.Agent.Gtk` instead of the standard agent package with
