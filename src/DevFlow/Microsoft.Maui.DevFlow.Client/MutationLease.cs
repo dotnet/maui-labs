@@ -41,14 +41,26 @@ public sealed class MutationLeaseStatus
 public sealed class MutationLeaseException : InvalidOperationException
 {
     public MutationLeaseException(MutationLeaseStatus status)
-        : base(status.HeldByOther
-            ? $"Another DevFlow session is driving this app ({status.Label ?? status.HolderKind ?? "unknown holder"})."
-            : status.Error ?? "Could not acquire the DevFlow mutation lease.")
+        : base(BuildMessage(status))
     {
         Status = status;
     }
 
     public MutationLeaseStatus Status { get; }
+
+    internal static string BuildMessage(MutationLeaseStatus status)
+    {
+        if (!status.HeldByOther)
+            return status.Error ?? "Could not acquire the DevFlow mutation lease.";
+
+        var holder = status.Label ?? status.HolderKind ?? "unknown holder";
+        var wait = status.ExpiresInMs > 0
+            ? $"The lease expires in about {Math.Max(1, (status.ExpiresInMs + 999) / 1000)}s if that session stops sending commands"
+            : "The lease expires shortly after that session stops sending commands";
+        return $"Another DevFlow session is driving this app ({holder}). {wait}. " +
+               "Retry after it expires, run related commands together with 'maui devflow batch', " +
+               "or take control from the other session (for example maui_take_control).";
+    }
 }
 
 public sealed class MutationRecordingObservation

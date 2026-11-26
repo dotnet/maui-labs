@@ -1825,7 +1825,16 @@ public partial class DevFlowCommands
             var delay = ctx.GetValue(batchDelayOption);
             var continueOnError = ctx.GetValue(batchContinueOption);
             var human = ctx.GetValue(batchHumanOption);
-            await BatchAsync(host, port, delay, continueOnError, human);
+            s_retainCliMutationLease = true;
+            try
+            {
+                await BatchAsync(host, port, delay, continueOnError, human);
+            }
+            finally
+            {
+                s_retainCliMutationLease = false;
+                await ReleaseCliMutationLeaseAsync(host, port);
+            }
         });
         devflowCommand.Add(batchCommand);
 
@@ -1981,7 +1990,16 @@ public partial class DevFlowCommands
     
     // ===== Agent connection preparation =====
 
-    private static readonly string s_cliMutationLeaseId = Guid.NewGuid().ToString("N");
+    // Stable across CLI processes for the same OS user on this machine, so consecutive one-shot
+    // commands (and batch) are recognized as the same caller instead of competing sessions.
+    private static readonly string s_cliMutationLeaseId = CreateCliMutationLeaseId(Environment.UserName, Environment.MachineName);
+
+    internal static string CreateCliMutationLeaseId(string? userName, string? machineName)
+    {
+        var identity = $"maui-cli\n{userName}\n{machineName}";
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(identity));
+        return "maui-cli-" + Convert.ToHexString(hash, 0, 16).ToLowerInvariant();
+    }
 
     private static async Task<Microsoft.Maui.DevFlow.Driver.AgentClient> CreateAgentClientAsync(string host, int port)
     {
@@ -2005,8 +2023,32 @@ public partial class DevFlowCommands
         {
             MutationLeaseId = s_cliMutationLeaseId,
             MutationLeaseHolderKind = "cli",
-            MutationLeaseLabel = "MAUI CLI"
+            MutationLeaseLabel = "MAUI CLI",
+            // One-shot commands hand the lease back when they finish; batch keeps it between steps.
+            ReleaseMutationLeaseOnDispose = !s_retainCliMutationLease
         };
+    }
+
+    private static bool s_retainCliMutationLease;
+
+    private static async Task ReleaseCliMutationLeaseAsync(string host, int port)
+    {
+        if (port <= 0)
+            return;
+        try
+        {
+            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port)
+            {
+                MutationLeaseId = s_cliMutationLeaseId,
+                MutationLeaseHolderKind = "cli",
+                MutationLeaseLabel = "MAUI CLI"
+            };
+            await client.ControlMutationLeaseAsync("release");
+        }
+        catch
+        {
+            // Best effort: the lease expires on its own if the agent is unreachable.
+        }
     }
 
     private static async Task<T> SendCdpCommandAsync<T>(string host, int port, Func<WebViewOperations, Task<T>> command)

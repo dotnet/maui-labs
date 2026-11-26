@@ -51,6 +51,15 @@ public class AgentClient : IDisposable
     public bool AutoAcquireMutationLease { get; set; } = true;
 
     /// <summary>
+    /// When true, <see cref="Dispose"/> releases the mutation lease if this client automatically
+    /// claimed it, so a short-lived caller (for example a one-shot CLI command) does not block
+    /// other sessions until the lease times out. Default: false.
+    /// </summary>
+    public bool ReleaseMutationLeaseOnDispose { get; set; }
+
+    private MutationLeaseIdentity? _autoClaimedMutationLease;
+
+    /// <summary>
     /// Additional attempts for transient transport failures such as a dropped ADB port
     /// forward. Defaults to 0 so normal client calls keep their current fail-fast behavior.
     /// </summary>
@@ -343,6 +352,32 @@ public class AgentClient : IDisposable
             identity.Label);
         if (!status.YouHold)
             throw new MutationLeaseException(status);
+
+        // Scoped overrides belong to proxy hosts that manage their own lease lifetimes.
+        if (_mutationLeaseOverride.Value is null &&
+            !string.Equals(status.Authority, "unsupported", StringComparison.Ordinal))
+            _autoClaimedMutationLease = identity;
+    }
+
+    /// <summary>
+    /// Releases the mutation lease if this client automatically claimed it. Returns <c>true</c>
+    /// when a release was sent and the agent accepted it. The lease is claimed again on the next
+    /// mutating request, so this is safe to call whenever the caller is done for now.
+    /// </summary>
+    public async Task<bool> ReleaseAutoClaimedMutationLeaseAsync()
+    {
+        var identity = _autoClaimedMutationLease;
+        if (identity is null)
+            return false;
+
+        _autoClaimedMutationLease = null;
+        var status = await ControlMutationLeaseAsync(
+            "release",
+            force: false,
+            identity.LeaseId,
+            identity.HolderKind,
+            identity.Label).ConfigureAwait(false);
+        return status.Ok;
     }
 
     private static HttpClient CreateHttpClient(
@@ -3408,6 +3443,18 @@ public class AgentClient : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
+        if (ReleaseMutationLeaseOnDispose && _autoClaimedMutationLease is not null)
+        {
+            try
+            {
+                // Best effort: Task.Run avoids capturing a caller synchronization context.
+                Task.Run(() => ReleaseAutoClaimedMutationLeaseAsync()).Wait(TimeSpan.FromSeconds(2));
+            }
+            catch
+            {
+                // The lease still expires on its own if the agent is unreachable.
+            }
+        }
         _disposed = true;
         _http.Dispose();
     }

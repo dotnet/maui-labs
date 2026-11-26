@@ -69,6 +69,71 @@ public class AgentClientMutationLeaseTests
     }
 
     [Fact]
+    public async Task Dispose_ReleasesAnAutoClaimedLeaseWhenRequested()
+    {
+        using var agent = FakeAgent.Start(request => request.Path == "/api/v1/agent/lease"
+            ? FakeAgent.Response.Json("""{"ok":true,"allowed":true,"youHold":true}""")
+            : FakeAgent.Response.Json("""{"success":true}"""));
+        var client = new AgentClient("localhost", agent.Port)
+        {
+            MutationLeaseId = "cli-lease",
+            MutationLeaseHolderKind = "cli",
+            ReleaseMutationLeaseOnDispose = true,
+        };
+
+        Assert.True(await client.TapAsync("el-1"));
+        client.Dispose();
+
+        Assert.Equal(3, agent.Requests.Count);
+        var release = agent.Requests[2];
+        Assert.Equal("/api/v1/agent/lease", release.Path);
+        using var body = System.Text.Json.JsonDocument.Parse(release.Body);
+        Assert.Equal("release", body.RootElement.GetProperty("action").GetString());
+        Assert.Equal("cli-lease", body.RootElement.GetProperty("leaseId").GetString());
+    }
+
+    [Fact]
+    public async Task Dispose_DoesNotReleaseWhenNothingWasClaimed()
+    {
+        using var agent = FakeAgent.StartJson("[]");
+        var client = new AgentClient("localhost", agent.Port) { ReleaseMutationLeaseOnDispose = true };
+
+        await client.QueryAsync(type: "Button");
+        client.Dispose();
+
+        Assert.Single(agent.Requests);
+    }
+
+    [Fact]
+    public async Task Dispose_KeepsTheLeaseByDefault()
+    {
+        using var agent = FakeAgent.Start(request => request.Path == "/api/v1/agent/lease"
+            ? FakeAgent.Response.Json("""{"ok":true,"allowed":true,"youHold":true}""")
+            : FakeAgent.Response.Json("""{"success":true}"""));
+        var client = new AgentClient("localhost", agent.Port);
+
+        Assert.True(await client.TapAsync("el-1"));
+        client.Dispose();
+
+        Assert.Equal(2, agent.Requests.Count);
+    }
+
+    [Fact]
+    public async Task TapAsync_LeaseConflictExplainsHowToProceed()
+    {
+        using var agent = FakeAgent.Start(request => request.Path == "/api/v1/agent/lease"
+            ? FakeAgent.Response.Json("""{"ok":true,"allowed":false,"youHold":false,"heldByOther":true,"label":"MAUI CLI","expiresInMs":7200}""")
+            : FakeAgent.Response.Json("""{"success":true}"""));
+        using var client = new AgentClient("localhost", agent.Port);
+
+        var failure = await Assert.ThrowsAsync<MutationLeaseException>(() => client.TapAsync("el-1"));
+
+        Assert.Contains("(MAUI CLI)", failure.Message);
+        Assert.Contains("about 8s", failure.Message);
+        Assert.Contains("maui devflow batch", failure.Message);
+    }
+
+    [Fact]
     public async Task QueryAsync_DoesNotClaimALeaseForReads()
     {
         // Reads never mutate, so they must not pay for — or be blocked by — the lease handshake.
