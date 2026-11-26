@@ -1990,15 +1990,20 @@ public partial class DevFlowCommands
     
     // ===== Agent connection preparation =====
 
-    // Stable across CLI processes for the same OS user on this machine, so consecutive one-shot
-    // commands (and batch) are recognized as the same caller instead of competing sessions.
-    private static readonly string s_cliMutationLeaseId = CreateCliMutationLeaseId(Environment.UserName, Environment.MachineName);
+    internal const string CliMutationLeaseIdEnvironmentVariable = "MAUI_DEVFLOW_LEASE_ID";
 
-    internal static string CreateCliMutationLeaseId(string? userName, string? machineName)
+    // Each CLI process is its own lease holder, so separate tools or agents can't silently
+    // interleave mutations. Callers that deliberately drive one app across several separate
+    // commands can opt in to a shared identity with MAUI_DEVFLOW_LEASE_ID.
+    private static readonly string s_cliMutationLeaseId = ResolveCliMutationLeaseId(
+        Environment.GetEnvironmentVariable(CliMutationLeaseIdEnvironmentVariable));
+
+    internal static string ResolveCliMutationLeaseId(string? sharedLeaseId)
     {
-        var identity = $"maui-cli\n{userName}\n{machineName}";
-        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(identity));
-        return "maui-cli-" + Convert.ToHexString(hash, 0, 16).ToLowerInvariant();
+        var trimmed = sharedLeaseId?.Trim();
+        return string.IsNullOrEmpty(trimmed)
+            ? Guid.NewGuid().ToString("N")
+            : "maui-cli-shared-" + trimmed;
     }
 
     private static async Task<Microsoft.Maui.DevFlow.Driver.AgentClient> CreateAgentClientAsync(string host, int port)

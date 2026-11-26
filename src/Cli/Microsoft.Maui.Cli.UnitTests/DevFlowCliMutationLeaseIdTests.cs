@@ -4,26 +4,29 @@ using Xunit;
 namespace Microsoft.Maui.Cli.UnitTests;
 
 /// <summary>
-/// Separate one-shot CLI invocations from the same user must share a lease identity so that
-/// consecutive commands are not refused as "another DevFlow session".
+/// CLI processes are separate lease holders by default; MAUI_DEVFLOW_LEASE_ID opts separate
+/// commands in to one shared lease identity.
 /// </summary>
 public class DevFlowCliMutationLeaseIdTests
 {
-    [Fact]
-    public void CreateCliMutationLeaseId_IsStableForTheSameUserAndMachine()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolveCliMutationLeaseId_WithoutSharedId_IsUniquePerProcess(string? sharedLeaseId)
     {
-        var first = DevFlowCommands.CreateCliMutationLeaseId("alice", "mac-1");
-        var second = DevFlowCommands.CreateCliMutationLeaseId("alice", "mac-1");
-
-        Assert.Equal(first, second);
-        Assert.StartsWith("maui-cli-", first);
+        Assert.NotEqual(
+            DevFlowCommands.ResolveCliMutationLeaseId(sharedLeaseId),
+            DevFlowCommands.ResolveCliMutationLeaseId(sharedLeaseId));
     }
 
     [Fact]
-    public void CreateCliMutationLeaseId_DiffersForAnotherUser()
+    public void ResolveCliMutationLeaseId_WithSharedId_IsReusedAcrossProcesses()
     {
-        Assert.NotEqual(
-            DevFlowCommands.CreateCliMutationLeaseId("alice", "mac-1"),
-            DevFlowCommands.CreateCliMutationLeaseId("bob", "mac-1"));
+        var first = DevFlowCommands.ResolveCliMutationLeaseId(" my-script ");
+        var second = DevFlowCommands.ResolveCliMutationLeaseId("my-script");
+
+        Assert.Equal(first, second);
+        Assert.NotEqual(first, DevFlowCommands.ResolveCliMutationLeaseId("other-script"));
     }
 }

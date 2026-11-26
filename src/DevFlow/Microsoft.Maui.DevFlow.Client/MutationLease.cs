@@ -59,6 +59,7 @@ public sealed class MutationLeaseException : InvalidOperationException
             : "The lease expires shortly after that session stops sending commands";
         return $"Another DevFlow session is driving this app ({holder}). {wait}. " +
                "Retry after it expires, run related commands together with 'maui devflow batch', " +
+               "set the same MAUI_DEVFLOW_LEASE_ID for separate CLI commands that should share one lease, " +
                "or take control from the other session (for example maui_take_control).";
     }
 }
