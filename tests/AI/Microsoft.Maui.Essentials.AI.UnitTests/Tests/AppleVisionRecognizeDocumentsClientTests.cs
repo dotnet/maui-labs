@@ -16,7 +16,7 @@ public class AppleVisionRecognizeDocumentsClientTests
 			await Task.Yield();
 			cancellationToken.ThrowIfCancellationRequested();
 			using var json = JsonDocument.Parse("""[{"transcript":"Page text","nodes":[{"path":"p","kind":"paragraph","text":"Text"}]}]""");
-			yield return new(number, 2, json.RootElement);
+			yield return new(number, json.RootElement);
 		}
 	}
 
@@ -133,8 +133,8 @@ public class AppleVisionRecognizeDocumentsClientTests
 			{
 				await Task.Yield();
 				using var snapshot = JsonDocument.Parse("[]");
-				yield return new(1, 2, snapshot.RootElement);
-				yield return new(1, 2, snapshot.RootElement);
+				yield return new(1, snapshot.RootElement);
+				yield return new(1, snapshot.RootElement);
 			}
 			finally { disposed = true; }
 		}

@@ -15,9 +15,9 @@ For build and test commands, see the [contributor guide](../../src/AI/README.md)
 
 ```text
 image or PDF stream (caller-owned)
-  -> Platform/MaciOS processor: image orientation, or PDFKit page rendering
+  -> client (Platform/MaciOS): image orientation, or PDFKit page rendering
   -> Swift bridge: RecognizeDocumentsRequest, observation -> JSON snapshot
-  -> DocumentExtraction/ mapper: snapshot -> ExtractionDocument
+  -> mapper (DocumentExtraction/): snapshot -> ExtractionDocument
 ```
 
 `ExtractAsync` returns one completed `ExtractionDocument`. PDFs are processed
@@ -114,6 +114,14 @@ place for, so it stays in the native snapshot:
   table, list, or title where a paragraph overlaps it, then appends the rest.
   Apple does not document an order across collections.
 - **Truncation:** no standard signal that a provider returned partial results.
+- **Serialization:** the document types have no JSON wire contract, so a
+  native bridge cannot emit the shared shape and let `System.Text.Json`
+  deserialize it. With
+  `Microsoft.Extensions.Documents.Abstractions` 11.0.0-preview.1.26560.3,
+  serializing drops table rows, columns and cells, and element types.
+  Deserializing `ExtractionDocument` returns no sections or source pages,
+  because those collections are get-only. Element and source-page types fail
+  constructor binding or validation. The mapping therefore stays in C#.
 - **Feature toggles:** `DocumentExtractionOptions` has no portable switch for
   optional recognizers such as barcodes, so this client enables barcode
   detection by default and exposes the opt-out only as a provider key.
