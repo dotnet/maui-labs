@@ -91,6 +91,8 @@ public class RecognizeDocumentsRequestNative: NSObject {
         }
 
         var request = RecognizeDocumentsRequest(revision)
+        // Vision leaves barcode detection off; turn it on so barcodes are not silently dropped.
+        request.barcodeDetectionOptions.enabled = true
 
         if let options {
             var textOptions = request.textRecognitionOptions

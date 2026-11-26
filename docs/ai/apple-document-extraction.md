@@ -47,7 +47,7 @@ the snapshot node it came from.
   | `apple.vision.automaticallyDetectLanguage` | `bool` |
   | `apple.vision.maximumCandidateCount` | `int` (1–10) |
   | `apple.vision.minimumTextHeightFraction` | `float` (0–1) |
-  | `apple.vision.barcodeDetectionEnabled` | `bool` |
+  | `apple.vision.barcodeDetectionEnabled` | `bool` (default `true`; Vision's own default is `false`) |
   | `apple.vision.barcodeSymbologies` | `string[]` |
   | `apple.vision.coalesceCompositeSymbologies` | `bool` |
   | `apple.vision.regionOfInterest` | `float[]` `[x, y, width, height]`, normalized |
@@ -114,6 +114,9 @@ place for, so it stays in the native snapshot:
   table, list, or title where a paragraph overlaps it, then appends the rest.
   Apple does not document an order across collections.
 - **Truncation:** no standard signal that a provider returned partial results.
+- **Feature toggles:** `DocumentExtractionOptions` has no portable switch for
+  optional recognizers such as barcodes, so this client enables barcode
+  detection by default and exposes the opt-out only as a provider key.
 
 ## Playground
 

@@ -195,6 +195,9 @@ internal static class AppleVisionRecognizeDocumentsMapper
 				list.ItemProjections.TryAdd(item.Path, paragraph.Text);
 				return true;
 			}
+		foreach (var item in items)
+			if (MatchesItemLine(paragraph.Text, item) && Overlap(paragraph, item) >= 0.7)
+				return true;
 		var lines = paragraph.Text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
 		if (items.Length > 0 && lines.Length == items.Length && Overlap(paragraph, list) >= 0.7 &&
 			items.Select((item, index) => MatchesItemText(lines[index], item)).All(match => match))
@@ -215,6 +218,21 @@ internal static class AppleVisionRecognizeDocumentsMapper
 			text[marker.Length..].TrimStart() == content;
 	}
 
+	// A wrapped item joins its lines with U+2028; Vision may also return each line as a paragraph.
+	private static bool MatchesItemLine(string text, Node item)
+	{
+		var lines = (GetString(item.Json, "itemString") ?? item.Text).Split(ItemLineSeparators, StringSplitOptions.TrimEntries);
+		if (lines.Length < 2)
+			return false;
+		var marker = GetString(item.Json, "markerString");
+		var candidate = text.Trim();
+		if (!string.IsNullOrEmpty(marker) && candidate.StartsWith(marker.Trim(), StringComparison.Ordinal))
+			candidate = candidate[marker.Trim().Length..].TrimStart();
+		return lines.Contains(candidate, StringComparer.Ordinal);
+	}
+
+	private static readonly char[] ItemLineSeparators = ['\u2028', '\u2029', '\n'];
+
 	private static string RenderList(Node list)
 	{
 		if (list.WholeListProjection is { } whole)
@@ -228,7 +246,8 @@ internal static class AppleVisionRecognizeDocumentsMapper
 			foreach (var nested in SelectContent(item.Children))
 			{
 				// Vision can expose an item's own region again through its recursive content.
-				if (nested.Kind == "paragraph" && MatchesItemText(nested.Text, item) && Overlap(nested, item) >= 0.85 ||
+				if (nested.Kind == "paragraph" && (MatchesItemText(nested.Text, item) || MatchesItemLine(nested.Text, item)) &&
+					Overlap(nested, item) >= 0.85 ||
 					IsRepeatedItemList(nested, item))
 					continue;
 				var childText = nested.Kind switch

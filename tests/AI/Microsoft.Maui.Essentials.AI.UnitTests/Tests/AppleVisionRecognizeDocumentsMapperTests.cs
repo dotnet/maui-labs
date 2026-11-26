@@ -218,6 +218,22 @@ public class AppleVisionRecognizeDocumentsMapperTests
 	}
 
 	[Fact]
+	public void AddPage_WrappedListItemLinesRenderOnce()
+	{
+		var result = Map("""
+			[{"nodes":[
+			{"path":"list","kind":"list","polygon":[0,0,1,0,1,1,0,1]},
+			{"path":"item","parentPath":"list","kind":"listItem","text":"Spouse\u2028If checked, enter name","itemString":"Spouse\u2028If checked, enter name",
+			 "markerString":"- ","polygon":[0,0,1,0,1,1,0,1]},
+			{"path":"n1","parentPath":"item","kind":"paragraph","text":"- Spouse","polygon":[0,0.5,1,0.5,1,1,0,1]},
+			{"path":"n2","parentPath":"item","kind":"paragraph","text":"If checked, enter name","polygon":[0,0,1,0,1,0.5,0,0.5]},
+			{"path":"p1","kind":"paragraph","text":"- Spouse","polygon":[0,0.5,1,0.5,1,1,0,1]},
+			{"path":"p2","kind":"paragraph","text":"If checked, enter name","polygon":[0,0,1,0,1,0.5,0,0.5]}]}]
+			""");
+		Assert.Equal("- Spouse\u2028If checked, enter name", Text(Assert.Single(result.Sections[0].Elements)));
+	}
+
+	[Fact]
 	public void AddPage_ListItemKeepsNestedTitleTableAndBarcodeText()
 	{
 		var result = Map("""
