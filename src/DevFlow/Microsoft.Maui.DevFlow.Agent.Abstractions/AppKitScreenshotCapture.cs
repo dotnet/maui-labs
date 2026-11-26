@@ -45,4 +45,31 @@ internal static class AppKitScreenshotCapture
 
         return true;
     }
+
+    /// <summary>
+    /// Maps a window's content layout rect (window coordinates, bottom-left origin, as returned by
+    /// <c>NSWindow.ContentLayoutRect</c>) onto a captured image of the whole window (top-left
+    /// origin). Used so the title bar and toolbar do not hide a blank content area. Returns null
+    /// when the inputs cannot describe a non-empty region.
+    /// </summary>
+    internal static (int X, int Y, int Width, int Height)? GetContentPixelRect(
+        double windowWidth, double windowHeight,
+        double contentX, double contentY, double contentWidth, double contentHeight,
+        int imageWidth, int imageHeight)
+    {
+        if (windowWidth <= 0 || windowHeight <= 0 || imageWidth <= 0 || imageHeight <= 0 ||
+            contentWidth <= 0 || contentHeight <= 0)
+            return null;
+
+        var scaleX = imageWidth / windowWidth;
+        var scaleY = imageHeight / windowHeight;
+        var left = Math.Clamp((int)Math.Ceiling(contentX * scaleX), 0, imageWidth);
+        var right = Math.Clamp((int)Math.Floor((contentX + contentWidth) * scaleX), 0, imageWidth);
+        var top = Math.Clamp((int)Math.Ceiling((windowHeight - (contentY + contentHeight)) * scaleY), 0, imageHeight);
+        var bottom = Math.Clamp((int)Math.Floor((windowHeight - contentY) * scaleY), 0, imageHeight);
+
+        return right > left && bottom > top
+            ? (left, top, right - left, bottom - top)
+            : null;
+    }
 }

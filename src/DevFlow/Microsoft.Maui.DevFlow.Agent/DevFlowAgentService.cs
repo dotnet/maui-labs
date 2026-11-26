@@ -1605,10 +1605,13 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                 // A covered window can stop painting (WKWebView pauses when its page becomes
                 // hidden), so every capture path may "succeed" with a blank image. Reject
                 // blank images from an occluded window so callers get an actionable error.
+                // Images of the whole window are checked only within its content area, so native
+                // title-bar or toolbar chrome cannot mask a blank page; pass null for images that
+                // already contain only the content view.
                 var occluded = IsWindowOccluded(window);
-                byte[]? Accept(byte[]? png)
+                byte[]? Accept(byte[]? png, NSWindow? wholeWindow)
                 {
-                    if (png == null || !occluded || !IsBlankPng(png))
+                    if (png == null || !occluded || !IsBlankPng(png, wholeWindow))
                         return png;
                     rejectedOccludedBlank = true;
                     return null;
@@ -1620,7 +1623,8 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                 var capturedImage = Accept(await AppKitScreenshotCapture.CaptureAsync(
                     hasAttachedSheet: attachedSheet != null,
                     () => CaptureWindowViaScreenCaptureKitAsync(capturedWindow),
-                    () => attachedSheet == null ? null : AppKitWindowCapture.CaptureWindows(capturedWindow, attachedSheet)));
+                    () => attachedSheet == null ? null : AppKitWindowCapture.CaptureWindows(capturedWindow, attachedSheet)),
+                    capturedWindow);
                 if (capturedImage != null)
                     return capturedImage;
 
@@ -1635,7 +1639,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                 // layer-backed controls and WebView content. This can return null when the
                 // window is fully occluded (the window server may have purged its backing
                 // store), so we fall through to occlusion-independent paths below.
-                var pngBytes = Accept(CaptureWindowViaCG(window));
+                var pngBytes = Accept(CaptureWindowViaCG(window), window);
                 if (pngBytes != null)
                     return pngBytes;
 
@@ -1646,7 +1650,9 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                     // hierarchy directly, so it works even when the window is not frontmost.
                     // Capture the theme frame when possible so native title-bar chrome is
                     // included instead of limiting the result to the content view.
-                    var cached = Accept(CaptureNSView(contentView.Superview ?? contentView));
+                    var cached = Accept(
+                        CaptureNSView(contentView.Superview ?? contentView),
+                        contentView.Superview != null ? window : null);
                     if (cached != null)
                         return cached;
 
@@ -1665,7 +1671,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                                 using var pngProperties = new NSDictionary();
                                 var pngData = bitmapRep.RepresentationUsingTypeProperties(
                                     NSBitmapImageFileType.Png, pngProperties);
-                                var pdfPng = Accept(pngData?.ToArray());
+                                var pdfPng = Accept(pngData?.ToArray(), null);
                                 if (pdfPng != null || !rejectedOccludedBlank)
                                     return pdfPng;
                             }
@@ -1700,14 +1706,32 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
         }
     }
 
-    static bool IsBlankPng(byte[] png)
+    static bool IsBlankPng(byte[] png, NSWindow? wholeWindow)
     {
         try
         {
             using var data = NSData.FromArray(png);
             using var source = ImageIO.CGImageSource.FromData(data);
-            using var image = source?.CreateImage(0, (ImageIO.CGImageOptions?)null);
-            if (image == null || image.Width <= 0 || image.Height <= 0)
+            using var fullImage = source?.CreateImage(0, (ImageIO.CGImageOptions?)null);
+            if (fullImage == null || fullImage.Width <= 0 || fullImage.Height <= 0)
+                return false;
+
+            CoreGraphics.CGImage? contentImage = null;
+            if (wholeWindow != null)
+            {
+                var frame = wholeWindow.Frame;
+                var content = wholeWindow.ContentLayoutRect;
+                var rect = AppKitScreenshotCapture.GetContentPixelRect(
+                    frame.Width, frame.Height,
+                    content.X, content.Y, content.Width, content.Height,
+                    (int)fullImage.Width, (int)fullImage.Height);
+                if (rect is { } r)
+                    contentImage = fullImage.WithImageInRect(new CoreGraphics.CGRect(r.X, r.Y, r.Width, r.Height));
+            }
+
+            using var croppedImage = contentImage;
+            var image = croppedImage ?? fullImage;
+            if (image.Width <= 0 || image.Height <= 0)
                 return false;
 
             // Downsample with interpolation so small content (text, borders) still shifts

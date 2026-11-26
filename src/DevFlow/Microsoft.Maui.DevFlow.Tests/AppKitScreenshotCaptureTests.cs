@@ -35,6 +35,22 @@ public class AppKitScreenshotCaptureTests
     {
         Assert.False(AppKitScreenshotCapture.IsUniformRgba(new byte[] { 255, 255, 255, 255 }));
     }
+
+    [Fact]
+    public void GetContentPixelRect_ExcludesTitleBarFromWindowCapture()
+    {
+        // 1440x960 window with a 28pt title bar, captured at 2x.
+        var rect = AppKitScreenshotCapture.GetContentPixelRect(1440, 960, 0, 0, 1440, 932, 2880, 1920);
+
+        Assert.Equal((0, 56, 2880, 1864), rect);
+    }
+
+    [Fact]
+    public void GetContentPixelRect_EmptyContent_ReturnsNull()
+    {
+        Assert.Null(AppKitScreenshotCapture.GetContentPixelRect(1440, 960, 0, 0, 0, 0, 2880, 1920));
+    }
+
     [Theory]
     [InlineData(14, 0, false)]
     [InlineData(14, 1, false)]
