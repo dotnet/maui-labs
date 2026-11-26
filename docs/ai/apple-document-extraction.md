@@ -17,8 +17,14 @@ For build and test commands, see the [contributor guide](../../src/AI/README.md)
 image or PDF stream (caller-owned)
   -> client (Platform/MaciOS): image orientation, or PDFKit page rendering
   -> Swift bridge: RecognizeDocumentsRequest, observation -> JSON snapshot
-  -> mapper (DocumentExtraction/): snapshot -> ExtractionDocument
+  -> typed snapshot (DocumentExtraction/): JSON -> internal C# model
+  -> mapper (DocumentExtraction/): internal model -> ExtractionDocument
 ```
+
+The Swift bridge exports Vision-native data only. C# uses a source-generated
+`System.Text.Json` contract to deserialize the snapshot into internal typed
+models, then maps it to the shared extraction abstractions. The raw JSON is
+retained for `RawRepresentation`; opaque Vision details are not discarded.
 
 `ExtractAsync` returns one completed `ExtractionDocument`. PDFs are processed
 page by page internally; there is no per-page streaming or progress API.
@@ -116,7 +122,8 @@ place for, so it stays in the native snapshot:
 - **Truncation:** no standard signal that a provider returned partial results.
 - **Serialization:** the document types have no JSON wire contract, so a
   native bridge cannot emit the shared shape and let `System.Text.Json`
-  deserialize it. With
+  deserialize it directly. The bridge therefore has its own typed C# snapshot
+  model and a single mapping step. With
   `Microsoft.Extensions.Documents.Abstractions` 11.0.0-preview.1.26560.3,
   serializing drops table rows, columns and cells, and element types.
   Deserializing `ExtractionDocument` returns no sections or source pages,

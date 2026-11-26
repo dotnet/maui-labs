@@ -14,23 +14,29 @@ internal static class AppleVisionRecognizeDocumentsMapper
 	{
 		if (document.SourcePages.Any(page => page.PageNumber == pageNumber))
 			throw new InvalidDataException($"Vision returned duplicate source page number '{pageNumber}'.");
-		if (snapshot.ValueKind != JsonValueKind.Array)
-			throw new InvalidDataException("Vision returned an invalid document snapshot.");
+		AddPage(document, AppleVisionRecognizeDocumentsSnapshot.Deserialize(snapshot), snapshot, pageNumber);
+	}
+
+	private static void AddPage(
+		ExtractionDocument document,
+		IReadOnlyList<AppleVisionRecognizeDocumentsSnapshot.Observation> observations,
+		JsonElement rawSnapshot,
+		int pageNumber)
+	{
 		var frame = new ExtractionDocumentSourcePage($"{document.Identifier}/page/{pageNumber}", pageNumber,
 			new(1, 1), ExtractionDocumentCoordinateUnit.Normalized, ExtractionDocumentCoordinateOrigin.BottomLeft);
 		var section = new ExtractionDocumentSection();
-		section.Sources.Add(new(frame, rawRepresentation: snapshot.Clone()));
 		var observationIds = new HashSet<string>(StringComparer.Ordinal);
 		var observationIndex = 0;
-		foreach (var observation in snapshot.EnumerateArray())
+		foreach (var observation in observations)
 		{
-			var identity = GetString(observation, "uuid") ?? $"snapshot-observation-{observationIndex}";
+			var identity = observation.Uuid ?? $"snapshot-observation-{observationIndex}";
 			observationIndex++;
 			if (!observationIds.Add(identity))
 				throw new InvalidDataException("Vision returned duplicate observation identities.");
-			var transcript = GetString(observation, "transcript");
-			ValidateConfidence(observation);
-			_ = Region(observation, frame);
+			var transcript = observation.Transcript;
+			ValidateConfidence(observation.Confidence);
+			_ = Region(observation.Polygon, observation.HasPolygon, frame, observation.RawSnapshot);
 			var nodes = ReadNodes(observation, frame);
 			var roots = nodes.Where(node => node.ParentPath is null).ToArray();
 			var selected = SelectContent(roots);
@@ -43,21 +49,24 @@ internal static class AppleVisionRecognizeDocumentsMapper
 			}
 			if (section.Elements.Count == firstElement && !string.IsNullOrEmpty(transcript))
 			{
-				var text = new ExtractionDocumentTextElement(new TextContent(transcript) { RawRepresentation = observation.Clone() });
-				text.Sources.Add(Region(observation, frame) ?? new(frame, rawRepresentation: observation.Clone()));
+				var text = new ExtractionDocumentTextElement(new TextContent(transcript) { RawRepresentation = observation.RawSnapshot });
+				text.Sources.Add(Region(observation.Polygon, observation.HasPolygon, frame, observation.RawSnapshot) ??
+					new(frame, rawRepresentation: observation.RawSnapshot));
 				section.Elements.Add(text);
 			}
 		}
+		section.Sources.Add(new(frame, rawRepresentation: rawSnapshot.Clone()));
 		document.SourcePages.Add(frame);
 		document.Sections.Add(section);
 	}
 
-	private static Node[] ReadNodes(JsonElement observation, ExtractionDocumentSourcePage frame)
+	private static Node[] ReadNodes(
+		AppleVisionRecognizeDocumentsSnapshot.Observation observation,
+		ExtractionDocumentSourcePage frame)
 	{
-		if (!observation.TryGetProperty("nodes", out var values) ||
-			values.ValueKind != JsonValueKind.Array || values.GetArrayLength() > MaximumNodes)
+		if (observation.Nodes is not { } values || values.Count > MaximumNodes)
 			throw new InvalidDataException("Vision returned invalid document nodes.");
-		var nodes = values.EnumerateArray().Select(value => new Node(value, frame)).ToArray();
+		var nodes = values.Select(value => new Node(value, frame)).ToArray();
 		var byPath = new Dictionary<string, Node>(StringComparer.Ordinal);
 		foreach (var node in nodes)
 			if (!byPath.TryAdd(node.Path, node))
@@ -124,10 +133,10 @@ internal static class AppleVisionRecognizeDocumentsMapper
 				long rows = 0, columns = 0;
 				foreach (var child in children)
 				{
-					var row = Integer(child.Json, "rowIndex");
-					var column = Integer(child.Json, "columnIndex");
-					var rowSpan = Integer(child.Json, "rowSpan");
-					var columnSpan = Integer(child.Json, "columnSpan");
+					var row = Integer(child.RowIndex);
+					var column = Integer(child.ColumnIndex);
+					var rowSpan = Integer(child.RowSpan);
+					var columnSpan = Integer(child.ColumnSpan);
 					if (row < 0 || column < 0 || rowSpan < 1 || columnSpan < 1)
 						throw new InvalidDataException("Vision returned an invalid table cell.");
 					rows = Math.Max(rows, (long)row + rowSpan);
@@ -139,10 +148,10 @@ internal static class AppleVisionRecognizeDocumentsMapper
 				var occupied = new bool[(int)rows, (int)columns];
 				foreach (var child in children)
 				{
-					var row = Integer(child.Json, "rowIndex");
-					var column = Integer(child.Json, "columnIndex");
-					var rowSpan = Integer(child.Json, "rowSpan");
-					var columnSpan = Integer(child.Json, "columnSpan");
+					var row = Integer(child.RowIndex);
+					var column = Integer(child.ColumnIndex);
+					var rowSpan = Integer(child.RowSpan);
+					var columnSpan = Integer(child.ColumnSpan);
 					for (var r = row; r < row + rowSpan; r++)
 						for (var c = column; c < column + columnSpan; c++)
 						{
@@ -173,7 +182,7 @@ internal static class AppleVisionRecognizeDocumentsMapper
 			case "list":
 			case "barcode":
 				var text = node.Kind == "list" ? RenderList(node) :
-					GetString(node.Json, "payloadString") ?? node.Text;
+					node.PayloadString ?? node.Text;
 				result = new ExtractionDocumentTextElement(new TextContent(text) { RawRepresentation = node.Json.Clone() });
 				break;
 			default:
@@ -210,10 +219,10 @@ internal static class AppleVisionRecognizeDocumentsMapper
 
 	private static bool MatchesItemText(string text, Node item)
 	{
-		var content = GetString(item.Json, "itemString") ?? item.Text;
+		var content = item.ItemString ?? item.Text;
 		if (text == content)
 			return true;
-		var marker = GetString(item.Json, "markerString");
+		var marker = item.MarkerString;
 		return !string.IsNullOrEmpty(marker) && text.StartsWith(marker, StringComparison.Ordinal) &&
 			text[marker.Length..].TrimStart() == content;
 	}
@@ -221,10 +230,10 @@ internal static class AppleVisionRecognizeDocumentsMapper
 	// A wrapped item joins its lines with U+2028; Vision may also return each line as a paragraph.
 	private static bool MatchesItemLine(string text, Node item)
 	{
-		var lines = (GetString(item.Json, "itemString") ?? item.Text).Split(ItemLineSeparators, StringSplitOptions.TrimEntries);
+		var lines = (item.ItemString ?? item.Text).Split(ItemLineSeparators, StringSplitOptions.TrimEntries);
 		if (lines.Length < 2)
 			return false;
-		var marker = GetString(item.Json, "markerString");
+		var marker = item.MarkerString;
 		var candidate = text.Trim();
 		if (!string.IsNullOrEmpty(marker) && candidate.StartsWith(marker.Trim(), StringComparison.Ordinal))
 			candidate = candidate[marker.Trim().Length..].TrimStart();
@@ -239,8 +248,8 @@ internal static class AppleVisionRecognizeDocumentsMapper
 			return whole.Text;
 		return string.Join("\n", list.Children.Where(child => child.Kind == "listItem").Select(item =>
 		{
-			var text = list.ItemProjections.GetValueOrDefault(item.Path) ?? GetString(item.Json, "itemString") ?? item.Text;
-			var marker = GetString(item.Json, "markerString");
+			var text = list.ItemProjections.GetValueOrDefault(item.Path) ?? item.ItemString ?? item.Text;
+			var marker = item.MarkerString;
 			if (!string.IsNullOrEmpty(marker) && !text.StartsWith(marker, StringComparison.Ordinal))
 				text = marker + (char.IsWhiteSpace(marker[^1]) ? "" : " ") + text;
 			foreach (var nested in SelectContent(item.Children))
@@ -266,40 +275,44 @@ internal static class AppleVisionRecognizeDocumentsMapper
 
 	private static string RenderTable(Node table) =>
 		string.Join("\n", table.Children.Where(child => child.Kind == "tableCell")
-			.GroupBy(cell => Integer(cell.Json, "rowIndex"))
+			.GroupBy(cell => Integer(cell.RowIndex))
 			.OrderBy(row => row.Key)
-			.Select(row => string.Join("\t", row.OrderBy(cell => Integer(cell.Json, "columnIndex")).Select(cell => cell.Text))));
+			.Select(row => string.Join("\t", row.OrderBy(cell => Integer(cell.ColumnIndex)).Select(cell => cell.Text))));
 
 	private static bool IsRepeatedItemList(Node node, Node item) =>
 		node.Kind == "list" && node.Children.Count > 0 && node.Children.All(child =>
 			child.Kind == "listItem" && child.Children.Count == 0 &&
 			child.Text == item.Text &&
-			GetString(child.Json, "itemString") == GetString(item.Json, "itemString") &&
-			GetString(child.Json, "markerString") == GetString(item.Json, "markerString") &&
+			child.ItemString == item.ItemString &&
+			child.MarkerString == item.MarkerString &&
 			Overlap(child, item) >= 0.85);
 
-	private static void ValidateConfidence(JsonElement source)
+	private static void ValidateConfidence(double? confidence)
 	{
-		if (!source.TryGetProperty("confidence", out var confidence) || confidence.ValueKind == JsonValueKind.Null)
+		if (confidence is not { } value)
 			return;
-		if (!confidence.TryGetDouble(out var value) || !double.IsFinite(value) || value is < 0 or > 1)
+		if (!double.IsFinite(value) || value is < 0 or > 1)
 			throw new InvalidDataException("Vision returned invalid confidence.");
 	}
 
-	private static ExtractionDocumentSourceReference? Region(JsonElement source, ExtractionDocumentSourcePage frame)
+	private static ExtractionDocumentSourceReference? Region(
+		double[]? polygon,
+		bool hasPolygon,
+		ExtractionDocumentSourcePage frame,
+		JsonElement rawSnapshot)
 	{
-		if (!source.TryGetProperty("polygon", out var polygon))
+		if (!hasPolygon)
 			return null;
-		if (polygon.ValueKind != JsonValueKind.Array)
+		if (polygon is null)
 			throw new InvalidDataException("Vision returned an invalid polygon.");
-		var coordinates = polygon.EnumerateArray().Select(value => value.GetDouble()).ToArray();
+		var coordinates = polygon;
 		if (coordinates.Length == 0)
 			return null;
 		if (coordinates.Length < 6 || coordinates.Length % 2 != 0 || coordinates.Any(value => !double.IsFinite(value)))
 			throw new InvalidDataException("Vision returned an invalid normalized polygon.");
 		return new(frame, Enumerable.Range(0, coordinates.Length / 2)
 			.Select(index => new ExtractionDocumentPoint(coordinates[index * 2], coordinates[index * 2 + 1])).ToArray(),
-			rawRepresentation: source.Clone());
+			rawRepresentation: rawSnapshot);
 	}
 
 	private static double Overlap(Node first, Node second)
@@ -311,41 +324,48 @@ internal static class AppleVisionRecognizeDocumentsMapper
 			Math.Max(0, Math.Min(a.Top, b.Top) - Math.Max(a.Bottom, b.Bottom)) / area;
 	}
 
-	private static string? GetString(JsonElement value, string name) =>
-		value.TryGetProperty(name, out var property) && property.ValueKind != JsonValueKind.Null ? property.GetString() : null;
-
-	private static int Integer(JsonElement value, string name) =>
-		value.TryGetProperty(name, out var number) && number.TryGetInt32(out var result) ? result :
-			throw new InvalidDataException("Vision returned an invalid table cell.");
+	private static int Integer(int? value) =>
+		value ?? throw new InvalidDataException("Vision returned an invalid table cell.");
 
 	private sealed class Node
 	{
-		internal Node(JsonElement json, ExtractionDocumentSourcePage frame)
+		private readonly AppleVisionRecognizeDocumentsSnapshot.Node _snapshot;
+
+		internal Node(AppleVisionRecognizeDocumentsSnapshot.Node snapshot, ExtractionDocumentSourcePage frame)
 		{
-			Json = json;
+			_snapshot = snapshot;
 			Frame = frame;
-			Path = GetString(json, "path") ?? throw new InvalidDataException("Vision returned a node without a path.");
-			ParentPath = GetString(json, "parentPath");
-			Kind = GetString(json, "kind") ?? "";
-			Text = GetString(json, "text") ?? "";
-			ValidateConfidence(json);
-			if (json.TryGetProperty("words", out var words) && words.ValueKind == JsonValueKind.Array)
-				foreach (var word in words.EnumerateArray())
+			Path = snapshot.Path ?? throw new InvalidDataException("Vision returned a node without a path.");
+			ParentPath = snapshot.ParentPath;
+			Kind = snapshot.Kind ?? "";
+			Text = snapshot.Text ?? "";
+			ValidateConfidence(snapshot.Confidence);
+			if (snapshot.Words is { } words)
+				foreach (var word in words)
 				{
-					ValidateConfidence(word);
-					_ = AppleVisionRecognizeDocumentsMapper.Region(word, frame);
+					ValidateConfidence(word.Confidence);
+					_ = AppleVisionRecognizeDocumentsMapper.Region(
+						word.Polygon, word.HasPolygon, frame, word.RawSnapshot);
 				}
-			Region = AppleVisionRecognizeDocumentsMapper.Region(json, frame);
+			Region = AppleVisionRecognizeDocumentsMapper.Region(
+				snapshot.Polygon, snapshot.HasPolygon, frame, snapshot.RawSnapshot);
 			if (Region is { } region)
 				Bounds = (region.Polygon.Min(point => point.X), region.Polygon.Min(point => point.Y),
 					region.Polygon.Max(point => point.X), region.Polygon.Max(point => point.Y));
 		}
-		internal JsonElement Json { get; }
+		internal JsonElement Json => _snapshot.RawSnapshot;
 		internal ExtractionDocumentSourcePage Frame { get; }
 		internal string Path { get; }
 		internal string? ParentPath { get; }
 		internal string Kind { get; }
 		internal string Text { get; }
+		internal int? RowIndex => _snapshot.RowIndex;
+		internal int? ColumnIndex => _snapshot.ColumnIndex;
+		internal int? RowSpan => _snapshot.RowSpan;
+		internal int? ColumnSpan => _snapshot.ColumnSpan;
+		internal string? ItemString => _snapshot.ItemString;
+		internal string? MarkerString => _snapshot.MarkerString;
+		internal string? PayloadString => _snapshot.PayloadString;
 		internal ExtractionDocumentSourceReference? Region { get; }
 		internal (double Left, double Bottom, double Right, double Top)? Bounds { get; }
 		internal List<Node> Children { get; } = [];

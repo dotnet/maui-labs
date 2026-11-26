@@ -18,6 +18,44 @@ public class AppleVisionRecognizeDocumentsMapperTests
 	private static string Text(ExtractionDocumentElement element) => Assert.IsType<TextContent>(element.Content).Text;
 
 	[Fact]
+	public void Snapshot_DeserializesTypedFieldsAndRetainsOpaqueNativePayloads()
+	{
+		using var json = JsonDocument.Parse("""
+			[{"uuid":"obs","confidence":0.91,"transcript":"Text","polygon":[0,0,1,0,1,1],
+			"structureTruncated":true,"projectedNodeCount":1,"maximumTraversalDepth":2,
+			"repeatedContainerCount":1,"firstRepeatedContainerPath":"repeated",
+			"firstRepeatedAncestorPath":"ancestor","nodes":[
+			{"path":"b","kind":"barcode","payloadString":"QR","payloadDataBase64":"AQID",
+			 "symbology":"qr","confidence":0.8,"polygon":[0,0,1,0,1,1],
+			 "detectedData":[{"details":{"newCase":{"value":"preserved"}}}],
+			 "candidates":[{"text":"QR","confidence":0.7}],
+			 "words":[{"polygon":[0,0,1,0,1,1],"recognitionLanguages":["en"],"candidates":[]}]}]}]
+			""");
+
+		var observation = Assert.Single(AppleVisionRecognizeDocumentsSnapshot.Deserialize(json.RootElement));
+		Assert.Equal("obs", observation.Uuid);
+		Assert.Equal(0.91, observation.Confidence);
+		Assert.True(observation.StructureTruncated);
+		Assert.Equal(1, observation.ProjectedNodeCount);
+		Assert.Equal(2, observation.MaximumTraversalDepth);
+		Assert.Equal(1, observation.RepeatedContainerCount);
+		Assert.Equal("repeated", observation.FirstRepeatedContainerPath);
+		Assert.Equal("ancestor", observation.FirstRepeatedAncestorPath);
+
+		var node = Assert.Single(observation.Nodes!);
+		Assert.Equal("barcode", node.Kind);
+		Assert.Equal("QR", node.PayloadString);
+		Assert.Equal("AQID", node.PayloadDataBase64);
+		Assert.Equal("qr", node.Symbology);
+		Assert.Equal(0.8, node.Confidence);
+		Assert.Equal("newCase", node.DetectedData[0].GetProperty("details").EnumerateObject().Single().Name);
+		Assert.Equal(0.7, node.Candidates[0].GetProperty("confidence").GetDouble());
+		Assert.Equal("en", Assert.Single(Assert.Single(node.Words!).RecognitionLanguages!));
+		Assert.Equal("preserved", node.RawSnapshot.GetProperty("detectedData")[0]
+			.GetProperty("details").GetProperty("newCase").GetProperty("value").GetString());
+	}
+
+	[Fact]
 	public void AddPage_PreservesExactFramePolygonAndDetachedNativeDetailsWithoutMetadata()
 	{
 		var result = Map("""
