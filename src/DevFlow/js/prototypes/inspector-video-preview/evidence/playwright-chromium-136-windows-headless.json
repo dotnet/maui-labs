@@ -1,0 +1,62 @@
+{
+  "environment": {
+    "browser": "Playwright Chromium",
+    "build": "chromium-1169",
+    "version": "136.0.7103.25",
+    "os": "Windows 11 VM",
+    "mode": "headless",
+    "gpu": "disabled"
+  },
+  "capabilities": {
+    "secureContext": true,
+    "visibilityState": "visible",
+    "websocket": true,
+    "websocketStream": true,
+    "webCodecs": {
+      "decoderAvailable": true,
+      "decoder": {
+        "h264-baseline": {
+          "available": true,
+          "supported": false,
+          "error": null
+        },
+        "vp8": {
+          "available": true,
+          "supported": true,
+          "error": null
+        },
+        "vp9-profile0": {
+          "available": true,
+          "supported": true,
+          "error": null
+        },
+        "av1-main": {
+          "available": true,
+          "supported": true,
+          "error": null
+        }
+      }
+    },
+    "mediaSource": {
+      "available": true,
+      "types": {
+        "h264": false,
+        "vp8": true,
+        "vp9": true,
+        "av1": true
+      }
+    },
+    "webRtc": {
+      "available": true,
+      "mimeTypes": [
+        "video/AV1",
+        "video/VP8",
+        "video/VP9",
+        "video/flexfec-03",
+        "video/red",
+        "video/rtx",
+        "video/ulpfec"
+      ]
+    }
+  }
+}
