@@ -14,7 +14,11 @@ public static class McpServerHost
 	{
 		var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
 
-		var builder = new HostApplicationBuilder(new HostApplicationBuilderSettings { Args = [] });
+		// DisableDefaults skips the default appsettings.json sources, which register a recursive
+		// FileSystemWatcher on the current directory. On macOS that watcher walks the whole tree on
+		// every change under it (e.g. IDE/build output) and can grow memory without bound in a
+		// long-lived MCP server. This server has no file-based configuration.
+		var builder = new HostApplicationBuilder(new HostApplicationBuilderSettings { Args = [], DisableDefaults = true });
 
 		// The MCP server uses stdio transport (stdin/stdout for JSON-RPC).
 		// The default console logger writes to stdout, corrupting the protocol stream.
