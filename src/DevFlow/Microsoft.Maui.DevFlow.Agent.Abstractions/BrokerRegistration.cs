@@ -117,14 +117,12 @@ public class BrokerRegistration : IDisposable
         _cts = new CancellationTokenSource();
         
         var logger = _logger ?? _staticLogger;
-        logger?.LogInformation("DevFlow agent connecting to broker at ws://localhost:{BrokerPort}/ws/agent", _brokerPort);
+        logger?.LogInformation("DevFlow agent connecting to broker on loopback port {BrokerPort}", _brokerPort);
 
         try
         {
-            _ws = new ClientWebSocket();
-
             using var connectCts = new CancellationTokenSource(timeout.Value);
-            await _ws.ConnectAsync(new Uri($"ws://localhost:{_brokerPort}/ws/agent"), connectCts.Token);
+            _ws = await ConnectBrokerWebSocketAsync(connectCts.Token).ConfigureAwait(false);
 
             // Send registration
             var registration = BuildRegistrationJson();
@@ -159,11 +157,42 @@ public class BrokerRegistration : IDisposable
         catch (Exception ex)
         {
             // Broker unavailable — start background retries so we register when it comes up
-            logger?.LogDebug("Broker unavailable at ws://localhost:{BrokerPort}/ws/agent — starting background reconnection: {Message}", _brokerPort, ex.Message);
+            logger?.LogDebug("Broker unavailable on loopback port {BrokerPort} — starting background reconnection: {Message}", _brokerPort, ex.Message);
             _ws?.Dispose();
             _ws = null;
             StartReconnection();
             return null;
+        }
+    }
+
+    // Use the same host order as PostBrokerAsync. On macOS/Linux the broker's "localhost" prefix
+    // listens only on ::1, so Android's adb reverse tunnel (which reaches the host over IPv4)
+    // gets 404 for a "localhost" Host header and must use the literal 127.0.0.1 prefix.
+    private async Task<ClientWebSocket> ConnectBrokerWebSocketAsync(CancellationToken cancellationToken)
+    {
+        for (var index = 0; ; index++)
+        {
+            var host = _brokerHttpHosts[index];
+            var socket = new ClientWebSocket();
+            try
+            {
+                await socket.ConnectAsync(new Uri($"ws://{host}:{_brokerPort}/ws/agent"), cancellationToken)
+                    .ConfigureAwait(false);
+                return socket;
+            }
+            catch (WebSocketException ex) when (index < _brokerHttpHosts.Length - 1 && !cancellationToken.IsCancellationRequested)
+            {
+                socket.Dispose();
+                (_logger ?? _staticLogger)?.LogDebug(
+                    "DevFlow broker WebSocket through Host {Host} failed; retrying alternate loopback host: {Message}",
+                    host,
+                    ex.Message);
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
         }
     }
 
@@ -209,11 +238,9 @@ public class BrokerRegistration : IDisposable
             ClientWebSocket? candidate = null;
             try
             {
-                candidate = new ClientWebSocket();
-
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(lifetimeToken);
                 cts.CancelAfter(TimeSpan.FromSeconds(2));
-                await candidate.ConnectAsync(new Uri($"ws://localhost:{_brokerPort}/ws/agent"), cts.Token);
+                candidate = await ConnectBrokerWebSocketAsync(cts.Token).ConfigureAwait(false);
 
                 // Re-register
                 var registration = BuildRegistrationJson();
