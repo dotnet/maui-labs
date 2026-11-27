@@ -141,4 +141,7 @@ internal record RegistrationMessage
 
     [JsonPropertyName("processId")]
     public int? ProcessId { get; init; }
+
+    [JsonPropertyName("supportsHeartbeat")]
+    public bool SupportsHeartbeat { get; init; }
 }

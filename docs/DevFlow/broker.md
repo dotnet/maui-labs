@@ -13,7 +13,8 @@ The broker is a lightweight background process that:
 
 - **Assigns unique ports** to each MAUI agent from a shared pool (10223–10899)
 - **Tracks running agents** so the CLI can discover them without manual `--agent-port` flags
-- **Detects disconnections instantly** via persistent WebSocket connections
+- **Detects disconnections** via persistent WebSocket connections and bounded
+  application-level heartbeat challenges for agents advertising heartbeat support
 - **Starts on demand and stops automatically** — you rarely need to manage it directly
 
 ```
@@ -82,9 +83,15 @@ When a MAUI app starts with `AddMicrosoft.Maui.DevFlowAgent()`:
    config or a previous broker connection), it sends `currentPort` in the registration
    message. The broker uses that port instead of allocating a new one from the pool.
 
-5. The WebSocket connection stays open. The broker uses it as a liveness signal —
-   if the connection drops, the agent is immediately marked as disconnected and
-   its port is released.
+5. The WebSocket connection stays open. The broker removes disconnected agents
+   and releases their ports. Agents advertising `supportsHeartbeat: true` respond
+   to broker `{"type":"ping","nonce":"..."}` messages with
+   `{"type":"pong","nonce":"..."}`. The broker sends a challenge every 10 seconds
+   and evicts an agent if it does not receive the matching response within 5 seconds,
+   even if its TCP connection stays half-open. This checks the existing registration
+   channel, not the agent's HTTP port (which may be unreachable without Android
+   forwarding). Older agents without heartbeat support remain on passive WebSocket
+   disconnect detection; upgrade their agent package for bounded crash detection.
 
 ### CLI Discovery
 
