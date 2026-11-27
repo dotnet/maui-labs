@@ -1,6 +1,6 @@
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
 using UIKit;
 #endif
 #if MACOS
@@ -123,7 +123,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
                         && actionView.IsShown;
                 }
             }
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
             if (registration.NativeElement is MenuItem)
             {
                 info.Framework = "maui-logical";
@@ -489,7 +489,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             capabilities.Add(capability);
     }
 
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
     private static bool IsAppleViewVisible(UIKit.UIView view)
     {
         if (view.Window is null)
@@ -596,7 +596,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
     }
 #endif
 
-#if ANDROID || IOS || MACCATALYST || MACOS
+#if ANDROID || IOS || MACCATALYST || TVOS || MACOS
     protected override bool CanInvokeRegisteredNativeElement(object nativeElement)
     {
 #if ANDROID
@@ -607,7 +607,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             Enabled: true,
             Clickable: true
         };
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
         if (nativeElement is UIKit.UITableViewCell cell)
         {
             var tableView = FindAppleTableView(cell);
@@ -621,12 +621,15 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             return IsAppleViewVisible(control)
                 && control.Enabled
                 && (control.AllTargets.Count > 0
+#if IOS || MACCATALYST
                     || control is UIKit.UIButton
                     {
                         Menu: not null,
                         ShowsMenuAsPrimaryAction: true
                     } && (OperatingSystem.IsIOSVersionAtLeast(17, 4)
-                        || OperatingSystem.IsMacCatalystVersionAtLeast(17, 4)));
+                        || OperatingSystem.IsMacCatalystVersionAtLeast(17, 4))
+#endif
+                    );
 
         return nativeElement is UIKit.UIBarButtonItem
         {
@@ -649,7 +652,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             Enabled: true,
             Focusable: true
         };
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
         return nativeElement is UIKit.UIView view
             && IsAppleViewVisible(view)
             && view.CanBecomeFirstResponder;
@@ -669,7 +672,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             IsAttachedToWindow: true,
             Enabled: true
         };
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
         return nativeElement is UIKit.UITextField { Enabled: true }
             or UIKit.UISearchBar { UserInteractionEnabled: true };
 #elif MACOS
@@ -693,7 +696,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             editText.SetSelection(editText.Text?.Length ?? 0);
             return "ok";
         }
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
         if (nativeElement is UIKit.UITextField textField)
         {
             if (!CanSetValueRegisteredNativeElement(textField))
@@ -740,7 +743,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
                 ? "ok"
                 : $"Native element '{elementId}' did not handle the click";
         }
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
         if (nativeElement is UIKit.UITableViewCell cell)
         {
             var tableView = FindAppleTableView(cell);
@@ -762,6 +765,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             if (!CanInvokeRegisteredNativeElement(control))
                 return $"Native element '{elementId}' is not visible, enabled, and actionable";
 
+#if IOS || MACCATALYST
             if (control is UIKit.UIButton
                 {
                     Menu: not null,
@@ -777,8 +781,15 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
 
                 return $"Native menu launcher '{elementId}' requires iOS or Mac Catalyst 17.4 or later for programmatic invocation";
             }
+#endif
 
+#if TVOS
+            // A Siri Remote select press raises PrimaryActionTriggered; TouchUpInside comes from
+            // touchscreens only.
+            control.SendActionForControlEvents(UIKit.UIControlEvent.PrimaryActionTriggered);
+#else
             control.SendActionForControlEvents(UIKit.UIControlEvent.TouchUpInside);
+#endif
             return "ok";
         }
 
@@ -796,6 +807,8 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
                     : $"Native element '{elementId}' action was not handled";
         }
 
+#if !TVOS
+        // tvOS tab bars have no More overflow controller.
         if (nativeElement is UIKit.UITabBarItem tabBarItem
             && GetNativeElementInfoById(elementId) is
             {
@@ -810,6 +823,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             tabBarController.SelectedViewController = tabBarController.MoreNavigationController;
             return "ok";
         }
+#endif
 #elif MACOS
         if (nativeElement is AppKit.NSButton button)
         {
@@ -826,7 +840,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
         return null;
     }
 
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
     private static UIKit.UITabBarController? FindAppleTabBarController(
         UIKit.UITabBarItem tabBarItem)
     {
@@ -878,7 +892,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
 #endif
 #endif
 
-#if ANDROID || IOS || MACCATALYST || MACOS
+#if ANDROID || IOS || MACCATALYST || TVOS || MACOS
     public override string TryNativeElementFocus(string elementId)
     {
         if (!elementId.StartsWith("native:registered:", StringComparison.Ordinal))
@@ -890,7 +904,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             return androidView.RequestFocus()
                 ? "ok"
                 : $"Native element '{elementId}' could not be focused";
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
         if (nativeElement is UIKit.UIView uiView)
             return uiView.BecomeFirstResponder()
                 ? "ok"
@@ -993,7 +1007,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
 
             info.NativeType = platformView.GetType().FullName;
 
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
             if (platformView is UIKit.UIView uiView)
             {
                 var props = new Dictionary<string, string?>();
@@ -1099,7 +1113,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
     {
         try
         {
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
             return ResolveBoundsApple(marker);
 #elif ANDROID
             return ResolveBoundsAndroid(marker);
@@ -1116,7 +1130,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
     {
         try
         {
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
             PopulateNativeInfoApple(info, marker);
 #elif ANDROID
             PopulateNativeInfoAndroid(info, marker);
@@ -1134,7 +1148,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             var platformView = ve.Handler?.PlatformView;
             if (platformView == null) return null;
 
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
             if (platformView is UIKit.UIView uiView && uiView.Window != null)
             {
                 var windowRect = uiView.ConvertRectToView(uiView.Bounds, uiView.Window.RootViewController?.View ?? uiView.Window);
@@ -1196,7 +1210,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
         catch { return null; }
     }
 
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
     private BoundsInfo? ResolveBoundsApple(object marker)
     {
         Shell? shell = marker switch
@@ -1540,7 +1554,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
     {
         try
         {
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || TVOS
             if (platformObj is UIKit.UIView uiView)
             {
                 if (string.IsNullOrEmpty(uiView.AccessibilityIdentifier))

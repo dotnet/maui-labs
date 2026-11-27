@@ -1,7 +1,8 @@
-# iOS & Mac Catalyst Reference
+# iOS, tvOS & Mac Catalyst Reference
 
 ## Table of Contents
 - [Simulator Management](#simulator-management)
+- [tvOS (Apple TV)](#tvos-apple-tv)
 - [Building and Deploying](#building-and-deploying)
 - [Apple CLI Tool](#apple-cli-tool)
 - [xcrun simctl Reference](#xcrun-simctl-reference)
@@ -11,9 +12,9 @@
 
 ### Avoiding multi-project conflicts
 
-When multiple projects (or AI agents) may deploy to iOS simulators simultaneously, each
-project should use its own dedicated simulator. Two apps deployed to the same simulator
-will replace each other — only the last-deployed app survives.
+When multiple projects (or AI agents) may deploy to iOS or tvOS simulators simultaneously,
+each project should use its own dedicated simulator. Sharing a simulator can interrupt
+another project's foreground app and automation.
 
 **Before creating or booting a simulator, check what's already in use:**
 ```bash
@@ -59,13 +60,13 @@ apple simulator shutdown <UDID>
 
 ### Install and launch app
 ```bash
-xcrun simctl install booted /path/to/App.app
-xcrun simctl launch booted com.company.appid
+xcrun simctl install <UDID> /path/to/App.app
+xcrun simctl launch <UDID> com.company.appid
 ```
 
 ### Screenshots (iOS Simulator)
 ```bash
-xcrun simctl io booted screenshot output.png
+xcrun simctl io <UDID> screenshot output.png
 apple simulator screenshot <UDID> --output output.png
 ```
 
@@ -85,6 +86,64 @@ xcrun simctl erase <UDID>                     # factory reset
 xcrun simctl delete <UDID>                    # permanently remove
 xcrun simctl delete unavailable               # clean up old sims
 ```
+
+## tvOS (Apple TV)
+
+MAUI tvOS apps use a community backend such as `Platform.Maui.TvOS`, with the standard
+`Microsoft.Maui.DevFlow.Agent` package registered in the backend's `CreateMauiApp`.
+Inspect the app's TFM; the agent provides both `net10.0-tvos` and `net11.0-tvos` targets.
+The repository sample uses .NET 11 and Platform.Maui.TvOS 0.5.0, including the scene
+lifecycle required by tvOS 27.
+
+Choose an available Apple TV that is not running another investigation. Use its explicit
+UDID, never the unqualified `booted` target when iPhones and Apple TVs coexist:
+
+```bash
+maui device list --platform tvos --json
+maui apple runtime list --platform tvOS --json
+maui apple simulator start <UDID>
+xcrun simctl bootstatus <UDID> -b
+dotnet build <project.csproj> -f <tvos-tfm> -p:RuntimeIdentifier=tvossimulator-arm64
+maui apple simulator install <UDID> <built-app.app>
+maui apple simulator launch <UDID> <bundle-id>
+maui devflow list
+```
+
+Use `tvossimulator-x64` instead on an Intel Mac. Simulators share the host network;
+no adb forwarding is needed. From the agent list, identify the tvOS app and use its
+port explicitly when other agents are connected:
+
+```bash
+maui devflow agent status --agent-port <port>
+maui devflow ui tree --agent-port <port> --depth 3
+maui devflow ui query --agent-port <port> --automationId <automation-id>
+maui devflow ui tap --agent-port <port> <element-id-from-query>
+maui devflow ui screenshot --agent-port <port> --output tv.png
+maui devflow recording start --platform tvos --device <UDID> --output tv.mp4
+maui devflow recording stop
+maui devflow theme set dark --scope app --agent-port <port>
+```
+
+Unscoped CLI/MCP screenshots use the selected simulator's entire display, including
+system overlays. Element, explicit non-default window, and capture-bound screenshots
+stay with the agent; physical devices use in-app capture. Recording requires a simulator:
+CLI start takes `--platform tvos --device <UDID>`, while `maui_recording_start` resolves the
+selected agent's UDID. Stop uses the saved recording target even if agent selection changes.
+Do not interrupt another session's recording. Shut down only simulators you started.
+
+**Input limits:** element tap invokes the control's action; fill and back operate on app
+state. These do not prove that the real focus-navigation path works. In Simulator, a human
+can use arrow keys to move focus, Return to select, and Escape to go back
+([Apple keyboard shortcuts](https://developer.apple.com/documentation/xcode/interacting-with-your-app-in-the-tvos-simulator)).
+DevFlow's key action (`maui_key` over MCP) edits supported text controls; it does not inject those
+simulator keyboard events or Siri Remote buttons. Directional remote automation, synthetic
+touch gestures, and native system-dialog automation are unsupported. Ask for manual input
+when a test requires the real remote/focus path or a system dialog.
+
+**Theme and Essentials limits:** tvOS does not support `simctl ui appearance`. Use app
+scope (also the auto default for tvOS), not system scope. Essentials-backed endpoints
+require an implementation supplied by the app/backend; do not assume sensors or device
+services work just because the agent is reachable.
 
 ## Building and Deploying
 
@@ -121,24 +180,18 @@ If sandbox must stay enabled (e.g. testing App Store builds), add `network.serve
 See [setup.md Step 5](setup.md#5-mac-catalyst-entitlements) for the full sandbox-enabled plist.
 
 ```bash
-dotnet build -f net10.0-maccatalyst                          # build only
-dotnet build -f net10.0-maccatalyst -t:Run                   # build + run
-open path/to/bin/Debug/net10.0-maccatalyst/maccatalyst-arm64/AppName.app  # run existing
+dotnet build -f net11.0-maccatalyst                          # build only
+dotnet build -f net11.0-maccatalyst -t:Run                   # build + run
+open path/to/bin/Debug/net11.0-maccatalyst/maccatalyst-arm64/AppName.app  # run existing
 ```
 
 ### iOS Simulator
 ```bash
-# Find UDID of booted simulator
-UDID=$(xcrun simctl list devices booted -j | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-for r in d['devices'].values():
-  for dev in r:
-    if dev['state']=='Booted': print(dev['udid']); break
-" 2>/dev/null | head -1)
+# Choose the intended iOS simulator, not the first booted iPhone or Apple TV.
+maui apple simulator list --json
 
 # Build and deploy
-dotnet build -f net10.0-ios -t:Run -p:_DeviceName=:v2:udid=$UDID
+dotnet build -f net11.0-ios -t:Run -p:_DeviceName=:v2:udid=<UDID>
 ```
 
 The `-t:Run` target keeps the process alive while the app runs — it **blocks until the app exits**.
@@ -150,7 +203,7 @@ Check the project file for `<TargetFrameworks>`:
 ```bash
 grep -i TargetFramework *.csproj
 ```
-Common values: `net9.0-ios`, `net9.0-maccatalyst`, `net10.0-ios`, `net10.0-maccatalyst`.
+Common values: `net9.0-ios`, `net9.0-maccatalyst`, `net11.0-ios`, `net11.0-maccatalyst`.
 
 ## Apple CLI Tool
 
@@ -216,13 +269,13 @@ the standard error envelope:
   desktop session.
 - **"Unable to lookup in current state: Shutdown"**: Simulator not booted. Run `xcrun simctl boot <UDID>`.
 - **Build error NETSDK1005 "Assets file doesn't have a target"**: Wrong TFM. Check
-  `<TargetFrameworks>` in .csproj and use matching version (e.g. `net10.0-ios` not `net9.0-ios`).
+  `<TargetFrameworks>` in .csproj and use matching version (e.g. `net11.0-ios` not `net9.0-ios`).
 - **Agent not connecting after deploy**: The app may still be launching. Poll
   `maui devflow ui status` every few seconds. If it hasn't connected after ~60-90s, read the
   async shell output from `dotnet build -t:Run` for build/launch errors.
 - **Mac Catalyst app name vs binary name**: The `.app` bundle name may differ from the project
   name (e.g. `MauiTodo.app` vs `SampleMauiApp`). Check the `ApplicationTitle` in .csproj.
-  Find the bundle: `find bin/Debug/net10.0-maccatalyst -name "*.app" -maxdepth 3`
+  Find the bundle: `find bin/Debug/net11.0-maccatalyst -name "*.app" -maxdepth 3`
 
 ## Permission & Dialog Handling
 
@@ -231,8 +284,9 @@ the standard error envelope:
 **Prefer the `maui` CLI** — `maui apple simulator privacy` now wraps `simctl privacy`
 (the `bundle-id` is optional, so you can grant for all apps). For
 `maui devflow ui permission`, pass `--udid` to target the intended simulator.
-Without it, the command selects the first booted simulator, not the simulator
-associated with the connected agent.
+Without it, the command uses the selected Apple simulator agent's UDID when available;
+otherwise it requires an unambiguous matching booted simulator. Physical Apple agents
+are not silently substituted with a simulator.
 ```bash
 maui apple simulator privacy grant <UDID> location --bundle-id com.company.appid
 maui apple simulator privacy grant <UDID> photos          # all apps (no bundle id)

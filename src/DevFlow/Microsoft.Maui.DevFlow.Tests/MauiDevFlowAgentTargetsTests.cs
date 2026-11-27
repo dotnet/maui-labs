@@ -145,9 +145,15 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
     [InlineData("net11.0", false)]
     [InlineData("net11.0-macos", true)]
     [InlineData("net11.0-macos", false)]
+    [InlineData("net10.0-android", true)]
+    [InlineData("net10.0-ios", false)]
+    [InlineData("net10.0-maccatalyst", true)]
+    [InlineData("net10.0-tvos", true)]
+    [InlineData("net10.0-windows", false)]
     [InlineData("net11.0-android", true)]
     [InlineData("net11.0-ios", false)]
     [InlineData("net11.0-maccatalyst", true)]
+    [InlineData("net11.0-tvos", true)]
     [InlineData("net11.0-windows", false)]
     public void CoreSourceMapTarget_PreservesMauiPipeline_ForEveryTfm(string targetFramework, bool importBeforeMaui)
     {

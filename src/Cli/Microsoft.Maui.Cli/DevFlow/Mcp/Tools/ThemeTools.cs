@@ -24,14 +24,14 @@ public sealed class ThemeTools
     }
 
     [McpServerTool(Name = "maui_set_theme"),
-     Description("Set the running app or disposable emulator/simulator to light, dark, or system theme. Scope defaults to auto: uses system scope only for Android emulators and iOS simulators, and app scope for desktops or physical devices.")]
+     Description("Set the running app or disposable emulator/simulator to light, dark, or system theme. Scope defaults to auto: uses system scope only for Android emulators and iOS simulators, and app scope for tvOS, desktops or physical devices.")]
     public static async Task<string> SetTheme(
         McpAgentSession session,
-        [Description("Theme to apply: light, dark, or system. System means follow the OS in app scope; iOS Simulator host scope supports only light and dark.")] string theme,
+        [Description("Theme to apply: light, dark, or system. System means follow the OS in app scope; Apple simulator host scope supports only light and dark.")] string theme,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
-        [Description("Where to apply the theme: auto, app, or system. Auto uses host-side switching only for Android emulators and iOS simulators.")] string scope = "auto",
+        [Description("Where to apply the theme: auto, app, or system. Auto uses host-side switching only for Android emulators and iOS simulators. tvOS supports app scope only.")] string scope = "auto",
         [Description("Android adb device/emulator serial for system-scope changes. Optional when adb has exactly one target.")] string? androidDevice = null,
-        [Description("iOS Simulator UDID for system-scope changes. If omitted for simulator targets, the booted simulator is auto-detected.")] string? simulatorUdid = null)
+        [Description("iOS simulator UDID for system-scope changes. Defaults to the simulator reported by the selected agent.")] string? simulatorUdid = null)
     {
         if (!ThemeExtensions.TryParseTheme(theme, out var parsedTheme))
             throw new McpException($"Invalid theme '{theme}'. Use light, dark, or system.");
@@ -40,16 +40,8 @@ public sealed class ThemeTools
             throw new McpException($"Invalid scope '{scope}'. Use auto, app, or system.");
 
         using var agent = await session.GetAgentClientAsync(agentPort);
-        var status = await agent.GetStatusAsync();
-
-        var platform = status?.Platform;
-        var deviceType = status?.DeviceType;
-        var useHost = parsedScope == ThemeSetScope.System
-            || ThemeHostSelector.ShouldUseHostThemeScopeAutomatically(platform, deviceType, parsedTheme, androidDevice, simulatorUdid);
-
-        ThemeResult result = useHost
-            ? await ThemeHostSelector.SetHostThemeAsync(platform, deviceType, parsedTheme, androidDevice, simulatorUdid, "app scope")
-            : await agent.SetThemeAsync(parsedTheme);
+        var result = await new ThemeOperations(agent).SetAsync(
+            "unknown", parsedTheme, parsedScope, androidDevice, simulatorUdid);
 
         if (!result.Success)
             throw new McpException(result.Message ?? "Failed to set theme.");

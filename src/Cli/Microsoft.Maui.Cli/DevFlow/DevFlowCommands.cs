@@ -71,8 +71,8 @@ public partial class DevFlowCommands
         // ambiguity/refusal sentinel (issue #343) must be skipped when targeting a remote host.
         var agentHostOption = new Option<string>("--agent-host", "-ah") { Description = "Agent HTTP host", DefaultValueFactory = _ => "localhost" };
         var agentPortOption = new Option<int>("--agent-port", "-ap") { Description = "Agent HTTP port (auto-discovered via broker, .mauidevflow, or default 9223)", DefaultValueFactory = ar => ResolveAgentPort(ar.GetValue(agentHostOption)) };
-        var deviceOption = new Option<string?>("--device") { Description = "Android serial for forwarding or recording, or iOS simulator UDID for recording" };
-        var platformOption = new Option<string>("--platform", "-p") { Description = "Target platform (maccatalyst, android, ios, windows)", DefaultValueFactory = _ => "maccatalyst" };
+        var deviceOption = new Option<string?>("--device") { Description = "Android serial for forwarding or recording, or iOS/tvOS simulator UDID for recording" };
+        var platformOption = new Option<string>("--platform", "-p") { Description = "Target platform (maccatalyst, android, ios, tvos, windows)", DefaultValueFactory = _ => "maccatalyst" };
         var noJsonOption = new Option<bool>("--no-json") { Description = "Force human-readable output even when piped", DefaultValueFactory = _ => false };
 
         agentPortOption.Recursive = true;
@@ -319,7 +319,7 @@ public partial class DevFlowCommands
         var themeArg = new Argument<string>("theme") { Description = "Theme to apply: light, dark, or system" };
         var themeScopeOption = new Option<string>("--scope") { Description = "Where to apply the theme: auto, app, or system", DefaultValueFactory = _ => "auto" };
         var themeDeviceOption = new Option<string?>("--device", "-d") { Description = "Android adb device/emulator serial for system-scope changes" };
-        var themeUdidOption = new Option<string?>("--udid") { Description = "iOS Simulator UDID for system-scope changes (auto-detects booted simulator if omitted for simulator targets)" };
+        var themeUdidOption = new Option<string?>("--udid") { Description = "iOS simulator UDID for system-scope changes (defaults to the selected agent's simulator)" };
         var themeSetCmd = new Command("set", "Set the app or system light-dark theme") { themeArg, themeScopeOption, themeDeviceOption, themeUdidOption };
         themeSetCmd.SetAction(async (ctx, ct) =>
         {

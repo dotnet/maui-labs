@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
@@ -120,6 +121,58 @@ public class XamlSourceMapGeneratorTests
         // The generated source must compile cleanly against Agent.Core.
         var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
         Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void GeneratedProvider_ReusesTypeMetadata_UntilInvalidated()
+    {
+        var (output, diagnostics, _) = Run(("MainPage.xaml", SampleXaml, true));
+        Assert.Empty(diagnostics);
+        using var ms = new System.IO.MemoryStream();
+        Assert.True(output.Emit(ms).Success);
+        var providerType = Assembly.Load(ms.ToArray()).GetType(
+            "Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.Generated.__DevFlowXamlSourceMapProvider")!;
+        var provider = (IXamlSourceMapProvider)Activator.CreateInstance(providerType, nonPublic: true)!;
+        var metadataField = providerType.GetField("_metadata", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        Assert.NotNull(provider.GetMap("TestApp.MainPage"));
+        var first = metadataField.GetValue(provider);
+        Assert.NotNull(first);
+        Assert.NotNull(provider.GetMap("TestApp.MainPage"));
+        Assert.Same(first, metadataField.GetValue(provider));
+
+        provider.InvalidateCache();
+        Assert.NotNull(provider.GetMap("TestApp.MainPage"));
+        var rebuilt = metadataField.GetValue(provider);
+        Assert.NotNull(rebuilt);
+        Assert.NotSame(first, rebuilt);
+    }
+
+    [Fact]
+    public void Generator_XamlAndTypeMappingEdits_DoNotChangeFieldInitializers()
+    {
+        var (originalOutput, originalDiagnostics, original) =
+            Run(("MainPage.xaml", SampleXaml, true, "/project/MainPage.xaml"), ProjectNamespacePrefixSource);
+        var updatedXaml = SampleXaml.Replace(
+            "<Label Text=\"Hello\" />",
+            "<widgets:CustomView xmlns:widgets=\"http://schemas.test/widgets\" />");
+        var (updatedOutput, updatedDiagnostics, updated) =
+            Run(("MainPage.xaml", updatedXaml, true, "/project/MainPage.xaml"), ProjectNamespacePrefixSource);
+
+        Assert.Empty(originalDiagnostics);
+        Assert.Empty(updatedDiagnostics);
+        Assert.Empty(originalOutput.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Empty(updatedOutput.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.NotNull(original);
+        Assert.NotNull(updated);
+        Assert.NotEqual(original, updated);
+        Assert.Contains("TestControls.CustomView", updated);
+
+        static string[] Fields(string source) => CSharpSyntaxTree.ParseText(source)
+            .GetRoot().DescendantNodes().OfType<FieldDeclarationSyntax>()
+            .Select(field => field.NormalizeWhitespace().ToFullString()).ToArray();
+
+        Assert.Equal(Fields(original!), Fields(updated!));
     }
 
     [Fact]
@@ -332,7 +385,7 @@ public class XamlSourceMapGeneratorTests
     [Fact]
     public void GeneratedProvider_EndToEnd_RegistersMapMatchingParser()
     {
-        const string path = @"C:\proj\TestApp\MainPage.xaml";
+        var path = System.IO.Path.Combine("proj", "TestApp", "MainPage.xaml");
         // The generator normalizes to a project-relative path (falling back to the file name when
         // MSBuildProjectDirectory is unavailable, as here) so shipped assemblies never embed
         // developer-machine paths. The inspector resolves it against the registered project.

@@ -13,6 +13,9 @@ internal sealed class ThemeOperations(AgentClient client)
         var status = await client.GetStatusAsync();
         var platformName = status?.Platform ?? platform;
         var deviceType = status?.DeviceType;
+        if (HostOperations.IsAppleSimulatorPlatform(platformName) && simulatorUdid == null)
+            simulatorUdid = status?.DeviceType?.Equals("Virtual", StringComparison.OrdinalIgnoreCase) == true
+                ? status.Device?.Id : null;
 
         var useHost = scope == ThemeSetScope.System
             || ThemeHostSelector.ShouldUseHostThemeScopeAutomatically(platformName, deviceType, theme, androidDevice, simulatorUdid);

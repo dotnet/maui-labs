@@ -26,6 +26,10 @@ public class iOSSimulatorAppDriver : AppDriverBase, IAlertDriver
 
     public override string Platform => "iOSSimulator";
 
+    protected virtual string RecordingPlatform => "ios";
+
+    protected virtual void EnsureNativeInteractionSupported() { }
+
     /// <summary>
     /// The simulator device UDID (required for simctl/idb operations).
     /// </summary>
@@ -246,6 +250,7 @@ public class iOSSimulatorAppDriver : AppDriverBase, IAlertDriver
     /// </summary>
     public async Task TapCoordinateAsync(int x, int y)
     {
+        EnsureNativeInteractionSupported();
         EnsureDeviceUdid();
         await RunProcessAsync("apple", $"simulator idb tap {DeviceUdid} {x} {y}").ConfigureAwait(false);
     }
@@ -321,7 +326,8 @@ public class iOSSimulatorAppDriver : AppDriverBase, IAlertDriver
             RecordingPid = process.Id,
             WatchdogPid = watchdogPid,
             OutputFile = fullPath,
-            Platform = "ios",
+            Platform = RecordingPlatform,
+            Serial = DeviceUdid,
             StartedAt = DateTimeOffset.UtcNow,
             TimeoutSeconds = timeoutSeconds
         });
@@ -332,8 +338,8 @@ public class iOSSimulatorAppDriver : AppDriverBase, IAlertDriver
         var state = RecordingStateManager.Load()
             ?? throw new InvalidOperationException("No active recording found.");
 
-        if (state.Platform != "ios")
-            throw new InvalidOperationException($"Active recording is on {state.Platform}, not iOS.");
+        if (state.Platform != RecordingPlatform)
+            throw new InvalidOperationException($"Active recording is on {state.Platform}, not {RecordingPlatform}.");
 
         KillWatchdog(state.WatchdogPid);
         SendInterrupt(state.RecordingPid);
@@ -399,6 +405,7 @@ public class iOSSimulatorAppDriver : AppDriverBase, IAlertDriver
 
     private async Task<string> RunIdbAccessibilityInfoAsync()
     {
+        EnsureNativeInteractionSupported();
         try
         {
             return await RunProcessWithOutputAsync("apple", $"simulator idb accessibility {DeviceUdid}").ConfigureAwait(false);

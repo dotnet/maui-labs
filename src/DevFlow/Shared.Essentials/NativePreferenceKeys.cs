@@ -1,4 +1,4 @@
-#if IOS || MACCATALYST || MACOS
+#if IOS || MACCATALYST || TVOS || MACOS
 using Foundation;
 #endif
 
@@ -8,7 +8,7 @@ internal static class NativePreferenceKeys
 {
     public static IReadOnlyCollection<string>? Enumerate(string? sharedName)
     {
-#if IOS || MACCATALYST || MACOS
+#if IOS || MACCATALYST || TVOS || MACOS
         // Enumerate only the app's persistent domain, not global/system defaults.
         var domain = !string.IsNullOrWhiteSpace(sharedName)
             ? sharedName

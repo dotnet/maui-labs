@@ -64,6 +64,6 @@ jobs:
       run-tests: false
       pack: false
       install-workloads: true
-      workloads: maui macos
+      workloads: maui macos tvos
       android-project: ''
       build-target-framework: net11.0-windows10.0.19041.0

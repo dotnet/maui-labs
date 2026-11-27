@@ -5,7 +5,7 @@ using Microsoft.Maui.DevFlow.Agent.Core;
 using Android.Graphics;
 using Android.Views;
 using Android.Widget;
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
 using CoreGraphics;
 using UIKit;
 #elif MACOS
@@ -28,7 +28,7 @@ public partial class PlatformVisualTreeWalker
 #if ANDROID
             if (window.Handler?.PlatformView is global::Android.App.Activity activity)
                 return activity.Resources?.DisplayMetrics?.Density ?? 1;
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
             if (window.Handler?.PlatformView is UIWindow uiWindow)
                 return uiWindow.Screen.Scale;
 #elif MACOS
@@ -60,7 +60,7 @@ public partial class PlatformVisualTreeWalker
 #if ANDROID
         if (platformView is global::Android.Views.View androidView)
             PopulateAndroidLayoutMetrics(metrics, androidView);
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
         if (platformView is UIView uiView)
             PopulateUIKitLayoutMetrics(metrics, uiView, request, collectInteraction);
 #elif MACOS
@@ -87,7 +87,7 @@ public partial class PlatformVisualTreeWalker
             "Custom text renderers and ComposeView internals require their own diagnostics bridge.");
         SetSupport(support, LayoutDiagnosticRules.InteractionOccluded, "unsupported", "low",
             "Android has no non-destructive public topmost-view hit-test API.");
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
         SetSupport(support, LayoutDiagnosticRules.TextNotFullyRendered, "partial", "high",
             "UILabel layout is reconstructed with TextKit sizing.");
         SetSupport(support, LayoutDiagnosticRules.InteractionOccluded, "partial", "high",
@@ -320,7 +320,7 @@ public partial class PlatformVisualTreeWalker
         }
         return alpha;
     }
-#elif IOS || MACCATALYST
+#elif IOS || MACCATALYST || TVOS
     private void PopulateUIKitLayoutMetrics(
         LayoutPlatformMetrics metrics,
         UIView view,

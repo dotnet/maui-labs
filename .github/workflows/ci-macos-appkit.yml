@@ -78,7 +78,7 @@ jobs:
       run-tests: false
       pack: false
       install-workloads: true
-      workloads: 'macos maui'
+      workloads: 'macos tvos maui'
       workload-rollback-file: ${{ matrix.dotnet == '10' && 'eng/workloads/dotnet11-ga-macos-net10.json' || 'eng/workloads/dotnet11-ga.json' }}
       android-project: ''
       xcode-version: '27.2'
@@ -131,7 +131,7 @@ jobs:
           - scenario: menu-localization
             packages: true
           - scenario: bundle-resources
-            workloads: 'macos maui maui-tizen'
+            workloads: 'macos tvos maui maui-tizen'
             packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages

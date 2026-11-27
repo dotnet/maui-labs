@@ -115,7 +115,7 @@ test("iOS integration uses GA net11 while retaining the net10 compatibility mani
   assert.match(text, /ios:\n[\s\S]*?runs-on: xcode-27/);
   assert.match(text, /DEVFLOW_TEST_IOS_VERSION: \$\{\{ inputs\.ios-runtime \|\| '27\.2' \}\}/);
   assert.match(text, /for candidate in \/Applications\/Xcode_27\.2\.app \/Applications\/Xcode_27\.2\.0\.app/);
-  assert.match(text, /dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file \$\{\{ env\.DOTNET_WORKLOAD_ROLLBACK_FILE \}\}/);
+  assert.match(text, /dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --from-rollback-file \$\{\{ env\.DOTNET_WORKLOAD_ROLLBACK_FILE \}\}/);
   assert.doesNotMatch(text, /dotnet11-ga-ios-net10\.json/);
   assert.match(text, /name: Verify SDK-matching iOS simulator runtime\n\s+if: matrix\.framework == 'maui'/);
   assert.match(text, /runtime\["version"\]\.startswith\("27\.2"\) and runtime\["isAvailable"\]/);
