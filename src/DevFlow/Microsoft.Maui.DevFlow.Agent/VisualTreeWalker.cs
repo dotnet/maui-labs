@@ -413,7 +413,9 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
         while (current is Microsoft.UI.Xaml.FrameworkElement frameworkElement)
         {
             if (frameworkElement.Visibility != Microsoft.UI.Xaml.Visibility.Visible
-                || frameworkElement.Opacity <= 0)
+                || frameworkElement.Opacity <= 0
+                || frameworkElement.ActualWidth <= 0
+                || frameworkElement.ActualHeight <= 0)
             {
                 return false;
             }
@@ -1054,6 +1056,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
 #elif WINDOWS
             if (platformView is Microsoft.UI.Xaml.FrameworkElement frameworkElement)
             {
+                info.IsVisible &= IsWinUiElementVisible(frameworkElement);
                 var props = new Dictionary<string, string?>();
                 var automationId = Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(frameworkElement);
                 if (!string.IsNullOrEmpty(automationId))
@@ -1859,9 +1862,59 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
 
     private BoundsInfo? ResolveBoundsWindows(object marker)
     {
-        // Windows NavigationView doesn't expose easily queryable sub-parts
-        // for nav bar / tab regions. Return null for now — can be enhanced later.
+        if (marker is NavBarTitleMarker titleMarker)
+        {
+            var shell = GetShellForPage(titleMarker.Page);
+            if (shell?.Handler?.PlatformView is Microsoft.UI.Xaml.FrameworkElement shellView)
+                return FindWindowsTitleBounds(shellView, titleMarker.Title);
+        }
+
         return null;
+    }
+
+    private static Shell? GetShellForPage(Page page)
+    {
+        Element? ancestor = page.Parent;
+        while (ancestor is not null and not Shell)
+            ancestor = ancestor.Parent;
+
+        return ancestor as Shell ?? page.Window?.Page as Shell;
+    }
+
+    private static BoundsInfo? FindWindowsTitleBounds(
+        Microsoft.UI.Xaml.FrameworkElement root,
+        string title)
+    {
+        var pending = new Stack<Microsoft.UI.Xaml.DependencyObject>();
+        pending.Push(root);
+        BoundsInfo? best = null;
+
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            if (current is Microsoft.UI.Xaml.Controls.TextBlock textBlock
+                && string.Equals(textBlock.Text, title, StringComparison.Ordinal)
+                && IsWinUiElementVisible(textBlock))
+            {
+                var point = textBlock.TransformToVisual(null)
+                    .TransformPoint(new global::Windows.Foundation.Point(0, 0));
+                var bounds = new BoundsInfo
+                {
+                    X = point.X,
+                    Y = point.Y,
+                    Width = textBlock.ActualWidth,
+                    Height = textBlock.ActualHeight
+                };
+                if (best is null || bounds.Y < best.Y)
+                    best = bounds;
+            }
+
+            var childCount = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(current);
+            for (var index = childCount - 1; index >= 0; index--)
+                pending.Push(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(current, index));
+        }
+
+        return best;
     }
 
     private void PopulateNativeInfoWindows(ElementInfo info, object marker)
@@ -1871,7 +1924,7 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
             FlyoutButtonMarker m => m.Shell,
             ShellFlyoutItemMarker m => m.Shell,
             ShellTabMarker m => m.Shell,
-            NavBarTitleMarker => Shell.Current,
+            NavBarTitleMarker m => GetShellForPage(m.Page),
             _ => null
         };
 
