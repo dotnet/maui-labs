@@ -14,7 +14,7 @@ public sealed class MenuTools
 		[Description("Optional window index to scope the MAUI menu walk to a single window")] int? window = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GetMenusAsync(window);
 		return result.ValueKind == JsonValueKind.Undefined ? "Failed to list menus." : result.ToString();
 	}
@@ -37,7 +37,7 @@ public sealed class MenuTools
 			return "Provide one of: id, path, title, or key.";
 		}
 
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.InvokeMenuAsync(id, path, title, key, modifiers, target, window);
 		return result.ValueKind == JsonValueKind.Undefined
 			? "Failed to invoke menu item (not found or unsupported)."
