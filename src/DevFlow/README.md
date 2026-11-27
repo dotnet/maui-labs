@@ -734,6 +734,12 @@ Controls build targets can still supply `MauiXaml` items for source mapping.
 Project-wide XAML prefixes declared with `XmlnsPrefix` in the app or referenced
 assemblies are supported.
 
+The Agent.Core package embeds the generator under `analyzers/dotnet/cs` for both
+normal and `--no-build` packing. Run
+`pwsh eng/smoke-tests/devflow-analyzer-packaging-smoke-test.ps1` to inspect both
+actual packages and verify a clean .NET 11 consumer emits and registers source maps.
+This host-only check does not require a MAUI workload or verify native Inspector UI.
+
 The request privacy modes are:
 
 - `none` - no text or text length in evidence (default);

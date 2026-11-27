@@ -41,6 +41,18 @@ on:
       - 'NuGet.config'
 
 jobs:
+  analyzer-packaging:
+    name: DevFlow analyzer package regression
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Pack and load the analyzer from clean consumers
+        shell: pwsh
+        run: ./eng/smoke-tests/devflow-analyzer-packaging-smoke-test.ps1
+
   gtk-publication-guard:
     name: GTK publication closure guard
     runs-on: windows-latest
