@@ -271,6 +271,20 @@ public partial class VisualTreeWalker
         return true;
     }
 
+    private static string? GetNavigationTitle(Page page)
+    {
+        if (page.Parent is not Shell && FindAncestor<Shell>(page) is null)
+            return page.Title;
+
+        if (Shell.GetTitleView(page) is not null)
+            return null;
+
+        if (!string.IsNullOrEmpty(page.Title))
+            return page.Title;
+
+        return FindAncestor<ShellContent>(page)?.Title;
+    }
+
     private static bool IsInParentChain(Element element, Element ancestor)
     {
         for (Element? current = element; current is not null; current = current.Parent)
@@ -1668,7 +1682,7 @@ public partial class VisualTreeWalker
         }
         catch { return null; }
 
-        var title = page.Title;
+        var title = GetNavigationTitle(page);
         if (string.IsNullOrEmpty(title)) return null;
 
         var marker = new NavBarTitleMarker { Title = title, Page = page };
@@ -1806,7 +1820,7 @@ public partial class VisualTreeWalker
         if (!IsNavigationBarVisible(page))
             return;
 
-        var title = page.Title;
+        var title = GetNavigationTitle(page);
         if (string.IsNullOrEmpty(title)) return;
 
         var marker = new NavBarTitleMarker { Title = title, Page = page };
@@ -1900,7 +1914,9 @@ public partial class VisualTreeWalker
                         FullType = "Microsoft.Maui.DevFlow.Agent.Core.FlyoutItem",
                         AutomationId = bsi.AutomationId,
                         Text = bsi.Title,
-                        IsVisible = bsi.IsVisible,
+                        IsVisible = bsi.IsVisible
+                            && (shell.FlyoutBehavior == FlyoutBehavior.Locked
+                                || shell.FlyoutBehavior == FlyoutBehavior.Flyout && shell.FlyoutIsPresented),
                         IsEnabled = bsi.IsEnabled,
                         IsSelected = isSelected,
                         IsFocused = isSelected,
