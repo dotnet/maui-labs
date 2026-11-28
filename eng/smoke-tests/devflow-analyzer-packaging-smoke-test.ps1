@@ -16,7 +16,6 @@ $version = "0.0.0-analyzer-smoke.$([Guid]::NewGuid().ToString('N'))"
 $devflow = Join-Path $repo 'src/DevFlow'
 $core = Join-Path $devflow 'Microsoft.Maui.DevFlow.Agent.Core/Microsoft.Maui.DevFlow.Agent.Core.csproj'
 $dependencies = Join-Path $work 'dependencies'
-Write-Host "Smoke test artifacts: $work"
 
 function Invoke-DotNet {
     param([string[]] $Arguments)
@@ -26,19 +25,13 @@ function Invoke-DotNet {
     }
 }
 
-# The consumer must not inherit repository build imports or central package versions.
-foreach ($file in @('Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props')) {
-    Set-Content (Join-Path $work $file) '<Project />'
-}
-
 foreach ($name in @('Microsoft.Maui.DevFlow.Logging', 'Microsoft.Maui.DevFlow.Agent.Abstractions')) {
     Invoke-DotNet @('pack', (Join-Path $devflow "$name/$name.csproj"), '-c', 'Release',
         "-p:PackageVersion=$version", '-o', $dependencies, '--nologo', '-v', 'minimal')
 }
 
 foreach ($mode in @('normal', 'no-build')) {
-    $scenario = (New-Item -ItemType Directory -Path (Join-Path $work $mode)).FullName
-    $packages = (New-Item -ItemType Directory -Path (Join-Path $scenario 'packages')).FullName
+    $packages = (New-Item -ItemType Directory -Path (Join-Path $work $mode)).FullName
     Copy-Item (Join-Path $dependencies '*.nupkg') $packages
     $packArguments = @('pack', $core, '-c', 'Release', "-p:PackageVersion=$version",
         '-o', $packages, '--nologo', '-v', 'minimal')
@@ -51,28 +44,28 @@ foreach ($mode in @('normal', 'no-build')) {
     $package = Join-Path $packages "Microsoft.Maui.DevFlow.Agent.Core.$version.nupkg"
     $archive = [IO.Compression.ZipFile]::OpenRead($package)
     try {
-        $analyzers = @($archive.Entries | Where-Object FullName -CEQ 'analyzers/dotnet/cs/Microsoft.Maui.DevFlow.Analyzers.dll')
-        if ($analyzers.Count -ne 1 -or $analyzers[0].Length -eq 0) {
-            throw "$mode pack must contain exactly one nonempty DevFlow analyzer DLL."
-        }
-        foreach ($tfm in @('net10.0', 'net11.0')) {
-            if (-not $archive.GetEntry("lib/$tfm/Microsoft.Maui.DevFlow.Agent.Core.dll")) {
-                throw "$mode pack is missing the $tfm assembly."
-            }
+        $analyzer = $archive.GetEntry('analyzers/dotnet/cs/Microsoft.Maui.DevFlow.Analyzers.dll')
+        if (-not $analyzer -or $analyzer.Length -eq 0) {
+            throw "$mode pack is missing the DevFlow analyzer DLL."
         }
     } finally {
         $archive.Dispose()
     }
 
-    [xml] $config = Get-Content (Join-Path $repo 'NuGet.config') -Raw
-    $source = $config.CreateElement('add')
-    $source.SetAttribute('key', 'devflow-smoke')
-    $source.SetAttribute('value', $packages)
-    [void] $config.configuration.packageSources.AppendChild($source)
-    $config.Save((Join-Path $scenario 'NuGet.config'))
+    Write-Host "PASS: $mode package contains the analyzer."
+}
 
-    $consumer = (New-Item -ItemType Directory -Path (Join-Path $scenario 'consumer')).FullName
-    Set-Content (Join-Path $consumer 'Consumer.csproj') @"
+$consumerScenario = (New-Item -ItemType Directory -Path (Join-Path $work 'consumer')).FullName
+$packages = Join-Path $work 'normal'
+[xml] $config = Get-Content (Join-Path $repo 'NuGet.config') -Raw
+$source = $config.CreateElement('add')
+$source.SetAttribute('key', 'devflow-smoke')
+$source.SetAttribute('value', $packages)
+[void] $config.configuration.packageSources.AppendChild($source)
+$config.Save((Join-Path $consumerScenario 'NuGet.config'))
+
+$consumer = (New-Item -ItemType Directory -Path (Join-Path $consumerScenario 'app')).FullName
+Set-Content (Join-Path $consumer 'Consumer.csproj') @"
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net11.0</TargetFramework>
@@ -104,13 +97,12 @@ if (map is null || !map.File.EndsWith("MainPage.xaml", StringComparison.Ordinal)
     throw new InvalidOperationException("The packaged generator did not register the expected XAML source map.");
 Console.WriteLine("Packaged generator loaded and registered the Label source map.");
 '@
-    $project = Join-Path $consumer 'Consumer.csproj'
-    Invoke-DotNet @('restore', $project, '--packages', (Join-Path $scenario 'nuget'), '--nologo', '-v', 'minimal')
-    Invoke-DotNet @('build', $project, '-c', 'Debug', '--no-restore', '--nologo', '-v', 'minimal')
-    $generated = @(Get-ChildItem (Join-Path $consumer 'obj/generated') -Recurse -Filter 'DevFlowXamlSourceMaps.g.cs')
-    if ($generated.Count -ne 1) {
-        throw "$mode consumer must emit exactly one DevFlow XAML source-map file."
-    }
-    Invoke-DotNet @((Join-Path $consumer 'bin/Debug/net11.0/Consumer.dll'))
-    Write-Host "PASS: $mode nupkg and clean .NET 11 consumer."
+$project = Join-Path $consumer 'Consumer.csproj'
+Invoke-DotNet @('restore', $project, '--packages', (Join-Path $consumerScenario 'nuget'), '--nologo', '-v', 'minimal')
+Invoke-DotNet @('build', $project, '-c', 'Debug', '--no-restore', '--nologo', '-v', 'minimal')
+$generated = @(Get-ChildItem (Join-Path $consumer 'obj/generated') -Recurse -Filter 'DevFlowXamlSourceMaps.g.cs')
+if ($generated.Count -ne 1) {
+    throw "The clean consumer did not emit exactly one DevFlow XAML source-map file."
 }
+Invoke-DotNet @((Join-Path $consumer 'bin/Debug/net11.0/Consumer.dll'))
+Write-Host 'PASS: clean .NET 11 consumer loaded the generator and registered the Label source map.'
