@@ -734,6 +734,9 @@ Controls build targets can still supply `MauiXaml` items for source mapping.
 Project-wide XAML prefixes declared with `XmlnsPrefix` in the app or referenced
 assemblies are supported.
 
+Run `pwsh eng/smoke-tests/devflow-analyzer-packaging-smoke-test.ps1` to verify
+the packaged analyzer and XAML source-map generation.
+
 The request privacy modes are:
 
 - `none` - no text or text length in evidence (default);
